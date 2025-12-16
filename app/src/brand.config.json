@@ -1,0 +1,114 @@
+{
+  "defaultTenantId": "default",
+  "tenants": {
+    "default": {
+      "name": "Black Horse",
+      "product": "Factory OS",
+      "tagline": "Diagnostics & Reliability",
+      "logoPath": "/blackhorse-logo.png",
+      "theme": {
+        "primary": "#0EA5E9",
+        "accent": "#22C55E"
+      },
+      "features": {
+        "enableTVG": false,
+        "enableLeads": true,
+        "enablePipeline": true,
+        "enableJobs": true,
+        "enableSchedule": true,
+        "enableEstimates": true,
+        "enableInvoicing": true,
+        "enableContacts": true,
+        "enableCallConsole": true,
+        "enableSMS": true,
+        "enableMarketing": true,
+        "enableReporting": true,
+        "enablePricebook": true,
+        "enablePartners": true,
+        "enableSettings": true
+      }
+    },
+    "tvg": {
+      "name": "The Vent Guys",
+      "product": "CRM Suite",
+      "tagline": "We Clear What Others Miss",
+      "logoPath": "https://wwyxohjnyqnegzbxtuxs.supabase.co/storage/v1/object/public/vent-guys-images/TVG_Logo.jpg",
+      "theme": {
+        "primary": "#173861",
+        "accent": "#b52025",
+        "palette": ["#091e39", "#173861", "#831618", "#b52025", "#cd743f", "#f1b57b", "#231f20", "#939393", "#d1d3d4"]
+      },
+      "features": {
+        "enableTVG": true,
+        "enableLeads": true,
+        "enablePipeline": true,
+        "enableJobs": true,
+        "enableSchedule": true,
+        "enableEstimates": true,
+        "enableInvoicing": true,
+        "enableContacts": true,
+        "enableCallConsole": true,
+        "enableSMS": true,
+        "enableMarketing": true,
+        "enableReporting": true,
+        "enablePricebook": true,
+        "enablePartners": true,
+        "enableSettings": true
+      }
+    },
+    "installworxs": {
+      "name": "Install Worxs",
+      "product": "Handyman CRM",
+      "tagline": "Do it right the first time",
+      "logoPath": "/blackhorse-logo.png",
+      "theme": {
+        "primary": "#0EA5E9",
+        "accent": "#22C55E"
+      },
+      "features": {
+        "enableTVG": false,
+        "enableLeads": true,
+        "enablePipeline": true,
+        "enableJobs": true,
+        "enableSchedule": true,
+        "enableEstimates": true,
+        "enableInvoicing": true,
+        "enableContacts": true,
+        "enableCallConsole": true,
+        "enableSMS": true,
+        "enableMarketing": true,
+        "enableReporting": true,
+        "enablePricebook": true,
+        "enablePartners": true,
+        "enableSettings": true
+      }
+    },
+    "demo": {
+      "name": "Demo Tenant",
+      "product": "CRM Suite",
+      "tagline": "Demo Environment",
+      "logoPath": "/blackhorse-logo.png",
+      "theme": {
+        "primary": "#0EA5E9",
+        "accent": "#22C55E"
+      },
+      "features": {
+        "enableTVG": false,
+        "enableLeads": true,
+        "enablePipeline": true,
+        "enableJobs": true,
+        "enableSchedule": true,
+        "enableEstimates": true,
+        "enableInvoicing": true,
+        "enableContacts": true,
+        "enableCallConsole": true,
+        "enableSMS": true,
+        "enableMarketing": true,
+        "enableReporting": true,
+        "enablePricebook": true,
+        "enablePartners": true,
+        "enableSettings": true
+      }
+    }
+  }
+}

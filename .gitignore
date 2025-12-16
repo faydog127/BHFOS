@@ -1,0 +1,47 @@
+
+# .gitignore-freeze
+# This file serves as a SNAPSHOT of the ignore rules active during the v2.5.0 freeze.
+# It ensures that even if the main .gitignore is modified in future versions,
+# we have a record of what was excluded for this release.
+
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Testing
+coverage
+
+# Production
+dist
+build
+
+# Misc
+.DS_Store
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Archives / large binaries (avoid pushing to git)
+archive/*.zip
+archive/*.tar.gz
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Supabase
+supabase/functions/_lib/
+!supabase/functions/_lib/.gitkeep
