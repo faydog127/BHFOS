@@ -1,5 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from "@/lib/customSupabaseClient";
+import { getTenantId } from '@/lib/tenantUtils';
 import { format, parseISO, isSameDay } from 'date-fns';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +16,7 @@ export default function Schedule() {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("pending");
+  const tenantId = getTenantId();
 
   const fetchAppointments = async () => {
     setLoading(true);
@@ -27,6 +30,7 @@ export default function Schedule() {
             referral_partners ( name ),
             leads ( id, name, email, phone )
         `)
+        .eq('tenant_id', tenantId) // TENANT FILTER
         .order('scheduled_start', { ascending: true });
         
       if (error) throw error;
@@ -48,7 +52,8 @@ export default function Schedule() {
       const { error } = await supabase
         .from('appointments')
         .update({ status: newStatus })
-        .eq('id', appointment.id);
+        .eq('id', appointment.id)
+        .eq('tenant_id', tenantId);
         
       if (error) throw error;
 

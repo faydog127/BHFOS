@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
+import { getTenantId } from '@/lib/tenantUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -9,20 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
-    Search, 
-    Filter, 
-    MoreHorizontal, 
-    UserPlus, 
-    Star, 
-    AlertTriangle, 
-    Moon, 
-    Clock, 
-    Tag,
-    Zap,
-    Shield,
-    Settings,
-    TrendingUp,
-    Users
+    Search, Filter, MoreHorizontal, UserPlus, Star, 
+    AlertTriangle, Moon, Clock, Tag, Zap, Shield,
+    Settings, TrendingUp, Users
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -66,6 +57,7 @@ const Partners = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const { toast } = useToast();
     const navigate = useNavigate();
+    const tenantId = getTenantId();
 
     useEffect(() => {
         fetchPartnersAndDetails();
@@ -77,6 +69,7 @@ const Partners = () => {
             const { data: partnersData, error: partnersError } = await supabase
                 .from('partner_prospects')
                 .select('*')
+                .eq('tenant_id', tenantId) // TENANT FILTER
                 .eq('onboarding_completed', true)
                 .order('created_at', { ascending: false });
 
@@ -88,6 +81,7 @@ const Partners = () => {
                 const { data: leadsData } = await supabase
                     .from('leads')
                     .select('email, partner_referral_code')
+                    .eq('tenant_id', tenantId) // TENANT FILTER
                     .in('email', emails)
                     .eq('is_partner', true);
 
@@ -128,7 +122,7 @@ const Partners = () => {
     };
 
     const handleAddPartner = () => {
-        navigate('/crm/leads?persona=realtor&intent=new_partner');
+        navigate('/bhf/crm/leads?persona=realtor&intent=new_partner');
         toast({
             title: "Start Onboarding",
             description: "Add the new partner as a Lead first. They will appear here once onboarding is complete."
@@ -157,9 +151,6 @@ const Partners = () => {
                     <p className="text-slate-500 mt-1">Manage active partnerships, service levels, and benefits.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" className="shadow-sm bg-white" onClick={() => navigate('/crm/partner-manager')}>
-                        <Settings className="mr-2 h-4 w-4" /> Manage Types
-                    </Button>
                     <Button className="bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={handleAddPartner}>
                         <UserPlus className="mr-2 h-4 w-4" /> Add Partner
                     </Button>
@@ -179,10 +170,8 @@ const Partners = () => {
                 </TabsList>
 
                 <TabsContent value="list" className="space-y-6">
-                    {/* Status Dashboard */}
                     <PartnerStatusDashboard />
 
-                    {/* Main Partners List */}
                     <Card className="border-slate-200 shadow-sm">
                         <CardHeader className="pb-3 border-b border-slate-100 bg-white rounded-t-xl">
                             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -233,7 +222,7 @@ const Partners = () => {
                                                     <UserPlus className="h-10 w-10 text-slate-200" />
                                                     <p className="font-medium">No active partners found</p>
                                                     <p className="text-sm max-w-sm mx-auto">
-                                                        Partners currently in onboarding can be found in the <span className="text-blue-600 cursor-pointer underline hover:text-blue-700" onClick={() => navigate('/crm/leads')}>Leads</span> tab.
+                                                        Partners currently in onboarding can be found in the <span className="text-blue-600 cursor-pointer underline hover:text-blue-700" onClick={() => navigate('/bhf/crm/leads')}>Leads</span> tab.
                                                     </p>
                                                 </div>
                                             </TableCell>

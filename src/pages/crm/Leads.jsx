@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Helmet } from 'react-helmet';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
+import { getTenantId } from '@/lib/tenantUtils'; // IMPORT TENANT UTILS
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import BulkOperations from '@/components/BulkOperations'; 
 import { useTrainingMode } from '@/contexts/TrainingModeContext';
-import LeadEditor from '@/components/LeadEditor'; // New Component
+import LeadEditor from '@/components/LeadEditor'; 
 
 import {
   Dialog,
@@ -153,6 +155,9 @@ const Leads = () => {
   const [pipelineHistory, setPipelineHistory] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
+  // CURRENT TENANT ID
+  const tenantId = getTenantId();
+
   const openDrawerForLead = useCallback(async (leadId) => {
     if (!leadId) return;
     const lead = leads.find(l => l.id === leadId) || (await supabase.from('leads').select(`*, referrer:leads!referrer_id(first_name, last_name, persona)`).eq('id', leadId).single()).data;
@@ -178,6 +183,7 @@ const Leads = () => {
           *,
           referrer:leads!referrer_id(first_name, last_name, persona)
         `)
+        .eq('tenant_id', tenantId) // TENANT FILTER
         .order('created_at', { ascending: false })
         .limit(200);
 
@@ -209,7 +215,7 @@ const Leads = () => {
     } finally {
       setLoading(false);
     }
-  }, [stageFilter, personaFilter, toast, isTrainingMode]); 
+  }, [stageFilter, personaFilter, toast, isTrainingMode, tenantId]); 
 
   useEffect(() => {
     fetchLeads();
@@ -237,6 +243,7 @@ const Leads = () => {
       const { data, error } = await supabase
         .from('leads')
         .select('id, first_name, last_name, persona')
+        .eq('tenant_id', tenantId) // TENANT FILTER
         .in('persona', partnerPersonas)
         .order('first_name', { ascending: true });
 
@@ -328,7 +335,29 @@ const Leads = () => {
   const handleEditSaved = () => {
     fetchLeads();
     setIsDrawerOpen(false);
-    // Re-open drawer with new data? Or just close it. Let's keep it simple.
+  };
+
+  const handleAddSave = async () => {
+     setIsSaving(true);
+     try {
+         await supabase.from('leads').insert({
+             first_name: addFormData.firstName,
+             last_name: addFormData.lastName,
+             email: addFormData.email,
+             phone: addFormData.phone,
+             service: addFormData.service,
+             pipeline_stage: 'new',
+             is_test_data: isTrainingMode,
+             tenant_id: tenantId // Explicitly setting tenant_id
+         });
+         toast({ title: "Success", description: "Lead created." });
+         setIsAddModalOpen(false);
+         fetchLeads();
+     } catch(e) {
+         toast({ variant: "destructive", title: "Error", description: e.message });
+     } finally {
+         setIsSaving(false);
+     }
   };
 
   // --- Render ---
@@ -371,7 +400,6 @@ const Leads = () => {
                     <DialogHeader>
                     <DialogTitle>Add New Lead</DialogTitle>
                     </DialogHeader>
-                    {/* Simplified Form for Add - Full details in separate component normally */}
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2"><Label>First Name</Label><Input value={addFormData.firstName} onChange={e => setAddFormData({...addFormData, firstName: e.target.value})} /></div>
@@ -393,28 +421,7 @@ const Leads = () => {
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button onClick={async () => {
-                             // Quick save implementation for Add
-                             setIsSaving(true);
-                             try {
-                                 await supabase.from('leads').insert({
-                                     first_name: addFormData.firstName,
-                                     last_name: addFormData.lastName,
-                                     email: addFormData.email,
-                                     phone: addFormData.phone,
-                                     service: addFormData.service,
-                                     pipeline_stage: 'new',
-                                     is_test_data: isTrainingMode
-                                 });
-                                 toast({ title: "Success", description: "Lead created." });
-                                 setIsAddModalOpen(false);
-                                 fetchLeads();
-                             } catch(e) {
-                                 toast({ variant: "destructive", title: "Error", description: e.message });
-                             } finally {
-                                 setIsSaving(false);
-                             }
-                        }} disabled={isSaving}>Save</Button>
+                        <Button onClick={handleAddSave} disabled={isSaving}>Save</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

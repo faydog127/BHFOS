@@ -1,51 +1,59 @@
+
 import React from 'react';
 import { useTrainingMode } from '@/contexts/TrainingModeContext';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { AlertTriangle, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ShieldCheck, GraduationCap } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
-const SystemModeToggle = ({ className }) => {
-  const { isTrainingMode, toggleTrainingMode, loading } = useTrainingMode();
-
-  if (loading) return null;
+const SystemModeToggle = ({ className, showLabel = true }) => {
+  const { isTrainingMode, toggleTrainingMode } = useTrainingMode();
 
   return (
-    <>
-      {/* Persistent Banner for Training Mode */}
-      {isTrainingMode && (
-        <div className="fixed top-0 left-0 right-0 z-[60] h-8 bg-amber-400 text-amber-950 flex items-center justify-center text-xs font-bold tracking-wider shadow-sm">
-          <AlertTriangle className="w-3 h-3 mr-2" />
-          TRAINING MODE – Changes do not affect real customers or reports
-          <AlertTriangle className="w-3 h-3 ml-2" />
-        </div>
-      )}
-
-      {/* Toggle Switch UI */}
-      <div className={cn("flex items-center gap-2 px-3 py-1.5 rounded-full border transition-colors", 
-          isTrainingMode ? "bg-amber-50 border-amber-200" : "bg-white border-slate-200",
-          className
-      )}>
+    <div className={cn(
+      "flex items-center gap-3 px-3 py-1.5 rounded-full border transition-all duration-300", 
+      isTrainingMode 
+        ? "bg-amber-50 border-amber-200 shadow-[0_0_10px_rgba(251,191,36,0.2)]" 
+        : "bg-white border-slate-200",
+      className
+    )}>
+      <div className="flex items-center gap-2">
         <Switch 
-          id="mode-toggle" 
+          id="system-mode-toggle" 
           checked={isTrainingMode}
           onCheckedChange={toggleTrainingMode}
-          className="data-[state=checked]:bg-amber-500"
-        />
-        <Label htmlFor="mode-toggle" className="cursor-pointer text-xs font-semibold flex items-center gap-1.5 select-none">
-          {isTrainingMode ? (
-             <>
-               <span className="text-amber-700">Training</span>
-             </>
-          ) : (
-             <>
-               <ShieldCheck className="w-3 h-3 text-green-600" />
-               <span className="text-slate-600">Live</span>
-             </>
+          className={cn(
+            "data-[state=checked]:bg-amber-500", 
+            "data-[state=unchecked]:bg-slate-200"
           )}
-        </Label>
+        />
+        {showLabel && (
+          <Label 
+            htmlFor="system-mode-toggle" 
+            className="cursor-pointer text-xs font-semibold flex items-center gap-1.5 select-none"
+          >
+            {isTrainingMode ? (
+              <>
+                <GraduationCap className="w-3.5 h-3.5 text-amber-600" />
+                <span className="text-amber-700">Training Mode</span>
+              </>
+            ) : (
+              <>
+                <ShieldCheck className="w-3.5 h-3.5 text-green-600" />
+                <span className="text-slate-600">Live Data</span>
+              </>
+            )}
+          </Label>
+        )}
       </div>
-    </>
+      
+      {isTrainingMode && (
+        <Badge variant="outline" className="hidden sm:flex border-amber-200 text-amber-700 text-[10px] px-1.5 py-0 h-5 bg-amber-100/50">
+          TEST DATA ONLY
+        </Badge>
+      )}
+    </div>
   );
 };
 

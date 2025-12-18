@@ -17,7 +17,7 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import QuickFixes from '@/components/diagnostics/QuickFixes';
-import { scoreModule, getScoreColor, getScoreLabel, DIMENSIONS } from '@/services/uiuxScorer';
+import { scoreModule, getScoreColor as getUiScoreColor, getScoreLabel, DIMENSIONS } from '@/services/uiuxScorer';
 
 // Helper Components
 const ScoreCard = ({ title, score, icon: Icon }) => (
@@ -72,7 +72,7 @@ const UiUxBreakdown = ({ moduleName, metadata }) => {
         <div className="flex items-center gap-2">
           <Monitor className="w-4 h-4 text-indigo-500" />
           <span className="text-xs font-bold text-slate-700">UI/UX Score:</span>
-          <Badge className={cn("text-[10px] h-5 border", getScoreColor(scoreData.overallScore))}>
+          <Badge className={cn("text-[10px] h-5 border", getUiScoreColor(scoreData.overallScore))}>
             {scoreData.overallScore} - {getScoreLabel(scoreData.overallScore)}
           </Badge>
         </div>
@@ -128,6 +128,7 @@ const MasterDiagnostics = () => {
 
   useEffect(() => {
     window.scrollTo(0, 0);
+    // Auto-run if score is perfect (meaning likely uninitialized state)
     if (aggregatedScore === 100 && allFailures.length === 0 && logs.length === 0) {
       runDiagnostics();
     }
@@ -322,7 +323,7 @@ const MasterDiagnostics = () => {
                    </div>
                 </TabsContent>
 
-                {/* Other Tabs content would go here (same as previous iteration) */}
+                {/* CODE CONTENT */}
                 <TabsContent value="code" className="mt-0">
                    <div className="flex justify-between items-center mb-4">
                       <h3 className="text-lg font-semibold">Static Analysis Report</h3>

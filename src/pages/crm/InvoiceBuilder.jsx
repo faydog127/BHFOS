@@ -1,18 +1,19 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
+import { getTenantId } from '@/lib/tenantUtils';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Trash2, Plus, Save, Send, ArrowLeft, Loader2, Calculator, Link as LinkIcon, DollarSign, Ban, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -21,32 +22,26 @@ const InvoiceBuilder = () => {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const quoteIdParam = searchParams.get('quote_id');
-  
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useSupabaseAuth();
+  const tenantId = getTenantId();
   
   const [loading, setLoading] = useState(false);
   const [leads, setLeads] = useState([]);
   const [priceBook, setPriceBook] = useState([]);
   
-  // Payment Modal State
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState(''); 
-  const [paymentNote, setPaymentNote] = useState('');
   const [processingPayment, setProcessingPayment] = useState(false);
 
-  // Void Confirmation Dialog State
-  const [isVoidDialogOpen, setIsVoidDialogOpen] = useState(false);
-
-  // Invoice State
   const [invoice, setInvoice] = useState({
     lead_id: '',
     status: 'draft',
     issue_date: format(new Date(), 'yyyy-MM-dd'),
     due_date: format(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
-    notes: 'Thank you for your business. Please contact us if you have any questions.',
+    notes: 'Thank you for your business.',
     terms: 'Payment is due within 14 days.',
     items: [],
     invoice_number: '',
@@ -64,8 +59,8 @@ const InvoiceBuilder = () => {
     setLoading(true);
     try {
       const [leadsRes, priceBookRes] = await Promise.all([
-          supabase.from('leads').select('id, first_name, last_name, company').order('created_at', { ascending: false }),
-          supabase.from('price_book').select('*').eq('active', true).order('name')
+          supabase.from('leads').select('id, first_name, last_name, company').eq('tenant_id', tenantId).order('created_at', { ascending: false }),
+          supabase.from('price_book').select('*').eq('active', true).eq('tenant_id', tenantId).order('name')
       ]);
       
       if (leadsRes.data) setLeads(leadsRes.data);
@@ -76,6 +71,7 @@ const InvoiceBuilder = () => {
               .from('invoices')
               .select('*, invoice_items(*)')
               .eq('id', id)
+              .eq('tenant_id', tenantId) // TENANT FILTER
               .single();
               
           if (inv && !error) {
@@ -89,6 +85,7 @@ const InvoiceBuilder = () => {
               .from('quotes')
               .select('*, quote_items(*)')
               .eq('id', quoteIdParam)
+              .eq('tenant_id', tenantId)
               .single();
 
           if (quote && !quoteError) {
@@ -109,7 +106,6 @@ const InvoiceBuilder = () => {
                  discount_amount: 0,
                  notes: `Generated from Quote #${quote.quote_number}`
              });
-             toast({ title: "Data Loaded", description: `Invoice pre-filled from Quote #${quote.quote_number}` });
           }
       } else {
         const randomNum = Math.floor(100000 + Math.random() * 900000);
@@ -205,7 +201,8 @@ const InvoiceBuilder = () => {
         balance_due: balance,
         invoice_number: invoice.invoice_number,
         public_token: publicToken,
-        sent_at: statusToSave === 'sent' && invoice.status !== 'sent' ? new Date() : invoice.sent_at
+        sent_at: statusToSave === 'sent' && invoice.status !== 'sent' ? new Date() : invoice.sent_at,
+        tenant_id: tenantId // Explicit insert
     };
 
     try {
@@ -237,24 +234,16 @@ const InvoiceBuilder = () => {
             await supabase.from('invoice_items').insert(itemsToInsert);
         }
 
-        // --- SEND EMAIL LOGIC (New in Audit) ---
         if (statusToSave === 'sent') {
-            toast({ title: "Sending...", description: "Dispatching invoice to customer." });
-            const { data: sendData, error: sendError } = await supabase.functions.invoke('send-invoice', {
+            await supabase.functions.invoke('send-invoice', {
                 body: { invoice_id: invoiceId }
             });
-
-            if (sendError) {
-                console.error("Send Invoice Error:", sendError);
-                toast({ variant: "destructive", title: "Email Failed", description: sendError.message });
-            } else {
-                toast({ title: "Invoice Sent", description: "Customer has been emailed." });
-            }
+            toast({ title: "Invoice Sent", description: "Customer has been emailed." });
         } else {
             toast({ title: 'Success', description: 'Invoice saved successfully.' });
         }
 
-        if (!id) navigate(`/crm/invoices/${invoiceId}/edit`);
+        if (!id) navigate(`/bhf/crm/invoices/${invoiceId}`);
         else setInvoice(prev => ({ ...prev, ...invoiceData, public_token: publicToken }));
 
     } catch (error) {
@@ -265,118 +254,27 @@ const InvoiceBuilder = () => {
     }
   };
 
-  const handleRecordPayment = async () => {
-      if (!paymentAmount || Number(paymentAmount) <= 0) {
-          toast({ variant: "destructive", title: "Invalid Amount", description: "Payment amount must be greater than zero." });
-          return;
-      }
-      
-      if (!paymentMethod) {
-          toast({ variant: "destructive", title: "Method Required", description: "Please select a payment method to proceed." });
-          return;
-      }
-
-      setProcessingPayment(true);
-      try {
-          const { error: txError } = await supabase.from('transactions').insert({
-              invoice_id: id,
-              amount: paymentAmount,
-              type: 'payment',
-              method: paymentMethod,
-              status: 'completed',
-              created_by: user?.id
-          });
-          if (txError) throw txError;
-
-          const newPaidAmount = (Number(invoice.amount_paid) || 0) + Number(paymentAmount);
-          const { total } = calculateTotals();
-          const newBalance = total - newPaidAmount;
-          const newStatus = newBalance <= 0.01 ? 'paid' : 'partial';
-
-          const { error: invError } = await supabase.from('invoices').update({
-              amount_paid: newPaidAmount,
-              balance_due: newBalance > 0 ? newBalance : 0,
-              status: newStatus,
-              paid_at: newStatus === 'paid' ? new Date() : invoice.paid_at
-          }).eq('id', id);
-
-          if (invError) throw invError;
-
-          setInvoice(prev => ({
-              ...prev,
-              amount_paid: newPaidAmount,
-              status: newStatus
-          }));
-          
-          setIsPayModalOpen(false);
-          setPaymentAmount('');
-          setPaymentMethod('');
-          toast({ title: "Payment Recorded", description: `Successfully recorded payment of $${paymentAmount} via ${paymentMethod}` });
-
-      } catch (err) {
-          toast({ variant: "destructive", title: "Error", description: err.message });
-      } finally {
-          setProcessingPayment(false);
-      }
-  };
-
-  const handleVoid = async () => {
-      try {
-          await supabase.from('invoices').update({ status: 'void', balance_due: 0 }).eq('id', id);
-          setInvoice(prev => ({ ...prev, status: 'void', balance_due: 0 }));
-          setIsVoidDialogOpen(false);
-          toast({ title: "Invoice Voided" });
-      } catch (err) {
-          toast({ variant: "destructive", title: "Error", description: err.message });
-      }
-  };
-
-  const copyPaymentLink = () => {
-    if (!invoice.public_token) {
-        toast({ title: "Save First", description: "Please save the invoice to generate a link." });
-        return;
-    }
-    const url = `${window.location.origin}/pay/${invoice.public_token}`;
-    navigator.clipboard.writeText(url);
-    toast({ title: "Copied!", description: "Payment link copied to clipboard." });
-  };
-
   const { subtotal, taxAmount, total, balance } = calculateTotals();
 
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-8 pb-20">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
          <div className="flex items-center gap-4">
-            <Button variant="ghost" onClick={() => navigate('/crm/invoices')}><ArrowLeft className="w-5 h-5" /></Button>
+            <Button variant="ghost" onClick={() => navigate('/bhf/crm/invoices')}><ArrowLeft className="w-5 h-5" /></Button>
             <div>
                 <div className="flex items-center gap-3">
                    <h1 className="text-3xl font-bold text-slate-900">{id ? `Invoice #${invoice.invoice_number}` : 'New Invoice'}</h1>
-                   <Badge variant={invoice.status === 'paid' ? 'default' : (invoice.status === 'void' ? 'destructive' : 'secondary')} className="capitalize px-3">
+                   <Badge variant={invoice.status === 'paid' ? 'default' : 'secondary'} className="capitalize px-3">
                        {invoice.status}
                    </Badge>
                 </div>
             </div>
          </div>
          <div className="flex flex-wrap gap-2">
-            {id && invoice.status !== 'paid' && invoice.status !== 'void' && (
-                <Button variant="outline" className="border-green-600 text-green-700 hover:bg-green-50" onClick={() => { setPaymentAmount(balance.toFixed(2)); setIsPayModalOpen(true); }}>
-                    <DollarSign className="w-4 h-4 mr-2" /> Record Payment
-                </Button>
-            )}
-            {id && invoice.status !== 'void' && invoice.status !== 'paid' && (
-                <Button variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => setIsVoidDialogOpen(true)}>
-                    <Ban className="w-4 h-4 mr-2" /> Void
-                </Button>
-            )}
-            {invoice.public_token && invoice.status !== 'void' && (
-               <Button variant="outline" onClick={copyPaymentLink}>
-                   <LinkIcon className="w-4 h-4 mr-2" /> Pay Link
-               </Button>
-            )}
-            <Button variant="outline" onClick={() => handleSave()} disabled={loading || invoice.status === 'void'}>
+            <Button variant="outline" onClick={() => handleSave()} disabled={loading}>
                 <Save className="w-4 h-4 mr-2" /> Save Draft
             </Button>
-            <Button className="bg-blue-600" onClick={() => handleSave('sent')} disabled={loading || invoice.status === 'void' || invoice.status === 'paid'}>
+            <Button className="bg-blue-600" onClick={() => handleSave('sent')} disabled={loading}>
                 <Send className="w-4 h-4 mr-2" /> Save & Send
             </Button>
          </div>
@@ -397,7 +295,6 @@ const InvoiceBuilder = () => {
                                 ))}
                             </SelectContent>
                         </Select>
-                        {quoteIdParam && <p className="text-xs text-slate-500">Locked to Quote Customer</p>}
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -415,7 +312,7 @@ const InvoiceBuilder = () => {
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle>Items</CardTitle>
-                    <Button size="sm" variant="outline" onClick={addItem} disabled={invoice.status === 'paid' || invoice.status === 'void'}><Plus className="w-4 h-4 mr-2" /> Add Item</Button>
+                    <Button size="sm" variant="outline" onClick={addItem}><Plus className="w-4 h-4 mr-2" /> Add Item</Button>
                 </CardHeader>
                 <CardContent className="p-0">
                     <Table>
@@ -433,10 +330,7 @@ const InvoiceBuilder = () => {
                                 <TableRow key={idx}>
                                     <TableCell>
                                         <div className="space-y-2">
-                                            <Select 
-                                              onValueChange={(val) => handlePriceBookSelect(idx, val)}
-                                              disabled={invoice.status === 'paid' || invoice.status === 'void'}
-                                            >
+                                            <Select onValueChange={(val) => handlePriceBookSelect(idx, val)}>
                                                <SelectTrigger className="h-8 text-xs bg-slate-50 border-slate-200">
                                                    <SelectValue placeholder="Select from Price Book" />
                                                </SelectTrigger>
@@ -452,21 +346,20 @@ const InvoiceBuilder = () => {
                                                 value={item.description} 
                                                 onChange={e => updateItem(idx, 'description', e.target.value)} 
                                                 placeholder="Description" 
-                                                disabled={invoice.status === 'paid' || invoice.status === 'void'}
                                             />
                                         </div>
                                     </TableCell>
                                     <TableCell className="align-top pt-4">
-                                        <Input type="number" min="1" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} disabled={invoice.status === 'paid' || invoice.status === 'void'} />
+                                        <Input type="number" min="1" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} />
                                     </TableCell>
                                     <TableCell className="align-top pt-4">
-                                        <Input type="number" min="0" value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', e.target.value)} disabled={invoice.status === 'paid' || invoice.status === 'void'} />
+                                        <Input type="number" min="0" value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', e.target.value)} />
                                     </TableCell>
                                     <TableCell className="align-top pt-6">
                                         <div className="pl-3 font-medium">${Number(item.total_price).toFixed(2)}</div>
                                     </TableCell>
                                     <TableCell className="align-top pt-4">
-                                        <Button size="icon" variant="ghost" onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700" disabled={invoice.status === 'paid' || invoice.status === 'void'}>
+                                        <Button size="icon" variant="ghost" onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700">
                                             <Trash2 className="w-4 h-4" />
                                         </Button>
                                     </TableCell>
@@ -474,20 +367,6 @@ const InvoiceBuilder = () => {
                             ))}
                         </TableBody>
                     </Table>
-                </CardContent>
-            </Card>
-            
-            <Card>
-                <CardHeader><CardTitle>Terms & Notes</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                        <Label>Customer Notes</Label>
-                        <Textarea value={invoice.notes} onChange={e => setInvoice({...invoice, notes: e.target.value})} disabled={invoice.status === 'paid' || invoice.status === 'void'} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Terms & Conditions</Label>
-                        <Textarea value={invoice.terms} onChange={e => setInvoice({...invoice, terms: e.target.value})} disabled={invoice.status === 'paid' || invoice.status === 'void'} />
-                    </div>
                 </CardContent>
             </Card>
         </div>
@@ -508,96 +387,15 @@ const InvoiceBuilder = () => {
                         <span>Tax (7%)</span>
                         <span>${taxAmount.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-slate-300 items-center">
-                        <span>Discount</span>
-                        <Input 
-                            type="number" 
-                            className="w-24 h-8 bg-slate-800 border-slate-700 text-white text-right"
-                            value={invoice.discount_amount}
-                            onChange={(e) => setInvoice({...invoice, discount_amount: e.target.value})}
-                            disabled={invoice.status === 'paid' || invoice.status === 'void'}
-                        />
-                    </div>
                     <Separator className="bg-slate-700" />
                     <div className="flex justify-between text-lg font-bold text-white">
                         <span>Total</span>
                         <span>${total.toFixed(2)}</span>
                     </div>
-                     <div className="flex justify-between text-slate-400 text-sm">
-                        <span>Amount Paid</span>
-                        <span className="text-green-400">-${(Number(invoice.amount_paid) || 0).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-xl font-bold text-blue-400 pt-2 border-t border-slate-700">
-                        <span>Balance Due</span>
-                        <span>${balance.toFixed(2)}</span>
-                    </div>
-                    {invoice.status === 'paid' && (
-                        <div className="mt-4 bg-green-900/30 border border-green-800 text-green-400 p-3 rounded flex items-center gap-2 justify-center">
-                            <CheckCircle className="w-5 h-5" /> Paid in Full
-                        </div>
-                    )}
                 </CardContent>
             </Card>
         </div>
       </div>
-
-      <Dialog open={isPayModalOpen} onOpenChange={setIsPayModalOpen}>
-         <DialogContent>
-             <DialogHeader>
-                 <DialogTitle>Record Payment</DialogTitle>
-             </DialogHeader>
-             <div className="space-y-4 py-4">
-                 <div className="space-y-2">
-                     <Label>Amount ($)</Label>
-                     <Input type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} />
-                 </div>
-                 <div className="space-y-2">
-                     <Label className="text-slate-800 font-semibold">Payment Method <span className="text-red-500">*</span></Label>
-                     <Select value={paymentMethod} onValueChange={setPaymentMethod} required>
-                         <SelectTrigger className="border-slate-300"><SelectValue placeholder="Select Method..." /></SelectTrigger>
-                         <SelectContent>
-                             <SelectItem value="card">Credit Card (External)</SelectItem>
-                             <SelectItem value="cash">Cash</SelectItem>
-                             <SelectItem value="check">Check</SelectItem>
-                             <SelectItem value="ach">Bank Transfer</SelectItem>
-                             <SelectItem value="financing">Financing</SelectItem>
-                             <SelectItem value="zelle">Zelle / Venmo</SelectItem>
-                         </SelectContent>
-                     </Select>
-                 </div>
-                 <div className="space-y-2">
-                     <Label>Notes / Reference #</Label>
-                     <Input value={paymentNote} onChange={e => setPaymentNote(e.target.value)} placeholder="e.g. Check #1234" />
-                 </div>
-             </div>
-             <DialogFooter>
-                 <Button variant="ghost" onClick={() => setIsPayModalOpen(false)}>Cancel</Button>
-                 <Button onClick={handleRecordPayment} disabled={processingPayment || !paymentMethod}>
-                     {processingPayment && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Record Payment
-                 </Button>
-             </DialogFooter>
-         </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={isVoidDialogOpen} onOpenChange={setIsVoidDialogOpen}>
-         <AlertDialogContent>
-             <AlertDialogHeader>
-                 <AlertDialogTitle>Void Invoice?</AlertDialogTitle>
-                 <AlertDialogDescription>
-                     Are you sure you want to void this invoice? This action cannot be undone.
-                 </AlertDialogDescription>
-             </AlertDialogHeader>
-             <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-700">
-                 Invoice #{invoice.invoice_number} will be marked as void and removed from active billing.
-             </div>
-             <div className="flex justify-end gap-3">
-                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                 <AlertDialogAction onClick={handleVoid} className="bg-red-600 hover:bg-red-700">
-                     Void Invoice
-                 </AlertDialogAction>
-             </div>
-         </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 };

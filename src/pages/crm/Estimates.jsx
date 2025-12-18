@@ -1,5 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
+import { getTenantId } from '@/lib/tenantUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -9,7 +11,6 @@ import { Loader2, Plus, RefreshCw, Search, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 
-// Import the new/fixed modal
 import EstimateEditorModal from '@/components/crm/estimates/EstimateEditorModal';
 
 const Estimates = () => {
@@ -17,16 +18,12 @@ const Estimates = () => {
   const [estimates, setEstimates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const tenantId = getTenantId();
 
   const fetchEstimates = async () => {
     setLoading(true);
-    console.log("Fetching estimates..."); // Debug log 1
     try {
-      // FIX: Explicitly specify the foreign key relationship using !estimates_lead_id_fkey
-      // This is necessary because there is a circular reference (leads have estimate_id, estimates have lead_id)
       const { data, error } = await supabase
         .from('estimates')
         .select(`
@@ -38,17 +35,13 @@ const Estimates = () => {
             email
           )
         `)
+        .eq('tenant_id', tenantId) // TENANT FILTER
         .order('created_at', { ascending: false });
 
-      if (error) {
-          console.error("Supabase Error fetching estimates:", error);
-          throw error;
-      }
-      
-      console.log("Fetched Estimates Data:", data); // Debug log 2
+      if (error) throw error;
       setEstimates(data || []);
     } catch (err) {
-      console.error('Error in fetchEstimates:', err);
+      console.error('Error fetching estimates:', err);
     } finally {
       setLoading(false);
     }
@@ -62,7 +55,6 @@ const Estimates = () => {
     fetchEstimates();
   };
 
-  // Basic Filter Logic
   const filteredEstimates = estimates.filter(est => {
     const searchLower = searchTerm.toLowerCase();
     const estNum = est.estimate_number?.toLowerCase() || '';
@@ -93,8 +85,6 @@ const Estimates = () => {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
            <h1 className="text-3xl font-bold tracking-tight text-slate-900">Estimates</h1>
@@ -114,7 +104,6 @@ const Estimates = () => {
 
       <Card>
         <CardContent className="p-0">
-          {/* Toolbar */}
           <div className="p-4 border-b bg-slate-50/50 flex gap-4">
              <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -127,7 +116,6 @@ const Estimates = () => {
              </div>
           </div>
 
-          {/* Table */}
           <div className="rounded-md border-t-0">
             <Table>
               <TableHeader>
@@ -201,7 +189,6 @@ const Estimates = () => {
         </CardContent>
       </Card>
 
-      {/* Connection to the Modal */}
       <EstimateEditorModal 
          isOpen={isCreateModalOpen}
          onClose={() => setIsCreateModalOpen(false)}

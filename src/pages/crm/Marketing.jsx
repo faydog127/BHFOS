@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { useNavigate } from 'react-router-dom';
@@ -5,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Plus, Calendar, Download, Maximize2, ExternalLink } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
+import { getTenantId } from '@/lib/tenantUtils';
 import { useToast } from '@/components/ui/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -22,6 +24,7 @@ const Marketing = () => {
   const [dateRange, setDateRange] = useState('30');
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
+  const tenantId = getTenantId();
 
   useEffect(() => {
     fetchLeads();
@@ -30,13 +33,13 @@ const Marketing = () => {
   const fetchLeads = async () => {
     setLoading(true);
     try {
-      // Calculate date cutoff based on range (defaulting to 90 days max for performance on client-side filtering)
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - 90);
       
       const { data, error } = await supabase
         .from('leads')
         .select('id, created_at, marketing_source_detail, is_partner, source_kind, source, utm_source, utm_medium, utm_campaign')
+        .eq('tenant_id', tenantId) // TENANT FILTER
         .gte('created_at', cutoff.toISOString());
 
       if (error) throw error;
@@ -62,7 +65,6 @@ const Marketing = () => {
             <p className="text-muted-foreground mt-1">Track sources, manage campaigns, and automate growth.</p>
           </div>
           <div className="flex items-center gap-2">
-             {/* Shortcut to Console (Sidebar is read-only, so we add entry point here) */}
              <Button 
                 variant="outline" 
                 className="hidden md:flex border-slate-200 text-slate-700 hover:bg-slate-50"

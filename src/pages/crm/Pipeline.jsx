@@ -1,5 +1,7 @@
+
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
+import { getTenantId } from '@/lib/tenantUtils'; // IMPORT TENANT UTILS
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,6 +24,7 @@ const Pipeline = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
+  const tenantId = getTenantId();
 
   useEffect(() => {
     fetchLeads();
@@ -30,8 +33,6 @@ const Pipeline = () => {
   const fetchLeads = async () => {
     try {
       setLoading(true);
-      // Explicitly specifying the relationship path for estimates to resolve ambiguity.
-      // We use the foreign key constraint name: estimates_lead_id_fkey
       const { data, error } = await supabase
         .from('leads')
         .select(`
@@ -48,7 +49,8 @@ const Pipeline = () => {
           estimates!estimates_lead_id_fkey (
             total_price
           )
-        `);
+        `)
+        .eq('tenant_id', tenantId); // TENANT FILTER
 
       if (error) throw error;
       setLeads(data || []);
@@ -82,7 +84,8 @@ const Pipeline = () => {
       const { error } = await supabase
         .from('leads')
         .update({ status: newStatus })
-        .eq('id', draggableId);
+        .eq('id', draggableId)
+        .eq('tenant_id', tenantId); // TENANT CHECK
 
       if (error) throw error;
       
@@ -110,20 +113,15 @@ const Pipeline = () => {
 
   const getColumnLeads = (status) => {
     return filteredLeads.filter(lead => {
-        // Simple normalization for matching status columns
         const leadStatus = (lead.status || 'New').toLowerCase();
         const colId = status.toLowerCase();
         
-        // Handle variations
         if (colId === 'new' && leadStatus === 'new') return true;
         if (colId === 'working' && (leadStatus === 'working' || leadStatus === 'contacted')) return true;
         if (colId === 'scheduled' && leadStatus === 'scheduled') return true;
         if (colId === 'closed' && (leadStatus === 'closed' || leadStatus === 'won' || leadStatus === 'customer')) return true;
         if (colId === 'lost' && (leadStatus === 'lost' || leadStatus === 'archived')) return true;
-        
-        // Default to 'New' if status is unrecognized and column is New
         if (status === 'New' && !['new','working','contacted','scheduled','closed','won','customer','lost','archived'].includes(leadStatus)) return true;
-        
         return false;
     });
   };

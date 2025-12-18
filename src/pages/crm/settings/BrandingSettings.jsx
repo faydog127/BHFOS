@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
@@ -8,10 +9,11 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, Bot, Loader2, Save, Plus, Trash2, Mic, HandMetal, BookOpen } from 'lucide-react';
+import { Sparkles, Bot, Loader2, Save, Plus, Trash2, Mic, HandMetal, BookOpen, Palette, FileText, Download, ExternalLink } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { invoke } from '@/lib/api';
+import { BRAND_COLORS } from '@/lib/brandConfig';
 
 const Section = ({ title, description, children, ...props }) => (
   <Card {...props}>
@@ -71,6 +73,8 @@ const BrandingSettings = () => {
   const [services, setServices] = useState([]);
   const [objections, setObjections] = useState([]);
   const [playbooks, setPlaybooks] = useState([]);
+  const [brandColors, setBrandColors] = useState(BRAND_COLORS);
+  const [storageFiles, setStorageFiles] = useState([]);
 
   // Dialog states
   const [serviceModal, setServiceModal] = useState({ isOpen: false, data: null });
@@ -85,7 +89,16 @@ const BrandingSettings = () => {
     } else {
       if (table === 'brand_profile') {
         const profile = data.reduce((acc, { key, value }) => ({ ...acc, [key]: value }), {});
-        setter(profile);
+        setBrandProfile(profile);
+        // Parse brand colors if they exist
+        if (profile.brand_colors) {
+            try {
+                const parsedColors = JSON.parse(profile.brand_colors);
+                setBrandColors(prev => ({ ...prev, ...parsedColors }));
+            } catch (e) {
+                console.error("Failed to parse brand colors", e);
+            }
+        }
       } else {
         setter(data);
       }
@@ -93,11 +106,21 @@ const BrandingSettings = () => {
     setLoading(prev => ({ ...prev, [table]: false }));
   }, [toast]);
 
+  const fetchStorageFiles = async () => {
+      setLoading(prev => ({ ...prev, storage: true }));
+      const { data, error } = await supabase.storage.from('vent-guys-images').list();
+      if (!error && data) {
+          setStorageFiles(data);
+      }
+      setLoading(prev => ({ ...prev, storage: false }));
+  };
+
   useEffect(() => {
     fetchData('brand_profile', setBrandProfile);
     fetchData('services', setServices);
     fetchData('objections', setObjections);
     fetchData('playbook_templates', setPlaybooks);
+    fetchStorageFiles();
   }, [fetchData]);
 
   const handleSave = async (table, data, id) => {
@@ -137,7 +160,17 @@ const BrandingSettings = () => {
 
   const handleBrandProfileSave = async () => {
     setLoading(prev => ({...prev, brandSaving: true}));
+    
+    // Prepare updates
     const updates = Object.keys(brandProfile).map(key => ({ key, value: brandProfile[key] }));
+    
+    // Add colors as a special key
+    const colorUpdate = { key: 'brand_colors', value: JSON.stringify(brandColors) };
+    // Filter out existing if we are updating it, otherwise push
+    const existingIndex = updates.findIndex(u => u.key === 'brand_colors');
+    if (existingIndex >= 0) updates[existingIndex] = colorUpdate;
+    else updates.push(colorUpdate);
+
     const { error } = await supabase.from('brand_profile').upsert(updates, { onConflict: 'key' });
     if(error) {
         toast({ variant: 'destructive', title: 'Save Failed', description: error.message });
@@ -151,11 +184,17 @@ const BrandingSettings = () => {
     loading[key] ? <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div> : null
   );
 
+  const getPublicUrl = (path) => {
+      const { data } = supabase.storage.from('vent-guys-images').getPublicUrl(path);
+      return data.publicUrl;
+  };
+
   return (
     <div className="max-w-6xl mx-auto">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="brand-voice"><Mic className="w-4 h-4 mr-2"/>Brand Voice</TabsTrigger>
+                <TabsTrigger value="visual-identity"><Palette className="w-4 h-4 mr-2"/>Visual Identity</TabsTrigger>
                 <TabsTrigger value="services"><BookOpen className="w-4 h-4 mr-2"/>Services</TabsTrigger>
                 <TabsTrigger value="objections"><HandMetal className="w-4 h-4 mr-2"/>Objections</TabsTrigger>
                 <TabsTrigger value="playbooks"><Bot className="w-4 h-4 mr-2"/>Playbooks</TabsTrigger>
@@ -208,6 +247,101 @@ const BrandingSettings = () => {
                             {loading.brandSaving ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2"/>} Save Brand Profile
                         </Button>
                     </CardFooter>
+                </Section>
+            </TabsContent>
+
+            {/* VISUAL IDENTITY TAB */}
+            <TabsContent value="visual-identity" className="space-y-4">
+                <Section title="Brand Colors" description="Define your official brand colors found in the Brand Guide.">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <Field label="Primary Color">
+                            <div className="flex gap-2">
+                                <Input type="color" className="w-12 p-1" value={brandColors.primary} onChange={e => setBrandColors({...brandColors, primary: e.target.value})} />
+                                <Input value={brandColors.primary} onChange={e => setBrandColors({...brandColors, primary: e.target.value})} placeholder="#HEX" />
+                            </div>
+                        </Field>
+                        <Field label="Secondary Color">
+                            <div className="flex gap-2">
+                                <Input type="color" className="w-12 p-1" value={brandColors.secondary} onChange={e => setBrandColors({...brandColors, secondary: e.target.value})} />
+                                <Input value={brandColors.secondary} onChange={e => setBrandColors({...brandColors, secondary: e.target.value})} placeholder="#HEX" />
+                            </div>
+                        </Field>
+                        <Field label="Accent Color">
+                            <div className="flex gap-2">
+                                <Input type="color" className="w-12 p-1" value={brandColors.accent} onChange={e => setBrandColors({...brandColors, accent: e.target.value})} />
+                                <Input value={brandColors.accent} onChange={e => setBrandColors({...brandColors, accent: e.target.value})} placeholder="#HEX" />
+                            </div>
+                        </Field>
+                        <Field label="Text Color">
+                            <div className="flex gap-2">
+                                <Input type="color" className="w-12 p-1" value={brandColors.text} onChange={e => setBrandColors({...brandColors, text: e.target.value})} />
+                                <Input value={brandColors.text} onChange={e => setBrandColors({...brandColors, text: e.target.value})} placeholder="#HEX" />
+                            </div>
+                        </Field>
+                        <Field label="Background Color">
+                            <div className="flex gap-2">
+                                <Input type="color" className="w-12 p-1" value={brandColors.background} onChange={e => setBrandColors({...brandColors, background: e.target.value})} />
+                                <Input value={brandColors.background} onChange={e => setBrandColors({...brandColors, background: e.target.value})} placeholder="#HEX" />
+                            </div>
+                        </Field>
+                    </div>
+                    <CardFooter className="px-0 pt-6">
+                        <Button onClick={handleBrandProfileSave} disabled={loading.brandSaving}>
+                            {loading.brandSaving ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2"/>} Save Colors
+                        </Button>
+                    </CardFooter>
+                </Section>
+
+                <Section title="Brand Assets in Storage" description="Files currently hosted in 'vent-guys-images' bucket.">
+                    <div className="space-y-4">
+                        {loading.storage ? (
+                            <div className="text-center py-4"><Loader2 className="animate-spin inline-block mr-2"/> Loading assets...</div>
+                        ) : storageFiles.length === 0 ? (
+                            <div className="text-center py-4 text-muted-foreground">No files found.</div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {storageFiles.map(file => (
+                                    <div key={file.id} className="flex items-center justify-between p-3 border rounded-lg bg-slate-50">
+                                        <div className="flex items-center gap-3 overflow-hidden">
+                                            {file.metadata?.mimetype === 'application/pdf' ? (
+                                                <FileText className="w-8 h-8 text-red-500 flex-shrink-0" />
+                                            ) : (
+                                                <div className="w-8 h-8 bg-slate-200 rounded flex items-center justify-center flex-shrink-0 text-xs font-bold text-slate-500">
+                                                    IMG
+                                                </div>
+                                            )}
+                                            <div className="truncate">
+                                                <div className="font-medium text-sm truncate" title={file.name}>{file.name}</div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    {(file.metadata?.size / 1024).toFixed(1)} KB
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <a 
+                                            href={getPublicUrl(file.name)} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="flex-shrink-0"
+                                        >
+                                            <Button variant="outline" size="sm">
+                                                {file.name.toLowerCase().includes('brand') ? 'View Guide' : 'View'} 
+                                                <ExternalLink className="w-3 h-3 ml-2" />
+                                            </Button>
+                                        </a>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg flex items-start gap-3 mt-4">
+                            <FileText className="w-5 h-5 text-blue-600 mt-0.5" />
+                            <div>
+                                <h4 className="text-sm font-bold text-blue-900">Brand Guide Detected</h4>
+                                <p className="text-xs text-blue-700 mt-1">
+                                    The <strong>Brand Guide.pdf</strong> contains your official colors. Click "View Guide" above to open it, identify the Hex codes (e.g. #123456), and enter them in the Color Palette section above.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
                 </Section>
             </TabsContent>
             

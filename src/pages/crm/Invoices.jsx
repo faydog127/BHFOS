@@ -1,37 +1,22 @@
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/customSupabaseClient';
+import { getTenantId } from '@/lib/tenantUtils';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { 
-  Plus, 
-  Search, 
-  Filter, 
-  MoreHorizontal, 
-  Clock, 
-  AlertCircle,
-  DollarSign
+  Plus, Search, Filter, MoreHorizontal, Clock, AlertCircle, DollarSign
 } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, 
+  DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { useToast } from '@/components/ui/use-toast';
 import QuickBooksIndicator from '@/components/crm/invoices/QuickBooksIndicator';
@@ -43,7 +28,7 @@ const Invoices = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const tenantId = getTenantId();
 
   useEffect(() => {
     fetchInvoices();
@@ -71,6 +56,7 @@ const Invoices = () => {
             type
           )
         `)
+        .eq('tenant_id', tenantId) // TENANT FILTER
         .order('created_at', { ascending: false });
 
       if (statusFilter !== 'all') {
@@ -95,16 +81,11 @@ const Invoices = () => {
 
   const getStatusBadge = (status) => {
     switch (status) {
-      case 'paid':
-        return <Badge className="bg-green-100 text-green-800 border-green-200">Paid</Badge>;
-      case 'partial':
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Partial</Badge>;
-      case 'overdue':
-        return <Badge className="bg-red-100 text-red-800 border-red-200">Overdue</Badge>;
-      case 'sent':
-        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Sent</Badge>;
-      default:
-        return <Badge variant="outline" className="capitalize">{status || 'Draft'}</Badge>;
+      case 'paid': return <Badge className="bg-green-100 text-green-800 border-green-200">Paid</Badge>;
+      case 'partial': return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Partial</Badge>;
+      case 'overdue': return <Badge className="bg-red-100 text-red-800 border-red-200">Overdue</Badge>;
+      case 'sent': return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Sent</Badge>;
+      default: return <Badge variant="outline" className="capitalize">{status || 'Draft'}</Badge>;
     }
   };
 
@@ -143,7 +124,7 @@ const Invoices = () => {
             <Clock className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <Button onClick={() => navigate('/crm/invoices/new')}>
+          <Button onClick={() => navigate('/bhf/crm/invoices/new')}>
             <Plus className="w-4 h-4 mr-2" />
             Create Invoice
           </Button>
@@ -216,7 +197,7 @@ const Invoices = () => {
                   <TableHead>Date</TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>QB Sync</TableHead> {/* NEW COLUMN */}
+                  <TableHead>QB Sync</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -267,7 +248,7 @@ const Invoices = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => navigate(`/crm/invoices/${invoice.id}`)}>
+                            <DropdownMenuItem onClick={() => navigate(`/bhf/crm/invoices/${invoice.id}`)}>
                               Edit Invoice
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => window.open(`/invoices/${invoice.id}`, '_blank')}>

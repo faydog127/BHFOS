@@ -3,7 +3,7 @@
   "frontendModules": [
     { "id": "fe_dashboard", "name": "CRM Dashboard", "route": "/crm", "dependencies": [], "phase": "MVP" },
     { "id": "fe_leads_list", "name": "Leads List", "route": "/crm/leads", "dependencies": ["fe_dashboard"], "phase": "MVP" },
-    { "id": "fe_smart_call", "name": "Smart Call Console", "route": "/crm/calls", "dependencies": ["fe_leads_list"], "phase": "MVP" },
+    { "id": "fe_smart_call", "name": "Smart Call Console", "route": "/crm/call-console", "dependencies": ["fe_leads_list"], "phase": "MVP", "status": "partial", "notes": "Logic layer complete. VoIP integration pending." },
     { "id": "fe_inbox", "name": "Unified Inbox", "route": "/crm/inbox", "dependencies": [], "phase": "MVP" },
     { "id": "fe_schedule", "name": "Scheduling", "route": "/crm/schedule", "dependencies": [], "phase": "MVP" },
     { "id": "fe_estimates", "name": "Estimates Manager", "route": "/crm/estimates", "dependencies": [], "phase": "MVP" },
@@ -42,6 +42,7 @@
     { "id": "be_schedule_appt", "name": "Schedule Appointment", "dependencies": ["appointments_table"], "phase": "MVP" },
     { "id": "be_ai_suggestion", "name": "Generate AI Suggestion", "dependencies": ["marketing_actions_table"], "phase": "Phase 2" },
     { "id": "be_tech_assignment", "name": "Assign Technician", "dependencies": ["jobs_table", "technicians_table"], "phase": "MVP" },
-    { "id": "be_inventory_check", "name": "Check Inventory", "dependencies": ["inventory_table"], "phase": "Phase 3" }
+    { "id": "be_inventory_check", "name": "Check Inventory", "dependencies": ["inventory_table"], "phase": "Phase 3" },
+    { "id": "be_call_logging", "name": "Call Logging & Scripting", "dependencies": ["calls_table", "edge_function_console_save"], "phase": "MVP" }
   ]
 }

@@ -1,120 +1,182 @@
-import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/customSupabaseClient';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { Flame, Sparkles, Tag, ArrowRight, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Ticket, Download, Tag, Clock } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
-import { format } from 'date-fns';
+import { Card, CardContent } from '@/components/ui/card';
+import UrgencyTimer from '@/components/UrgencyTimer';
 
-const SpecialsSection = () => {
-    const [coupons, setCoupons] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const { toast } = useToast();
+export default function SpecialsSection() {
+  const specials = [
+    {
+      id: 1,
+      icon: Flame,
+      badge: "Most Popular",
+      badgeColor: "bg-red-500",
+      title: "Dryer Vent Cleaning Special",
+      originalPrice: "$150",
+      specialPrice: "$129",
+      savings: "Save $21",
+      description: "Complete dryer vent cleaning from connection to termination point. Includes airflow testing and safety inspection.",
+      features: [
+        "Lint removal from entire vent run",
+        "Before & after airflow measurement",
+        "Fire safety inspection",
+        "Same-day service available"
+      ],
+      gradient: "from-red-500 to-orange-500",
+      cta: "Book Now",
+      link: "/booking"
+    },
+    {
+      id: 2,
+      icon: Sparkles,
+      badge: "Best Value",
+      badgeColor: "bg-blue-500",
+      title: "NADCA Duct Cleaning Package",
+      originalPrice: "$449",
+      specialPrice: "$399",
+      savings: "Save $50",
+      description: "Full NADCA-compliant air duct cleaning with photo documentation. Perfect for homes up to 2,500 sq ft.",
+      features: [
+        "Negative pressure system",
+        "Before & after photos",
+        "HEPA filtration",
+        "Free air filter upgrade"
+      ],
+      gradient: "from-blue-500 to-cyan-500",
+      cta: "Get Started",
+      link: "/booking"
+    },
+    {
+      id: 3,
+      icon: CheckCircle,
+      badge: "Premium",
+      badgeColor: "bg-purple-500",
+      title: "Complete Home Package",
+      originalPrice: "$649",
+      specialPrice: "$549",
+      savings: "Save $100",
+      description: "Everything your home needs: dryer vent + full duct cleaning + IAQ testing. The ultimate clean air solution.",
+      features: [
+        "Dryer vent cleaning",
+        "Complete duct cleaning",
+        "IAQ testing & report",
+        "Clean Air Certification"
+      ],
+      gradient: "from-purple-500 to-pink-500",
+      cta: "Book Package",
+      link: "/booking"
+    }
+  ];
 
-    useEffect(() => {
-        fetchCoupons();
-    }, []);
+  return (
+    <section className="py-20 bg-gradient-to-b from-slate-50 to-white">
+      <div className="container mx-auto px-4">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="text-center mb-12"
+        >
+          <div className="inline-block bg-gradient-to-r from-red-500 to-orange-500 text-white px-4 py-2 rounded-full text-sm font-bold mb-4 shadow-lg">
+            🎉 Limited Time Offers
+          </div>
+          <h2 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">
+            Special Pricing for <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-600">Brevard County</span>
+          </h2>
+          <p className="text-xl text-slate-600 max-w-2xl mx-auto">
+            Professional, photo-verified service at unbeatable prices
+          </p>
+        </motion.div>
 
-    const fetchCoupons = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('coupons')
-                .select('*')
-                .eq('is_active', true)
-                .gte('valid_until', new Date().toISOString());
-            
-            if (error) throw error;
-            setCoupons(data || []);
-        } catch (error) {
-            console.error('Failed to load specials:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+        {/* Timer */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.2 }}
+          className="mb-12"
+        >
+          <UrgencyTimer endDate="2025-12-31" />
+        </motion.div>
 
-    const handleDownload = (coupon) => {
-        // Simulate download
-        const element = document.createElement("a");
-        const file = new Blob(
-            [`
-------------------------------------------------
-THE VENT GUYS - SPECIAL OFFER
-------------------------------------------------
-Offer: ${coupon.title}
-Discount: ${coupon.discount_value}
-Details: ${coupon.description}
-Code: ${coupon.code}
-Valid Until: ${format(new Date(coupon.valid_until), 'MMM d, yyyy')}
-------------------------------------------------
-Present this coupon at time of service.
-www.theventguys.com
-            `], 
-            {type: 'text/plain'}
-        );
-        element.href = URL.createObjectURL(file);
-        element.download = `TVG_Coupon_${coupon.code}.txt`;
-        document.body.appendChild(element);
-        element.click();
-        
-        toast({
-            title: "Coupon Downloaded!",
-            description: "Present this code to your technician.",
-        });
-    };
+        {/* Special Cards */}
+        <div className="grid md:grid-cols-3 gap-8 max-w-7xl mx-auto">
+          {specials.map((special, index) => (
+            <motion.div
+              key={special.id}
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: index * 0.1 }}
+            >
+              <Card className="relative overflow-hidden hover:shadow-2xl transition-all duration-300 group h-full flex flex-col border-2 hover:border-blue-400">
+                {/* Gradient Header */}
+                <div className={`bg-gradient-to-r ${special.gradient} p-6 text-white relative`}>
+                  <div className="absolute top-4 right-4">
+                    <div className={`${special.badgeColor} text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg`}>
+                      {special.badge}
+                    </div>
+                  </div>
 
-    if (!loading && coupons.length === 0) return null;
+                  <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mb-4">
+                    <special.icon className="w-8 h-8" />
+                  </div>
 
-    return (
-        <section className="py-16 bg-gradient-to-br from-blue-900 via-slate-900 to-black text-white relative overflow-hidden">
-             {/* Abstract Shapes */}
-             <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-             <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl translate-y-1/3 -translate-x-1/3"></div>
-
-            <div className="container mx-auto px-4 relative z-10">
-                <div className="text-center mb-12">
-                    <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-400/10 text-yellow-400 border border-yellow-400/20 text-xs font-bold uppercase tracking-wider mb-4">
-                        <Tag className="w-3 h-3" /> Limited Time Offers
-                    </span>
-                    <h2 className="text-3xl md:text-5xl font-bold mb-4 text-white">Current Specials</h2>
-                    <p className="text-blue-200 max-w-2xl mx-auto text-lg">
-                        Take advantage of our seasonal offers to improve your home's air quality for less.
-                    </p>
+                  <h3 className="text-2xl font-bold mb-2">{special.title}</h3>
+                  
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-white/60 line-through text-lg">{special.originalPrice}</span>
+                    <span className="text-4xl font-bold">{special.specialPrice}</span>
+                  </div>
+                  <div className="inline-block bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-semibold mt-2">
+                    {special.savings}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
-                    {coupons.map((coupon) => (
-                        <div key={coupon.id} className="group relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden hover:bg-white/10 transition-all duration-300">
-                            <div className="absolute top-0 right-0 p-4">
-                                <Ticket className="w-24 h-24 text-white/5 group-hover:text-white/10 transition-colors rotate-12 transform translate-x-4 -translate-y-4" />
-                            </div>
-                            
-                            <div className="p-6 md:p-8">
-                                <div className="text-3xl font-bold text-yellow-400 mb-2">{coupon.discount_value}</div>
-                                <h3 className="text-xl font-bold text-white mb-2">{coupon.title}</h3>
-                                <p className="text-sm text-blue-200 mb-6 min-h-[40px]">{coupon.description}</p>
-                                
-                                <div className="flex items-center gap-2 text-xs text-slate-400 mb-6 bg-black/20 w-fit px-3 py-1 rounded-full">
-                                    <Clock className="w-3 h-3" />
-                                    Expires: {format(new Date(coupon.valid_until), 'MMM d, yyyy')}
-                                </div>
+                <CardContent className="p-6 flex-1 flex flex-col">
+                  <p className="text-gray-700 mb-6 leading-relaxed">
+                    {special.description}
+                  </p>
 
-                                <div className="border-t border-white/10 pt-6">
-                                    <div className="flex items-center justify-between gap-4">
-                                        <div className="flex-1 bg-black/30 rounded-lg p-2 text-center font-mono text-sm font-bold tracking-widest text-white border border-dashed border-white/20 select-all">
-                                            {coupon.code}
-                                        </div>
-                                        <Button onClick={() => handleDownload(coupon)} size="sm" className="bg-blue-600 hover:bg-blue-500 text-white shrink-0">
-                                            <Download className="w-4 h-4 mr-2" /> Save
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                  <ul className="space-y-3 mb-6 flex-1">
+                    {special.features.map((feature, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                        <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span>{feature}</span>
+                      </li>
                     ))}
-                </div>
-            </div>
-        </section>
-    );
-};
+                  </ul>
 
-export default SpecialsSection;
+                  <Link to={special.link} className="block">
+                    <Button 
+                      size="lg" 
+                      className={`w-full bg-gradient-to-r ${special.gradient} hover:opacity-90 text-white font-bold shadow-lg group-hover:shadow-xl transition-all`}
+                    >
+                      {special.cta}
+                      <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Fine Print */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.5 }}
+          className="text-center mt-8 text-sm text-gray-500"
+        >
+          <p>* All prices subject to on-site verification of square footage and system accessibility.</p>
+          <p className="mt-1">Online booking required for special pricing. Offers valid through Dec 31, 2025.</p>
+        </motion.div>
+      </div>
+    </section>
+  );
+}

@@ -1,5 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
+import { getTenantId } from '@/lib/tenantUtils';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +29,7 @@ const PricebookManager = () => {
     description: '',
     active: true
   });
+  const tenantId = getTenantId();
 
   useEffect(() => {
     fetchItems();
@@ -34,7 +37,11 @@ const PricebookManager = () => {
 
   const fetchItems = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('price_book').select('*').order('name');
+    const { data, error } = await supabase
+      .from('price_book')
+      .select('*')
+      .eq('tenant_id', tenantId) // TENANT FILTER
+      .order('name');
     if (error) {
       toast({ variant: 'destructive', title: 'Error', description: error.message });
     } else {
@@ -52,17 +59,17 @@ const PricebookManager = () => {
 
         const payload = { 
             ...formData, 
-            base_price: parseFloat(formData.base_price)
+            base_price: parseFloat(formData.base_price),
+            tenant_id: tenantId // Explicit insert
         };
         
-        // Auto-generate code if empty
         if (!payload.code) {
             payload.code = payload.name.substring(0, 3).toUpperCase() + Math.floor(Math.random() * 1000);
         }
 
         let error;
         if (editingItem) {
-            ({ error } = await supabase.from('price_book').update(payload).eq('id', editingItem.id));
+            ({ error } = await supabase.from('price_book').update(payload).eq('id', editingItem.id).eq('tenant_id', tenantId));
         } else {
             ({ error } = await supabase.from('price_book').insert([payload]));
         }
@@ -79,7 +86,7 @@ const PricebookManager = () => {
 
   const handleDelete = async (id) => {
       if (!window.confirm('Delete this item?')) return;
-      const { error } = await supabase.from('price_book').delete().eq('id', id);
+      const { error } = await supabase.from('price_book').delete().eq('id', id).eq('tenant_id', tenantId);
       if (error) {
           toast({ variant: 'destructive', title: 'Error', description: error.message });
       } else {

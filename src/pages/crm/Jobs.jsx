@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { supabase } from '@/lib/customSupabaseClient';
+import { getTenantId } from '@/lib/tenantUtils';
 import { jobService } from '@/services/jobService';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
@@ -35,6 +37,8 @@ const Jobs = () => {
   const [testJobId, setTestJobId] = useState(null);
   const [simulationLog, setSimulationLog] = useState([]);
 
+  const tenantId = getTenantId();
+
   useEffect(() => {
     fetchJobs();
   }, [filter]);
@@ -48,6 +52,7 @@ const Jobs = () => {
           *,
           leads (first_name, last_name, phone)
         `)
+        .eq('tenant_id', tenantId) // TENANT FILTER
         .order('scheduled_start', { ascending: false });
 
       if (filter === 'active') {
@@ -83,7 +88,8 @@ const Jobs = () => {
              const { error } = await supabase
                 .from('jobs')
                 .update({ status: newStatus })
-                .eq('id', jobId);
+                .eq('id', jobId)
+                .eq('tenant_id', tenantId);
              if (error) throw error;
              toast({ title: 'Status Updated', description: `Job moved to ${newStatus}` });
         }

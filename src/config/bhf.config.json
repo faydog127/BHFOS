@@ -1,5 +1,9 @@
 
 {
+  "meta": {
+    "version": "2.3",
+    "description": "Multi-tenant CRM configuration for Factory OS"
+  },
   "stations": [
     {
       "id": "crm_core",
@@ -7,9 +11,7 @@
       "description": "Primary customer relationship tables",
       "checks": [
         { "type": "table", "target": "public.leads" },
-        { "type": "table", "target": "public.jobs" },
-        { "type": "table", "target": "public.estimates" },
-        { "type": "table", "target": "public.customers" }
+        { "type": "table", "target": "public.jobs" }
       ]
     },
     {
@@ -17,54 +19,92 @@
       "name": "System Admin",
       "description": "Administrative control and access",
       "checks": [
-        { "type": "table", "target": "public.app_user_roles" },
-        { "type": "table", "target": "public.system_settings" },
-        { "type": "table", "target": "public.audit_log_entries" }
-      ]
-    },
-    {
-      "id": "comms",
-      "name": "Communications",
-      "description": "Messaging and voice infrastructure",
-      "checks": [
-        { "type": "table", "target": "communications.calls" },
-        { "type": "table", "target": "communications.sms_messages" },
-        { "type": "table", "target": "public.marketing_campaigns" }
-      ]
-    },
-    {
-      "id": "sb_probe",
-      "name": "Supabase Probe",
-      "description": "Backend services availability",
-      "checks": [
-        { "type": "table", "target": "public.system_audit_log" },
-        { "type": "function", "target": "system_doctor_check_table" },
-        { "type": "function", "target": "execute_remediation_plan" }
-      ]
-    },
-    {
-      "id": "build_health",
-      "name": "Build Health",
-      "description": "Environment and configuration status",
-      "checks": [
-        { "type": "env", "target": "VITE_SUPABASE_URL" },
-        { "type": "env", "target": "VITE_SUPABASE_ANON_KEY" },
-        { "type": "env", "target": "VITE_GOOGLE_MAPS_API_KEY" }
-      ]
-    },
-    {
-      "id": "tenant_auditor",
-      "name": "Tenant Auditor",
-      "description": "Multi-tenancy isolation checks",
-      "checks": [
-        { "type": "table", "target": "public.organizations" },
-        { "type": "policy", "target": "tenant_isolation_policy" }
+        { "type": "table", "target": "public.app_user_roles" }
       ]
     }
+  ],
+  "crm_modules_definition": [
+    { "id": "dashboard", "label": "Dashboard", "path": "/bhf/crm", "flag": null, "icon": "LayoutDashboard", "description": "Overview of KPIs and activity" },
+    { "id": "leads", "label": "Leads", "path": "/bhf/crm/leads", "flag": "enableLeads", "icon": "Users", "description": "Manage incoming prospects and qualification" },
+    { "id": "pipeline", "label": "Pipeline", "path": "/bhf/crm/pipeline", "flag": "enablePipeline", "icon": "BarChart3", "description": "Visual deal tracking and stage management" },
+    { "id": "jobs", "label": "Jobs", "path": "/bhf/crm/jobs", "flag": "enableJobs", "icon": "HardHat", "description": "Active job management and tracking" },
+    { "id": "schedule", "label": "Schedule", "path": "/bhf/crm/schedule", "flag": "enableSchedule", "icon": "Calendar", "description": "Dispatch and appointment calendar" },
+    { "id": "estimates", "label": "Estimates", "path": "/bhf/crm/estimates", "flag": "enableEstimates", "icon": "FileText", "description": "Create and send cost estimates" },
+    { "id": "invoices", "label": "Invoices", "path": "/bhf/crm/invoices", "flag": "enableInvoicing", "icon": "Wallet", "description": "Billing and payment collection" },
+    { "id": "contacts", "label": "Contacts", "path": "/bhf/crm/contacts", "flag": "enableContacts", "icon": "Briefcase", "description": "Customer database and history" },
+    { "id": "call-console", "label": "Call Console", "path": "/bhf/crm/call-console", "flag": "enableCallConsole", "icon": "Phone", "description": "Power dialer and call logging" },
+    { "id": "sms", "label": "Inbox", "path": "/bhf/crm/sms", "flag": "enableSMS", "icon": "MessageSquare", "description": "2-way text messaging" },
+    { "id": "marketing", "label": "Marketing", "path": "/bhf/crm/marketing", "flag": "enableMarketing", "icon": "Megaphone", "description": "Campaigns and automation" },
+    { "id": "reporting", "label": "Reporting", "path": "/bhf/crm/reporting", "flag": "enableReporting", "icon": "BarChart", "description": "Analytics and performance metrics" },
+    { "id": "pricebook", "label": "Pricebook", "path": "/bhf/crm/pricebook", "flag": "enablePricebook", "icon": "Book", "description": "Service and product pricing catalog" },
+    { "id": "partners", "label": "Partners", "path": "/bhf/crm/partners", "flag": "enablePartners", "icon": "Handshake", "description": "Partner network management" },
+    { "id": "settings", "label": "Settings", "path": "/bhf/crm/settings", "flag": "enableSettings", "icon": "Settings", "description": "System configuration" }
   ],
   "integrations": [
     { "id": "google_places", "key_name": "VITE_GOOGLE_MAPS_API_KEY", "service_name": "Google Places API" },
     { "id": "supabase", "key_name": "VITE_SUPABASE_URL", "service_name": "Supabase Core" },
     { "id": "openai", "key_name": "VITE_OPENAI_API_KEY", "service_name": "OpenAI LLM" }
-  ]
+  ],
+  "bhf_defaults": {
+    "features": {
+      "enableLeads": { "value": true, "locked": false },
+      "enablePipeline": { "value": true, "locked": false },
+      "enableJobs": { "value": true, "locked": false },
+      "enableSchedule": { "value": true, "locked": false },
+      "enableEstimates": { "value": true, "locked": false },
+      "enableInvoicing": { "value": true, "locked": false },
+      "enableContacts": { "value": true, "locked": false },
+      "enableCallConsole": { "value": true, "locked": false },
+      "enableSMS": { "value": true, "locked": false },
+      "enableMarketing": { "value": true, "locked": false },
+      "enableReporting": { "value": true, "locked": false },
+      "enablePricebook": { "value": true, "locked": false },
+      "enablePartners": { "value": true, "locked": false },
+      "enableSettings": { "value": true, "locked": true }
+    },
+    "branding": {
+      "logo_url": "/assets/branding/TVG_logo.png",
+      "primary_color": "#2563eb",
+      "secondary_color": "#64748b"
+    }
+  },
+  "tenants": {
+    "default": {
+      "name": "Factory Host",
+      "description": "BHF Master Environment",
+      "features": {},
+      "branding": {}
+    },
+    "tvg": {
+      "name": "The Vent Guys",
+      "description": "Primary Operating Tenant",
+      "features": {
+        "enableMarketing": false 
+      },
+      "branding": {
+        "logo_url": "/assets/branding/TVG_logo.png",
+        "primary_color": "#2563eb"
+      }
+    },
+    "installworxs": {
+      "name": "Install Worxs",
+      "description": "Smart Installation Management",
+      "features": {},
+      "branding": {
+        "logo_url": "https://images.unsplash.com/photo-1581094288338-2314dddb7ece?w=100&h=100&fit=crop&q=80",
+        "primary_color": "#f97316", 
+        "secondary_color": "#84cc16"
+      }
+    },
+    "demo": {
+      "name": "Black Horse Farm OS",
+      "description": "AI-Powered Agricultural Manufacturing",
+      "features": {},
+      "branding": {
+        "logo_url": "https://images.unsplash.com/photo-1625246333195-58197bd47d26?w=100&h=100&fit=crop&q=80",
+        "primary_color": "#15803d",
+        "secondary_color": "#854d0e"
+      }
+    }
+  }
 }

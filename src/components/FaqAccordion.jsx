@@ -1,9 +1,11 @@
+
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 // Helper function to parse and link content
 const LinkedContent = ({ content }) => {
+    if (!content) return null;
     const parts = content.split(/(\[.*?\]\(.*?\))/g);
     return (
         <>
@@ -23,7 +25,11 @@ const LinkedContent = ({ content }) => {
     );
 };
 
-const FaqAccordion = ({ faqs, defaultOpen = false }) => {
+const FaqAccordion = ({ faqs = [], defaultOpen = false }) => {
+    if (!faqs || !Array.isArray(faqs) || faqs.length === 0) {
+        return null;
+    }
+
     return (
         <Accordion type="single" collapsible className="w-full" defaultValue={defaultOpen ? faqs[0]?.id : null}>
             {faqs.map((faq) => (

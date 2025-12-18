@@ -1,5 +1,7 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
+import { getTenantId } from '@/lib/tenantUtils';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +19,7 @@ const SmsInbox = () => {
   const [loading, setLoading] = useState(true);
   const scrollRef = useRef(null);
   const [sending, setSending] = useState(false);
+  const tenantId = getTenantId();
 
   useEffect(() => {
     fetchThreads();
@@ -37,6 +40,7 @@ const SmsInbox = () => {
     const { data, error } = await supabase
       .from('leads')
       .select('id, first_name, last_name, phone')
+      .eq('tenant_id', tenantId) // TENANT FILTER
       .order('last_touch_at', { ascending: false })
       .limit(20);
 
@@ -49,6 +53,7 @@ const SmsInbox = () => {
       .from('sms_messages')
       .select('*')
       .eq('lead_id', leadId)
+      .eq('tenant_id', tenantId) // TENANT FILTER (Technically redundant if lead is filtered, but safe)
       .order('created_at', { ascending: true });
 
     if (error) toast({ variant: 'destructive', title: 'Error', description: error.message });
@@ -58,7 +63,6 @@ const SmsInbox = () => {
   const handleSend = async () => {
     if (!newMessage.trim() || !selectedLeadId) return;
 
-    // 1. Get Lead Details
     const lead = threads.find(t => t.id === selectedLeadId);
     if (!lead?.phone) {
         toast({ variant: 'destructive', title: 'Error', description: 'Lead has no phone number.' });
@@ -67,32 +71,28 @@ const SmsInbox = () => {
 
     setSending(true);
     try {
-        // 2. Insert into DB (Queued)
         const { data: msgData, error: dbError } = await supabase.from('sms_messages').insert([{
           lead_id: selectedLeadId,
           direction: 'outbound',
           body: newMessage,
-          status: 'queued'
+          status: 'queued',
+          tenant_id: tenantId // Explicit insert
         }]).select().single();
 
         if (dbError) throw dbError;
 
-        // 3. Invoke Edge Function to Send via Twilio
         const { error: fnError } = await supabase.functions.invoke('send-sms', {
             body: { to: lead.phone, body: newMessage }
         });
 
         if (fnError) {
             console.error('Edge Function Error:', fnError);
-            // Mark as failed in DB
             await supabase.from('sms_messages').update({ status: 'failed' }).eq('id', msgData.id);
             throw fnError;
         }
 
-        // 4. Update DB to Sent
         await supabase.from('sms_messages').update({ status: 'sent' }).eq('id', msgData.id);
         
-        // 5. Update Lead Last Touch
         await supabase.from('leads').update({ last_touch_at: new Date().toISOString() }).eq('id', selectedLeadId);
 
         toast({ title: 'Sent', description: 'Message sent successfully.' });
@@ -150,7 +150,6 @@ const SmsInbox = () => {
               </div>
             </div>
 
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50" ref={scrollRef}>
               {messages.length === 0 && <p className="text-center text-gray-400 my-10">No messages yet. Start the conversation!</p>}
               {messages.map(m => (
@@ -170,7 +169,6 @@ const SmsInbox = () => {
               ))}
             </div>
 
-            {/* Input Area */}
             <div className="p-4 bg-white border-t space-y-3">
               <div className="flex gap-2 overflow-x-auto pb-2">
                 {['Yes, we can help!', 'Are you available for a call?', 'Please provide more details.', 'Not interested.'].map(qr => (

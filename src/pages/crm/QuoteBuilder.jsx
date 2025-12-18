@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
+import { getTenantId } from '@/lib/tenantUtils';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,13 +15,14 @@ import { Trash2, Plus, Save, Send, Loader2, ArrowLeft } from 'lucide-react';
 import { addDays, format } from 'date-fns';
 
 const QuoteBuilder = () => {
-    const { id } = useParams(); // If id exists, we are editing
+    const { id } = useParams();
     const navigate = useNavigate();
     const { toast } = useToast();
     const [loading, setLoading] = useState(false);
     const [leads, setLeads] = useState([]);
     const [services, setServices] = useState([]);
     const [settings, setSettings] = useState(null);
+    const tenantId = getTenantId();
 
     // Form State
     const [leadId, setLeadId] = useState('');
@@ -34,21 +37,21 @@ const QuoteBuilder = () => {
         const init = async () => {
             setLoading(true);
             try {
-                // Fetch Settings (Tax)
+                // Fetch Settings (Global/Tenant) - assuming business_settings is shared or updated with RLS (not strictly modified in this turn but good practice)
                 const { data: settingsData } = await supabase.from('business_settings').select('*').single();
                 setSettings(settingsData);
                 
                 // Fetch Leads
-                const { data: leadsData } = await supabase.from('leads').select('id, first_name, last_name, email').order('created_at', { ascending: false });
+                const { data: leadsData } = await supabase.from('leads').select('id, first_name, last_name, email').eq('tenant_id', tenantId).order('created_at', { ascending: false });
                 setLeads(leadsData || []);
 
-                // Fetch Services (for quick add)
-                const { data: servicesData } = await supabase.from('price_book').select('*').eq('active', true);
+                // Fetch Services
+                const { data: servicesData } = await supabase.from('price_book').select('*').eq('active', true).eq('tenant_id', tenantId);
                 setServices(servicesData || []);
 
                 // If Editing, Load Quote
                 if (id) {
-                    const { data: quote, error } = await supabase.from('quotes').select(`*, quote_items(*)`).eq('id', id).single();
+                    const { data: quote, error } = await supabase.from('quotes').select(`*, quote_items(*)`).eq('id', id).eq('tenant_id', tenantId).single();
                     if (error) throw error;
                     
                     setLeadId(quote.lead_id);
@@ -73,18 +76,15 @@ const QuoteBuilder = () => {
         init();
     }, [id]);
 
-    // Calculations
     const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.total_price) || 0), 0);
     const taxRate = settings?.default_tax_rate || 0;
     const taxAmount = subtotal * (taxRate / 100);
     const total = subtotal + taxAmount;
 
-    // Item Handlers
     const handleItemChange = (index, field, value) => {
         const newItems = [...items];
         newItems[index][field] = value;
         
-        // Recalculate total for row
         if (field === 'quantity' || field === 'unit_price') {
             const qty = parseFloat(newItems[index].quantity) || 0;
             const price = parseFloat(newItems[index].unit_price) || 0;
@@ -131,26 +131,22 @@ const QuoteBuilder = () => {
                 total_amount: total,
                 valid_until: validUntil,
                 header_text: headerText,
-                footer_text: footerText
+                footer_text: footerText,
+                tenant_id: tenantId // Explicit insert
             };
 
             let quoteId = id;
 
             if (id) {
-                // Update
                 const { error } = await supabase.from('quotes').update(quoteData).eq('id', id);
                 if (error) throw error;
-                
-                // Replace items (simple strategy: delete all, re-insert)
                 await supabase.from('quote_items').delete().eq('quote_id', id);
             } else {
-                // Create
                 const { data, error } = await supabase.from('quotes').insert([quoteData]).select().single();
                 if (error) throw error;
                 quoteId = data.id;
             }
 
-            // Insert Items
             const itemsPayload = items.map(item => ({
                 quote_id: quoteId,
                 description: item.description,
@@ -165,7 +161,7 @@ const QuoteBuilder = () => {
             }
 
             toast({ title: 'Quote Saved', description: `Quote has been ${status === 'sent' ? 'sent' : 'saved'}.` });
-            navigate('/crm/quotes');
+            navigate('/bhf/crm/estimates'); // Redirect to Estimates list (Quotes view)
 
         } catch (err) {
             console.error(err);
@@ -178,7 +174,7 @@ const QuoteBuilder = () => {
     return (
         <div className="p-6 max-w-5xl mx-auto space-y-6">
             <div className="flex items-center gap-4">
-                <Button variant="ghost" size="icon" onClick={() => navigate('/crm/quotes')}>
+                <Button variant="ghost" size="icon" onClick={() => navigate('/bhf/crm/estimates')}>
                     <ArrowLeft className="w-5 h-5"/>
                 </Button>
                 <div>
@@ -188,7 +184,6 @@ const QuoteBuilder = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Main Settings */}
                 <Card className="md:col-span-2">
                     <CardHeader><CardTitle>Customer & Terms</CardTitle></CardHeader>
                     <CardContent className="space-y-4">
@@ -223,7 +218,6 @@ const QuoteBuilder = () => {
                     </CardContent>
                 </Card>
 
-                {/* Quick Add */}
                 <Card>
                     <CardHeader><CardTitle>Quick Add</CardTitle></CardHeader>
                     <CardContent>
@@ -243,7 +237,6 @@ const QuoteBuilder = () => {
                 </Card>
             </div>
 
-            {/* Line Items */}
             <Card>
                 <CardHeader><CardTitle>Line Items</CardTitle></CardHeader>
                 <CardContent>
@@ -327,7 +320,7 @@ const QuoteBuilder = () => {
                     />
                 </CardContent>
                 <CardFooter className="justify-end gap-3 bg-slate-50 border-t p-4">
-                    <Button variant="outline" onClick={() => navigate('/crm/quotes')}>Cancel</Button>
+                    <Button variant="outline" onClick={() => navigate('/bhf/crm/estimates')}>Cancel</Button>
                     <Button variant="secondary" onClick={() => handleSave('draft')} disabled={loading}>
                          <Save className="w-4 h-4 mr-2" /> Save Draft
                     </Button>

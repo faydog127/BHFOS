@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
+import SYSTEM_VERSION from '@/config/version';
 
 // Embedded Package Data
 const PACKAGE_DATA = {
@@ -405,7 +406,7 @@ const SystemDiagnostics = () => {
                     <div>
                         <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
                             <Activity className="w-8 h-8 text-indigo-600" />
-                            System Diagnostics v5.1
+                            System Diagnostics {SYSTEM_VERSION.getFullVersion()}
                         </h1>
                         <p className="text-slate-500 mt-1">Feature completeness, dependency audits, and deep-scan diagnostics.</p>
                     </div>

@@ -18,4 +18,4 @@ Follow these steps to run the project on your local machine.
 
 ### 2. Installation
 
-Clone the repository and install the required dependencies:# BHFOS
+Clone the repository and install the required dependencies:

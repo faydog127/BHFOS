@@ -1,3 +1,4 @@
+
 // BRAND SOP:
 // 1. Receipts: Header (Logo), Footer (Credentials: NADCA, SDVOSB, Local, + Clean Air Cert if qualified)
 // 2. Reports: Header (Logo), Footer (Credentials: Same as Receipts)
@@ -12,22 +13,39 @@ export const BRAND_ASSETS = {
   badge_local_url: '/assets/branding/locally-owned.png'
 };
 
+// Default Brand Colors (TVG Blue/Grey standard)
+// Can be overridden by DB settings passed in context
+export const BRAND_COLORS = {
+  primary: '#2563eb',    // Blue-600
+  secondary: '#64748b',  // Slate-500
+  accent: '#f59e0b',     // Amber-500
+  text: '#0f172a',       // Slate-900
+  background: '#ffffff', // White
+};
+
 /**
  * Builds the standardized brand asset payload for emails and documents.
  * Ensures consistent credential rows across all communication.
- * @param {Object} context - Context object (e.g., job, invoice, lead)
+ * @param {Object} context - Context object (e.g., job, invoice, lead, db_settings)
  * @returns {Object} - Object containing all brand URLs, visibility flags, and config
  */
 export const getBrandPayload = (context = {}) => {
   // Determine if Clean Air Cert badge should be shown based on specific job flag
   const showCleanAirCert = context?.has_clean_air_cert === true;
 
+  // Allow DB overrides for colors if present in context
+  const colors = context?.brand_colors ? { ...BRAND_COLORS, ...context.brand_colors } : BRAND_COLORS;
+
   return {
     ...BRAND_ASSETS,
     show_clean_air_cert: showCleanAirCert,
     company_name: 'The Vent Guys',
     company_url: 'https://vent-guys.com',
-    primary_color: '#2563eb', // Blue-600
+    primary_color: colors.primary,
+    secondary_color: colors.secondary,
+    accent_color: colors.accent,
+    text_color: colors.text,
+    background_color: colors.background,
     address_line: 'Melbourne, FL | Space Coast Serving Brevard & Volusia'
   };
 };

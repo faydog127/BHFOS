@@ -1,224 +1,230 @@
+
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/components/ui/use-toast';
+import { useForm } from 'react-hook-form';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger,
+  DialogFooter
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
+import { Calendar as CalendarIcon, Loader2, CheckCircle2, ShieldCheck } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/customSupabaseClient';
-import { Loader2 } from 'lucide-react';
-import { SERVICE_CATALOG } from '@/lib/serviceCatalog';
 
-const FreeAirCheckModal = ({ open, onOpenChange }) => {
+const FreeAirCheckModal = ({ open, onOpenChange, children }) => {
+  const [date, setDate] = useState();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
   
-  // Form State
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    address: '',
-    notes: '',
-    jobType: 'residential',
-    partnerName: ''
-  });
+  const { register, handleSubmit, formState: { errors }, reset } = useForm();
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleJobTypeChange = (value) => {
-      setFormData(prev => ({ ...prev, jobType: value }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
+  const onSubmit = async (data) => {
+    setIsSubmitting(true);
     try {
-      // 1. Create Lead
-      const { data: lead, error: leadError } = await supabase
+      // 1. Submit to Leads table in Supabase
+      const { error } = await supabase
         .from('leads')
-        .insert({
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          email: formData.email,
-          phone: formData.phone,
-          notes: formData.notes,
+        .insert([{
+          first_name: data.fullName.split(' ')[0],
+          last_name: data.fullName.split(' ').slice(1).join(' ') || '',
+          email: data.email,
+          phone: data.phone,
           status: 'New',
           pipeline_stage: 'new',
-          source: 'Free Air Check',
           service: 'Free Air Check',
-          // New Fields
-          job_type: formData.jobType,
-          time_gate: formData.jobType === 'residential' ? 120 : 180, // Default 2h res, 3h comm
-          partner_name: formData.jobType === 'commercial' ? formData.partnerName : null
-        })
-        .select()
-        .single();
+          message: `Address: ${data.address}. Preferred Date: ${date ? format(date, 'yyyy-MM-dd') : 'Anytime'}. Note: ${data.notes || 'None'}`,
+          source: 'Website Modal',
+          lead_source: 'Free Air Check Offer'
+        }]);
 
-      if (leadError) throw leadError;
+      if (error) throw error;
 
-      // 2. Create Property (Basic)
-      const { error: propError } = await supabase
-        .from('properties')
-        .insert({
-           address1: formData.address,
-           city: 'Unknown',
-           state: 'FL',
-           zip: '00000',
-           label: 'Primary',
-           account_id: lead.account_id 
-        });
-        
-      if (propError && propError.code !== '23502') { 
-          // Ignore null violation if account_id is null (schema might allow loose properties)
-          console.warn('Property creation issue:', propError);
-      }
-
-      // 3. Create Initial Estimate Stub
-      // Pre-populate with Free Air Check service
-      const freeService = SERVICE_CATALOG.find(s => s.id === 'free_air_check');
-      const initialServices = freeService ? [{
-          id: freeService.id,
-          name: freeService.name,
-          code: freeService.id,
-          qty: 1,
-          unitPrice: freeService.price,
-          total: freeService.price,
-          category: freeService.category,
-          description: freeService.description
-      }] : [];
-
-      const { error: estError } = await supabase.from('estimates').insert({
-          lead_id: lead.id,
-          status: 'draft',
-          total_price: 0,
-          services: initialServices,
-          property_details: {
-              firstName: formData.firstName,
-              lastName: formData.lastName,
-              email: formData.email,
-              address: formData.address
-          }
-      });
-
-      if (estError) throw estError;
-
+      // 2. Success State
+      setIsSuccess(true);
       toast({
-        title: "Request Received",
-        description: "Free Air Check request created successfully. Estimate stub generated.",
+        title: "Request Received!",
+        description: "We'll call you shortly to confirm your free inspection.",
       });
       
-      onOpenChange(false);
-      
-      // Reset form
-      setFormData({
-        firstName: '', lastName: '', email: '', phone: '', address: '', notes: '', jobType: 'residential', partnerName: ''
-      });
+      // Reset form after delay if needed, or keep success state until close
+      setTimeout(() => {
+        // reset();
+        // setIsSuccess(false);
+        // onOpenChange(false);
+      }, 3000);
 
     } catch (error) {
       console.error('Submission error:', error);
       toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Failed to submit request.",
+        title: "Something went wrong",
+        description: "Please try again or call us directly.",
+        variant: "destructive"
       });
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
+  };
+
+  const handleClose = () => {
+    onOpenChange(false);
+    // Reset state after animation completes
+    setTimeout(() => {
+      setIsSuccess(false);
+      reset();
+      setDate(undefined);
+    }, 300);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>New Free Air Check Request</DialogTitle>
-          <DialogDescription>
-            Enter customer details to start a new lead and estimate.
-          </DialogDescription>
-        </DialogHeader>
+      {children && <DialogTrigger asChild>{children}</DialogTrigger>}
+      
+      <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden bg-white">
+        <div className="bg-blue-600 p-6 text-white text-center relative overflow-hidden">
+            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
+            <ShieldCheck className="w-12 h-12 mx-auto mb-2 text-blue-200" />
+            <DialogHeader className="z-10 relative">
+            <DialogTitle className="text-2xl font-bold text-white text-center">Free Air Quality Check</DialogTitle>
+            <DialogDescription className="text-blue-100 text-center">
+                No cost. No obligation. Just honest answers.
+            </DialogDescription>
+            </DialogHeader>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-2">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="firstName">First Name *</Label>
-              <Input id="firstName" name="firstName" required value={formData.firstName} onChange={handleChange} />
+        <div className="p-6">
+          {isSuccess ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center space-y-4 animate-in fade-in zoom-in duration-300">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                <CheckCircle2 className="w-10 h-10 text-green-600" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Request Sent!</h3>
+                <p className="text-slate-600 max-w-xs mx-auto mt-2">
+                  One of our certified technicians will contact you within 24 hours to schedule your inspection.
+                </p>
+              </div>
+              <Button onClick={handleClose} className="mt-4 bg-slate-900 text-white w-full">
+                Done
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="lastName">Last Name *</Label>
-              <Input id="lastName" name="lastName" required value={formData.lastName} onChange={handleChange} />
-            </div>
-          </div>
+          ) : (
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="fullName">Full Name</Label>
+                <Input 
+                  id="fullName" 
+                  placeholder="John Doe" 
+                  {...register("fullName", { required: "Name is required" })}
+                  className={errors.fullName ? "border-red-500" : ""}
+                />
+                {errors.fullName && <span className="text-xs text-red-500">{errors.fullName.message}</span>}
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email *</Label>
-              <Input id="email" name="email" type="email" required value={formData.email} onChange={handleChange} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone *</Label>
-              <Input id="phone" name="phone" type="tel" required value={formData.phone} onChange={handleChange} />
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input 
+                    id="email" 
+                    type="email" 
+                    placeholder="john@example.com" 
+                    {...register("email", { 
+                        required: "Email is required",
+                        pattern: {
+                        value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                        message: "Invalid email address"
+                        }
+                    })}
+                    className={errors.email ? "border-red-500" : ""}
+                    />
+                     {errors.email && <span className="text-xs text-red-500">{errors.email.message}</span>}
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="phone">Phone</Label>
+                    <Input 
+                    id="phone" 
+                    type="tel" 
+                    placeholder="(321) 555-0123" 
+                    {...register("phone", { required: "Phone is required" })}
+                    className={errors.phone ? "border-red-500" : ""}
+                    />
+                    {errors.phone && <span className="text-xs text-red-500">{errors.phone.message}</span>}
+                </div>
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="address">Service Address</Label>
-            <Input id="address" name="address" placeholder="123 Main St, City, FL" value={formData.address} onChange={handleChange} />
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="address">Home Address</Label>
+                <Input 
+                  id="address" 
+                  placeholder="123 Palm Ave, Melbourne" 
+                  {...register("address", { required: "Address is required for inspection" })}
+                  className={errors.address ? "border-red-500" : ""}
+                />
+                 {errors.address && <span className="text-xs text-red-500">{errors.address.message}</span>}
+              </div>
 
-          {/* New Fields: Job Type & Partner */}
-          <div className="grid grid-cols-2 gap-4">
-             <div className="space-y-2">
-                 <Label>Job Type</Label>
-                 <Select value={formData.jobType} onValueChange={handleJobTypeChange}>
-                     <SelectTrigger>
-                         <SelectValue />
-                     </SelectTrigger>
-                     <SelectContent>
-                         <SelectItem value="residential">Residential</SelectItem>
-                         <SelectItem value="commercial">Commercial</SelectItem>
-                     </SelectContent>
-                 </Select>
-             </div>
-             
-             {formData.jobType === 'commercial' && (
-                 <div className="space-y-2">
-                     <Label>Partner / Business Name</Label>
-                     <Input 
-                        name="partnerName" 
-                        placeholder="e.g. Hostinger Property Mgmt" 
-                        value={formData.partnerName} 
-                        onChange={handleChange} 
-                     />
-                 </div>
-             )}
-          </div>
+              <div className="space-y-2">
+                <Label>Preferred Date (Optional)</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !date && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {date ? format(date, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={date}
+                      onSelect={setDate}
+                      initialFocus
+                      disabled={(date) => date < new Date()}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              
+              <div className="space-y-2">
+                  <Label htmlFor="notes">Specific Concerns?</Label>
+                  <Textarea 
+                    id="notes" 
+                    placeholder="e.g. Smell mold, high humidity, just moved in..." 
+                    {...register("notes")}
+                  />
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes / Issues</Label>
-            <Textarea 
-                id="notes" 
-                name="notes" 
-                placeholder="Any specific concerns? (e.g. mold, weak airflow)" 
-                value={formData.notes} 
-                onChange={handleChange} 
-            />
-          </div>
-
-          <DialogFooter className="pt-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700">
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create Request
-            </Button>
-          </DialogFooter>
-        </form>
+              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-12" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Submitting...
+                  </>
+                ) : (
+                  "Schedule My Free Check"
+                )}
+              </Button>
+              <p className="text-xs text-center text-slate-400 mt-2">
+                Your information is secure. We never sell your data.
+              </p>
+            </form>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -1,45 +1,34 @@
 
-# BHF Deployment Checklist
+# Deployment Checklist
 
-## Environment Variables
+**Project:** BHF CRM
+**Target Environment:** Production
 
-Ensure the correct `VITE_TENANT_ID` is set during the build process for each host.
+## 1. Pre-Deployment (Staging)
+*   [ ] **Code Freeze:** Confirm `main` branch is locked and tagged.
+*   [ ] **Lint & Test:** Run `npm run lint` and `npm run test` with 100% pass rate.
+*   [ ] **Build Verification:** Run `npm run build` locally to ensure no compilation errors.
+*   [ ] **Dependency Audit:** Run `npm audit` to check for critical security vulnerabilities.
+*   [ ] **Database Migration Dry-Run:** Execute migration scripts against a copy of the production DB (or Staging).
+*   [ ] **Asset Optimization:** Ensure all new images in `public/` are compressed.
 
-| Tenant | Hostname | VITE_TENANT_ID | Notes |
-|--------|----------|----------------|-------|
-| Factory | `blackhorse.vent-guys.com` | `default` | Full access, system diagnostics enabled |
-| TVG | `crm.theventguys.com` | `tvg` | Standard production CRM |
-| Install Worxs | `installworxs.vent-guys.com` | `installworxs` | Placeholder branding, full features |
-| Black Horse Demo | `demo.vent-guys.com` | `demo` | Modern AI/Factory theme, demo landing page |
+## 2. Deployment Phase
+*   [ ] **Backup:** Trigger a manual backup snapshot in Supabase Dashboard.
+*   [ ] **Environment Variables:** Verify all new `.env` keys (Secrets) are added to the hosting provider (Vercel/Netlify).
+*   [ ] **Deploy Backend:** Deploy Supabase Edge Functions (`supabase functions deploy`).
+*   [ ] **Deploy Database:** Apply migrations (`supabase db push`).
+*   [ ] **Deploy Frontend:** Push to `main` to trigger CI/CD pipeline.
 
-## DNS Configuration (Hostinger)
+## 3. Post-Deployment (Verification)
+*   [ ] **Health Check:** Visit `/system-doctor` and run a "Deep Scan". Score must be > 90.
+*   [ ] **Critical Path Test:**
+    1.  Create a test lead.
+    2.  Convert to Job.
+    3.  Generate Invoice.
+    4.  Verify email notification receipt.
+*   [ ] **Error Monitoring:** Watch Supabase Logs for spikes in 500 errors.
+*   [ ] **Visual Check:** Verify layout on Mobile (iOS/Android) and Desktop (Chrome/Safari).
 
-All CNAMEs must point to the deployment infrastructure (e.g., Vercel alias or Hostinger IP).
-
-1. **Factory Host**: `blackhorse` CNAME -> `[Deployment Target]`
-2. **Install Worxs**: `installworxs` CNAME -> `[Deployment Target]`
-3. **Demo**: `demo` CNAME -> `[Deployment Target]`
-
-## Tenant Specifics
-
-### Install Worxs
-- [ ] Verify placeholder logo loads.
-- [ ] Verify primary color is neutral gray/slate.
-- [ ] Confirm all CRM modules are accessible.
-
-### Black Horse Demo
-- [ ] Verify landing page at `/demo/home`.
-- [ ] Check CRM theme: Should be dark mode with glassmorphism effects.
-- [ ] Verify branding colors: Electric Cyan (`#06b6d4`) & Dark Slate (`#0f172a`).
-
-## Feature Flags
-Feature flags are managed in `src/config/bhf.config.json` but can be overridden via `system_settings` table in Supabase.
-
-**Defaults:**
-- `enableMarketing`: Enabled for all EXCEPT `tvg` (disabled in config) and `installworxs` (inherited enabled).
-- `enableSettings`: Locked to TRUE in defaults, but `demo` tenant config may override if needed (currently inherits TRUE).
-
-## Post-Deployment Verification
-1. Visit `https://demo.vent-guys.com/demo/home` -> Should see AI Factory Landing Page.
-2. Login to CRM on Demo -> Should see dark themed interface.
-3. Visit `https://installworxs.vent-guys.com/bhf/crm` -> Should see standard light theme with Install Worxs branding.
+## 4. Emergency Procedures
+*   [ ] **Rollback Criteria:** If Critical Path fails or Error Rate > 1%, initiate Rollback.
+*   [ ] **Communication:** Notify stakeholders via Slack `#ops-alerts`.

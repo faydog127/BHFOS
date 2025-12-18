@@ -1,5 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from "@/lib/customSupabaseClient";
+import { getTenantId } from '@/lib/tenantUtils';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,8 +15,6 @@ import {
     LineChart, Line, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell,
     XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
-
-// --- Helper Components ---
 
 const MetricCard = ({ title, value, subtext, trend, icon: Icon, trendValue, color = "blue" }) => {
     const isPositive = trend === 'up';
@@ -53,14 +53,12 @@ const MetricCard = ({ title, value, subtext, trend, icon: Icon, trendValue, colo
     );
 };
 
-// --- Main Component ---
-
 export default function AnalyticsDashboard() {
     const { toast } = useToast();
     const [loading, setLoading] = useState(true);
     const [dateRange, setDateRange] = useState('30d');
+    const tenantId = getTenantId();
     
-    // Data States
     const [metrics, setMetrics] = useState({
         revenue: { total: 0, growth: 0 },
         jobs: { count: 0, avgDuration: 0 },
@@ -101,52 +99,45 @@ export default function AnalyticsDashboard() {
         try {
             const { start, end } = getDateInterval();
             
-            // 1. Fetch Appointments (Revenue, Jobs)
+            // 1. Fetch Appointments
             const { data: appointments } = await supabase
                 .from('appointments')
                 .select('*')
+                .eq('tenant_id', tenantId)
                 .gte('scheduled_start', start.toISOString())
                 .lte('scheduled_start', end.toISOString());
 
-            // 2. Fetch Leads (Acquisition)
+            // 2. Fetch Leads
             const { data: leads } = await supabase
                 .from('leads')
                 .select('*')
+                .eq('tenant_id', tenantId)
                 .gte('created_at', start.toISOString())
                 .lte('created_at', end.toISOString());
             
-            // 3. Fetch Partners/Referrals
+            // 3. Fetch Referrals
             const { data: referrals } = await supabase
                 .from('referrals')
                 .select('*, referral_partners(name)')
+                .eq('tenant_id', tenantId)
                 .gte('created_at', start.toISOString())
                 .lte('created_at', end.toISOString());
 
-            // --- Calculations ---
-
-            // Revenue
             const completedJobs = appointments?.filter(a => a.status === 'completed') || [];
             const revenueTotal = completedJobs.reduce((sum, job) => sum + (job.pricing_snapshot?.price || 0), 0);
             
-            // Jobs Stats
             const jobsCount = completedJobs.length;
-            // Mock Avg Duration if not tracked perfectly in demo data
             const avgDuration = completedJobs.length > 0 ? 75 : 0; 
 
-            // Leads & Conversion
             const totalLeads = leads?.length || 0;
-            // Simple conversion: Completed Jobs / Total Leads in period (imperfect but indicative)
             const conversionRate = totalLeads > 0 ? ((jobsCount / totalLeads) * 100).toFixed(1) : 0;
 
-            // Sentiment Mock (Pull from job notes/sentiment scores if available, usually in jobs table)
-            // Using a distribution based on available data or defaults
             const sentimentData = [
                 { name: 'Promoter', value: 65, color: '#22c55e' },
                 { name: 'Neutral', value: 25, color: '#eab308' },
                 { name: 'Detractor', value: 10, color: '#ef4444' }
             ];
 
-            // Partner Performance
             const partnerStats = {};
             referrals?.forEach(ref => {
                 const name = ref.referral_partners?.name || 'Unknown';
@@ -156,7 +147,6 @@ export default function AnalyticsDashboard() {
             });
             const partnerChartData = Object.values(partnerStats).sort((a,b) => b.referrals - a.referrals).slice(0, 5);
 
-            // Revenue Trend (Daily)
             const revenueByDay = {};
             completedJobs.forEach(job => {
                 const day = format(parseISO(job.scheduled_start), 'MMM d');
@@ -164,21 +154,20 @@ export default function AnalyticsDashboard() {
             });
             const revenueTrendData = Object.entries(revenueByDay).map(([date, amount]) => ({ date, amount }));
 
-            // Set State
             setMetrics({
-                revenue: { total: revenueTotal, growth: 12.5 }, // Growth mocked for demo
+                revenue: { total: revenueTotal, growth: 12.5 },
                 jobs: { count: jobsCount, avgDuration },
                 leads: { total: totalLeads, conversionRate },
-                reviews: { avgRating: 4.8, count: 24 }, // Mocked or fetched from separate table if exists
+                reviews: { avgRating: 4.8, count: 24 },
                 sentiment: { healthScore: 88, breakdown: sentimentData },
-                customers: { total: 1250, repeatRate: 32 } // Mocked cumulative
+                customers: { total: 1250, repeatRate: 32 }
             });
 
             setCharts({
                 revenueTrend: revenueTrendData,
                 partnerPerformance: partnerChartData,
                 sentimentDist: sentimentData,
-                jobsByStatus: [ // Mock breakdown
+                jobsByStatus: [
                     { name: 'Completed', value: jobsCount },
                     { name: 'Cancelled', value: appointments?.filter(a => a.status === 'cancelled').length || 0 },
                     { name: 'No Show', value: appointments?.filter(a => a.status === 'no_show').length || 0 }
@@ -194,7 +183,6 @@ export default function AnalyticsDashboard() {
     };
 
     const handleExport = () => {
-        // Simple CSV Export Logic
         const headers = ["Date", "Metric", "Value"];
         const rows = charts.revenueTrend.map(r => [r.date, "Revenue", r.amount]);
         
@@ -219,7 +207,6 @@ export default function AnalyticsDashboard() {
 
     return (
         <div className="p-6 max-w-7xl mx-auto space-y-8">
-            {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Business Analytics</h1>
@@ -245,7 +232,6 @@ export default function AnalyticsDashboard() {
                 </div>
             </div>
 
-            {/* Key Metrics Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <MetricCard 
                     title="Total Revenue" 
@@ -285,9 +271,7 @@ export default function AnalyticsDashboard() {
                 />
             </div>
 
-            {/* Main Charts Area */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Revenue Trend */}
                 <Card className="lg:col-span-2">
                     <CardHeader>
                         <CardTitle>Revenue Trend</CardTitle>
@@ -309,7 +293,6 @@ export default function AnalyticsDashboard() {
                     </CardContent>
                 </Card>
 
-                {/* Sentiment / Health */}
                 <Card>
                     <CardHeader>
                         <CardTitle>Customer Sentiment</CardTitle>
@@ -345,9 +328,7 @@ export default function AnalyticsDashboard() {
                 </Card>
             </div>
 
-            {/* Secondary Charts Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Partner Performance */}
                 <Card>
                     <CardHeader>
                         <CardTitle>Top Referral Partners</CardTitle>
@@ -370,7 +351,6 @@ export default function AnalyticsDashboard() {
                     </CardContent>
                 </Card>
 
-                {/* Job Status Breakdown */}
                 <Card>
                     <CardHeader>
                         <CardTitle>Job Completion Status</CardTitle>
