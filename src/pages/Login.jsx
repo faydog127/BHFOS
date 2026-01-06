@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { AlertCircle, Loader2, Lock } from 'lucide-react';
+import { AlertCircle, Loader2, Lock, ArrowLeft } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { tenantPath, getUrlTenant } from '@/lib/tenantUtils';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -17,14 +18,28 @@ const Login = () => {
   
   const { signIn, user } = useSupabaseAuth();
   const navigate = useNavigate();
+  // Prefer params, fallback to util
+  const { tenantId: paramTenant } = useParams();
+  const urlTenant = paramTenant || getUrlTenant() || 'tvg';
+  
   const location = useLocation();
 
+  // Redirect if already logged in
   useEffect(() => {
     if (user) {
-      const from = location.state?.from?.pathname || '/crm/dashboard';
-      navigate(from, { replace: true });
+      // 1. Check for 'next' query param
+      const searchParams = new URLSearchParams(location.search);
+      const next = searchParams.get('next');
+
+      // 2. Validate 'next' param: must start with /${urlTenant}/ to be safe and same-tenant
+      if (next && next.startsWith(`/${urlTenant}/`)) {
+         navigate(next, { replace: true });
+      } else {
+         // 3. Default redirect
+         navigate(tenantPath('/home', urlTenant), { replace: true });
+      }
     }
-  }, [user, navigate, location]);
+  }, [user, navigate, urlTenant, location]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -34,6 +49,7 @@ const Login = () => {
     try {
       const { error } = await signIn({ email, password });
       if (error) throw error;
+      // Success is handled by useEffect above
     } catch (err) {
       console.error('Login failed:', err);
       setError(err.message || 'Failed to sign in. Please check your credentials.');
@@ -44,14 +60,21 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-900 px-4">
+      <div className="absolute top-4 left-4">
+        <Button variant="ghost" asChild>
+          <Link to={tenantPath('/', urlTenant)} className="flex items-center gap-2">
+            <ArrowLeft className="w-4 h-4" /> Back to Home
+          </Link>
+        </Button>
+      </div>
       <Card className="w-full max-w-md shadow-xl border-slate-200 dark:border-slate-800">
         <CardHeader className="space-y-1 text-center">
           <div className="mx-auto w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center mb-4 shadow-lg shadow-blue-900/20">
             <Lock className="w-6 h-6 text-white" />
           </div>
-          <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
+          <CardTitle className="text-2xl font-bold capitalize">Sign in to {urlTenant}</CardTitle>
           <CardDescription>
-            Enter your credentials to access the CRM
+            Enter your credentials to access the {urlTenant} CRM
           </CardDescription>
         </CardHeader>
         <CardContent>

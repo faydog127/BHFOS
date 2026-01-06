@@ -1,0 +1,71 @@
+# Table ownership manifest (lightweight)
+# status: active | legacy | planned | investigate
+# owner: crm | marketing | settings | system | legacy | unknown
+
+leads:
+  owner: crm
+  status: active
+
+marketing_actions:
+  owner: marketing
+  status: active
+
+marketing_campaigns:
+  owner: marketing
+  status: active
+
+marketing_signals:
+  owner: marketing
+  status: active
+
+signals: # view shim to marketing_signals
+  owner: marketing
+  status: active
+
+property_inspections:
+  owner: crm
+  status: active
+
+rep_checklists:
+  owner: crm
+  status: active
+
+crm_tasks:
+  owner: crm
+  status: investigate
+
+campaigns:
+  owner: legacy
+  status: investigate # duplicate with marketing_campaigns?
+
+quotes:
+  owner: legacy
+  status: investigate # clarify vs estimates
+
+contacts:
+  owner: crm
+  status: investigate # clarify vs leads
+
+automation_workflows:
+  owner: marketing
+  status: planned
+
+automation_logs:
+  owner: marketing
+  status: planned
+
+kanban_config:
+  owner: crm
+  status: planned
+
+pipeline_columns:
+  owner: crm
+  status: planned
+
+integration_tokens:
+  owner: settings
+  status: active
+
+global_config:
+  owner: settings
+  status: active

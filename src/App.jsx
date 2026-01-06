@@ -1,6 +1,6 @@
 
 import React, { Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import Navigation from '@/components/Navigation';
 import Footer from '@/components/Footer';
 import MobileCtaBar from '@/components/MobileCtaBar';
@@ -9,6 +9,8 @@ import FeatureGuard from '@/components/FeatureGuard';
 import AdminRoute from '@/components/AdminRoute';
 import BHFCrmLayout from '@/components/BHFCrmLayout';
 import TrainingModeBanner from '@/components/TrainingModeBanner';
+import TenantGuard from '@/components/TenantGuard';
+import SelectTenant from '@/pages/SelectTenant';
 import { Loader2 } from 'lucide-react';
 
 // Public Pages
@@ -72,6 +74,7 @@ import SystemDoctorConsole from '@/components/SystemDoctorConsole';
 // Legacy Diagnostics
 import BackendTest from '@/pages/crm/BackendTest';
 import AdvancedDiagnostics from '@/components/crm/settings/AdvancedDiagnostics';
+import OpsDashboard from '@/pages/crm/settings/OpsDashboard';
 
 // Lazy Loaded CRM Modules
 const CRMHub = React.lazy(() => import('@/pages/crm/CRMHub'));
@@ -99,130 +102,127 @@ const LoadingFallback = () => (
   </div>
 );
 
-const PublicRoutes = () => {
-  const location = useLocation();
-  
-  // Hide public nav/footer on BHF CRM pages and Demo/InstallWorxs pages
-  const isCrmRoute = location.pathname.startsWith('/bhf/crm') || location.pathname.startsWith('/bhf/tenant-management') || location.pathname.startsWith('/bhf/tenant-onboarding');
-  const isDemoRoute = location.pathname.startsWith('/demo');
-  const isInstallWorxsRoute = location.pathname.startsWith('/installworxs');
-  const isSpecialRoute = location.pathname === '/thank-you' || location.pathname === '/partners/welcome' || location.pathname === '/login';
-  const hidePublicNav = isCrmRoute || isSpecialRoute || isDemoRoute || isInstallWorxsRoute;
+// Layout wrapper that provides the public navigation but aware of tenant scope if needed
+const PublicLayout = () => (
+  <div className="min-h-screen flex flex-col bg-gray-100 dark:bg-gray-900">
+    <TrainingModeBanner />
+    <Navigation />
+    <main className="flex-grow">
+      <Suspense fallback={<LoadingFallback />}>
+        <Outlet />
+      </Suspense>
+    </main>
+    <Footer />
+    <MobileCtaBar />
+    <ChatWidget />
+  </div>
+);
 
-  return (
-    <div className="min-h-screen flex flex-col bg-gray-100 dark:bg-gray-900">
-      {/* Training Banner injected at top of layout */}
-      <TrainingModeBanner />
+// Routes specific to the CRM authenticated experience
+const CRMRoutes = () => (
+  <Routes>
+    <Route element={<BHFCrmLayout />}>
+      <Route index element={<CRMHub />} />
+      <Route path="leads" element={<FeatureGuard flag="enableLeads"><LeadsPage /></FeatureGuard>} />
+      <Route path="pipeline" element={<FeatureGuard flag="enablePipeline"><PipelinePage /></FeatureGuard>} />
+      <Route path="jobs" element={<FeatureGuard flag="enableJobs"><JobsPage /></FeatureGuard>} />
+      <Route path="schedule" element={<FeatureGuard flag="enableSchedule"><SchedulePage /></FeatureGuard>} />
+      <Route path="estimates" element={<FeatureGuard flag="enableEstimates"><EstimatesPage /></FeatureGuard>} />
+      <Route path="invoices" element={<FeatureGuard flag="enableInvoicing"><InvoicesPage /></FeatureGuard>} />
+      <Route path="invoices/:id" element={<FeatureGuard flag="enableInvoicing"><InvoiceBuilder /></FeatureGuard>} />
+      <Route path="invoices/new" element={<FeatureGuard flag="enableInvoicing"><InvoiceBuilder /></FeatureGuard>} />
+      <Route path="contacts" element={<FeatureGuard flag="enableContacts"><ContactsPage /></FeatureGuard>} />
+      <Route path="call-console" element={<FeatureGuard flag="enableCallConsole"><CallConsolePage /></FeatureGuard>} />
+      <Route path="sms" element={<FeatureGuard flag="enableSMS"><SmsInboxPage /></FeatureGuard>} />
+      <Route path="marketing" element={<FeatureGuard flag="enableMarketing"><MarketingPage /></FeatureGuard>} />
+      <Route path="reporting" element={<FeatureGuard flag="enableReporting"><ReportingPage /></FeatureGuard>} />
+      <Route path="pricebook" element={<FeatureGuard flag="enablePricebook"><PricebookPage /></FeatureGuard>} />
+      <Route path="partners" element={<FeatureGuard flag="enablePartners"><PartnersPage /></FeatureGuard>} />
+      <Route path="settings" element={<FeatureGuard flag="enableSettings"><SettingsPage /></FeatureGuard>} />
+      <Route path="ops" element={<AdminRoute><OpsDashboard /></AdminRoute>} />
       
-      {!hidePublicNav && <Navigation />}
-      <main className={`flex-grow ${!hidePublicNav ? 'pb-20 lg:pb-0' : ''}`}>
-        <Suspense fallback={<LoadingFallback />}>
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/" element={<Home />} />
-            <Route path="/demo/home" element={<DemoHome />} />
-            <Route path="/installworxs/home" element={<InstallWorxsHome />} />
-            
-            <Route path="/services" element={<Services />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/contact" element={<Contact />} />
-            <Route path="/booking" element={<Booking />} />
-            <Route path="/blog" element={<Blog />} />
-            <Route path="/faq" element={<Faq />} />
-            <Route path="/gallery" element={<Gallery />} />
-            <Route path="/privacy" element={<PrivacyPolicy />} />
-            <Route path="/thank-you" element={<ThankYou />} />
-            <Route path="/login" element={<Login />} />
-
-            {/* Service Areas */}
-            <Route path="/service-areas/melbourne" element={<Melbourne />} />
-            <Route path="/service-areas/merritt-island" element={<MerrittIsland />} />
-            <Route path="/service-areas/new-smyrna-beach" element={<NewSmyrnaBeach />} />
-            <Route path="/service-areas/port-st-john" element={<PortStJohn />} />
-            <Route path="/service-areas/rockledge" element={<Rockledge />} />
-            <Route path="/service-areas/suntree" element={<Suntree />} />
-            <Route path="/service-areas/titusville" element={<Titusville />} />
-            <Route path="/service-areas/viera" element={<Viera />} />
-            <Route path="/service-areas/cocoa" element={<Cocoa />} />
-
-            {/* Partners */}
-            <Route path="/partners" element={<PartnersLanding />} />
-            <Route path="/partners/realtor" element={<RealtorPartner />} />
-            <Route path="/partners/property-manager" element={<PropertyManagerPartner />} />
-            <Route path="/partners/hoa" element={<HoaPartner />} />
-            <Route path="/partners/government" element={<GovernmentPartner />} />
-            <Route path="/partners/b2b" element={<B2bPartner />} />
-            <Route path="/partners/welcome" element={<PartnerWelcome />} />
-
-            {/* Blog Content */}
-            <Route path="/blog/clean-air-certified" element={<CleanAirCertified />} />
-            <Route path="/blog/dryer-vent-fire-safety" element={<DryerVentFireSafety />} />
-            <Route path="/blog/florida-filter-guide" element={<FloridaFilterGuide />} />
-            <Route path="/blog/florida-humidity-duct-contamination" element={<FloridaHumidityDuctContamination />} />
-            <Route path="/blog/free-air-check" element={<FreeAirCheck />} />
-            <Route path="/blog/mechanical-hygiene-vs-duct-cleaning" element={<MechanicalHygieneVsDuctCleaning />} />
-            <Route path="/blog/nadca-standards" element={<NadcaStandards />} />
-            <Route path="/blog/return-duct-leak" element={<ReturnDuctLeak />} />
-
-            {/* BHF CRM Routes (Protected & Flagged) */}
-            <Route path="/bhf/crm" element={<AdminRoute><BHFCrmLayout /></AdminRoute>}>
-              <Route index element={<CRMHub />} />
-              <Route path="leads" element={<FeatureGuard flag="enableLeads"><LeadsPage /></FeatureGuard>} />
-              <Route path="pipeline" element={<FeatureGuard flag="enablePipeline"><PipelinePage /></FeatureGuard>} />
-              <Route path="jobs" element={<FeatureGuard flag="enableJobs"><JobsPage /></FeatureGuard>} />
-              <Route path="schedule" element={<FeatureGuard flag="enableSchedule"><SchedulePage /></FeatureGuard>} />
-              <Route path="estimates" element={<FeatureGuard flag="enableEstimates"><EstimatesPage /></FeatureGuard>} />
-              <Route path="invoices" element={<FeatureGuard flag="enableInvoicing"><InvoicesPage /></FeatureGuard>} />
-              <Route path="invoices/:id" element={<FeatureGuard flag="enableInvoicing"><InvoiceBuilder /></FeatureGuard>} />
-              <Route path="invoices/new" element={<FeatureGuard flag="enableInvoicing"><InvoiceBuilder /></FeatureGuard>} />
-              <Route path="contacts" element={<FeatureGuard flag="enableContacts"><ContactsPage /></FeatureGuard>} />
-              <Route path="call-console" element={<FeatureGuard flag="enableCallConsole"><CallConsolePage /></FeatureGuard>} />
-              <Route path="sms" element={<FeatureGuard flag="enableSMS"><SmsInboxPage /></FeatureGuard>} />
-              <Route path="marketing" element={<FeatureGuard flag="enableMarketing"><MarketingPage /></FeatureGuard>} />
-              <Route path="reporting" element={<FeatureGuard flag="enableReporting"><ReportingPage /></FeatureGuard>} />
-              <Route path="pricebook" element={<FeatureGuard flag="enablePricebook"><PricebookPage /></FeatureGuard>} />
-              <Route path="partners" element={<FeatureGuard flag="enablePartners"><PartnersPage /></FeatureGuard>} />
-              <Route path="settings" element={<FeatureGuard flag="enableSettings"><SettingsPage /></FeatureGuard>} />
-            </Route>
-
-            {/* Admin Management Routes (Protected) */}
-            <Route path="/bhf/tenant-management" element={<AdminRoute><BHFCrmLayout /></AdminRoute>}>
-               <Route index element={<TenantManagement />} />
-            </Route>
-
-            {/* Tenant Onboarding Wizard */}
-            <Route path="/bhf/tenant-onboarding" element={<AdminRoute><TenantOnboarding /></AdminRoute>} />
-
-            {/* Legacy & Diagnostic Routes */}
-            <Route path="/bhf/communications" element={<AdminRoute><FeatureGuard flag="enableSMS"><SmsInboxPage /></FeatureGuard></AdminRoute>} />
-            <Route path="/bhf/master-diagnostics" element={<AdminRoute><MasterDiagnostics /></AdminRoute>} />
-            <Route path="/bhf/improvement-analysis" element={<AdminRoute><ImprovementAnalysis /></AdminRoute>} />
-            <Route path="/bhf/config-explainer" element={<AdminRoute><ConfigExplainer /></AdminRoute>} />
-            <Route path="/bhf/change-log" element={<AdminRoute><ChangeLog /></AdminRoute>} />
-            <Route path="/bhf/documentation" element={<AdminRoute><DocumentationDashboard /></AdminRoute>} />
-            <Route path="/bhf/session-report/:sessionId" element={<AdminRoute><SessionReport /></AdminRoute>} />
-            <Route path="/bhf/session-report" element={<AdminRoute><SessionReport /></AdminRoute>} />
-            <Route path="/bhf/fixes" element={<AdminRoute><FixesDocumentation /></AdminRoute>} />
-            <Route path="/bhf/issues" element={<AdminRoute><IssuesDocumentation /></AdminRoute>} />
-            <Route path="/system-doctor" element={<AdminRoute><SystemDoctorConsole /></AdminRoute>} />
-            <Route path="/crm/backend-test" element={<AdminRoute><BackendTest /></AdminRoute>} />
-            <Route path="/crm/advanced-diagnostics" element={<AdminRoute><AdvancedDiagnostics /></AdminRoute>} />
-
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
-      </main>
-      {!hidePublicNav && <Footer />}
-      {!hidePublicNav && <MobileCtaBar />}
-      {!hidePublicNav && <ChatWidget />}
-    </div>
-  );
-};
+      {/* Legacy & Diagnostic Routes */}
+      <Route path="backend-test" element={<BackendTest />} />
+      <Route path="advanced-diagnostics" element={<AdvancedDiagnostics />} />
+    </Route>
+  </Routes>
+);
 
 function App() {
   return (
     <Router>
-      <PublicRoutes />
+      <Routes>
+        {/* Root Path Handler */}
+        <Route path="/" element={<Navigate to="/select-tenant" replace />} />
+        <Route path="/select-tenant" element={<SelectTenant />} />
+
+        {/* Dynamic Tenant Route - Wraps everything under /:tenantId */}
+        <Route path="/:tenantId">
+          
+          {/* Tenant-specific Login */}
+          <Route path="login" element={<Login />} />
+
+          {/* Tenant-specific Public Pages (Optional overrides) */}
+          <Route element={<PublicLayout />}>
+            <Route path="home" element={<Home />} />
+            <Route path="services" element={<Services />} />
+            <Route path="about" element={<About />} />
+            <Route path="contact" element={<Contact />} />
+            <Route path="booking" element={<Booking />} />
+            <Route path="blog" element={<Blog />} />
+            <Route path="faq" element={<Faq />} />
+            <Route path="gallery" element={<Gallery />} />
+            <Route path="privacy" element={<PrivacyPolicy />} />
+            <Route path="thank-you" element={<ThankYou />} />
+
+            {/* Service Areas */}
+            <Route path="service-areas/melbourne" element={<Melbourne />} />
+            <Route path="service-areas/merritt-island" element={<MerrittIsland />} />
+            <Route path="service-areas/new-smyrna-beach" element={<NewSmyrnaBeach />} />
+            <Route path="service-areas/port-st-john" element={<PortStJohn />} />
+            <Route path="service-areas/rockledge" element={<Rockledge />} />
+            <Route path="service-areas/suntree" element={<Suntree />} />
+            <Route path="service-areas/titusville" element={<Titusville />} />
+            <Route path="service-areas/viera" element={<Viera />} />
+            <Route path="service-areas/cocoa" element={<Cocoa />} />
+
+            {/* Partners */}
+            <Route path="partners" element={<PartnersLanding />} />
+            <Route path="partners/realtor" element={<RealtorPartner />} />
+            <Route path="partners/property-manager" element={<PropertyManagerPartner />} />
+            <Route path="partners/hoa" element={<HoaPartner />} />
+            <Route path="partners/government" element={<GovernmentPartner />} />
+            <Route path="partners/b2b" element={<B2bPartner />} />
+            <Route path="partners/welcome" element={<PartnerWelcome />} />
+
+             {/* Blog Content */}
+            <Route path="blog/clean-air-certified" element={<CleanAirCertified />} />
+            <Route path="blog/dryer-vent-fire-safety" element={<DryerVentFireSafety />} />
+          </Route>
+
+          {/* Protected CRM Routes - Guarded by TenantGuard */}
+          <Route 
+            path="crm/*" 
+            element={
+              <TenantGuard>
+                <Suspense fallback={<LoadingFallback />}>
+                  <CRMRoutes />
+                </Suspense>
+              </TenantGuard>
+            } 
+          />
+        </Route>
+
+        {/* BHF Admin Routes - Keep separate for now, or move under :tenantId if admin is a tenant */}
+        {/* For now, assuming BHF admin tools might be accessed via a specific tenant context or global */}
+        {/* We will leave them at root level but might need to guard them or move them */}
+        <Route path="/bhf/tenant-management" element={<AdminRoute><BHFCrmLayout><TenantManagement /></BHFCrmLayout></AdminRoute>} />
+        <Route path="/bhf/tenant-onboarding" element={<AdminRoute><TenantOnboarding /></AdminRoute>} />
+        <Route path="/system-doctor" element={<AdminRoute><SystemDoctorConsole /></AdminRoute>} />
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/select-tenant" replace />} />
+      </Routes>
     </Router>
   );
 }

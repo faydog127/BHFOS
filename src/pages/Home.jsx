@@ -1,7 +1,8 @@
+
 import React, { useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowRight, CheckCircle2, Phone, Calendar, Wind, Shield, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -18,6 +19,13 @@ import BrandImage from '@/components/BrandImage';
 
 const Home = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const shouldReduceMotion = useReducedMotion();
+
+  // Animation variants that respect reduced motion
+  const fadeInUp = {
+    hidden: { opacity: 0, y: shouldReduceMotion ? 0 : 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.6 } }
+  };
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -38,8 +46,10 @@ const Home = () => {
              alt="Clean modern living room representing healthy air"
              className="w-full h-full object-cover opacity-40"
              fallbackSrc={brandAssets.placeholders.hero}
-             priority={true}
-             animate={false}
+             priority={true} // High priority for background
+             animate={false} // Disable fade-in for LCP
+             sizes="100vw"
+             decoding="sync"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900/80 to-transparent" />
         </div>
@@ -47,9 +57,9 @@ const Home = () => {
         <div className="container relative z-10 px-4 py-20 flex flex-col md:flex-row items-center gap-12">
           {/* Hero Content */}
           <motion.div 
-            initial={{ opacity: 0, x: -50 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8 }}
+            initial="hidden"
+            animate="visible"
+            variants={fadeInUp}
             className="flex-1 text-center md:text-left space-y-8"
           >
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-500/10 border border-orange-400/20 text-orange-200 text-sm font-semibold backdrop-blur-sm">
@@ -97,24 +107,43 @@ const Home = () => {
             </div>
           </motion.div>
 
-          {/* Hero Visual/Mascot - Optional, or just let background be the hero */}
+          {/* Hero Visual/Mascot - Optimized for LCP */}
           <motion.div 
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.8, delay: 0.2 }}
             className="flex-1 hidden lg:flex justify-center"
           >
-            {/* Using a nice graphic or the mascot here */}
-             <div className="relative w-[500px] h-[500px]">
-                <div className="absolute inset-0 bg-blue-500/20 rounded-full blur-3xl animate-pulse" />
+             <motion.div 
+               className="relative w-[500px] h-[500px]"
+               animate={shouldReduceMotion ? {} : {
+                 y: [-10, 10, -10],
+               }}
+               transition={{
+                 duration: 6,
+                 repeat: Infinity,
+                 ease: "easeInOut"
+               }}
+             >
+                <div className="absolute inset-0 bg-blue-500/30 rounded-full blur-[80px] animate-pulse" />
                 <BrandImage 
-                  src={brandAssets.mascot.waving} 
+                  src="https://wwyxohjnyqnegzbxtuxs.supabase.co/storage/v1/object/public/vent-guys-images/logo_blackBG.png"
                   alt="Vent Guys Mascot Waving" 
-                  className="relative z-10 w-full h-full object-contain drop-shadow-2xl"
+                  className="relative z-10 w-full h-full object-contain drop-shadow-2xl animate-mascot-float"
                   fallbackSrc={brandAssets.mascot.full}
-                  priority={true}
+                  priority={true} // LCP optimization
+                  fetchPriority="high" // LCP optimization
+                  animate={false} // Disable JS-based fade-in for LCP element
+                  width={500} // Explicit width to prevent CLS
+                  height={500} // Explicit height to prevent CLS
+                  sizes="(max-width: 768px) 100vw, 500px"
+                  decoding="sync" // Decode immediately
+                  style={{
+                    maxWidth: 'clamp(300px, 50vw, 500px)',
+                    aspectRatio: '1 / 1'
+                  }}
                 />
-             </div>
+             </motion.div>
           </motion.div>
         </div>
 
@@ -144,6 +173,10 @@ const Home = () => {
                   alt="The Vent Guys Team Mascot" 
                   className="w-full h-auto bg-slate-50"
                   animate={true}
+                  loading="lazy"
+                  decoding="async"
+                  sizes="(max-width: 768px) 100vw, 50vw"
+                  style={{ aspectRatio: '4/3' }}
                 />
               </div>
               {/* Floating Badge */}

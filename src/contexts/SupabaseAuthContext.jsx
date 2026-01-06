@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
+import { resolveTenantIdFromSession, logTenantDebugInfo } from '@/lib/tenantUtils';
 
 const SupabaseAuthContext = createContext({});
 
@@ -15,6 +16,7 @@ export const SupabaseAuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
   const [role, setRole] = useState(null);
+  const [tenantId, setTenantId] = useState('tvg'); // Default safe tenant
 
   useEffect(() => {
     let mounted = true;
@@ -33,6 +35,13 @@ export const SupabaseAuthProvider = ({ children }) => {
           setUser(session?.user ?? null);
           // Extract role if available in metadata
           setRole(session?.user?.app_metadata?.role || session?.user?.user_metadata?.role || 'viewer');
+          
+          if (session) {
+            // Resolve and log tenant info immediately on init
+            await logTenantDebugInfo();
+            const resolvedTenant = await resolveTenantIdFromSession();
+            setTenantId(resolvedTenant);
+          }
         }
       } catch (error) {
         console.error('Auth initialization error:', error);
@@ -51,6 +60,7 @@ export const SupabaseAuthProvider = ({ children }) => {
             setSession(null);
             setUser(null);
             setRole(null);
+            localStorage.removeItem('tvg_tenant_id'); // Clear tenant cache
           } catch (signOutError) {
             console.error('Error during forced sign-out:', signOutError);
           }
@@ -78,13 +88,20 @@ export const SupabaseAuthProvider = ({ children }) => {
         setRole(session?.user?.app_metadata?.role || session?.user?.user_metadata?.role || 'viewer');
         setLoading(false);
         
-        if (event === 'SIGNED_IN') {
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           setAuthError(null);
+          // Re-resolve tenant on sign-in or refresh to ensure claims are up to date
+          await logTenantDebugInfo();
+          const resolvedTenant = await resolveTenantIdFromSession();
+          setTenantId(resolvedTenant);
         }
+        
         if (event === 'SIGNED_OUT') {
           setSession(null);
           setUser(null);
           setRole(null);
+          setTenantId('tvg'); // Reset to default
+          localStorage.removeItem('tvg_tenant_id'); // Clear cache
         }
       }
     });
@@ -120,6 +137,7 @@ export const SupabaseAuthProvider = ({ children }) => {
         setUser(null);
         setSession(null);
         setRole(null);
+        localStorage.removeItem('tvg_tenant_id');
       } catch (error) {
         console.error('Error signing out:', error);
       }
@@ -129,6 +147,7 @@ export const SupabaseAuthProvider = ({ children }) => {
     loading,
     authError,
     role,
+    tenantId, // Expose resolved tenant ID
     isAdmin: role === 'admin' || role === 'super_admin'
   };
 

@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "vite --host :: --port 3000",
-    "build": "vite build",
+    "build": "node tools/generate-llms.js || true && vite build",
     "preview": "vite preview --host :: --port 3000"
   },
   "dependencies": {
@@ -42,11 +42,14 @@
     "canvas-confetti": "^1.9.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
+    "cmdk": "^1.0.0",
     "date-fns": "^4.1.0",
     "dompurify": "^3.0.6",
     "framer-motion": "^10.16.4",
+    "jwt-decode": "^4.0.0",
     "lucide-react": "^0.292.0",
     "openai": "^4.52.7",
+    "puppeteer": "^24.34.0",
     "react": "^18.2.0",
     "react-day-picker": "^9.5.0",
     "react-dom": "^18.2.0",

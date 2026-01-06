@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from "react";
 
 function getFunctionUrl(supabaseUrl, fnName) {
-  return `${supabaseUrl.replace(/\\/$/, "")}/functions/v1/${fnName}`;
+  const base = (supabaseUrl || "").replace(/\/$/, "");
+  return `${base}/functions/v1/${fnName}`;
 }
 
 function getErrorMessage(data, status) {
@@ -52,7 +53,7 @@ export default function App() {
 
     // Bot trap: pretend success to avoid tipping off spammers.
     if (website && website.trim().length > 0) {
-      setStatus({ state: "success", message: "Received. We’ll reach out soon." });
+      setStatus({ state: "success", message: "Received. We'll reach out soon." });
       return;
     }
 
@@ -95,7 +96,7 @@ export default function App() {
         return;
       }
 
-      setStatus({ state: "success", message: "Received. We’ll reach out soon." });
+      setStatus({ state: "success", message: "Received. We'll reach out soon." });
       setForm({
         name: "",
         email: "",
@@ -128,7 +129,8 @@ export default function App() {
               Go to App
             </a>
             <small>
-              Env: {envOk ? "OK" : "Missing"}{buildSha ? ` · Build: ${buildSha.slice(0, 7)}` : ""}
+              Env: {envOk ? "OK" : "Missing"}
+              {buildSha ? ` · Build: ${buildSha.slice(0, 7)}` : ""}
             </small>
           </div>
         </header>

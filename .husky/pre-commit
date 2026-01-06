@@ -1,0 +1,12 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "Running schema validation..."
+node scripts/validate-schema-usage.cjs
+status=$?
+if [ $status -ne 0 ]; then
+  echo "Schema validation failed. Commit aborted."
+  exit $status
+fi
+
+echo "Schema validation passed."

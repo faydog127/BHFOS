@@ -259,9 +259,19 @@ const ProposalBuilder = () => {
              try {
                  // Trigger Send Estimate Edge Function
                  console.log('Calling send-estimate function for Quote ID:', quoteId);
+
+                 // Resolve the selected lead and ensure we have an email to send to
+                 const leadForProposal = leads.find(l => l.id === proposal.lead_id);
+                 if (!leadForProposal || !leadForProposal.email) {
+                     throw new Error('Customer email is required to send this proposal.');
+                 }
                  
                  const { data, error: sendError } = await supabase.functions.invoke('send-estimate', {
-                     body: { quote_id: quoteId }
+                     body: { 
+                       quote_id: quoteId,
+                       email: leadForProposal.email,
+                       lead_id: proposal.lead_id
+                     }
                  });
 
                  // Edge function error (caught by supabase client)

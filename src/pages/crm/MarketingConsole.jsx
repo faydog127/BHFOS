@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
@@ -32,12 +33,18 @@ const MarketingConsole = () => {
   const fetchPendingActions = async () => {
     setLoading(true);
     try {
-      // Only fetch actions that specifically need approval
-      // We check for 'needs_approval' as per standard flow, but also 'pending_approval' if used by legacy triggers
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+         setActions([]);
+         setLoading(false);
+         return;
+      }
+
+      // RLS will automatically filter by tenant_id
       const { data, error } = await supabase
         .from('marketing_actions')
         .select('*, leads(first_name, last_name, email, company)')
-        .in('status', ['needs_approval', 'pending_approval'])
+        .in('status', ['needs_approval', 'pending', 'pending_approval'])
         .order('scheduled_at', { ascending: true });
 
       if (error) throw error;
@@ -45,8 +52,8 @@ const MarketingConsole = () => {
     } catch (error) {
       console.error('Error fetching actions:', error);
       toast({
-        title: "Error",
-        description: "Failed to load pending marketing actions.",
+        title: "Error fetching data",
+        description: error.message || "Failed to load pending marketing actions.",
         variant: "destructive"
       });
     } finally {
@@ -67,30 +74,43 @@ const MarketingConsole = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
+      if (!user) {
+        throw new Error("You must be logged in to perform this action.");
+      }
+
       const updates = {
         status: newStatus,
         reviewer_notes: reviewerNotes ? reviewerNotes.trim() : null,
         reviewed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        approved_by: user?.id,
-        // Only set approved_at if we are actually approving
+        approved_by: user.id,
         approved_at: newStatus === 'approved' ? new Date().toISOString() : null
       };
 
-      const { error } = await supabase
+      const { count, error } = await supabase
         .from('marketing_actions')
         .update(updates)
-        .eq('id', selectedAction.id);
+        .eq('id', selectedAction.id)
+        .select('*', { count: 'exact' });
 
-      if (error) throw error;
+      if (error) {
+        throw new Error(`Database Error: ${error.message} (Code: ${error.code})`);
+      }
+
+      // 5) Add optimistic removal/refetch on approvals list after approve/reject succeeds.
+      // Optimistic Update: Remove from local list immediately
+      setActions((prev) => prev.filter((a) => a.id !== selectedAction.id));
+      
+      setIsSheetOpen(false);
+      setSelectedAction(null);
 
       toast({
         title: newStatus === 'approved' ? "Approved" : "Rejected",
         description: `Action has been ${newStatus}.`,
         variant: newStatus === 'approved' ? "default" : "destructive"
       });
-
-      setIsSheetOpen(false);
+      
+      // Background Sync to ensure consistency
       fetchPendingActions();
 
     } catch (error) {
@@ -100,6 +120,8 @@ const MarketingConsole = () => {
         description: error.message || "Could not update the action status.",
         variant: "destructive"
       });
+      // Revert optimistic update (refetch)
+      fetchPendingActions();
     } finally {
       setProcessing(false);
     }
@@ -179,7 +201,6 @@ const MarketingConsole = () => {
                   </CardContent>
 
                   <CardFooter className="pt-2 pb-4">
-                    {/* Fixed styling for button visibility */}
                     <Button 
                       className="w-full bg-blue-600 text-white hover:bg-blue-700 shadow-sm" 
                       onClick={() => handlePreview(action)}
@@ -194,11 +215,8 @@ const MarketingConsole = () => {
         </div>
       </div>
 
-      {/* Detail Drawer / Side Panel */}
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
         <SheetContent className="w-full sm:max-w-xl flex flex-col h-full p-0 gap-0" side="right">
-          
-          {/* Fixed Header */}
           <SheetHeader className="p-6 border-b bg-white flex-shrink-0">
             <SheetTitle className="text-xl">Review Action</SheetTitle>
             <SheetDescription>
@@ -206,11 +224,9 @@ const MarketingConsole = () => {
             </SheetDescription>
           </SheetHeader>
           
-          {/* Scrollable Content Area */}
           <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
             {selectedAction && (
               <div className="space-y-6">
-                {/* Details Grid */}
                 <div className="bg-white rounded-lg border p-4 shadow-sm space-y-4">
                   <h3 className="text-sm font-semibold text-slate-900 border-b pb-2">Recipient Details</h3>
                   <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-sm">
@@ -230,20 +246,18 @@ const MarketingConsole = () => {
                     </div>
                     <div>
                       <span className="text-xs text-slate-500 uppercase font-medium">Playbook</span>
-                      <div className="font-medium">{selectedAction.playbook_key}</div>
+                      <div className="font-medium">{selectedAction.playbook_key || selectedAction.type || 'Manual'}</div>
                     </div>
                   </div>
                 </div>
 
-                {/* Content Preview Box */}
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-slate-900">Message Preview</label>
                   <div className="w-full rounded-lg border bg-white p-4 text-sm leading-relaxed shadow-sm font-mono whitespace-pre-wrap text-slate-800">
-                    {selectedAction.content_preview}
+                    {selectedAction.content_preview || selectedAction.body || selectedAction.subject_line}
                   </div>
                 </div>
 
-                {/* Reviewer Notes Input */}
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-slate-900">Reviewer Notes (Internal)</label>
                   <Textarea 
@@ -253,13 +267,11 @@ const MarketingConsole = () => {
                     className="bg-white resize-none focus-visible:ring-blue-500"
                     rows={3}
                   />
-                  <p className="text-xs text-slate-500">These notes are saved to the database but not sent to the customer.</p>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Fixed Footer */}
           <SheetFooter className="p-6 border-t bg-white flex-shrink-0 flex-col sm:flex-row gap-3 sm:gap-2">
              <Button 
               variant="outline" 

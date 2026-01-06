@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/customSupabaseClient';
 
 /**
@@ -64,8 +65,10 @@ export const jobService = {
   },
 
   /**
-   * Mark a job as complete and Trigger Sentiment Gate
-   * Transition: Job (In Progress) -> Job (Completed) -> Sentiment Gate
+   * Mark a job as complete.
+   * NOTE: The Database Trigger `trg_emit_inv_on_job_complete` will automatically:
+   * 1. Create a draft invoice
+   * 2. (Optional) Emit a 'job_complete' event for further processing
    */
   async completeJob(jobId, notes) {
     // 1. Update Database
@@ -82,21 +85,8 @@ export const jobService = {
 
     if (error) return { success: false, error: error.message };
 
-    // 2. Trigger Sentiment Gate (v3.0)
-    try {
-        const { error: funcError } = await supabase.functions.invoke('sentiment-gate', {
-            body: {
-                action: 'REQUEST_RATING',
-                jobId: jobId,
-                leadId: data.lead_id
-            }
-        });
-        
-        if (funcError) console.error("Sentiment Gate Trigger Failed:", funcError);
-        
-    } catch (e) {
-        console.error("Error invoking sentiment-gate:", e);
-    }
+    // Note: We deliberately rely on DB triggers for downstream actions (Invoice Creation)
+    // rather than client-side logic to ensure reliability.
 
     return { success: true, data };
   },
@@ -136,8 +126,7 @@ export const jobService = {
           first_name,
           last_name,
           email,
-          phone,
-          risk_tags
+          phone
         )
       `)
       .eq('id', jobId)

@@ -2,10 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { getTenantId } from '@/lib/tenantUtils';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
-  Plus, Search, Filter, MoreHorizontal, Clock, AlertCircle, DollarSign
+  Plus, Search, Filter, MoreHorizontal, Clock, AlertCircle, DollarSign, Send, CheckCircle2, Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,10 +21,12 @@ import { useToast } from '@/components/ui/use-toast';
 import QuickBooksIndicator from '@/components/crm/invoices/QuickBooksIndicator';
 
 const Invoices = () => {
+  const [searchParams] = useSearchParams();
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all');
+  const [processingId, setProcessingId] = useState(null);
   const navigate = useNavigate();
   const { toast } = useToast();
   const tenantId = getTenantId();
@@ -56,10 +57,13 @@ const Invoices = () => {
             type
           )
         `)
-        .eq('tenant_id', tenantId) // TENANT FILTER
+        .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false });
 
-      if (statusFilter !== 'all') {
+      if (statusFilter === 'unpaid') {
+        // Map "unpaid" generic filter to exact unpaid statuses
+        query = query.in('status', ['sent', 'partial', 'overdue']);
+      } else if (statusFilter !== 'all') {
         query = query.eq('status', statusFilter);
       }
 
@@ -77,6 +81,35 @@ const Invoices = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleStatusUpdate = async (id, status, event) => {
+      event.stopPropagation();
+      setProcessingId(id);
+      const originalInvoices = [...invoices];
+      
+      setInvoices(prev => prev.map(i => i.id === id ? { ...i, status } : i));
+
+      try {
+          const { error } = await supabase
+            .from('invoices')
+            .update({ status })
+            .eq('id', id)
+            .eq('tenant_id', tenantId);
+
+          if (error) throw error;
+
+          let msg = `Invoice marked as ${status}.`;
+          if (status === 'paid') msg = "Invoice paid. Review request queued.";
+          
+          toast({ title: "Updated", description: msg, className: status === 'paid' ? 'bg-green-50 border-green-200' : '' });
+
+      } catch (e) {
+          setInvoices(originalInvoices);
+          toast({ variant: "destructive", title: "Error", description: e.message });
+      } finally {
+          setProcessingId(null);
+      }
   };
 
   const getStatusBadge = (status) => {
@@ -124,7 +157,7 @@ const Invoices = () => {
             <Clock className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <Button onClick={() => navigate('/bhf/crm/invoices/new')}>
+          <Button onClick={() => navigate(`/${tenantId}/crm/invoices/new`)}>
             <Plus className="w-4 h-4 mr-2" />
             Create Invoice
           </Button>
@@ -171,12 +204,13 @@ const Invoices = () => {
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm">
                     <Filter className="w-4 h-4 mr-2" />
-                    Filter: {statusFilter === 'all' ? 'All Statuses' : statusFilter}
+                    Filter: {statusFilter === 'all' ? 'All Statuses' : statusFilter === 'unpaid' ? 'Unpaid & Overdue' : statusFilter}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => setStatusFilter('all')}>All Statuses</DropdownMenuItem>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setStatusFilter('unpaid')}>Unpaid & Overdue</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setStatusFilter('draft')}>Draft</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setStatusFilter('sent')}>Sent</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setStatusFilter('paid')}>Paid</DropdownMenuItem>
@@ -241,21 +275,39 @@ const Invoices = () => {
                           />
                       </TableCell>
                       <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => navigate(`/bhf/crm/invoices/${invoice.id}`)}>
-                              Edit Invoice
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => window.open(`/invoices/${invoice.id}`, '_blank')}>
-                              View Public Page
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <div className="flex justify-end gap-2 items-center">
+                            {processingId === invoice.id ? (
+                                <Button size="sm" variant="ghost" disabled><Loader2 className="w-4 h-4 animate-spin"/></Button>
+                            ) : (
+                                <>
+                                    {invoice.status === 'draft' && (
+                                        <Button size="sm" variant="outline" onClick={(e) => handleStatusUpdate(invoice.id, 'sent', e)} title="Mark Sent">
+                                            <Send className="w-4 h-4 text-blue-600"/>
+                                        </Button>
+                                    )}
+                                    {(invoice.status === 'sent' || invoice.status === 'partial') && (
+                                        <Button size="sm" variant="outline" className="border-green-200 hover:bg-green-50" onClick={(e) => handleStatusUpdate(invoice.id, 'paid', e)} title="Mark Paid">
+                                            <DollarSign className="w-4 h-4 text-green-600"/>
+                                        </Button>
+                                    )}
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" className="h-8 w-8 p-0">
+                                            <MoreHorizontal className="h-4 w-4" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuItem onClick={() => navigate(`/${tenantId}/crm/invoices/${invoice.id}`)}>
+                                            Edit Invoice
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => window.open(`/invoices/${invoice.id}`, '_blank')}>
+                                            View Public Page
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </>
+                            )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
