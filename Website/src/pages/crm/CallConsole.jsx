@@ -1,0 +1,616 @@
+
+import React, { useState, useEffect } from 'react';
+import { Helmet } from 'react-helmet';
+import { 
+  Phone, Search, Menu, RefreshCw, Users, ShieldAlert,
+  Layout, Zap, MessageSquare, PlayCircle, MoreVertical,
+  Database, PlusCircle
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { cn } from '@/lib/utils';
+import { useToast } from '@/components/ui/use-toast';
+import { supabase } from '@/lib/customSupabaseClient';
+import { getTenantId } from '@/lib/tenantUtils';
+import { useTrainingMode } from '@/contexts/TrainingModeContext';
+
+// Sub-Components
+import AgentSessionOverlay from '@/components/crm/call-console/AgentSessionOverlay';
+import CallIntentSelector from '@/components/crm/call-console/CallIntentSelector';
+import AiResponseGrid from '@/components/crm/call-console/AiResponseGrid';
+import UnpreparedInput from '@/components/crm/call-console/UnpreparedInput';
+import StreetViewPanel from '@/components/crm/call-console/StreetViewPanel';
+import CoachingPanel from '@/components/crm/call-console/CoachingPanel';
+import PostCallAutomation from '@/components/crm/call-console/PostCallAutomation';
+import SystemModeToggle from '@/components/SystemModeToggle';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
+
+const getQueueItemMeta = (item) => {
+  if (!item) {
+    return {
+      kind: 'unknown',
+      displayName: '',
+      phone: '',
+      location: '',
+      customerType: 'unknown',
+      companyLabel: '',
+    };
+  }
+
+  // Partner Prospect (B2B) shape
+  if (item.business_name || item.contact_name || item.persona) {
+    const displayName = item.business_name || item.contact_name || 'Partner Prospect';
+    const phone = item.phone || item.contact_phone || '';
+    const location = [item.city, item.county, item.state].filter(Boolean).join(', ');
+    return {
+      kind: 'partner_prospect',
+      displayName,
+      phone,
+      location,
+      customerType: 'partner',
+      companyLabel: item.persona || item.service_type || 'B2B Prospect',
+    };
+  }
+
+  // Lead (consumer) shape
+  const displayName = [item.first_name, item.last_name].filter(Boolean).join(' ') || 'Lead';
+  const phone = item.phone || '';
+  const location = [item.city, item.state].filter(Boolean).join(', ');
+  const customerType = item.type === 'Property Manager' ? 'partner' : 'homeowner';
+  return {
+    kind: 'lead',
+    displayName,
+    phone,
+    location,
+    customerType,
+    companyLabel: item.company || item.type || 'Residential',
+  };
+};
+
+const ActiveCallView = ({ lead, isTrainingMode }) => {
+  const { toast } = useToast();
+  const [intent, setIntent] = useState(null);
+  const [aiOptions, setAiOptions] = useState([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [callDuration, setCallDuration] = useState(0);
+  const [selectedScriptRisk, setSelectedScriptRisk] = useState('low');
+  const [activeCall, setActiveCall] = useState(false);
+  const meta = getQueueItemMeta(lead);
+
+  // Call Timer
+  useEffect(() => {
+    let timer;
+    if (activeCall) {
+      timer = setInterval(() => setCallDuration(prev => prev + 1), 1000);
+    } else {
+      setCallDuration(0);
+    }
+    return () => clearInterval(timer);
+  }, [activeCall]);
+
+  // Reset when lead changes
+  useEffect(() => {
+    setIntent(null);
+    setAiOptions([]);
+    setActiveCall(false);
+    setSelectedScriptRisk('low');
+  }, [lead?.id]);
+
+  const handleIntentSelect = async (selectedIntentId) => {
+    setIntent(selectedIntentId);
+    setIsGenerating(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-call-options', {
+        body: { 
+            call_type: selectedIntentId.includes('inbound') ? 'inbound' : 'outbound',
+            customer_type: meta.customerType,
+            call_purpose: selectedIntentId,
+            prospect_info: { 
+              name: meta.displayName, 
+              location: meta.location 
+            }
+        }
+      });
+
+      if (error) throw error;
+      setAiOptions(data.options || []);
+    } catch (err) {
+      console.error(err);
+      setAiOptions([
+        { title: "Empathetic Opening", tone: "Empathetic", script: "I noticed you've been having some humidity issues in the area. How is your system holding up?", risk_level: "low" },
+        { title: "Direct Value", tone: "Direct", script: "We're doing certified air checks in Melbourne today. Can I stop by for 10 minutes?", risk_level: "medium" },
+        { title: "Urgency", tone: "Urgent", script: "We found a major mold issue at a neighbor's property. Just wanted to alert you.", risk_level: "high" },
+        { title: "Curiosity", tone: "Curious", script: "When was the last time you actually saw inside your ductwork?", risk_level: "low" },
+      ]);
+      
+      if (!isTrainingMode) {
+         toast({ title: "AI Error", description: "Using offline script backup.", variant: "destructive" });
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleScriptSelect = async (option, index) => {
+    setSelectedScriptRisk(option.risk_level);
+    toast({ title: "Script Selected", description: `Using: ${option.title}` });
+    
+    if (isTrainingMode) {
+        console.log("Training Mode: Script selection logged locally only.", option);
+    } else {
+        await supabase.from('call_a_b_tests').insert({
+            call_type: intent?.includes('inbound') ? 'inbound' : 'outbound',
+            customer_type: meta.customerType,
+            call_purpose: intent || 'unknown',
+            selected_option_index: index,
+            response_text: option.script,
+            response_tone: option.tone,
+            outcome: 'selected' 
+        });
+    }
+  };
+
+  const toggleCall = () => {
+    if (activeCall) {
+      setActiveCall(false);
+      toast({ title: "Call Ended", description: "Don't forget to log the outcome!" });
+    } else {
+      setActiveCall(true);
+      toast({ title: "Dialing...", description: `Calling ${meta.phone || 'Unknown'} ${isTrainingMode ? '(Simulated)' : ''}` });
+    }
+  };
+
+  if (!lead) return (
+    <div className="flex flex-col items-center justify-center h-full text-center p-8 text-slate-400">
+        <Users className="w-16 h-16 mb-4 opacity-20" />
+        <h3 className="text-xl font-semibold mb-2 text-slate-600">No Lead Selected</h3>
+        <p>Select a lead from the queue to start dialing.</p>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col h-full bg-white md:rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+      {/* Header */}
+      <div className={cn("p-4 md:p-6 border-b border-slate-100 transition-colors", isTrainingMode ? "bg-amber-50/50" : "bg-slate-50/50")}>
+        <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl md:text-2xl font-bold text-slate-900 leading-tight break-words flex items-center gap-2">
+              {meta.displayName}
+              {isTrainingMode && meta.kind === 'lead' && <Badge variant="outline" className="border-amber-400 text-amber-600 text-[10px]">TEST LEAD</Badge>}
+            </h1>
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <Badge variant="secondary" className="bg-slate-200 text-slate-700">
+                <Users className="w-3 h-3 mr-1" /> {meta.companyLabel}
+              </Badge>
+              <Badge variant="outline" className="border-slate-300 text-slate-600">
+                <Search className="w-3 h-3 mr-1" /> {meta.location || 'Unknown location'}
+              </Badge>
+               {activeCall && (
+                  <Badge variant="destructive" className="animate-pulse">
+                     ON CALL: {Math.floor(callDuration / 60)}:{(callDuration % 60).toString().padStart(2, '0')}
+                  </Badge>
+               )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 xl:self-start mt-2 xl:mt-0">
+            <Button 
+              size="lg" 
+              className={cn("shadow-md w-full xl:w-auto flex-1 xl:flex-none justify-center transition-colors", activeCall ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700")}
+              onClick={toggleCall}
+            >
+              <Phone className="w-4 h-4 mr-2" /> <span className="font-semibold">{activeCall ? 'End Call' : 'Dial Now'}</span>
+            </Button>
+            <Button variant="outline" size="icon" className="shrink-0"><MoreVertical className="w-4 h-4 text-slate-500" /></Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <ScrollArea className="flex-1 bg-white">
+        <div className="p-4 md:p-6 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Left: Scripting & AI */}
+          <div className="lg:col-span-2 space-y-6">
+            <Card className="border-slate-200 shadow-sm">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Call Intent</CardTitle>
+                    <CardDescription>Select the purpose of this call to prime the AI.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <CallIntentSelector selectedIntent={intent} onSelect={handleIntentSelect} />
+                </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-indigo-50 to-white border-indigo-100 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                 <Zap className="w-32 h-32" />
+              </div>
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                   <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center shadow-sm">
+                     <PlayCircle className="w-6 h-6 text-indigo-600" />
+                   </div>
+                   <div>
+                     <CardTitle className="text-lg text-indigo-950">AI Copilot</CardTitle>
+                     <CardDescription>Dynamic script generation based on {intent ? intent.replace(/_/g, ' ') : 'intent'}</CardDescription>
+                   </div>
+                </div>
+              </CardHeader>
+              <CardContent className="relative z-10">
+                <AiResponseGrid 
+                    options={aiOptions} 
+                    isGenerating={isGenerating} 
+                    onSelectResponse={handleScriptSelect} 
+                />
+                <CoachingPanel intent={intent} callDuration={callDuration} selectedScriptRisk={selectedScriptRisk} />
+              </CardContent>
+            </Card>
+
+            <UnpreparedInput callId={activeCall ? 'active' : 'post'} />
+          </div>
+
+          {/* Right: Intel & Actions */}
+          <div className="space-y-6">
+             <StreetViewPanel address={lead.address1} city={lead.city} state={lead.state} zip={lead.zip} />
+             
+             <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-sm uppercase tracking-wide text-slate-500">Post-Call Automation</CardTitle></CardHeader>
+                <CardContent>
+                    <PostCallAutomation leadId={lead.id} />
+                </CardContent>
+             </Card>
+
+             <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-slate-400" /> Log Interaction
+                </h3>
+                <Card className="bg-slate-50 border-slate-200">
+                    <CardContent className="p-4 space-y-3">
+                        <select className="flex h-10 w-full items-center justify-between rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                            <option>Select Outcome...</option>
+                            <option>Connected - Positive</option>
+                            <option>Connected - Not Interested</option>
+                            <option>Left Voicemail</option>
+                            <option>Wrong Number</option>
+                            <option>Booked Appointment</option>
+                        </select>
+                        <textarea 
+                            className="flex min-h-[100px] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" 
+                            placeholder="Call notes..." 
+                        />
+                        <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm">Log & Next Lead</Button>
+                    </CardContent>
+                </Card>
+             </div>
+          </div>
+
+        </div>
+      </ScrollArea>
+    </div>
+  );
+};
+
+const SmartCallConsole = () => {
+  // Automatically active by default to skip overlay
+  const [sessionActive, setSessionActive] = useState(true);
+  const [agentInfo, setAgentInfo] = useState(null);
+  const [selectedLead, setSelectedLead] = useState(null);
+  const [isQueueOpen, setIsQueueOpen] = useState(false);
+  const [queueSource, setQueueSource] = useState('partner_prospects'); // default to B2B partner calling
+  const [search, setSearch] = useState('');
+  const [leads, setLeads] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [queueError, setQueueError] = useState(null);
+  
+  const { user } = useAuth();
+  const { isTrainingMode } = useTrainingMode();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchLeads();
+  }, [isTrainingMode, queueSource, search]); 
+
+  const fetchLeads = async () => {
+    setLoading(true);
+    setQueueError(null);
+    try {
+        const table = queueSource === 'leads' ? 'leads' : 'partner_prospects';
+
+        // Rely on RLS for tenant isolation instead of explicit tenant_id filtering
+        let query = supabase
+          .from(table)
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        if (search.trim()) {
+          const searchTerm = `%${search.trim()}%`;
+          if (table === 'leads') {
+            query = query.or(`first_name.ilike.${searchTerm},last_name.ilike.${searchTerm},phone.ilike.${searchTerm},email.ilike.${searchTerm},company.ilike.${searchTerm},city.ilike.${searchTerm}`);
+          } else {
+            query = query.or(`business_name.ilike.${searchTerm},contact_name.ilike.${searchTerm},phone.ilike.${searchTerm},email.ilike.${searchTerm},city.ilike.${searchTerm},county.ilike.${searchTerm}`);
+          }
+        }
+
+        // Training mode filtering only applies to leads (partner_prospects typically does not include is_test_data)
+        if (table === 'leads') {
+          if (isTrainingMode) {
+            query = query.eq('is_test_data', true);
+          } else {
+            query = query.or('is_test_data.eq.false,is_test_data.is.null');
+          }
+        }
+
+        const { data, error } = await query;
+        
+        if (error) throw error;
+        setLeads(data || []);
+        
+        // Auto-select first lead if none selected or if switching modes invalidates current selection
+        if (data?.length > 0) {
+             const currentLeadStillValid = data.find(l => l.id === selectedLead?.id);
+             if (!selectedLead || !currentLeadStillValid) {
+                 setSelectedLead(data[0]);
+             }
+        } else {
+             setSelectedLead(null);
+        }
+
+    } catch (e) {
+        console.error("Queue Fetch Error:", e);
+        setLeads([]);
+        setSelectedLead(null);
+
+        const message =
+          e?.message ||
+          e?.error?.message ||
+          "Could not refresh queue. Check connection and database policies.";
+
+        // Surface the error even if the SDK doesn't provide a PostgREST error code
+        setQueueError(message);
+        toast({ title: "Queue Sync Error", description: message, variant: "destructive" });
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const seedTrainingData = async () => {
+    setLoading(true);
+    try {
+        if (queueSource !== 'leads') {
+            toast({ title: "Not available", description: "Training seeding is only available for website leads.", variant: "destructive" });
+            setLoading(false);
+            return;
+        }
+        const { error } = await supabase.rpc('seed_training_data');
+        if (error) throw error;
+        toast({ title: "Success", description: "Generated training leads!", duration: 3000 });
+        await fetchLeads();
+    } catch (e) {
+        console.error(e);
+        toast({ title: "Seeding Failed", description: e.message, variant: "destructive" });
+        setLoading(false);
+    }
+  };
+
+  const handleSessionStart = (info) => {
+    setAgentInfo(info);
+    setSessionActive(true);
+    // Removed toast notification here to clean up UI
+  };
+
+  if (!sessionActive) {
+    return <AgentSessionOverlay onSessionStart={handleSessionStart} />;
+  }
+
+  return (
+    <div className="h-[calc(100vh-64px)] lg:h-screen w-full bg-slate-100 flex overflow-hidden font-sans">
+      <Helmet>
+        <title>Smart Console | CRM</title>
+      </Helmet>
+
+      {/* Sidebar Queue */}
+      <aside className="hidden xl:flex w-80 flex-col bg-white border-r border-slate-200 shrink-0 z-10 h-full">
+        <QueueListContent 
+            leads={leads} 
+            selectedLead={selectedLead} 
+            onSelect={setSelectedLead} 
+            onRefresh={fetchLeads} 
+            loading={loading}
+            isTrainingMode={isTrainingMode}
+            onSeedData={seedTrainingData}
+            queueSource={queueSource}
+            onQueueSourceChange={setQueueSource}
+            search={search}
+            onSearchChange={setSearch}
+            queueError={queueError}
+        />
+      </aside>
+
+      <Sheet open={isQueueOpen} onOpenChange={setIsQueueOpen}>
+        <SheetContent side="left" className="p-0 w-80">
+          <QueueListContent 
+            leads={leads} 
+            selectedLead={selectedLead} 
+            onSelect={(lead) => {
+                setSelectedLead(lead);
+                setIsQueueOpen(false);
+            }} 
+            onRefresh={fetchLeads}
+            loading={loading}
+            isTrainingMode={isTrainingMode}
+            onSeedData={seedTrainingData}
+            queueSource={queueSource}
+            onQueueSourceChange={setQueueSource}
+            search={search}
+            onSearchChange={setSearch}
+            queueError={queueError}
+          />
+        </SheetContent>
+      </Sheet>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-w-0 bg-slate-100 relative h-full">
+        {/* Mobile Header */}
+        <div className="xl:hidden h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0">
+           <Button variant="ghost" size="sm" className="gap-2 text-slate-600" onClick={() => setIsQueueOpen(true)}>
+             <Menu className="w-5 h-5" /> <span className="font-semibold">Queue</span>
+           </Button>
+           <span className="font-bold text-slate-900 truncate max-w-[150px]">
+             {selectedLead ? getQueueItemMeta(selectedLead).displayName : 'Select Prospect'}
+           </span>
+           <div className="w-8" />
+        </div>
+
+        {/* Top Bar with Mode Toggle (Desktop) */}
+        <div className="hidden xl:flex items-center justify-end px-6 py-2 bg-slate-100 border-b border-slate-200 h-12">
+             <SystemModeToggle />
+        </div>
+
+        <div className="flex-1 p-2 md:p-4 lg:p-6 overflow-hidden h-full">
+          <div className="h-full max-w-7xl mx-auto flex flex-col">
+             <ActiveCallView lead={selectedLead} isTrainingMode={isTrainingMode} />
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+const QueueListContent = ({ leads, selectedLead, onSelect, onRefresh, loading, isTrainingMode, onSeedData, queueSource, onQueueSourceChange, search, onSearchChange, queueError }) => (
+  <div className={cn("flex flex-col h-full bg-white", isTrainingMode && "bg-amber-50/30")}>
+    <div className="p-4 border-b border-slate-100">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-bold text-lg flex items-center gap-2 text-slate-800">
+          <Phone className="w-5 h-5 text-blue-600" /> Call Queue
+        </h2>
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-600" onClick={onRefresh}>
+          <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+        </Button>
+      </div>
+
+      <div className="flex items-center gap-2 mb-4">
+        <Button
+          type="button"
+          size="sm"
+          variant={queueSource === 'partner_prospects' ? "default" : "outline"}
+          className={cn("flex-1", queueSource === 'partner_prospects' ? "bg-slate-900 hover:bg-slate-800" : "")}
+          onClick={() => onQueueSourceChange('partner_prospects')}
+        >
+          B2B Prospects
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={queueSource === 'leads' ? "default" : "outline"}
+          className={cn("flex-1", queueSource === 'leads' ? "bg-slate-900 hover:bg-slate-800" : "")}
+          onClick={() => onQueueSourceChange('leads')}
+        >
+          Website Leads
+        </Button>
+      </div>
+      
+      {/* Mobile Toggle inside Sheet */}
+      <div className="xl:hidden mb-4">
+        <SystemModeToggle className="w-full justify-between" />
+      </div>
+
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <Input
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder={queueSource === 'partner_prospects' ? "Search prospects..." : "Search leads..."}
+          className="pl-9 bg-slate-50 border-slate-200 focus-visible:ring-blue-500"
+        />
+      </div>
+    </div>
+    
+    <ScrollArea className="flex-1">
+      <div className="p-2 space-y-1">
+        {queueError && !loading ? (
+             <div className="flex flex-col items-center justify-center p-8 text-center h-64">
+                <ShieldAlert className="w-10 h-10 text-red-400 mb-3" />
+                <p className="text-sm font-semibold text-slate-700 mb-1">Queue failed to load</p>
+                <p className="text-xs text-slate-500 max-w-[240px]">
+                  {queueError}
+                </p>
+                <div className="mt-4 w-full space-y-2">
+                  <Button onClick={onRefresh} size="sm" className="w-full bg-slate-900 hover:bg-slate-800">
+                    Try Again
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => onQueueSourceChange(queueSource === 'partner_prospects' ? 'leads' : 'partner_prospects')}
+                  >
+                    Switch Source
+                  </Button>
+                </div>
+             </div>
+        ) : leads.length === 0 && !loading ? (
+             <div className="flex flex-col items-center justify-center p-8 text-center h-64">
+                <Database className="w-10 h-10 text-slate-300 mb-2" />
+                <p className="text-sm text-slate-500 mb-4">Queue is empty</p>
+                {isTrainingMode && queueSource === 'leads' ? (
+                    <Button onClick={onSeedData} size="sm" className="w-full bg-amber-500 hover:bg-amber-600">
+                        <PlusCircle className="w-4 h-4 mr-2" /> Generate Test Data
+                    </Button>
+                ) : (
+                    <div className="text-xs text-slate-400">
+                        {queueSource === 'partner_prospects'
+                          ? "Adjust filters or add prospects to the pipeline."
+                          : "Switch to training mode\n to simulate leads."}
+                    </div>
+                )}
+             </div>
+        ) : (
+            leads.map((lead) => (
+            (() => {
+              const meta = getQueueItemMeta(lead);
+              return (
+            <div 
+                key={lead.id}
+                onClick={() => onSelect(lead)}
+                className={cn(
+                "p-3 rounded-lg cursor-pointer transition-all border border-transparent group",
+                selectedLead?.id === lead.id 
+                    ? (isTrainingMode ? "bg-amber-100 border-amber-300 shadow-sm" : "bg-blue-50 border-blue-200 shadow-sm")
+                    : "hover:bg-slate-50 hover:border-slate-100"
+                )}
+            >
+                <div className="flex justify-between items-start mb-1">
+                <span className={cn("font-semibold text-sm line-clamp-1 group-hover:text-blue-700", selectedLead?.id === lead.id ? "text-blue-700" : "text-slate-900")}>
+                    {meta.displayName}
+                </span>
+                <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", (lead.pqi || 0) > 90 ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700")}>
+                    {lead.pqi || lead.score || 'N/A'}
+                </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                <Users className="w-3 h-3" /> <span>{meta.companyLabel}</span>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                    <span className="text-[10px] text-slate-400">{lead.city || lead.county || 'Unknown'}</span>
+                    <span className={cn("text-[10px] px-1.5 rounded", lead.status === 'New' ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600")}>
+                        {lead.status || lead.partner_status || 'new'}
+                    </span>
+                </div>
+            </div>
+              );
+            })()
+            ))
+        )}
+      </div>
+    </ScrollArea>
+  </div>
+);
+
+export default SmartCallConsole;

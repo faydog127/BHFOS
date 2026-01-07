@@ -1,0 +1,48 @@
+
+{
+  "frontendModules": [
+    { "id": "fe_dashboard", "name": "CRM Dashboard", "route": "/crm", "dependencies": [], "phase": "MVP" },
+    { "id": "fe_leads_list", "name": "Leads List", "route": "/crm/leads", "dependencies": ["fe_dashboard"], "phase": "MVP" },
+    { "id": "fe_smart_call", "name": "Smart Call Console", "route": "/crm/call-console", "dependencies": ["fe_leads_list"], "phase": "MVP", "status": "partial", "notes": "Logic layer complete. VoIP integration pending." },
+    { "id": "fe_inbox", "name": "Unified Inbox", "route": "/crm/inbox", "dependencies": [], "phase": "MVP" },
+    { "id": "fe_schedule", "name": "Scheduling", "route": "/crm/schedule", "dependencies": [], "phase": "MVP" },
+    { "id": "fe_estimates", "name": "Estimates Manager", "route": "/crm/estimates", "dependencies": [], "phase": "MVP" },
+    { "id": "fe_jobs", "name": "Jobs Manager", "route": "/crm/jobs", "dependencies": ["fe_estimates"], "phase": "MVP" },
+    { "id": "fe_invoices", "name": "Invoice Builder", "route": "/crm/invoices", "dependencies": ["fe_jobs"], "phase": "MVP" },
+    { "id": "fe_customers", "name": "Customer Directory", "route": "/crm/customers", "dependencies": [], "phase": "MVP" },
+    { "id": "fe_marketing", "name": "Marketing Hub", "route": "/crm/marketing", "dependencies": [], "phase": "MVP" },
+    { "id": "fe_pipeline", "name": "Pipeline View", "route": "/crm/pipeline", "dependencies": ["fe_leads_list"], "phase": "MVP" },
+    { "id": "fe_reports", "name": "Reporting", "route": "/crm/reporting", "dependencies": [], "phase": "Phase 2" },
+    { "id": "fe_settings", "name": "Settings", "route": "/crm/settings", "dependencies": [], "phase": "MVP" },
+    { "id": "fe_system_health", "name": "System Health", "route": "/crm/system-health", "dependencies": [], "phase": "Phase 2" },
+    { "id": "fe_partners", "name": "Partner Portal", "route": "/crm/partners", "dependencies": [], "phase": "MVP" },
+    { "id": "fe_tech_dashboard", "name": "Tech Dashboard", "route": "/tech/dashboard", "dependencies": [], "phase": "Phase 3" },
+    { "id": "fe_pricebook", "name": "Pricebook Manager", "route": "/crm/pricebook", "dependencies": [], "phase": "MVP" },
+    { "id": "fe_diagnostics", "name": "Master Diagnostics", "route": "/bhf/master-diagnostics", "dependencies": [], "phase": "MVP" },
+    { "id": "fe_branding", "name": "Branding Settings", "route": "/crm/settings/branding", "dependencies": ["fe_settings"], "phase": "MVP" },
+    { "id": "fe_email_templates", "name": "Email Templates", "route": "/crm/settings/email-templates", "dependencies": ["fe_settings"], "phase": "MVP" },
+    { "id": "fe_sms_templates", "name": "SMS Templates", "route": "/crm/settings/sms-templates", "dependencies": ["fe_settings"], "phase": "MVP" },
+    { "id": "fe_automations", "name": "Automation Workflows", "route": "/crm/automations", "dependencies": ["fe_marketing"], "phase": "Phase 2" },
+    { "id": "fe_api_keys", "name": "API Keys", "route": "/crm/settings/api-keys", "dependencies": ["fe_settings"], "phase": "Phase 3" },
+    { "id": "fe_audit_logs", "name": "Audit Logs", "route": "/crm/settings/audit-logs", "dependencies": ["fe_settings"], "phase": "MVP" },
+    { "id": "fe_user_management", "name": "User Management", "route": "/admin/users", "dependencies": [], "phase": "MVP" }
+  ],
+  "backendWorkflows": [
+    { "id": "be_create_lead", "name": "Create Lead", "dependencies": ["leads_table"], "phase": "MVP" },
+    { "id": "be_update_lead", "name": "Update Lead Status", "dependencies": ["leads_table"], "phase": "MVP" },
+    { "id": "be_create_estimate", "name": "Generate Estimate", "dependencies": ["estimates_table", "leads_table"], "phase": "MVP" },
+    { "id": "be_convert_to_job", "name": "Convert Estimate to Job", "dependencies": ["jobs_table", "estimates_table"], "phase": "MVP" },
+    { "id": "be_create_invoice", "name": "Generate Invoice", "dependencies": ["invoices_table", "jobs_table"], "phase": "MVP" },
+    { "id": "be_send_email", "name": "Send Email", "dependencies": ["marketing_actions_table", "edge_function_email"], "phase": "MVP" },
+    { "id": "be_send_sms", "name": "Send SMS", "dependencies": ["sms_messages_table", "edge_function_sms"], "phase": "MVP" },
+    { "id": "be_process_payment", "name": "Process Payment", "dependencies": ["transactions_table", "invoices_table"], "phase": "MVP" },
+    { "id": "be_partner_referral", "name": "Process Partner Referral", "dependencies": ["referrals_table", "partners_table"], "phase": "MVP" },
+    { "id": "be_marketing_signal", "name": "Ingest Marketing Signal", "dependencies": ["marketing_signals_table"], "phase": "Phase 2" },
+    { "id": "be_audit_log", "name": "Log System Action", "dependencies": ["system_audit_log_table"], "phase": "MVP" },
+    { "id": "be_schedule_appt", "name": "Schedule Appointment", "dependencies": ["appointments_table"], "phase": "MVP" },
+    { "id": "be_ai_suggestion", "name": "Generate AI Suggestion", "dependencies": ["marketing_actions_table"], "phase": "Phase 2" },
+    { "id": "be_tech_assignment", "name": "Assign Technician", "dependencies": ["jobs_table", "technicians_table"], "phase": "MVP" },
+    { "id": "be_inventory_check", "name": "Check Inventory", "dependencies": ["inventory_table"], "phase": "Phase 3" },
+    { "id": "be_call_logging", "name": "Call Logging & Scripting", "dependencies": ["calls_table", "edge_function_console_save"], "phase": "MVP" }
+  ]
+}

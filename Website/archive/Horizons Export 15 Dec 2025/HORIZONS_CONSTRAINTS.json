@@ -1,0 +1,124 @@
+{
+  "system_identity": "Horizons",
+  "role": "Platform SRE & Senior Developer",
+  "timestamp": "2025-11-29T00:00:00Z",
+  "description": "Definitive operational contract for the BlackHorse runtime environment. This document defines hard limits, soft constraints, and operational assumptions for CI/CD pipelines and DevOps guardrails.",
+  "runtime": {
+    "environment": "Node.js v20",
+    "package_manager": "npm",
+    "supported_languages": [
+      "JavaScript (ESNext)",
+      "JSX (React 18)",
+      "CSS (TailwindCSS)",
+      "HTML5",
+      "SQL (Postgres/Supabase)"
+    ],
+    "unsupported_languages": [
+      "Python",
+      "PHP",
+      "Ruby",
+      "Go",
+      "Rust",
+      "Java"
+    ],
+    "process_management": {
+      "daemons_allowed": false,
+      "background_services_allowed": false,
+      "available_commands": [
+        "npm install",
+        "npm run dev",
+        "npm run build",
+        "npm run lint"
+      ]
+    },
+    "resources": {
+      "max_cpu_seconds_per_call": "dynamic_platform_managed",
+      "max_wall_clock_seconds_per_call": "dynamic_platform_managed",
+      "max_memory_mb": "dynamic_platform_managed"
+    }
+  },
+  "model": {
+    "context_window": {
+      "behavior": "dynamic",
+      "large_file_handling": "truncation",
+      "truncation_marker": "<large_files_section>",
+      "implication": "Modifications to large files (>400 lines) require strictly targeted replacements or reliance on provided code snippets rather than full context recall."
+    },
+    "output": {
+      "behavior": "token_bucket",
+      "max_output_tokens": "finite_per_turn",
+      "implication": "Large refactors must be atomized. Architectural changes spanning >10 files in a single prompt are high-risk for cutoff."
+    },
+    "knowledge_cutoff": "static",
+    "determinism": "non_deterministic"
+  },
+  "filesystem": {
+    "root_access": true,
+    "access_mode": "read_write",
+    "write_mechanism": "atomic_overwrite",
+    "capabilities": {
+      "create_file": true,
+      "modify_file": true,
+      "delete_file": false,
+      "apply_diffs": false
+    },
+    "constraints": {
+      "max_file_size_mb": "unknown",
+      "path_restrictions": [
+        "Must be relative to project root",
+        "Cannot escape sandbox"
+      ],
+      "immutable_files": [
+        "vite.config.js",
+        "src/lib/customSupabaseClient.js",
+        "src/contexts/SupabaseAuthContext.jsx"
+      ]
+    }
+  },
+  "network": {
+    "model_access": {
+      "internet": false,
+      "external_api_calls": false,
+      "implication": "AI cannot verify live documentation, check current npm package versions, or browse the web."
+    },
+    "runtime_access": {
+      "internet": true,
+      "outbound_http": true,
+      "implication": "Generated React code CAN make fetch requests to Supabase and public APIs. 'npm install' CAN reach public registries."
+    }
+  },
+  "tooling": {
+    "built_in": [
+      "Vite (Build/Dev)",
+      "TailwindCSS (Styling)",
+      "Shadcn/UI (Components)",
+      "Lucide React (Icons)",
+      "Supabase Client (BaaS)"
+    ],
+    "limitations": {
+      "database": "No local SQLite/MySQL. Must use Supabase.",
+      "backend": "No Express/NestJS servers. Must use Supabase Edge Functions.",
+      "images": "No programmatic generation. Must use <img-replace> tags."
+    }
+  },
+  "security": {
+    "isolation": "session_scoped_sandbox",
+    "secrets": {
+      "storage": "environment_variables",
+      "injection_method": "<type='supabase-secrets'>",
+      "hardcoding_allowed": false
+    },
+    "persistence": {
+      "codebase": "persistent",
+      "runtime_state": "ephemeral",
+      "browser_storage": "client_side_only"
+    }
+  },
+  "assumptions": [
+    "The runtime environment is always Node v20.",
+    "The project is strictly a Single Page Application (SPA) using React.",
+    "All backend logic is offloaded to Supabase.",
+    "Files listed in <read_only_file_list> must never be modified.",
+    "Linting is enforced by eslint-config-react-app and runs automatically."
+  ]
+}
