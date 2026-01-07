@@ -1,0 +1,92 @@
+{
+  "tvg": {
+    "name": "The Vent Guys",
+    "logo_url": "https://wwyxohjnyqnegzbxtuxs.supabase.co/storage/v1/object/public/vent-guys-images/TVG_Logo.jpg",
+    "primary_color": "#0a56a6",
+    "secondary_color": "#1e88e5",
+    "contact_email": "info@theventguys.com",
+    "contact_phone": "321-360-9704",
+    "website_url": "https://theventguys.com",
+    "address": "123 Clean Air Dr, Space Coast, FL",
+    "feature_flags": {
+      "enableLeads": true,
+      "enablePipeline": true,
+      "enableJobs": true,
+      "enableSchedule": true,
+      "enableEstimates": true,
+      "enableInvoicing": true,
+      "enableContacts": true,
+      "enableCallConsole": true,
+      "enableSMS": true,
+      "enableMarketing": true,
+      "enableReporting": true,
+      "enablePricebook": true,
+      "enablePartners": true,
+      "enableSettings": true
+    },
+    "seo": {
+      "title": "The Vent Guys - NADCA Certified Dryer Vent & Air Duct Cleaning",
+      "description": "Expert dryer vent and air duct cleaning services in Brevard County, FL. Improve air quality, prevent fires, and save energy with NADCA certified professionals."
+    }
+  },
+  "installworxs": {
+    "name": "InstallWorxs",
+    "logo_url": "https://wwyxohjnyqnegzbxtuxs.supabase.co/storage/v1/object/public/vent-guys-images/installworxs-logo.png",
+    "primary_color": "#6200EE",
+    "secondary_color": "#03DAC6",
+    "contact_email": "support@installworxs.com",
+    "contact_phone": "800-555-WORX",
+    "website_url": "https://installworxs.com",
+    "address": "456 Project Blvd, Orlando, FL",
+    "feature_flags": {
+      "enableLeads": true,
+      "enablePipeline": true,
+      "enableJobs": true,
+      "enableSchedule": true,
+      "enableEstimates": true,
+      "enableInvoicing": true,
+      "enableContacts": true,
+      "enableCallConsole": true,
+      "enableSMS": false,
+      "enableMarketing": false,
+      "enableReporting": true,
+      "enablePricebook": true,
+      "enablePartners": true,
+      "enableSettings": true
+    },
+    "seo": {
+      "title": "InstallWorxs - Professional Installation Services",
+      "description": "Trusted installation services for residential and commercial projects. Quality workmanship guaranteed."
+    }
+  },
+  "demo": {
+    "name": "Demo Company",
+    "logo_url": "https://wwyxohjnyqnegzbxtuxs.supabase.co/storage/v1/object/public/vent-guys-images/demo-logo.png",
+    "primary_color": "#FF5733",
+    "secondary_color": "#33FF57",
+    "contact_email": "demo@example.com",
+    "contact_phone": "1-800-DEMO-CO",
+    "website_url": "https://demo.example.com",
+    "address": "789 Example St, Anytown, CA",
+    "feature_flags": {
+      "enableLeads": true,
+      "enablePipeline": true,
+      "enableJobs": true,
+      "enableSchedule": true,
+      "enableEstimates": true,
+      "enableInvoicing": true,
+      "enableContacts": true,
+      "enableCallConsole": false,
+      "enableSMS": false,
+      "enableMarketing": false,
+      "enableReporting": false,
+      "enablePricebook": true,
+      "enablePartners": false,
+      "enableSettings": true
+    },
+    "seo": {
+      "title": "Demo Company - Experience Our Platform",
+      "description": "Explore the features of our platform with a live demo environment."
+    }
+  }
+}

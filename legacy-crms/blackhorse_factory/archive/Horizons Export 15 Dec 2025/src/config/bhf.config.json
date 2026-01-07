@@ -1,0 +1,70 @@
+
+{
+  "stations": [
+    {
+      "id": "crm_core",
+      "name": "CRM Core",
+      "description": "Primary customer relationship tables",
+      "checks": [
+        { "type": "table", "target": "public.leads" },
+        { "type": "table", "target": "public.jobs" },
+        { "type": "table", "target": "public.estimates" },
+        { "type": "table", "target": "public.customers" }
+      ]
+    },
+    {
+      "id": "sys_admin",
+      "name": "System Admin",
+      "description": "Administrative control and access",
+      "checks": [
+        { "type": "table", "target": "public.app_user_roles" },
+        { "type": "table", "target": "public.system_settings" },
+        { "type": "table", "target": "public.audit_log_entries" }
+      ]
+    },
+    {
+      "id": "comms",
+      "name": "Communications",
+      "description": "Messaging and voice infrastructure",
+      "checks": [
+        { "type": "table", "target": "communications.calls" },
+        { "type": "table", "target": "communications.sms_messages" },
+        { "type": "table", "target": "public.marketing_campaigns" }
+      ]
+    },
+    {
+      "id": "sb_probe",
+      "name": "Supabase Probe",
+      "description": "Backend services availability",
+      "checks": [
+        { "type": "table", "target": "public.system_audit_log" },
+        { "type": "function", "target": "system_doctor_check_table" },
+        { "type": "function", "target": "execute_remediation_plan" }
+      ]
+    },
+    {
+      "id": "build_health",
+      "name": "Build Health",
+      "description": "Environment and configuration status",
+      "checks": [
+        { "type": "env", "target": "VITE_SUPABASE_URL" },
+        { "type": "env", "target": "VITE_SUPABASE_ANON_KEY" },
+        { "type": "env", "target": "VITE_GOOGLE_MAPS_API_KEY" }
+      ]
+    },
+    {
+      "id": "tenant_auditor",
+      "name": "Tenant Auditor",
+      "description": "Multi-tenancy isolation checks",
+      "checks": [
+        { "type": "table", "target": "public.organizations" },
+        { "type": "policy", "target": "tenant_isolation_policy" }
+      ]
+    }
+  ],
+  "integrations": [
+    { "id": "google_places", "key_name": "VITE_GOOGLE_MAPS_API_KEY", "service_name": "Google Places API" },
+    { "id": "supabase", "key_name": "VITE_SUPABASE_URL", "service_name": "Supabase Core" },
+    { "id": "openai", "key_name": "VITE_OPENAI_API_KEY", "service_name": "OpenAI LLM" }
+  ]
+}

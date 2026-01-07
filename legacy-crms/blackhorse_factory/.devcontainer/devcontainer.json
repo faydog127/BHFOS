@@ -1,0 +1,28 @@
+{
+  "name": "BHFOS Devcontainer",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20.19.1"
+    }
+  },
+  "remoteUser": "vscode",
+  "updateContentCommand": "npm ci",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "editor.formatOnSave": true,
+        "files.eol": "\n"
+      },
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  },
+  "forwardPorts": [
+    5173,
+    54321
+  ],
+  "postCreateCommand": "npm run build --if-present"
+}

@@ -1,0 +1,90 @@
+{
+  "project": {
+    "name": "BlackHorse Factory",
+    "version": "2.2.0",
+    "environment": "production"
+  },
+  "stations": [
+    {
+      "id": "crm-core",
+      "label": "CRM Core",
+      "name": "CRM Core",
+      "route": "/bhf/crm",
+      "description": "Leads, Jobs, and Invoicing",
+      "icon": "Activity",
+      "color": "indigo",
+      "cta": "Open CRM",
+      "checks": [
+        { "table": "public.leads", "columns": ["id", "status", "name"] },
+        { "table": "public.jobs", "columns": ["lead_id", "scheduled_date"] },
+        { "table": "public.invoices", "columns": ["amount", "status"] }
+      ]
+    },
+    {
+      "id": "sys-admin",
+      "label": "System Admin",
+      "name": "System Admin",
+      "route": "/bhf/system-doctor",
+      "description": "Audit Logs and Health",
+      "icon": "ShieldAlert",
+      "color": "emerald",
+      "cta": "Run Diagnostics",
+      "checks": [
+        { "table": "public.system_audit_log", "columns": ["feature_id", "fix_plan_jsonb"] },
+        { "table": "public.app_user_roles", "columns": ["user_id", "role"] },
+        { "table": "public.system_settings", "columns": ["key", "value"] }
+      ]
+    },
+    {
+      "id": "comms",
+      "label": "Communications",
+      "name": "Communications",
+      "route": "/bhf/communications",
+      "description": "VoIP and Messaging",
+      "icon": "Database",
+      "color": "blue",
+      "cta": "Open Comms",
+      "checks": [
+        { "table": "communications.calls", "columns": ["direction", "status"] },
+        { "table": "communications.sms_messages", "columns": ["direction", "body"] }
+      ]
+    },
+    {
+      "id": "probe",
+      "label": "Supabase Probe",
+      "name": "Supabase Probe",
+      "route": "/bhf/probe",
+      "description": "Connectivity diagnostics & RPC testing.",
+      "icon": "Database",
+      "color": "blue",
+      "cta": "Test Connection",
+      "checks": []
+    },
+    {
+      "id": "build",
+      "label": "Build Health",
+      "name": "Build Health",
+      "route": "/bhf/build-health",
+      "description": "Static analysis, white-label enforcement & dependency checks.",
+      "icon": "Hammer",
+      "color": "amber",
+      "cta": "Scan Codebase",
+      "checks": []
+    },
+    {
+      "id": "tenant",
+      "label": "Tenant Auditor",
+      "name": "Tenant Auditor",
+      "route": "/bhf/tenant-simulator",
+      "description": "Cross-tenant RLS verification.",
+      "icon": "ShieldAlert",
+      "color": "red",
+      "cta": "Simulate Attack",
+      "checks": []
+    }
+  ],
+  "integrations": [
+    { "id": "google-places", "name": "Google Places", "env_key": "VITE_GOOGLE_MAPS_KEY" },
+    { "id": "supabase", "name": "Supabase Client", "env_key": "VITE_SUPABASE_URL" }
+  ]
+}

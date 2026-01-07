@@ -1,0 +1,42 @@
+# Supabase project configuration.
+#
+# These are the default settings for every new project.
+# For more information, see https://supabase.com/docs/guides/cli/config
+
+# The name of your project.
+# It is used in the URL of your project.
+# Only lowercase alphanumeric characters and hyphens are allowed.
+project_id = 'tvg-web-app'
+
+[api]
+# The port to use for the API URL.
+port = 54321
+# Schemas to expose in the API.
+schemas = ["public", "storage", "graphql"]
+# The maximum number of rows to return from a table.
+max_rows = 1000
+
+[db]
+# The port to use for the local database.
+port = 54322
+# The major version of Postgres to use.
+major_version = 15
+
+[studio]
+# The port to use for Supabase Studio.
+port = 54323
+
+# Email testing server.
+# To catch all outgoing emails in your local development environment,
+# run `npx supabase start` and go to http://localhost:54323/project/smtp
+[inbucket]
+port = 54324
+
+# Defines the Edge Functions in this project.
+# You can define multiple functions, with different configurations.
+# For more information, see https://supabase.com/docs/guides/functions
+[functions.klaire-chat]
+  no_verify_jwt = true
+
+[functions."*"]
+  # verify_jwt = true # It's recommended to enable JWT verification for all functions
