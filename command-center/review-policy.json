@@ -1,0 +1,136 @@
+{
+  "critical_domains": [
+    "tenant_isolation",
+    "money_state",
+    "acceptance_commit",
+    "state_machine",
+    "completion_gate"
+  ],
+  "required_top_level_fields": [
+    "gate_version",
+    "change_id",
+    "pr_id",
+    "title",
+    "generated_at",
+    "source_commit",
+    "run_id",
+    "files_changed",
+    "scope",
+    "domain_tags",
+    "summary",
+    "decider",
+    "risk_acceptances",
+    "scenarios",
+    "concurrency_model",
+    "ops_impact",
+    "trigger_evidence",
+    "artifacts",
+    "coverage_report",
+    "findings",
+    "verification",
+    "readiness"
+  ],
+  "allowed_concurrency_models": [
+    "dedupe_based",
+    "lock_based"
+  ],
+  "required_scenario_categories_when_triggered": [
+    "concurrency",
+    "replay_idempotency",
+    "bad_data",
+    "dependency_failure",
+    "human_error"
+  ],
+  "allowed_risk_probability": [
+    "LOW",
+    "MEDIUM",
+    "HIGH"
+  ],
+  "allowed_risk_blast_radius": [
+    "LOW",
+    "MEDIUM",
+    "HIGH",
+    "CATASTROPHIC"
+  ],
+  "allowed_readiness_labels": [
+    "P0-02: LOCAL_PROVEN",
+    "P0-02: PRODUCTION-VALIDATED"
+  ],
+  "required_artifact_types": [
+    "log",
+    "db_output",
+    "code_reference",
+    "manifest",
+    "test_result"
+  ],
+  "artifact_rules": {
+    "require_paths_exist": true,
+    "require_non_empty_types": [
+      "log",
+      "db_output",
+      "manifest",
+      "test_result"
+    ],
+    "code_reference_must_match_file": true,
+    "max_age_hours": 168,
+    "max_age_hours_types": [
+      "log",
+      "db_output",
+      "manifest",
+      "test_result"
+    ]
+  },
+  "forbidden_as_sole_proof": [
+    "screenshot",
+    "summary_only",
+    "verbal_confirmation"
+  ],
+  "required_coverage_fields": [
+    "files_analyzed",
+    "discovery_inputs",
+    "excluded_scope",
+    "uncertainty_boundaries"
+  ],
+  "required_finding_fields": [
+    "id",
+    "title",
+    "severity",
+    "business_impact",
+    "rule_violated",
+    "proof",
+    "recommended_action",
+    "verification_method",
+    "closure_evidence_required"
+  ],
+  "critical_change_requirements": {
+    "tenant_isolation": [
+      "tenant_boundary_analysis",
+      "runtime_negative_test",
+      "rollback_plan"
+    ],
+    "money_state": [
+      "idempotency_analysis",
+      "replay_test",
+      "rollback_plan"
+    ],
+    "acceptance_commit": [
+      "atomicity_analysis",
+      "exactly_once_analysis",
+      "rollback_plan"
+    ],
+    "state_machine": [
+      "migration_plan",
+      "legacy_data_plan",
+      "rollback_plan"
+    ],
+    "completion_gate": [
+      "negative_test",
+      "positive_test"
+    ]
+  },
+  "allowed_readiness": [
+    "NOT_READY",
+    "CONDITIONALLY_READY",
+    "READY"
+  ]
+}

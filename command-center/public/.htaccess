@@ -1,0 +1,28 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteRule ^index\.html$ - [L]
+  RewriteRule ^assets/ - [L]
+  RewriteRule \.(js|mjs|css|map|png|jpe?g|gif|svg|ico|webp|woff2?|ttf|eot|json|txt|xml|pdf)$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header set X-Powered-By "Hostinger Horizons"
+
+  # Do not cache the SPA shell at the edge. A stale HTML document can point to
+  # outdated hashed bundles and break phones/desktops on different CDN nodes.
+  Header set Cache-Control "no-cache, no-store, must-revalidate"
+  
+  # Hashed build assets are safe to cache aggressively.
+  <If "%{REQUEST_URI} =~ m#^/assets/.*$#">
+    Header set Cache-Control "public, max-age=604800, immutable"
+  </If>
+
+  # Static root images/icons can also be cached.
+  <If "%{REQUEST_URI} =~ m#^/(favicon\.png|vite\.svg|apple-touch-icon.*|icon.*\.(png|svg|ico))$#">
+    Header set Cache-Control "public, max-age=604800"
+  </If>
+</IfModule>

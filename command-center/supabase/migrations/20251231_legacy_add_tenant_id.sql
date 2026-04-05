@@ -1,0 +1,110 @@
+-- Legacy tenant_id retrofit for existing tables without tenant_id
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'accounts',
+    'activity_log',
+    'air_duct_components',
+    'analytics_snapshots',
+    'app_settings',
+    'app_user_roles',
+    'applied_fixes',
+    'automation_logs',
+    'automation_workflows',
+    'blacklist_identifiers',
+    'brand_profile',
+    'build_events',
+    'build_logs',
+    'build_metrics',
+    'business_settings',
+    'call_a_b_tests',
+    'call_logs',
+    'call_responses',
+    'campaign_metrics',
+    'campaigns',
+    'chat_logs',
+    'chatbot_leads',
+    'config_audit_logs',
+    'coupons',
+    'customer_discounts',
+    'diagnostics_failures',
+    'diagnostics_fixes',
+    'diagnostics_log',
+    'diagnostics_runs',
+    'doc_categories',
+    'doc_templates',
+    'escalations',
+    'evaluations',
+    'fixes_log',
+    'global_config',
+    'industry_news',
+    'integration_tokens',
+    'invoice_items',
+    'job_items',
+    'job_surveys',
+    'kanban_config',
+    'kanban_status_events',
+    'klaire_chat_logs',
+    'klaire_contacts',
+    'klaire_leads',
+    'landing_page_conversions',
+    'landing_pages',
+    'lead_pipeline_events',
+    'lifecycle_events',
+    'manual_call_logs',
+    'marketing_metrics',
+    'marketing_signals',
+    'objections',
+    'organizations',
+    'package_items',
+    'packages',
+    'partner_registrations',
+    'pipeline_columns',
+    'playbook_templates',
+    'projects',
+    'property_inspections',
+    'quote_items',
+    'referral_codes',
+    'referral_partners',
+    'remediation_step_log',
+    'rep_checklists',
+    'reviews',
+    'rollback_audit_log',
+    'scheduled_notifications',
+    'script_library',
+    'service_pricing',
+    'service_usage_stats',
+    'services',
+    'services_catalog',
+    'session_log',
+    'smart_trigger_rules',
+    'sms_templates',
+    'source_performance',
+    'submissions',
+    'superusers',
+    'system_rollback_log',
+    'system_settings',
+    'technicians',
+    'tenants',
+    'training_leads',
+    'user_training_settings',
+    'widget_settings',
+    'work_orders',
+    'properties',
+    'transactions'
+  ]
+  LOOP
+    -- This legacy retrofit list spans tables that may not exist in a clean/local schema.
+    -- Skip safely when a table is absent so bootstrap migrations remain portable.
+    IF to_regclass(format('public.%I', t)) IS NULL THEN
+      CONTINUE;
+    END IF;
+
+    EXECUTE format('ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS tenant_id text', t);
+    EXECUTE format('UPDATE public.%I SET tenant_id = ''tvg'' WHERE tenant_id IS NULL', t);
+    EXECUTE format('ALTER TABLE public.%I ALTER COLUMN tenant_id SET NOT NULL', t);
+    EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON public.%I (tenant_id)', t || '_tenant_id_idx', t);
+  END LOOP;
+END $$;

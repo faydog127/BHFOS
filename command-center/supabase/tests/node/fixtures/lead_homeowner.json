@@ -1,0 +1,20 @@
+{
+  "lead": {
+    "persona": "homeowner",
+    "first_name": "Maya",
+    "last_name": "Chen",
+    "email": "maya@example.com",
+    "phone": "+13215553333",
+    "city": "Titusville",
+    "zip": "32780",
+    "message": "musty odor near returns"
+  },
+  "meta": {
+    "page": "/book",
+    "utm_source": "google",
+    "utm_medium": "lsa",
+    "utm_campaign": "iaq",
+    "referrer": "https://google.com",
+    "timestamp": "2025-11-08T12:00:00Z"
+  }
+}

@@ -1,0 +1,132 @@
+# Supabase project configuration.
+#
+# These are the default settings for every new project.
+# For more information, see https://supabase.com/docs/guides/cli/config
+
+# The name of your project.
+# It is used in the URL of your project.
+# Only lowercase alphanumeric characters and hyphens are allowed.
+project_id = 'tvg-web-app'
+
+[api]
+# The port to use for the API URL.
+port = 25431
+# Schemas to expose in the API.
+schemas = ["public", "storage", "graphql"]
+# The maximum number of rows to return from a table.
+max_rows = 1000
+
+[db]
+# The port to use for the local database.
+port = 25432
+# The major version of Postgres to use.
+major_version = 15
+
+[studio]
+# The port to use for Supabase Studio.
+port = 25433
+
+# Email testing server.
+# To catch all outgoing emails in your local development environment,
+# run `npx supabase start` and go to http://localhost:54323/project/smtp
+[inbucket]
+port = 25434
+
+# Defines the Edge Functions in this project.
+# You can define multiple functions, with different configurations.
+# For more information, see https://supabase.com/docs/guides/functions
+[functions.klaire-chat]
+  verify_jwt = false
+
+[functions.kanban-list]
+  verify_jwt = false
+
+[functions.kanban-move]
+  verify_jwt = false
+
+[functions.lead-update-stage]
+  verify_jwt = false
+
+[functions.quote-update-status]
+  verify_jwt = false
+
+[functions.quotes-list]
+  verify_jwt = false
+
+[functions.invoice-update-status]
+  verify_jwt = false
+
+[functions.invoices-list]
+  verify_jwt = false
+
+[functions.payment-webhook]
+  verify_jwt = false
+
+[functions.stripe-webhook]
+  verify_jwt = false
+
+[functions.public-quote]
+  verify_jwt = false
+
+[functions.public-invoice]
+  verify_jwt = false
+
+[functions.public-pay]
+  verify_jwt = false
+
+[functions.public-quote-approve]
+  verify_jwt = false
+
+[functions.send-estimate]
+  verify_jwt = false
+
+[functions.send-invoice]
+  verify_jwt = false
+
+[functions.manual-convert-customer]
+  verify_jwt = false
+
+[functions.calls]
+  verify_jwt = false
+
+[functions.execute-sql]
+  verify_jwt = false
+
+[functions.work-order-update]
+  verify_jwt = false
+
+[functions.invoice-save]
+  verify_jwt = false
+
+[functions.routes-proxy]
+  verify_jwt = false
+
+[functions.zones-proxy]
+  verify_jwt = false
+
+[functions.create-appointment]
+  verify_jwt = false
+
+[functions.update-appointment-status]
+  verify_jwt = false
+
+[functions.run-appointment-reminders]
+  verify_jwt = false
+
+[functions.run-invoice-reminders]
+  verify_jwt = false
+
+[functions.run-quote-reminders]
+  verify_jwt = false
+
+[functions.send-receipt]
+  verify_jwt = false
+
+[functions.send-sms]
+  verify_jwt = false
+
+[functions.submit-form]
+  verify_jwt = false
+
+[functions.money-loop-delete]
+  verify_jwt = false

@@ -1,5 +1,101 @@
-node_modules
-.next
-.env
-.env.local
+########################################
+# OS / Editor
+########################################
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+########################################
+# Node / JS
+########################################
+node_modules/
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+########################################
+# Environment
+########################################
+.env
+.env.*
+!.env.example
+command-center/.env*
+Website/.env*
+
+########################################
+# Build / Dist
+########################################
+dist/
+build/
+.out/
+.next/
+.vite/
+
+########################################
+# Test Artifacts
+########################################
+coverage/
+playwright-report/
+test-results/
+
+########################################
+# Local scratch / artifacts (do not version)
+########################################
+tmp/
+archive/
+artifacts/
+artifacts/*.log
+artifacts/*.err.log
+.tmp.driveupload/
+dev.log
+debug.log
+trace-inspect/
+*.trace
+
+########################################
+# Bundled binaries (do not version)
+########################################
+tools/supabase/
+tools/supabase.exe
+tools/supabase_*.tar.gz
+
+########################################
+# Local deploy bundles (do not version)
+########################################
+dist-deploy-*/
+dist-deploy-*.zip
+tmp/dist-deploy-*/
+tmp/dist-deploy-*.zip
+docs.zip
+
+########################################
+# Keys / local auth material (do not version)
+########################################
+tmp/hostinger_*
+
+########################################
+# Supabase temp / local state
+########################################
+supabase/.temp/
+supabase/.temp/**
+supabase/**/.temp/**
+supabase/**/tmp*
+supabase/.branches/
+
+########################################
+# AI / CODEX / Scratch
+########################################
+tmpclaude-*/
+tmpclaude_*/
+tmpclaude*/
+temp_snapshot/
+bhfos_snapshot.ps1
+
+########################################
+# Local tools / experiments
+########################################
+########################################
+# Legacy / archives
+########################################
+command-center_old/

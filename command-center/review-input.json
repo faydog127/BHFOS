@@ -1,0 +1,199 @@
+{
+  "gate_version": "2.0.0",
+  "change_id": "EXAMPLE-P1-LOCAL-PROOF",
+  "pr_id": "LOCAL",
+  "title": "Example submission (local money-loop proof)",
+  "generated_at": "2026-04-04T20:43:34-04:00",
+  "source_commit": "5b3fc1984520130bc0010d48e5f9ced791830958",
+  "run_id": "2026-04-04T20:43:34-04:00",
+  "files_changed": [
+    "scripts/money-loop-smoke-test.ps1",
+    "scripts/now-queue-smoke-test.ps1",
+    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_money-loop-smoke.md",
+    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_flow-trace_quote-job-invoice-payment.md"
+  ],
+  "scope": {
+    "included": [
+      "scripts/money-loop-smoke-test.ps1",
+      "scripts/now-queue-smoke-test.ps1",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_money-loop-smoke.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_flow-trace_quote-job-invoice-payment.md"
+    ],
+    "excluded": [
+      "dist/",
+      "node_modules/"
+    ]
+  },
+  "domain_tags": [
+    "money_state",
+    "acceptance_commit"
+  ],
+  "summary": "Example: attaches local money-loop smoke + now-queue smoke outputs as evidence artifacts.",
+  "decider": {
+    "name": "TBD",
+    "role": "system_owner",
+    "approved_at": "2026-04-04T20:43:34-04:00"
+  },
+  "risk_acceptances": [],
+  "scenarios": [
+    {
+      "category": "concurrency",
+      "scenario": "Two concurrent finalization attempts for the same provider_payment_id",
+      "expected_behavior": "At most one financial effect (1 transaction + 1 application); duplicates are no-ops",
+      "verification_method": "Run the P0-02.C and P0-02.E race tests; confirm 1 tx + 1 app",
+      "evidence_required": [
+        "test_result",
+        "db_output"
+      ]
+    },
+    {
+      "category": "replay_idempotency",
+      "scenario": "Same webhook event replayed multiple times",
+      "expected_behavior": "No duplicate transaction/application and no duplicate canonical event",
+      "verification_method": "Replay the same event in local tests; assert dedupe flags and 1 tx/app",
+      "evidence_required": [
+        "test_result",
+        "db_output"
+      ]
+    },
+    {
+      "category": "bad_data",
+      "scenario": "Legacy invoice has amount_paid > 0 but no ledger applications",
+      "expected_behavior": "System flags reconciliation_required; does not silently settle incorrectly",
+      "verification_method": "Run P0-02.E legacy capture/quarantine tests; confirm flags and proof objects",
+      "evidence_required": [
+        "test_result",
+        "db_output",
+        "log"
+      ]
+    },
+    {
+      "category": "dependency_failure",
+      "scenario": "RPC fails mid-run (no partial money writes)",
+      "expected_behavior": "No partial financial effect; alert/trace emitted; safe to retry",
+      "verification_method": "Simulate RPC failure in controlled test; assert no tx/app created",
+      "evidence_required": [
+        "test_result",
+        "db_output"
+      ]
+    },
+    {
+      "category": "human_error",
+      "scenario": "Staff enters weak manual reference (e.g. 'cash')",
+      "expected_behavior": "Rejected; no ledger writes created",
+      "verification_method": "Run P0-02.B manual reference rejection tests",
+      "evidence_required": [
+        "test_result"
+      ]
+    }
+  ],
+  "concurrency_model": {
+    "model": "dedupe_based",
+    "guarantees": [
+      "No duplicate financial effect under reruns/overlap due to DB uniqueness/idempotency"
+    ],
+    "non_guarantees": [
+      "Does not guarantee zero duplicate processing attempts without explicit lock strategy"
+    ]
+  },
+  "ops_impact": {
+    "alert_dedupe_identity": "Deterministic alert_key (e.g. invoice_id + anomaly_type + provider_payment_id)",
+    "max_open_alerts_per_entity": "1 per alert_key",
+    "task_dedupe_rule": "public.ensure_follow_up_task(tenant_id, source_type, source_id, title) prevents duplicates"
+  },
+  "trigger_evidence": {
+    "derived_domain_tags": [
+      "money_state",
+      "acceptance_commit"
+    ],
+    "derivation_inputs": [
+      "git diff --name-only",
+      "path-to-domain mapping rules"
+    ]
+  },
+  "artifacts": [
+    {
+      "type": "code_reference",
+      "path": "scripts/money-loop-smoke-test.ps1",
+      "snippet": "param(\n  [string]$TenantId = 'tvg',\n  [string]$RunPrefix = 'smoke'"
+    },
+    {
+      "type": "log",
+      "path": "tmp/money-loop-smoke-test_latest.log"
+    },
+    {
+      "type": "db_output",
+      "path": "tmp/money-loop-smoke-test_latest.log"
+    },
+    {
+      "type": "test_result",
+      "path": "tmp/now-queue-smoke-test_latest.log"
+    },
+    {
+      "type": "manifest",
+      "path": "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_flow-trace_quote-job-invoice-payment.md"
+    }
+  ],
+  "coverage_report": {
+    "files_analyzed": [
+      "scripts/money-loop-smoke-test.ps1",
+      "scripts/now-queue-smoke-test.ps1",
+      "tmp/money-loop-smoke-test_latest.log",
+      "tmp/now-queue-smoke-test_latest.log",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_money-loop-smoke.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_flow-trace_quote-job-invoice-payment.md"
+    ],
+    "discovery_inputs": [
+      "smoke test scripts",
+      "generated local evidence logs"
+    ],
+    "excluded_scope": [
+      "UI walkthrough (separate evidence file)"
+    ],
+    "uncertainty_boundaries": [
+      "This example proves local path-level behavior only; it is not production proof."
+    ]
+  },
+  "findings": [
+    {
+      "id": "F-001",
+      "title": "Local money loop smoke produced verifiable IDs and DB evidence",
+      "severity": "MEDIUM",
+      "business_impact": "Provides evidence-grade artifact format for review gate validation.",
+      "rule_violated": "n/a (example submission)",
+      "proof": [
+        "tmp/money-loop-smoke-test_latest.log",
+        "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_money-loop-smoke.md"
+      ],
+      "recommended_action": "Replace this example with a real change submission that includes dedicated db_output/test_result files and exact code references.",
+      "verification_method": "Run `pwsh -NoProfile -File .\\\\scripts\\\\money-loop-smoke-test.ps1 -SkipStart` and confirm output contains IDs + DB queries.",
+      "closure_evidence_required": [
+        "log",
+        "db_output",
+        "test_result"
+      ]
+    }
+  ],
+  "verification": {
+    "positive_tests": [
+      "public pay succeeds in local mock mode",
+      "now-queue smoke shows tasks + suspension + no job"
+    ],
+    "negative_tests": [
+      "second public-pay call returns already_paid"
+    ],
+    "idempotency_analysis": "Smoke test calls approval twice and public-pay twice; idempotent outcomes are asserted in the output log.",
+    "replay_test": "Re-run the same smoke scripts and confirm identical invariants hold (exactly-once job per quote, already_paid on second pay).",
+    "atomicity_analysis": "n/a (example submission; no code change).",
+    "exactly_once_analysis": "Smoke test calls approval twice; DB evidence shows a single job for the quote_id.",
+    "rollback_plan": "n/a (example submission; no code change)."
+  },
+  "readiness": {
+    "status": "NOT_READY",
+    "reason": "This is an example submission used to validate the review gate; not a production-ready remediation.",
+    "labels": [
+      "P0-02: LOCAL_PROVEN"
+    ],
+    "production_artifacts": []
+  }
+}
