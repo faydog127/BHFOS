@@ -1,7 +1,7 @@
 ---
 name: "🔷 Build / Execution"
 about: "Implement a feature tied to a requirement"
-title: "[BUILD] - <Short Description>"
+title: "[BUILD] - Short description"
 labels: "type:build, status:backlog"
 assignees: ''
 ---
@@ -9,18 +9,21 @@ assignees: ''
 ## 📐 WHY
 - Requirement: RQ-### or TBD
 
+## 🧱 BUILD (required)
+- build:<id> (e.g., build:lead-state-authority)
+
 ## 📋 SCOPE
 - item
 - item
 
-## ▶️ NEXT
+## ▶️ NEXT (required)
 (single next step, ≤60 min)
 
 ## ✅ DONE WHEN
 - artifact
 - artifact
 
-## 🚧 STATUS
+## 🚧 STATUS (choose exactly one)
 - [ ] status:backlog
 - [ ] status:active
 - [ ] status:blocked
@@ -34,12 +37,12 @@ assignees: ''
 - [ ] Persistence/state verified
 - [ ] UI work now allowed
 
-## ⛔ BLOCKED BY (only if blocked)
-- 
+## ⛔ BLOCKED BY (required only if status:blocked)
+-
 
-## 💾 SESSION STATE (before ending session)
+## 💾 SESSION STATE (required before ending session)
 **PROGRESS:**
-- 
+-
 
 **NEXT:**
 -

@@ -1,7 +1,7 @@
 ---
 name: "🔍 Discovery / Spike"
 about: "Investigate to define requirements or approach"
-title: "[DISCOVERY] - <System/Feature>"
+title: "[DISCOVERY] - System or feature"
 labels: "type:discovery, status:backlog"
 assignees: ''
 ---
@@ -12,6 +12,9 @@ assignees: ''
 ## 📐 WHY
 - Requirement: RQ-### or TBD
 
+## 🧱 BUILD (required)
+- build:<id> (e.g., build:quote-flow)
+
 ## ⏱️ TIMEBOX
 - Limit: (e.g., 2 sessions max)
 
@@ -19,7 +22,7 @@ assignees: ''
 - [ ] New Requirement (RQ-###)
 - [ ] OR documented technical approach
 
-## 🚧 STATUS
+## 🚧 STATUS (choose exactly one)
 - [ ] status:backlog
 - [ ] status:active
 - [ ] status:blocked
@@ -27,12 +30,12 @@ assignees: ''
 ## 🧩 OPS TRACKING
 - [ ] Add `track:ops` label if this should appear on Ops board
 
-## ⛔ BLOCKED BY (only if blocked)
-- 
+## ⛔ BLOCKED BY (required only if status:blocked)
+-
 
-## 💾 SESSION STATE (before ending session)
+## 💾 SESSION STATE (required before ending session)
 **PROGRESS:**
-- 
+-
 
 **NEXT:**
 -
