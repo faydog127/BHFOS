@@ -85,6 +85,43 @@ const typeLabelFromLabels = (labels: string[]): 'build' | 'fix' | 'discovery' | 
   return null;
 };
 
+const looksLikePlaceholder = (value: string): boolean => {
+  const v = value.trim().toLowerCase();
+  if (!v) return true;
+  return (
+    v.includes('single next step') ||
+    v.includes('≤60') ||
+    v.includes('60 min') ||
+    v.includes('e.g.') ||
+    v.includes('example') ||
+    v === '-' ||
+    v === 'tbd'
+  );
+};
+
+const parseSectionValue = (text: string, heading: RegExp): string | null => {
+  const lines = text.split(/\r?\n/);
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] ?? '';
+    if (!heading.test(line)) continue;
+
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const candidate = String(lines[j] ?? '').trim();
+      if (!candidate) continue;
+      if (/^#{1,6}\s+/.test(candidate)) break; // next section
+      const cleaned = candidate.replace(/^[-*]\s+/, '').trim();
+      if (!cleaned) continue;
+      if (looksLikePlaceholder(cleaned)) return null;
+      return cleaned;
+    }
+
+    break;
+  }
+
+  return null;
+};
+
 const parseNextAction = (body: string | null | undefined): string | null => {
   const text = String(body ?? '');
   if (!text.trim()) return null;
@@ -93,7 +130,11 @@ const parseNextAction = (body: string | null | undefined): string | null => {
   if (!match?.[1]) return null;
 
   const next = match[1].trim();
-  return next ? next : null;
+  if (looksLikePlaceholder(next)) return null;
+  if (next) return next;
+
+  // Fallback: accept a markdown heading like "## NEXT" and read the first non-empty line below it.
+  return parseSectionValue(text, /^#{2,6}\s*.*\bnext\b.*$/i);
 };
 
 const parseBlockedBy = (body: string | null | undefined): string | null => {
@@ -104,7 +145,10 @@ const parseBlockedBy = (body: string | null | undefined): string | null => {
   if (!match?.[1]) return null;
 
   const blockedBy = match[1].trim();
-  return blockedBy ? blockedBy : null;
+  if (looksLikePlaceholder(blockedBy)) return null;
+  if (blockedBy) return blockedBy;
+
+  return parseSectionValue(text, /^#{2,6}\s*.*\bblocked\s+by\b.*$/i);
 };
 
 const fetchJson = async (url: string, token: string) => {
