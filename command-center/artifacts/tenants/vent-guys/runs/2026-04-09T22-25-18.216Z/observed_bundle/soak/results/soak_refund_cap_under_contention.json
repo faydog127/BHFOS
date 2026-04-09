@@ -1,0 +1,114 @@
+{
+  "schema_version": "2.0",
+  "test_id": "soak_refund_cap_under_contention",
+  "test_name": "Soak: refund vs refund (refund cap under contention)",
+  "lane": "soak",
+  "iteration": null,
+  "status": "PASS",
+  "classification": null,
+  "failure_mode": null,
+  "failure_signature": null,
+  "outcome_type": null,
+  "severity": "low",
+  "runtime_ms": 2169007,
+  "commit_hash": "9b4b9b391cc5259855310f79ea55b391e27f7630",
+  "confidence_score": 95,
+  "confidence_score_delta": null,
+  "environment": {
+    "runner": "local",
+    "php_version": "8.3",
+    "db_engine": "postgres",
+    "db_version": "16",
+    "isolation_level": "read_committed",
+    "php_image": "bhfos-ledger-php-test",
+    "db_container": "postgres:16",
+    "cpu_limit": null,
+    "memory_limit_mb": null
+  },
+  "fixture_id": "fx_refund_cap_soak_v1",
+  "pre_state": {
+    "iterations_total": 100,
+    "original_applied_cents": 1000,
+    "refund_cents_each": 800
+  },
+  "expected": {
+    "success_count": 1,
+    "failure_count": 1,
+    "expected_failure_codes": [
+      "ERR_REFUND_EXCEEDS_REFUNDABLE"
+    ],
+    "final_state": {
+      "refund_adjustment_sum_cents": 800
+    },
+    "invariants": [
+      "refund_cap_under_contention",
+      "no_over_refund"
+    ]
+  },
+  "actual": {
+    "success_count": null,
+    "failure_count": null,
+    "failure_codes": [],
+    "db_error_family": null,
+    "final_state": {
+      "settled_refund_row_count": 1,
+      "refund_adjustment_sum_cents": 800,
+      "invoice_balance_cents": 800
+    }
+  },
+  "invariant_results": [
+    {
+      "name": "refund_cap_under_contention",
+      "passed": true,
+      "details": "Soak iterations=100 pass=100 fail=0"
+    },
+    {
+      "name": "no_over_refund",
+      "passed": true,
+      "details": "Refund adjustments capped to remaining refundable."
+    }
+  ],
+  "workers": [
+    {
+      "worker_id": "w1",
+      "status": "success",
+      "error_code": null,
+      "duration_ms": 4912,
+      "connection_id": null,
+      "transaction_start_ts": null
+    },
+    {
+      "worker_id": "w2",
+      "status": "failed",
+      "error_code": "ERR_REFUND_EXCEEDS_REFUNDABLE",
+      "duration_ms": 4953,
+      "connection_id": null,
+      "transaction_start_ts": null
+    }
+  ],
+  "artifacts": {
+    "stdout_path": "artifacts/soak_refund_cap_under_contention/stdout.txt",
+    "stderr_path": "artifacts/soak_refund_cap_under_contention/stderr.txt",
+    "db_snapshot_path": "artifacts/soak_refund_cap_under_contention/db_snapshot.json",
+    "worker_results_path": "artifacts/soak_refund_cap_under_contention/workers.json",
+    "timing_trace_path": "artifacts/soak_refund_cap_under_contention/timing.json"
+  },
+  "artifact_completeness": {
+    "worker_stdout": true,
+    "worker_stderr": true,
+    "db_snapshot": true,
+    "timing_trace": true
+  },
+  "promotion_gate": {
+    "lane_green": true,
+    "merge_recommended": true,
+    "deploy_recommended": true,
+    "reason": "Soak lane passed with stable single-winner outcomes under contention."
+  },
+  "redaction_policy": {
+    "customer_ids_masked": true,
+    "billing_case_ids_masked": true,
+    "raw_payloads_excluded": true
+  },
+  "notes": "Observed soak run; see soak_summary.json for authoritative aggregation."
+}

@@ -1,0 +1,28 @@
+{
+  "confidence_change": "unavailable_no_prior_run",
+  "deployment_risks_still_open": [],
+  "failure_mechanism": null,
+  "next_action_type": "confidence_rerun",
+  "next_best_action": "Proceed to Layer 3 document generation using this judgment output.",
+  "proven_property_status": {
+    "refund_cap_under_contention": "proven",
+    "repeated_run_determinism_under_contention": "proven",
+    "single_winner_credit_allocation": "proven"
+  },
+  "raw_artifact_gaps": [],
+  "result_by_test": [
+    {
+      "result_path": "results/soak_credit_single_winner.json",
+      "status": "PASS",
+      "test_id": "soak_credit_single_winner"
+    },
+    {
+      "result_path": "results/soak_refund_cap_under_contention.json",
+      "status": "PASS",
+      "test_id": "soak_refund_cap_under_contention"
+    }
+  ],
+  "run_summary_line": "run_id=observed_soak_20260409_174750 pass=100 fail=0 mode=deterministic",
+  "scope": "bundle=tmp\\orchestrator-v2\\observed\\20260409_174750\\soak lane=soak",
+  "test_run_verdict": "DEPLOY_CONFIDENCE_INCREASED"
+}

@@ -1,0 +1,113 @@
+{
+  "schema_version": "2.0",
+  "test_id": "soak_credit_single_winner",
+  "test_name": "Soak: apply credit vs apply credit (single winner)",
+  "lane": "soak",
+  "iteration": null,
+  "status": "PASS",
+  "classification": null,
+  "failure_mode": null,
+  "failure_signature": null,
+  "outcome_type": null,
+  "severity": "low",
+  "runtime_ms": 2169007,
+  "commit_hash": "9b4b9b391cc5259855310f79ea55b391e27f7630",
+  "confidence_score": 95,
+  "confidence_score_delta": null,
+  "environment": {
+    "runner": "local",
+    "php_version": "8.3",
+    "db_engine": "postgres",
+    "db_version": "16",
+    "isolation_level": "read_committed",
+    "php_image": "bhfos-ledger-php-test",
+    "db_container": "postgres:16",
+    "cpu_limit": null,
+    "memory_limit_mb": null
+  },
+  "fixture_id": "fx_credit_single_winner_soak_v1",
+  "pre_state": {
+    "iterations_total": 100,
+    "credit_total_cents": 3000,
+    "requested_cents_each": 2000
+  },
+  "expected": {
+    "success_count": 1,
+    "failure_count": 1,
+    "expected_failure_codes": [
+      "ERR_INSUFFICIENT_AVAILABLE"
+    ],
+    "final_state": {
+      "credit_applied_cents_max": 2000
+    },
+    "invariants": [
+      "single_winner_credit_allocation",
+      "no_over_application"
+    ]
+  },
+  "actual": {
+    "success_count": null,
+    "failure_count": null,
+    "failure_codes": [],
+    "db_error_family": null,
+    "final_state": {
+      "credit_applied_cents": 2000,
+      "credit_remaining_unapplied_cents": 1000
+    }
+  },
+  "invariant_results": [
+    {
+      "name": "single_winner_credit_allocation",
+      "passed": true,
+      "details": "Soak iterations=100 pass=100 fail=0"
+    },
+    {
+      "name": "no_over_application",
+      "passed": true,
+      "details": "Invoice clamp enforced; credit application did not exceed available."
+    }
+  ],
+  "workers": [
+    {
+      "worker_id": "w1",
+      "status": "success",
+      "error_code": null,
+      "duration_ms": 5101,
+      "connection_id": null,
+      "transaction_start_ts": null
+    },
+    {
+      "worker_id": "w2",
+      "status": "failed",
+      "error_code": "ERR_INSUFFICIENT_AVAILABLE",
+      "duration_ms": 5126,
+      "connection_id": null,
+      "transaction_start_ts": null
+    }
+  ],
+  "artifacts": {
+    "stdout_path": "artifacts/soak_credit_single_winner/stdout.txt",
+    "stderr_path": "artifacts/soak_credit_single_winner/stderr.txt",
+    "db_snapshot_path": "artifacts/soak_credit_single_winner/db_snapshot.json",
+    "worker_results_path": "artifacts/soak_credit_single_winner/workers.json",
+    "timing_trace_path": "artifacts/soak_credit_single_winner/timing.json"
+  },
+  "artifact_completeness": {
+    "worker_stdout": true,
+    "worker_stderr": true,
+    "db_snapshot": true,
+    "timing_trace": true
+  },
+  "promotion_gate": {
+    "lane_green": true,
+    "merge_recommended": true,
+    "deploy_recommended": true,
+    "reason": "Soak lane passed with stable single-winner outcomes under contention."
+  },
+  "redaction_policy": {
+    "customer_ids_masked": true,
+    "billing_case_ids_masked": true,
+    "raw_payloads_excluded": true
+  },
+  "notes": "Observed soak run; see soak_summary.json for authoritative aggregation."
+}
