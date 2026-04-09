@@ -1,7 +1,7 @@
 param(
   [string]$TenantId = "vent-guys",
   [string]$BaselineBundleRoot = "",
-  [string]$BaselineConfigPath = ".\\tmp\\orchestrator-v2\\baseline.json"
+  [string]$BaselineConfigPath = "./tmp/orchestrator-v2/baseline.json"
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,9 +23,9 @@ if (-not $BaselineBundleRoot -or $BaselineBundleRoot.Trim() -eq "") {
     }
     $runFolder = [string]$cfg.baseline_run_folder
     if (-not $runFolder -or $runFolder.Trim() -eq "") { throw "Invalid baseline config: missing baseline_run_folder" }
-    $BaselineBundleRoot = ".\\artifacts\\tenants\\$TenantId\\runs\\$runFolder\\observed_bundle"
+    $BaselineBundleRoot = "./artifacts/tenants/$TenantId/runs/$runFolder/observed_bundle"
   } else {
-    $BaselineBundleRoot = ".\\artifacts\\tenants\\$TenantId\\runs\\2026-04-09T03-54-25.639Z\\observed_bundle"
+    $BaselineBundleRoot = "./artifacts/tenants/$TenantId/runs/2026-04-09T03-54-25.639Z/observed_bundle"
   }
 }
 
@@ -42,7 +42,7 @@ try {
   CopyDir $BaselineBundleRoot $bundleCopy
 
   Write-Host "Running Layer2 evaluator pipeline (evaluate-only) on baseline bundle..."
-  & pwsh -NoProfile -File .\tmp\orchestrator-v2\runner\run_layer2_pipeline.ps1 -Mode evaluate -BundleRoot $bundleCopy | Out-Host
+  & pwsh -NoProfile -File ./tmp/orchestrator-v2/runner/run_layer2_pipeline.ps1 -Mode evaluate -BundleRoot $bundleCopy | Out-Host
   if ($LASTEXITCODE -ne 0) { throw "Layer2 pipeline failed with exit_code=$LASTEXITCODE" }
 
   Write-Host "CI Layer2 evaluation: PASS"

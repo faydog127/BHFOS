@@ -10,9 +10,22 @@ function Assert([bool]$Condition, [string]$Message) {
   if (-not $Condition) { throw $Message }
 }
 
+function ExecNode {
+  param(
+    [Parameter(Mandatory = $true)][string[]]$Args
+  )
+  & node @Args | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw ("node failed (exit_code={0}): node {1}" -f $LASTEXITCODE, ($Args -join " "))
+  }
+}
+
 if ($Mode -eq "capture" -or $Mode -eq "all") {
   Write-Host "Layer2 Pipeline: capturing observed artifacts (full + soak)..."
-  $out = & pwsh -NoProfile -File .\tmp\orchestrator-v2\runner\capture_observed_success.ps1 -Iterations $Iterations 2>&1
+  $out = & pwsh -NoProfile -File ./tmp/orchestrator-v2/runner/capture_observed_success.ps1 -Iterations $Iterations 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    throw "capture_observed_success.ps1 failed with exit_code=$LASTEXITCODE"
+  }
   $line = $out | Select-Object -Last 1
   if ($line -notmatch "^OBSERVED_BUNDLE_DIR=") {
     throw "capture_observed_success.ps1 did not emit OBSERVED_BUNDLE_DIR. Last line: $line"
@@ -31,11 +44,11 @@ if ($Mode -eq "evaluate" -or $Mode -eq "all") {
   $eval2 = Join-Path $BundleRoot "layer2_eval_2"
 
   Write-Host "Layer2 Pipeline: evaluating observed soak bundle twice for determinism..."
-  node .\tmp\orchestrator-v2\eval\evaluate_bundle.mjs $observedSoak $eval1 | Out-Null
-  node .\tmp\orchestrator-v2\eval\evaluate_bundle.mjs $observedSoak $eval2 | Out-Null
+  ExecNode @("./tmp/orchestrator-v2/eval/evaluate_bundle.mjs", $observedSoak, $eval1)
+  ExecNode @("./tmp/orchestrator-v2/eval/evaluate_bundle.mjs", $observedSoak, $eval2)
 
-  node .\tmp\orchestrator-v2\eval\validate_judgment.mjs (Join-Path $eval1 "judgment.md") | Out-Null
-  node .\tmp\orchestrator-v2\eval\validate_judgment.mjs (Join-Path $eval2 "judgment.md") | Out-Null
+  ExecNode @("./tmp/orchestrator-v2/eval/validate_judgment.mjs", (Join-Path $eval1 "judgment.md"))
+  ExecNode @("./tmp/orchestrator-v2/eval/validate_judgment.mjs", (Join-Path $eval2 "judgment.md"))
 
   $j1 = Get-Content -Raw (Join-Path $eval1 "judgment.json")
   $j2 = Get-Content -Raw (Join-Path $eval2 "judgment.json")
@@ -47,14 +60,14 @@ if ($Mode -eq "evaluate" -or $Mode -eq "all") {
   Assert ($judgment.proven_property_status.refund_cap_under_contention -eq "proven") "Expected refund_cap_under_contention proven."
 
   Write-Host "Layer2 Pipeline: evaluating negative controls with same evaluator..."
-  $envBundle = ".\\tmp\\orchestrator-v2\\examples\\03_environment_failure"
-  $invBundle = ".\\tmp\\orchestrator-v2\\examples\\04_invariant_violation_deploy_blocked"
+  $envBundle = "./tmp/orchestrator-v2/examples/03_environment_failure"
+  $invBundle = "./tmp/orchestrator-v2/examples/04_invariant_violation_deploy_blocked"
 
   $envOut = Join-Path $BundleRoot "layer2_eval_env_control"
   $invOut = Join-Path $BundleRoot "layer2_eval_invariant_control"
 
-  node .\tmp\orchestrator-v2\eval\evaluate_bundle.mjs $envBundle $envOut | Out-Null
-  node .\tmp\orchestrator-v2\eval\evaluate_bundle.mjs $invBundle $invOut | Out-Null
+  ExecNode @("./tmp/orchestrator-v2/eval/evaluate_bundle.mjs", $envBundle, $envOut)
+  ExecNode @("./tmp/orchestrator-v2/eval/evaluate_bundle.mjs", $invBundle, $invOut)
 
   $envJ = Get-Content -Raw (Join-Path $envOut "judgment.json") | ConvertFrom-Json
   $invJ = Get-Content -Raw (Join-Path $invOut "judgment.json") | ConvertFrom-Json
