@@ -31,8 +31,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ledger-lock-${{ github.ref }}
-  cancel-in-progress: true
+  group: ledger-lock-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   ledger_lock:
