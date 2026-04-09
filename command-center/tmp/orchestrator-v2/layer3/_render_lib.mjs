@@ -14,6 +14,21 @@ const asString = (value) => {
 
 const mdInline = (value) => `\`${asString(value)}\``;
 
+const collapseSlashes = (s) => String(s || '').replace(/([^:])\/{2,}/g, '$1/');
+const normPath = (p) => collapseSlashes(asString(p).replaceAll('\\', '/'));
+const canonicalRel = (p) => {
+  const s = normPath(p);
+  if (!s) return s;
+  if (/^[a-zA-Z]:\//.test(s) || s.startsWith('/')) return s;
+  if (s.startsWith('./') || s.startsWith('../')) return s;
+  return `./${s}`;
+};
+const extractTenantFromPath = (p) => {
+  const s = normPath(p);
+  const m = s.match(/(?:^|\/)artifacts\/tenants\/([^/]+)\/runs\//);
+  return m ? m[1] : null;
+};
+
 export const renderLayer3Raw = ({ inputPath, observedJudgmentJson }) => {
   const src = observedJudgmentJson || {};
   const judgment = src?.judgment || {};
@@ -23,12 +38,17 @@ export const renderLayer3Raw = ({ inputPath, observedJudgmentJson }) => {
     throw new Error('Layer3 render error: missing required tenant_id in layer2_observed_judgment.json');
   }
 
+  const pathTenant = extractTenantFromPath(inputPath);
+  if (pathTenant && pathTenant !== tenantId) {
+    throw new Error(`Layer3 render error: tenant_id mismatch (path=${pathTenant} json=${tenantId})`);
+  }
+
   const lines = [];
   lines.push('# Layer 3 (Raw) — Ledger Lock Judgment');
   lines.push('');
   lines.push('Contract: `layer3_raw_v1`');
   lines.push('');
-  lines.push(`Input: \`${String(inputPath || '').replaceAll('\\', '/')}\``);
+  lines.push(`Input: \`${canonicalRel(inputPath)}\``);
   lines.push('');
   lines.push('## Snapshot');
   lines.push(`- tenant_id: ${mdInline(tenantId)}`);

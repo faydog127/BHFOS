@@ -10,6 +10,7 @@ const toIsoDate = (value) => {
   return Number.isNaN(d.getTime()) ? null : d;
 };
 const isHexSha = (value) => typeof value === 'string' && /^[0-9a-f]{7,40}$/i.test(value.trim());
+const isTenantSlug = (value) => typeof value === 'string' && /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/.test(value.trim());
 
 const asStringArray = (value) =>
   Array.isArray(value) ? value.filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim()) : [];
@@ -96,6 +97,11 @@ if (typeof input.pr_id !== 'string' || !input.pr_id.trim()) {
 }
 if (typeof input.run_id !== 'string' || !toIsoDate(input.run_id)) {
   errors.push('Invalid run_id (must be ISO datetime string)');
+}
+
+// tenant_id integrity (required)
+if (!isTenantSlug(input.tenant_id)) {
+  errors.push("Invalid tenant_id (must be a lowercase slug like 'vent-guys')");
 }
 
 // files_changed integrity

@@ -13,7 +13,20 @@ const asString = (value) => {
 };
 
 const mdInline = (value) => `\`${asString(value)}\``;
-const normPath = (p) => asString(p).replaceAll('\\', '/');
+const collapseSlashes = (s) => String(s || '').replace(/([^:])\/{2,}/g, '$1/');
+const normPath = (p) => collapseSlashes(asString(p).replaceAll('\\', '/'));
+const canonicalRel = (p) => {
+  const s = normPath(p);
+  if (!s) return s;
+  if (/^[a-zA-Z]:\//.test(s) || s.startsWith('/')) return s;
+  if (s.startsWith('./') || s.startsWith('../')) return s;
+  return `./${s}`;
+};
+const extractTenantFromPath = (p) => {
+  const s = normPath(p);
+  const m = s.match(/(?:^|\/)artifacts\/tenants\/([^/]+)\/runs\//);
+  return m ? m[1] : null;
+};
 
 export const renderLayer3ReviewV1 = ({
   inputJsonPath,
@@ -28,6 +41,11 @@ export const renderLayer3ReviewV1 = ({
   const tenantId = src?.tenant_id;
   if (!tenantId || typeof tenantId !== 'string' || tenantId.trim().length === 0) {
     throw new Error('Layer3 review render error: missing required tenant_id in layer2_observed_judgment.json');
+  }
+
+  const pathTenant = extractTenantFromPath(inputJsonPath);
+  if (pathTenant && pathTenant !== tenantId) {
+    throw new Error(`Layer3 review render error: tenant_id mismatch (path=${pathTenant} json=${tenantId})`);
   }
 
   const verdict = judgment.test_run_verdict;
@@ -55,9 +73,9 @@ export const renderLayer3ReviewV1 = ({
   lines.push('');
 
   lines.push('## Inputs');
-  lines.push(`- Layer 2 judgment JSON: ${mdInline(normPath(inputJsonPath))}`);
-  lines.push(`- Layer 3 raw contract doc: ${mdInline(normPath(rawDocPath))}`);
-  lines.push(`- Preferred evidence bundle (committed copy): ${mdInline(normPath(preferredEvidenceBundlePath))}`);
+  lines.push(`- Layer 2 judgment JSON: ${mdInline(canonicalRel(inputJsonPath))}`);
+  lines.push(`- Layer 3 raw contract doc: ${mdInline(canonicalRel(rawDocPath))}`);
+  lines.push(`- Preferred evidence bundle (committed copy): ${mdInline(canonicalRel(preferredEvidenceBundlePath))}`);
   lines.push('');
 
   lines.push('## Executive Summary');
@@ -87,9 +105,9 @@ export const renderLayer3ReviewV1 = ({
   lines.push('');
 
   lines.push('## Evidence Map');
-  lines.push(`- Raw contract (exact): ${mdInline(normPath(rawDocPath))}`);
-  lines.push(`- Evidence bundle root: ${mdInline(normPath(preferredEvidenceBundlePath))}`);
-  lines.push(`- Judgment JSON: ${mdInline(normPath(inputJsonPath))}`);
+  lines.push(`- Raw contract (exact): ${mdInline(canonicalRel(rawDocPath))}`);
+  lines.push(`- Evidence bundle root: ${mdInline(canonicalRel(preferredEvidenceBundlePath))}`);
+  lines.push(`- Judgment JSON: ${mdInline(canonicalRel(inputJsonPath))}`);
   lines.push('');
 
   lines.push('## Open Risks');
@@ -115,11 +133,11 @@ export const renderLayer3ReviewV1 = ({
   lines.push('- Run Layer 1 deck: `pwsh -NoProfile -File ./tmp/billing-ledger-php/tests/run.ps1`');
   lines.push('- Run Layer 2 evaluation: `pwsh -NoProfile -File ./tmp/orchestrator-v2/runner/ci_layer2_eval.ps1`');
   lines.push(
-    `- Re-render docs: \`node tmp/orchestrator-v2/layer3/render_layer3_raw.mjs ${normPath(
+    `- Re-render docs: \`node tmp/orchestrator-v2/layer3/render_layer3_raw.mjs ${canonicalRel(
       inputJsonPath
-    )} ${normPath(rawDocPath)}\` + \`node tmp/orchestrator-v2/layer3/render_layer3_review.mjs --json ${normPath(
+    )} ${canonicalRel(rawDocPath)}\` + \`node tmp/orchestrator-v2/layer3/render_layer3_review.mjs --json ${canonicalRel(
       inputJsonPath
-    )} --out ${normPath(reviewDocPath)}\``
+    )} --out ${canonicalRel(reviewDocPath)}\``
   );
   lines.push('');
 

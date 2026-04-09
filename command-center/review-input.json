@@ -3,7 +3,7 @@
   "change_id": "CHANGE-20260408-LAYER2-LEDGER-LOCK",
   "pr_id": "LOCAL",
   "title": "Layer 2 (Orchestrator v2) — observed judgment lock for ledger contention invariants",
-  "generated_at": "2026-04-09T03:54:26.525Z",
+  "generated_at": "2026-04-09T19:27:08.796Z",
   "source_commit": "5862bf696f147cbbe13fb7a301b5cae4927236f5",
   "run_id": "2026-04-09T03:54:25.639Z",
   "tenant_id": "vent-guys",
@@ -44,7 +44,7 @@
   "decider": {
     "name": "UNASSIGNED",
     "role": "human_decider",
-    "approved_at": "2026-04-09T03:54:26.525Z"
+    "approved_at": "2026-04-09T19:27:08.796Z"
   },
   "risk_acceptances": [],
   "scenarios": [

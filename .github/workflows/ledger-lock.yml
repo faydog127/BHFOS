@@ -58,6 +58,9 @@ jobs:
       - name: Review gate
         run: node ./tools/review-gate.mjs
 
+      - name: Tenant artifact guardrails
+        run: node ./tools/validate-tenant-artifacts.mjs
+
       - name: Ledger deck (DB-backed)
         run: |
           New-Item -ItemType Directory -Force -Path ./.ci_logs | Out-Null
@@ -70,10 +73,7 @@ jobs:
           exit $LASTEXITCODE
 
       - name: Layer 3 raw doc contract (baseline)
-        run: node ./tmp/orchestrator-v2/layer3/validate_layer3_output.mjs --mode exact --json ./artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json --doc ./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md
-
-      - name: Layer 3 review doc contract (baseline)
-        run: node ./tmp/orchestrator-v2/layer3/validate_layer3_review_output.mjs --mode exact --json ./artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json --doc ./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_REVIEW_v1.md
+        run: pwsh -NoProfile -File ./tmp/orchestrator-v2/runner/ci_layer3_validate.ps1
 
       - name: Upload logs (on failure)
         if: failure()

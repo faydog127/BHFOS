@@ -19,6 +19,12 @@ Note: GitHub shows required checks using the `Workflow Name / Job Name` format. 
 - workflow `CI` jobs `lint` and `build`
 - workflow `Ledger Lock` job `ledger_lock`
 
+## Recommended CODEOWNERS
+
+Add CODEOWNERS so governance/lock changes always require a deliberate review:
+
+- `.github/CODEOWNERS`
+
 ## Required merge policy
 
 Recommended settings:
@@ -37,4 +43,3 @@ Optional (stricter):
 
 - The ledger lock is a maintained standard, not a one-off green run.
 - Without branch protection, a single “unchecked” merge can silently invalidate the baseline.
-

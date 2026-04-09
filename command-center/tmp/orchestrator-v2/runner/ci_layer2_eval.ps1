@@ -1,6 +1,7 @@
 param(
   [string]$TenantId = "vent-guys",
-  [string]$BaselineBundleRoot = ""
+  [string]$BaselineBundleRoot = "",
+  [string]$BaselineConfigPath = ".\\tmp\\orchestrator-v2\\baseline.json"
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,7 +16,17 @@ function CopyDir([string]$Src, [string]$Dst) {
 }
 
 if (-not $BaselineBundleRoot -or $BaselineBundleRoot.Trim() -eq "") {
-  $BaselineBundleRoot = ".\\artifacts\\tenants\\$TenantId\\runs\\2026-04-09T03-54-25.639Z\\observed_bundle"
+  if (Test-Path $BaselineConfigPath) {
+    $cfg = Get-Content -Raw $BaselineConfigPath | ConvertFrom-Json
+    if (-not $TenantId -or $TenantId.Trim() -eq "") {
+      $TenantId = [string]$cfg.baseline_tenant_id
+    }
+    $runFolder = [string]$cfg.baseline_run_folder
+    if (-not $runFolder -or $runFolder.Trim() -eq "") { throw "Invalid baseline config: missing baseline_run_folder" }
+    $BaselineBundleRoot = ".\\artifacts\\tenants\\$TenantId\\runs\\$runFolder\\observed_bundle"
+  } else {
+    $BaselineBundleRoot = ".\\artifacts\\tenants\\$TenantId\\runs\\2026-04-09T03-54-25.639Z\\observed_bundle"
+  }
 }
 
 if (-not (Test-Path $BaselineBundleRoot)) {

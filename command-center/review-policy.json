@@ -8,6 +8,7 @@
   ],
   "required_top_level_fields": [
     "gate_version",
+    "tenant_id",
     "change_id",
     "pr_id",
     "title",

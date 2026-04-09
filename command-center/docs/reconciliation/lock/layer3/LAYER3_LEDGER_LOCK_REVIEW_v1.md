@@ -7,7 +7,7 @@ SSOT: Layer 3 raw contract doc + Layer 2 judgment JSON (no extra interpretation)
 ## Inputs
 - Layer 2 judgment JSON: `./artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json`
 - Layer 3 raw contract doc: `./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md`
-- Preferred evidence bundle (committed copy): `./artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/`
+- Preferred evidence bundle (committed copy): `./artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle`
 
 ## Executive Summary
 Layer 2 classified this run as `DEPLOY_CONFIDENCE_INCREASED` with next action type `confidence_rerun` and confidence change `unavailable_no_prior_run`.
@@ -30,7 +30,7 @@ Layer 2 classified this run as `DEPLOY_CONFIDENCE_INCREASED` with next action ty
 
 ## Evidence Map
 - Raw contract (exact): `./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md`
-- Evidence bundle root: `./artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/`
+- Evidence bundle root: `./artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle`
 - Judgment JSON: `./artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json`
 
 ## Open Risks

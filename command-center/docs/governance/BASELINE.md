@@ -9,6 +9,9 @@ Date locked: `2026-04-09` (America/New_York)
 
 ## Baseline artifacts (SSOT)
 
+Baseline config (SSOT pointer for CI + docs):
+- `tmp/orchestrator-v2/baseline.json`
+
 Baseline run folder (self-contained, committed):
 - `artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/`
 
