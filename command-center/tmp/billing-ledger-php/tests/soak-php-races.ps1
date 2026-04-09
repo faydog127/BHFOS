@@ -3,6 +3,7 @@ param(
   [string]$ContainerName = "bhfos_billing_ledger_soak_db",
   [int]$HostPort = 55434,
   [string]$PhpImage = "bhfos-ledger-php-test",
+  [string]$NetworkName = "",
   [string]$LogDir = ".\\tmp\\billing-ledger-php\\tests\\_soak_php_race_logs",
   [int]$SleepMsBetween = 0,
   [string]$SnapshotDir = "",
@@ -16,6 +17,9 @@ if ($Iterations -lt 1) { throw "Iterations must be >= 1" }
 
 function Cleanup {
   try { docker rm -f $ContainerName 2>$null | Out-Null } catch { }
+  if ($NetworkName -and $NetworkName.Trim() -ne "") {
+    try { docker network rm $NetworkName 2>$null | Out-Null } catch { }
+  }
 }
 
 function Exec {
@@ -31,8 +35,16 @@ if ($SnapshotDir -and $SnapshotDir.Trim() -ne "") {
 
 Cleanup
 
+if (-not $NetworkName -or $NetworkName.Trim() -eq "") {
+  $NetworkName = "${ContainerName}_net"
+}
+
+Write-Host "SOAK(PHP): Creating Docker network: $NetworkName"
+try { docker network create $NetworkName 2>$null | Out-Null } catch { }
+
 Write-Host "SOAK(PHP): Starting Postgres container: $ContainerName (port $HostPort)"
 docker run -d --rm --name $ContainerName `
+  --network $NetworkName `
   -e POSTGRES_PASSWORD=postgres `
   -p ${HostPort}:5432 `
   -v "${PWD}\\tmp\\billing-ledger-php:/work" `
@@ -81,7 +93,8 @@ try {
         "-NoProfile","-File",".\\tmp\\billing-ledger-php\\tests\\006_php_race.ps1",
         "-ContainerName",$ContainerName,
         "-HostPort",$HostPort,
-        "-PhpImage",$PhpImage
+        "-PhpImage",$PhpImage,
+        "-NetworkName",$NetworkName
       )
       if ($snapshotPath) {
         $args += @("-SnapshotPath",$snapshotPath)

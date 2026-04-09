@@ -1,13 +1,17 @@
 param(
   [string]$ContainerName = "bhfos_billing_ledger_race_db",
   [int]$HostPort = 55433,
-  [string]$PhpImage = "bhfos-ledger-php-test"
+  [string]$PhpImage = "bhfos-ledger-php-test",
+  [string]$NetworkName = ""
 )
 
 $ErrorActionPreference = "Stop"
 
 function Cleanup {
   try { docker rm -f $ContainerName 2>$null | Out-Null } catch { }
+  if ($NetworkName -and $NetworkName.Trim() -ne "") {
+    try { docker network rm $NetworkName 2>$null | Out-Null } catch { }
+  }
 }
 
 function Exec {
@@ -18,8 +22,16 @@ function Exec {
 
 Cleanup
 
+if (-not $NetworkName -or $NetworkName.Trim() -eq "") {
+  $NetworkName = "${ContainerName}_net"
+}
+
+Write-Host "Creating Docker network: $NetworkName"
+try { docker network create $NetworkName 2>$null | Out-Null } catch { }
+
 Write-Host "Starting Postgres container: $ContainerName (port $HostPort)"
 docker run -d --rm --name $ContainerName `
+  --network $NetworkName `
   -e POSTGRES_PASSWORD=postgres `
   -p ${HostPort}:5432 `
   -v "${PWD}\\tmp\\billing-ledger-php:/work" `
@@ -43,10 +55,9 @@ try {
   Exec "docker build -t $PhpImage -f tmp/billing-ledger-php/tests/php/Dockerfile tmp/billing-ledger-php/tests/php"
 
   Write-Host "Running PHP race tests..."
-  Exec "pwsh -NoProfile -File .\\tmp\\billing-ledger-php\\tests\\006_php_race.ps1 -ContainerName $ContainerName -HostPort $HostPort -PhpImage $PhpImage"
+  Exec "pwsh -NoProfile -File .\\tmp\\billing-ledger-php\\tests\\006_php_race.ps1 -ContainerName $ContainerName -HostPort $HostPort -PhpImage $PhpImage -NetworkName $NetworkName"
 
   Write-Host "RACE TESTS PASSED"
 } finally {
   Cleanup
 }
-

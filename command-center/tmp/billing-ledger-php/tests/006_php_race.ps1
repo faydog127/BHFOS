@@ -2,6 +2,7 @@ param(
   [Parameter(Mandatory = $true)][string]$ContainerName,
   [int]$HostPort = 55432,
   [string]$PhpImage = "bhfos-ledger-php-test",
+  [string]$NetworkName = "",
   [string]$SnapshotPath = ""
 )
 
@@ -23,9 +24,19 @@ function RunPhp {
     [Parameter(Mandatory = $true)][string[]]$Args,
     [Parameter(Mandatory = $true)][string]$LedgerRoot
   )
+  $dbHost = "host.docker.internal"
+  $dbPort = "$HostPort"
+  $netArgs = @()
+
+  if ($NetworkName -and $NetworkName.Trim() -ne "") {
+    $dbHost = $ContainerName
+    $dbPort = "5432"
+    $netArgs = @("--network", $NetworkName)
+  }
+
   $envs = @(
-    "-e","DB_HOST=host.docker.internal",
-    "-e","DB_PORT=$HostPort",
+    "-e","DB_HOST=$dbHost",
+    "-e","DB_PORT=$dbPort",
     "-e","DB_NAME=postgres",
     "-e","DB_USER=postgres",
     "-e","DB_PASS=postgres"
@@ -33,7 +44,7 @@ function RunPhp {
 
   $mount = "${LedgerRoot}:/work"
 
-  $cmd = @("docker","run","--rm","-v",$mount,"-w","/work") + $envs + @($PhpImage,"php") + $Args
+  $cmd = @("docker","run","--rm") + $netArgs + @("-v",$mount,"-w","/work") + $envs + @($PhpImage,"php") + $Args
   & $cmd 2>$null
 }
 
@@ -73,23 +84,30 @@ PsqlExec "insert into credit_memos (credit_memo_record_id,billing_case_id,payer_
 $idem1 = "race:credit:" + [guid]::NewGuid().ToString()
 $idem2 = "race:credit:" + [guid]::NewGuid().ToString()
 
+$dbHost = "host.docker.internal"
+$dbPort = "$HostPort"
+$netArgs = @()
+if ($NetworkName -and $NetworkName.Trim() -ne "") {
+  $dbHost = $ContainerName
+  $dbPort = "5432"
+  $netArgs = @("--network", $NetworkName)
+}
+
 $job1Start = Get-Date
 $job1 = Start-Job -ScriptBlock {
-  param($idem,$cm,$inv,$user,$root,$img,$port)
-  $env:DB_PORT = $port
-  docker run --rm -v "${root}:/work" -w /work `
-    -e DB_HOST=host.docker.internal -e DB_PORT=$port -e DB_NAME=postgres -e DB_USER=postgres -e DB_PASS=postgres `
+  param($idem,$cm,$inv,$user,$root,$img,$dbHost,$dbPort,$netArgs)
+  docker run --rm @netArgs -v "${root}:/work" -w /work `
+    -e DB_HOST=$dbHost -e DB_PORT=$dbPort -e DB_NAME=postgres -e DB_USER=postgres -e DB_PASS=postgres `
     $img php /work/tests/php/bin/apply_credit.php $idem $cm $inv 2000 $user strict
-} -ArgumentList $idem1,$cm,$invA,$userId,$LedgerRoot,$PhpImage,$HostPort
+} -ArgumentList $idem1,$cm,$invA,$userId,$LedgerRoot,$PhpImage,$dbHost,$dbPort,$netArgs
 
 $job2Start = Get-Date
 $job2 = Start-Job -ScriptBlock {
-  param($idem,$cm,$inv,$user,$root,$img,$port)
-  $env:DB_PORT = $port
-  docker run --rm -v "${root}:/work" -w /work `
-    -e DB_HOST=host.docker.internal -e DB_PORT=$port -e DB_NAME=postgres -e DB_USER=postgres -e DB_PASS=postgres `
+  param($idem,$cm,$inv,$user,$root,$img,$dbHost,$dbPort,$netArgs)
+  docker run --rm @netArgs -v "${root}:/work" -w /work `
+    -e DB_HOST=$dbHost -e DB_PORT=$dbPort -e DB_NAME=postgres -e DB_USER=postgres -e DB_PASS=postgres `
     $img php /work/tests/php/bin/apply_credit.php $idem $cm $inv 2000 $user strict
-} -ArgumentList $idem2,$cm,$invB,$userId,$LedgerRoot,$PhpImage,$HostPort
+} -ArgumentList $idem2,$cm,$invB,$userId,$LedgerRoot,$PhpImage,$dbHost,$dbPort,$netArgs
 
 $out1 = Receive-Job $job1 -Wait -AutoRemoveJob
 $job1Dur = (Get-Date) - $job1Start
@@ -99,7 +117,9 @@ $job2Dur = (Get-Date) - $job2Start
 $r1 = $out1 | ConvertFrom-Json
 $r2 = $out2 | ConvertFrom-Json
 
-Assert (($r1.ok -eq $true) -xor ($r2.ok -eq $true)) "Expected exactly one apply_credit to succeed in strict mode."
+if (-not (($r1.ok -eq $true) -xor ($r2.ok -eq $true))) {
+  throw ("Expected exactly one apply_credit to succeed in strict mode. w1={0} w2={1}" -f ($out1 | Out-String).Trim(), ($out2 | Out-String).Trim())
+}
 Assert ((($r1.ok -eq $false) -and ($r1.error.code -eq 'ERR_INSUFFICIENT_AVAILABLE')) -or (($r2.ok -eq $false) -and ($r2.error.code -eq 'ERR_INSUFFICIENT_AVAILABLE'))) "Expected losing apply_credit to fail with ERR_INSUFFICIENT_AVAILABLE."
 
 $applied = [int](PsqlScalar "select coalesce(sum(applied_cents),0) from credit_applications where credit_memo_record_id = '$cm'")
@@ -147,19 +167,19 @@ $proc2 = "proc_rf_" + [guid]::NewGuid().ToString()
 
 $jobR1Start = Get-Date
 $jobR1 = Start-Job -ScriptBlock {
-  param($idem,$pay,$inv,$alloc,$cents,$proc,$user,$root,$img,$port)
-  docker run --rm -v "${root}:/work" -w /work `
-    -e DB_HOST=host.docker.internal -e DB_PORT=$port -e DB_NAME=postgres -e DB_USER=postgres -e DB_PASS=postgres `
+  param($idem,$pay,$inv,$alloc,$cents,$proc,$user,$root,$img,$dbHost,$dbPort,$netArgs)
+  docker run --rm @netArgs -v "${root}:/work" -w /work `
+    -e DB_HOST=$dbHost -e DB_PORT=$dbPort -e DB_NAME=postgres -e DB_USER=postgres -e DB_PASS=postgres `
     $img php /work/tests/php/bin/refund_invoice_impacting.php $idem $pay $inv $alloc $cents $proc $user
-} -ArgumentList $idemR1,$pay,$inv,$alloc,800,$proc1,$userId,$LedgerRoot,$PhpImage,$HostPort
+} -ArgumentList $idemR1,$pay,$inv,$alloc,800,$proc1,$userId,$LedgerRoot,$PhpImage,$dbHost,$dbPort,$netArgs
 
 $jobR2Start = Get-Date
 $jobR2 = Start-Job -ScriptBlock {
-  param($idem,$pay,$inv,$alloc,$cents,$proc,$user,$root,$img,$port)
-  docker run --rm -v "${root}:/work" -w /work `
-    -e DB_HOST=host.docker.internal -e DB_PORT=$port -e DB_NAME=postgres -e DB_USER=postgres -e DB_PASS=postgres `
+  param($idem,$pay,$inv,$alloc,$cents,$proc,$user,$root,$img,$dbHost,$dbPort,$netArgs)
+  docker run --rm @netArgs -v "${root}:/work" -w /work `
+    -e DB_HOST=$dbHost -e DB_PORT=$dbPort -e DB_NAME=postgres -e DB_USER=postgres -e DB_PASS=postgres `
     $img php /work/tests/php/bin/refund_invoice_impacting.php $idem $pay $inv $alloc $cents $proc $user
-} -ArgumentList $idemR2,$pay,$inv,$alloc,800,$proc2,$userId,$LedgerRoot,$PhpImage,$HostPort
+} -ArgumentList $idemR2,$pay,$inv,$alloc,800,$proc2,$userId,$LedgerRoot,$PhpImage,$dbHost,$dbPort,$netArgs
 
 $o1 = Receive-Job $jobR1 -Wait -AutoRemoveJob
 $jobR1Dur = (Get-Date) - $jobR1Start
@@ -169,7 +189,9 @@ $jobR2Dur = (Get-Date) - $jobR2Start
 $rr1 = $o1 | ConvertFrom-Json
 $rr2 = $o2 | ConvertFrom-Json
 
-Assert (($rr1.ok -eq $true) -xor ($rr2.ok -eq $true)) "Expected exactly one refund to succeed (second should exceed refundable)."
+if (-not (($rr1.ok -eq $true) -xor ($rr2.ok -eq $true))) {
+  throw ("Expected exactly one refund to succeed (second should exceed refundable). w1={0} w2={1}" -f ($o1 | Out-String).Trim(), ($o2 | Out-String).Trim())
+}
 Assert ((($rr1.ok -eq $false) -and ($rr1.error.code -eq 'ERR_REFUND_EXCEEDS_REFUNDABLE')) -or (($rr2.ok -eq $false) -and ($rr2.error.code -eq 'ERR_REFUND_EXCEEDS_REFUNDABLE'))) "Expected losing refund to fail with ERR_REFUND_EXCEEDS_REFUNDABLE."
 
 $refundCount = [int](PsqlScalar "select count(*) from payment_refunds where payment_record_id = '$pay' and status = 'settled'")
