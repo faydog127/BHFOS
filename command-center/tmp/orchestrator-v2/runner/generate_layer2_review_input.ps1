@@ -1,5 +1,6 @@
 param(
   [string]$ObservedBundleRoot = ".\\tmp\\orchestrator-v2\\observed\\20260408_150010",
+  [string]$TenantId = "vent-guys",
   [string]$ChangeId = "CHANGE-20260408-LAYER2-LEDGER-LOCK",
   [string]$Title = "Layer 2 (Orchestrator v2) — observed judgment lock for ledger contention invariants"
 )
@@ -32,6 +33,13 @@ function RequirePath([string]$Path, [string]$Label) {
   if (-not (Test-Path $Path)) { throw "Missing ${Label}: $Path" }
 }
 
+if (-not $TenantId -or $TenantId.Trim() -eq "") {
+  throw "TenantId is required."
+}
+if ($TenantId -notmatch "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$") {
+  throw "Invalid TenantId '$TenantId'. Use a slug like 'vent-guys' (lowercase letters/numbers/dashes)."
+}
+
 RequirePath $ObservedBundleRoot "Observed bundle root"
 RequirePath (Join-Path $ObservedBundleRoot "full\\run_summary.json") "Observed full run_summary.json"
 RequirePath (Join-Path $ObservedBundleRoot "soak\\run_summary.json") "Observed soak run_summary.json"
@@ -49,7 +57,7 @@ $sourceCommit = (& git rev-parse HEAD).Trim()
 if (-not $sourceCommit) { throw "Unable to determine git HEAD sha" }
 
 $runFolder = SanitizeRunFolder $runId
-$runArtifactsDir = Join-Path ".\\artifacts\\runs" $runFolder
+$runArtifactsDir = Join-Path ".\\artifacts\\tenants\\$TenantId\\runs" $runFolder
 EnsureDir $runArtifactsDir
 
 $manifestPath = Join-Path $runArtifactsDir "manifest.json"
@@ -120,6 +128,7 @@ Expected outcome (observed success):
 "@
 
 $layer2TestResult = [ordered]@{
+  tenant_id = $TenantId
   run_id = $runId
   observed_bundle_root = $bundleCopyRoot
   source_observed_bundle_root = $ObservedBundleRoot
@@ -176,10 +185,10 @@ $filesChanged = @(
   "tmp/orchestrator-v2/runner/capture_observed_success.ps1",
   "tmp/orchestrator-v2/runner/run_layer2_pipeline.ps1",
   "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
-  ("artifacts/runs/$runFolder/manifest.json"),
-  ("artifacts/runs/$runFolder/db_output.txt"),
-  ("artifacts/runs/$runFolder/layer2_pipeline.log"),
-  ("artifacts/runs/$runFolder/layer2_observed_judgment.json")
+  ("artifacts/tenants/$TenantId/runs/$runFolder/manifest.json"),
+  ("artifacts/tenants/$TenantId/runs/$runFolder/db_output.txt"),
+  ("artifacts/tenants/$TenantId/runs/$runFolder/layer2_pipeline.log"),
+  ("artifacts/tenants/$TenantId/runs/$runFolder/layer2_observed_judgment.json")
 )
 
 $scopeIncluded = @(
@@ -187,10 +196,10 @@ $scopeIncluded = @(
   "docs/reconciliation/lock/appendix-a/index.md",
   "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_billing-ledger-race-soak.md",
   "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
-  ("artifacts/runs/$runFolder/manifest.json"),
-  ("artifacts/runs/$runFolder/db_output.txt"),
-  ("artifacts/runs/$runFolder/layer2_pipeline.log"),
-  ("artifacts/runs/$runFolder/layer2_observed_judgment.json")
+  ("artifacts/tenants/$TenantId/runs/$runFolder/manifest.json"),
+  ("artifacts/tenants/$TenantId/runs/$runFolder/db_output.txt"),
+  ("artifacts/tenants/$TenantId/runs/$runFolder/layer2_pipeline.log"),
+  ("artifacts/tenants/$TenantId/runs/$runFolder/layer2_observed_judgment.json")
 )
 
 $reviewInput = [ordered]@{
@@ -201,6 +210,7 @@ $reviewInput = [ordered]@{
   generated_at = $generatedAt
   source_commit = $sourceCommit
   run_id = $runId
+  tenant_id = $TenantId
   files_changed = $filesChanged
   scope = [ordered]@{
     included = $scopeIncluded
@@ -222,8 +232,8 @@ $reviewInput = [ordered]@{
       verification_method = "Observed soak artifacts + Layer2 judgment; see Appendix A evidence doc."
       evidence_required = @(
         "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_billing-ledger-race-soak.md",
-        "artifacts/runs/$runFolder/db_output.txt",
-        "artifacts/runs/$runFolder/layer2_observed_judgment.json"
+        "artifacts/tenants/$TenantId/runs/$runFolder/db_output.txt",
+        "artifacts/tenants/$TenantId/runs/$runFolder/layer2_observed_judgment.json"
       )
     },
     [ordered]@{
@@ -233,7 +243,7 @@ $reviewInput = [ordered]@{
       verification_method = "Determinism assertion is proven by stored judgment outputs referenced by EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md."
       evidence_required = @(
         "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
-        "artifacts/runs/$runFolder/layer2_observed_judgment.json"
+        "artifacts/tenants/$TenantId/runs/$runFolder/layer2_observed_judgment.json"
       )
     },
     [ordered]@{
@@ -291,25 +301,25 @@ $reviewInput = [ordered]@{
       type = "log"
       label = "Layer 2 pipeline summary log"
       proof_of = "Human-readable log with run_id and pointers to observed bundle + verdict"
-      path = "artifacts/runs/$runFolder/layer2_pipeline.log"
+      path = "artifacts/tenants/$TenantId/runs/$runFolder/layer2_pipeline.log"
     },
     [ordered]@{
       type = "db_output"
       label = "DB/output pointer index"
       proof_of = "Run-scoped pointer list for observed bundle + judgments"
-      path = "artifacts/runs/$runFolder/db_output.txt"
+      path = "artifacts/tenants/$TenantId/runs/$runFolder/db_output.txt"
     },
     [ordered]@{
       type = "manifest"
       label = "Run manifest"
       proof_of = "Run-scoped metadata with run_id and observed bundle root"
-      path = "artifacts/runs/$runFolder/manifest.json"
+      path = "artifacts/tenants/$TenantId/runs/$runFolder/manifest.json"
     },
     [ordered]@{
       type = "test_result"
       label = "Observed Layer 2 judgment (machine-checkable)"
       proof_of = "Judgment JSON that can be validated/replayed without rerunning tests"
-      path = "artifacts/runs/$runFolder/layer2_observed_judgment.json"
+      path = "artifacts/tenants/$TenantId/runs/$runFolder/layer2_observed_judgment.json"
     },
     [ordered]@{
       type = "code_reference"
@@ -328,7 +338,7 @@ $reviewInput = [ordered]@{
     excluded_scope = @()
     uncertainty_boundaries = @(
       "Observed bundle is local artifact capture, not production validation.",
-      "A minimal observed-bundle subset is copied into artifacts/runs/<run_id>/observed_bundle (self-contained gate evidence)."
+      "A minimal observed-bundle subset is copied into artifacts/tenants/<tenant_id>/runs/<run_id>/observed_bundle (self-contained gate evidence)."
     )
   }
   findings = @(
@@ -340,7 +350,7 @@ $reviewInput = [ordered]@{
       rule_violated = "None (guardrail)"
       proof = @(
         "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
-        "artifacts/runs/$runFolder/layer2_pipeline.log"
+        "artifacts/tenants/$TenantId/runs/$runFolder/layer2_pipeline.log"
       )
       recommended_action = "Run a production-targeted validation lane before setting readiness label to P0-02: PRODUCTION-VALIDATED."
       verification_method = "Confirm readiness.labels remains LOCAL_PROVEN and does not claim production validation."

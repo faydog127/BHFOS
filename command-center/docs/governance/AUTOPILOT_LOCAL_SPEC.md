@@ -38,7 +38,7 @@ The gate is the local SSOT for review enforcement.
 ## Run folder contract (Common workspace)
 Each invocation creates one run folder:
 
-`artifacts/runs/<run_id>/`
+`artifacts/tenants/<tenant_id>/runs/<run_id>/`
 
 ### Required top-level artifacts
 - `meta.json`
@@ -161,4 +161,3 @@ And must specify:
 Add a run manifest with hashes:
 - `manifest.json` lists SHA256 for each produced artifact file.
 - Gate may later verify hashes to detect post-run edits.
-

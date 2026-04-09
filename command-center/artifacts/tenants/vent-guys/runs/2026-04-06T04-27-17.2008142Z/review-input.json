@@ -1,0 +1,221 @@
+{
+  "gate_version": "v1",
+  "change_id": "CHANGE-20260406-APPENDIX-A-EVIDENCE-INDEX",
+  "pr_id": "LOCAL",
+  "title": "Appendix A (Reconciliation Lock) — evidence cross-link + gate-aligned submission",
+  "generated_at": "2026-04-06T04:38:28.3917275Z",
+  "source_commit": "3c9785ee279b5d41b3e7755debae71a696d9df04",
+  "run_id": "2026-04-06T04:27:17.2008142Z",
+  "files_changed": [
+    "docs/reconciliation/lock/appendix-a/evidence/README.md",
+    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_automation-run.md",
+    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_flow-trace_quote-job-invoice-payment.md",
+    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_manual-ux.md",
+    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_money-loop-smoke.md",
+    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-01_tenant-isolation-lock.md",
+    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02B_offline-manual-payment-writer.md",
+    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02C_payment-webhook-rebuild.md",
+    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02D_public-pay-initiation-boundary.md",
+    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02E_reconciliation-tools.md",
+    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-05_phase-0-snapshot_local-proof.md"
+  ],
+  "scope": {
+    "included": [
+      "docs/reconciliation/lock/appendix-a/evidence/README.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_automation-run.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_flow-trace_quote-job-invoice-payment.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_manual-ux.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_money-loop-smoke.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-01_tenant-isolation-lock.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02B_offline-manual-payment-writer.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02C_payment-webhook-rebuild.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02D_public-pay-initiation-boundary.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02E_reconciliation-tools.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-05_phase-0-snapshot_local-proof.md"
+    ],
+    "excluded": []
+  },
+  "domain_tags": ["tenant_isolation", "money_state"],
+  "summary": "This submission indexes the Appendix A evidence packet for Phase 0 (P0-01 tenant isolation + P0-02 money model lock) and ties it to a gate-aligned review-input for peer review. It does not claim production validation; it links local proof artifacts and explicitly records uncertainty boundaries.",
+  "decider": {
+    "name": "UNASSIGNED",
+    "role": "human_decider",
+    "approved_at": "2026-04-06T04:38:28.3917275Z"
+  },
+  "risk_acceptances": [],
+  "scenarios": [
+    {
+      "category": "concurrency",
+      "scenario": "Concurrent settlement attempts do not create duplicate financial effects (DB uniqueness/idempotency based).",
+      "expected_behavior": "Duplicate attempts converge on a single transaction/application set; no double-application; invoice settlement derives from ledger.",
+      "verification_method": "Reference local proof logs for P0-02C webhook ingest + P0-02E sweep convergence; confirm dedupe-based overlap model is explicitly stated.",
+      "evidence_required": [
+        "tmp/p0-02c-payment-webhook-test.log",
+        "tmp/p0-02e-sweep-test.log",
+        "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-05_phase-0-snapshot_local-proof.md"
+      ]
+    },
+    {
+      "category": "replay_idempotency",
+      "scenario": "Webhook replay or duplicate delivery does not create duplicate financial effects.",
+      "expected_behavior": "Replayed events are idempotent; existing provider references block duplicate transactions/applications.",
+      "verification_method": "Reference P0-02C local proof log and evidence doc.",
+      "evidence_required": [
+        "tmp/p0-02c-payment-webhook-test.log",
+        "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02C_payment-webhook-rebuild.md"
+      ]
+    },
+    {
+      "category": "bad_data",
+      "scenario": "Wrong/mismatched tenant context is rejected for public-pay/public endpoints.",
+      "expected_behavior": "Tenant mismatch fails hard; no fallback tenant selection; token-derived tenant is authoritative.",
+      "verification_method": "Reference P0-01 negative test outputs and tenant mismatch rejection behavior in public endpoints.",
+      "evidence_required": [
+        "tmp/p0-01-tenant-isolation-test.log",
+        "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-01_tenant-isolation-lock.md"
+      ]
+    },
+    {
+      "category": "dependency_failure",
+      "scenario": "Stripe/webhook delivery timing or dependency degradation does not corrupt settlement truth.",
+      "expected_behavior": "System remains pending until webhook arrives; reconciliation/sweep flags drift without mutating totals; ledger truth remains authoritative.",
+      "verification_method": "Reference P0-02E reconciliation tooling + sweep logs; verify recovery routes through canonical webhook pipeline with deterministic ids.",
+      "evidence_required": [
+        "tmp/p0-02e-reconciliation-test.log",
+        "tmp/p0-02e-sweep-test.log",
+        "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02E_reconciliation-tools.md"
+      ]
+    },
+    {
+      "category": "human_error",
+      "scenario": "Offline/manual payment writer is duplicate-safe and reference-validated (prevents accidental double-recording).",
+      "expected_behavior": "Manual payment path is idempotent/duplicate-safe and settlement-backed; legacy money writes are blocked or routed through canonical ledger primitives.",
+      "verification_method": "Reference P0-02B local proof logs and evidence doc.",
+      "evidence_required": [
+        "tmp/p0-02b-offline-manual-payment-test.log",
+        "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02B_offline-manual-payment-writer.md"
+      ]
+    }
+  ],
+  "concurrency_model": {
+    "model": "dedupe_based",
+    "guarantees": [
+      "Financial uniqueness is enforced by DB constraints + deterministic provider references; duplicate attempts converge without double financial effect."
+    ],
+    "non_guarantees": [
+      "Duplicate attempts may still occur (no single-worker guarantee); logs/alerts may see multiple attempts unless explicitly deduped at the edge."
+    ]
+  },
+  "ops_impact": {
+    "alert_dedupe_identity": "payment/provider_payment_id",
+    "max_open_alerts_per_entity": "1",
+    "task_dedupe_rule": "deterministic alert_key + DB uniqueness (where available)"
+  },
+  "trigger_evidence": {
+    "derived_domain_tags": ["tenant_isolation", "money_state"],
+    "derivation_inputs": [
+      "Evidence packet scope: docs/reconciliation/lock/appendix-a/evidence/* (P0-01 + P0-02 proof)",
+      "Referenced code paths include supabase/functions/public-* and payment writer migrations/RPCs"
+    ]
+  },
+  "artifacts": [
+    {
+      "type": "log",
+      "label": "P0-02E sweep proof log (local)",
+      "proof_of": "Sweep overlap convergence (dedupe/idempotency based) and reconciliation tooling behavior",
+      "path": "tmp/p0-02e-sweep-test.log"
+    },
+    {
+      "type": "test_result",
+      "label": "P0-02C payment-webhook proof log (local)",
+      "proof_of": "Webhook ingest + idempotency behavior (local)",
+      "path": "tmp/p0-02c-payment-webhook-test.log"
+    },
+    {
+      "type": "db_output",
+      "label": "DB output index (documentation run)",
+      "proof_of": "Index of DB-affecting proof artifacts and migrations referenced by this submission",
+      "path": "artifacts/runs/2026-04-06T04-27-17.2008142Z/db_output.txt"
+    },
+    {
+      "type": "manifest",
+      "label": "Run manifest",
+      "proof_of": "Run-scoped artifact index for this submission",
+      "path": "artifacts/runs/2026-04-06T04-27-17.2008142Z/manifest.json"
+    },
+    {
+      "type": "code_reference",
+      "label": "Tenant mismatch rejection (public-pay)",
+      "proof_of": "Tenant isolation boundary enforcement at public edge",
+      "path": "supabase/functions/public-pay/index.ts",
+      "snippet": "return respondJson({ error: 'Tenant mismatch' }, 403, cors.headers);"
+    },
+    {
+      "type": "code_reference",
+      "label": "Ledger-first settlement mapping table",
+      "proof_of": "Money truth derives from applications (not additive mutation)",
+      "path": "supabase/migrations/20260404203000_p0_02b_offline_manual_ledger.sql",
+      "snippet": "create table if not exists public.transaction_applications ("
+    },
+    {
+      "type": "code_reference",
+      "label": "Phase 0 snapshot evidence packet",
+      "proof_of": "Human-readable evidence index for local proofs (no production-safe claim)",
+      "path": "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-05_phase-0-snapshot_local-proof.md",
+      "snippet": "# EV-2026-04-05 — Phase 0 Snapshot (P0-01 + P0-02 Local Proof)"
+    }
+  ],
+  "coverage_report": {
+    "files_analyzed": [
+      "docs/reconciliation/lock/appendix-a/evidence/README.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_automation-run.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_flow-trace_quote-job-invoice-payment.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_manual-ux.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_money-loop-smoke.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-01_tenant-isolation-lock.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02B_offline-manual-payment-writer.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02C_payment-webhook-rebuild.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02D_public-pay-initiation-boundary.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02E_reconciliation-tools.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-05_phase-0-snapshot_local-proof.md"
+    ],
+    "discovery_inputs": [
+      "rg -n \"P0-01|P0-02\" docs/reconciliation/lock/appendix-a/evidence",
+      "rg -n \"tenant_mismatch|Tenant mismatch\" supabase/functions/public-pay/index.ts",
+      "rg -n \"transaction_applications\" supabase/migrations/20260404203000_p0_02b_offline_manual_ledger.sql"
+    ],
+    "excluded_scope": [],
+    "uncertainty_boundaries": [
+      "No new production artifacts are included in this submission.",
+      "No new DB queries were executed during this documentation indexing run.",
+      "Manual UX evidence (EV-2026-03-18) may be stale relative to current UI; it is treated as historical context only."
+    ]
+  },
+  "findings": [
+    {
+      "id": "F-INFO-0001",
+      "title": "Evidence packet is local-proof only (no production validation claim)",
+      "severity": "INFO",
+      "business_impact": "Prevents premature production readiness claims and keeps review aligned to the gate/readiness schema.",
+      "rule_violated": "None (informational guardrail)",
+      "proof": [
+        "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-05_phase-0-snapshot_local-proof.md",
+        "docs/governance/REVIEW_MAP.md"
+      ],
+      "recommended_action": "Keep production validation gated to ticket P0-02-PROD-VALIDATION and ensure any future money/tenant changes regenerate artifacts and re-run review:gate.",
+      "verification_method": "Confirm gate schema: readiness.labels allow only P0-02 LOCAL/PRODUCTION validated labels and production validated requires production_artifacts[].",
+      "closure_evidence_required": ["N/A (informational finding)"]
+    }
+  ],
+  "verification": {
+    "tenant_boundary_analysis": "See EV-2026-04-04_P0-01_tenant-isolation-lock.md and tmp/p0-01-tenant-isolation-test.log for negative tenant mismatch coverage.",
+    "runtime_negative_test": "tmp/p0-01-tenant-isolation-test.log (negative tests executed locally)",
+    "idempotency_analysis": "See EV-2026-04-04_P0-02C_payment-webhook-rebuild.md and tmp/p0-02c-payment-webhook-test.log for dual idempotency proofs.",
+    "replay_test": "tmp/p0-02c-payment-webhook-test.log (replay/idempotency assertions)",
+    "rollback_plan": "Rollback is documented as: do not claim production validated; production rollback plan is deferred to P0-02-PROD-VALIDATION run artifacts."
+  },
+  "readiness": {
+    "status": "NOT_READY",
+    "labels": []
+  }
+}

@@ -18,6 +18,11 @@ export const renderLayer3Raw = ({ inputPath, observedJudgmentJson }) => {
   const src = observedJudgmentJson || {};
   const judgment = src?.judgment || {};
 
+  const tenantId = src?.tenant_id;
+  if (!tenantId || typeof tenantId !== 'string' || tenantId.trim().length === 0) {
+    throw new Error('Layer3 render error: missing required tenant_id in layer2_observed_judgment.json');
+  }
+
   const lines = [];
   lines.push('# Layer 3 (Raw) — Ledger Lock Judgment');
   lines.push('');
@@ -26,6 +31,7 @@ export const renderLayer3Raw = ({ inputPath, observedJudgmentJson }) => {
   lines.push(`Input: \`${String(inputPath || '').replaceAll('\\', '/')}\``);
   lines.push('');
   lines.push('## Snapshot');
+  lines.push(`- tenant_id: ${mdInline(tenantId)}`);
   lines.push(`- run_id: ${mdInline(src.run_id)}`);
   lines.push(`- observed_bundle_root: ${mdInline(src.observed_bundle_root)}`);
   if ('source_observed_bundle_root' in src) {
@@ -77,4 +83,3 @@ export const renderLayer3Raw = ({ inputPath, observedJudgmentJson }) => {
 
   return normalizeNewlines(lines.join('\n') + '\n');
 };
-

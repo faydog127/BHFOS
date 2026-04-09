@@ -1,7 +1,7 @@
 {
-  "run_id": "2026-04-09T03:54:25.639Z",
-  "observed_bundle_root": ".\\\\artifacts\\\\runs\\2026-04-09T03-54-25.639Z\\observed_bundle",
-  "source_observed_bundle_root": ".\\tmp\\orchestrator-v2\\observed\\20260408_150010",
+  "tenant_id": "vent-guys",
+  "run_id": "2026-04-08T20:59:17.687Z",
+  "observed_bundle_root": ".\\tmp\\orchestrator-v2\\observed\\20260408_150010",
   "judgment": {
     "confidence_change": "unavailable_no_prior_run",
     "deployment_risks_still_open": [],

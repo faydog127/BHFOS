@@ -73,7 +73,7 @@ const expected = renderLayer3ReviewV1({
   inputJsonPath: args.json,
   reviewDocPath: args.doc,
   rawDocPath: './docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md',
-  preferredEvidenceBundlePath: './artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/',
+  preferredEvidenceBundlePath: './artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/',
   observedJudgmentJson,
 });
 

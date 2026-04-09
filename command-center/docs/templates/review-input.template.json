@@ -48,7 +48,7 @@
       "type": "log",
       "label": "REPLACE ME",
       "proof_of": "REPLACE ME",
-      "path": "artifacts/runs/REPLACE_ME/stdout.log",
+      "path": "artifacts/tenants/REPLACE_TENANT/runs/REPLACE_ME/stdout.log",
       "created_at": "2026-04-06T00:00:00.000Z"
     }
   ],
@@ -77,4 +77,3 @@
     "labels": []
   }
 }
-

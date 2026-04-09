@@ -231,7 +231,7 @@ const template = {
       type: (policy.required_artifact_types || [])[0] || 'log',
       label: 'REPLACE ME',
       proof_of: 'REPLACE ME',
-      path: 'artifacts/runs/REPLACE_ME/stdout.log',
+      path: 'artifacts/tenants/REPLACE_TENANT/runs/REPLACE_ME/stdout.log',
       created_at: new Date().toISOString(),
     },
   ],
@@ -264,4 +264,3 @@ writeJson(templatePath, template);
 console.log('Generated:');
 console.log(`- ${path.relative(repoRoot, schemaPath)}`);
 console.log(`- ${path.relative(repoRoot, templatePath)}`);
-

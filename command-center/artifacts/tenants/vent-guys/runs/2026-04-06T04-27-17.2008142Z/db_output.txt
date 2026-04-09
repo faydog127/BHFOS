@@ -1,0 +1,16 @@
+run_id: 2026-04-06T04:27:17.2008142Z
+generated_at_utc: 2026-04-06T04:37:47.5130944Z
+source_commit: 3c9785ee279b5d41b3e7755debae71a696d9df04
+note: This is a documentation/evidence indexing run. No new DB queries were executed in this run.
+
+Referenced DB-affecting proof outputs (executed previously; see corresponding tmp logs):
+- tmp/p0-02b-offline-manual-payment-test.log
+- tmp/p0-02c-payment-webhook-test.log
+- tmp/p0-02d-public-pay-test.log
+- tmp/p0-02e-reconciliation-test.log
+- tmp/p0-02e-sweep-test.log
+
+Referenced migrations (see evidence docs for exact lists):
+- supabase/migrations/20260404203000_p0_02b_offline_manual_ledger.sql
+- supabase/migrations/20260404210000_p0_02c_webhook_rebuild_support.sql
+- supabase/migrations/20260405001000_p0_02e_reconciliation_tools.sql

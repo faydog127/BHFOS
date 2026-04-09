@@ -30,7 +30,7 @@ const ensureDir = (p) => fs.mkdirSync(path.dirname(p), { recursive: true });
 
 const src = readJson(args.json);
 const rawDocPath = args.raw || './docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md';
-const evidencePath = args.evidence || './artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/';
+const evidencePath = args.evidence || './artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/';
 
 const out = renderLayer3ReviewV1({
   inputJsonPath: args.json,

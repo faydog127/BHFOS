@@ -1,14 +1,11 @@
-run_id: 2026-04-09T03:54:25.639Z
+run_id: 2026-04-08T21:02:02.110Z
 
 Layer 2 lock milestone:
 - observed bundle is mechanically captured (not hand-authored)
 - evaluator output is deterministic (judgment.json identical across two eval runs)
 - negative controls classify correctly
 
-Observed bundle (self-contained copy):
-- .\\artifacts\\runs\2026-04-09T03-54-25.639Z\observed_bundle
-
-Observed bundle (source capture):
+Observed bundle:
 - .\tmp\orchestrator-v2\observed\20260408_150010
 
 Expected outcome (observed success):

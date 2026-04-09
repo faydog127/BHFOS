@@ -14,28 +14,28 @@ Layer 2 is closed for the two highest-risk contention invariants by:
   - invariant violation → `DEPLOY_BLOCKED`
 
 ## Observed success bundle (mechanically captured)
-- Self-contained bundle root (copied from observed capture for gate evidence): `artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/`
+- Self-contained bundle root (copied from observed capture for gate evidence): `artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/`
 - Source capture root (not required for review gate once copied): `tmp/orchestrator-v2/observed/20260408_150010/`
 - Full lane:
-  - `artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/full/run_summary.json`
+  - `artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/full/run_summary.json`
 - Soak lane:
-  - `artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/soak/run_summary.json`
-  - `artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/soak/soak_summary.json`
-  - `artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/soak/results/soak_credit_single_winner.json`
-  - `artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/soak/results/soak_refund_cap_under_contention.json`
+  - `artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/soak/run_summary.json`
+  - `artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/soak/soak_summary.json`
+  - `artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/soak/results/soak_credit_single_winner.json`
+  - `artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/soak/results/soak_refund_cap_under_contention.json`
 
 ## Layer 2 outputs (machine-checkable)
 Observed success (evaluated twice; identical JSON output):
-- `artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/layer2_eval_1/judgment.json`
-- `artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/layer2_eval_1/judgment.md`
-- `artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/layer2_eval_2/judgment.json`
-- `artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/layer2_eval_2/judgment.md`
+- `artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/layer2_eval_1/judgment.json`
+- `artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/layer2_eval_1/judgment.md`
+- `artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/layer2_eval_2/judgment.json`
+- `artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/layer2_eval_2/judgment.md`
 
 Negative controls (same evaluator, same contracts):
 - Environment failure control:
-  - `artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/layer2_eval_env_control/judgment.md`
+  - `artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/layer2_eval_env_control/judgment.md`
 - Invariant violation control:
-  - `artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/layer2_eval_invariant_control/judgment.md`
+  - `artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/layer2_eval_invariant_control/judgment.md`
 
 ## Key result (observed success)
 - Expected: `DEPLOY_CONFIDENCE_INCREASED`

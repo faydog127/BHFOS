@@ -25,6 +25,11 @@ export const renderLayer3ReviewV1 = ({
   const src = observedJudgmentJson || {};
   const judgment = src?.judgment || {};
 
+  const tenantId = src?.tenant_id;
+  if (!tenantId || typeof tenantId !== 'string' || tenantId.trim().length === 0) {
+    throw new Error('Layer3 review render error: missing required tenant_id in layer2_observed_judgment.json');
+  }
+
   const verdict = judgment.test_run_verdict;
   const nextActionType = judgment.next_action_type;
   const confidenceChange = judgment.confidence_change;
@@ -64,6 +69,7 @@ export const renderLayer3ReviewV1 = ({
   lines.push('');
 
   lines.push('## Snapshot');
+  lines.push(`- tenant_id: ${mdInline(tenantId)}`);
   lines.push(`- run_id: ${mdInline(runId)}`);
   lines.push(`- verdict: ${mdInline(verdict)}`);
   lines.push(`- next_action_type: ${mdInline(nextActionType)}`);

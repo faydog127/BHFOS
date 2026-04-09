@@ -325,7 +325,7 @@ Define `autopilot:local` as the single local orchestration backbone for evidence
 ## Run folder contract
 Each invocation creates one run folder:
 
-`artifacts/runs/<run_id>/`
+`artifacts/tenants/<tenant_id>/runs/<run_id>/`
 
 ### Required top-level artifacts
 - `meta.json`

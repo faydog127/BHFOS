@@ -1,0 +1,16 @@
+run_id: 2026-04-08T20:59:17.687Z
+
+Observed bundle root:
+- .\tmp\orchestrator-v2\observed\20260408_150010
+
+Observed soak artifacts:
+- .\tmp\orchestrator-v2\observed\20260408_150010\\soak\\run_summary.json
+- .\tmp\orchestrator-v2\observed\20260408_150010\\soak\\soak_summary.json
+- .\tmp\orchestrator-v2\observed\20260408_150010\\soak\\results\\soak_credit_single_winner.json
+- .\tmp\orchestrator-v2\observed\20260408_150010\\soak\\results\\soak_refund_cap_under_contention.json
+
+Layer 2 judgments (machine-checkable):
+- .\tmp\orchestrator-v2\observed\20260408_150010\\layer2_eval_1\\judgment.json
+- .\tmp\orchestrator-v2\observed\20260408_150010\\layer2_eval_1\\judgment.md
+- .\tmp\orchestrator-v2\observed\20260408_150010\\layer2_eval_2\\judgment.json
+- .\tmp\orchestrator-v2\observed\20260408_150010\\layer2_eval_2\\judgment.md

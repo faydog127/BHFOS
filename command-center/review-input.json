@@ -6,6 +6,7 @@
   "generated_at": "2026-04-09T03:54:26.525Z",
   "source_commit": "5862bf696f147cbbe13fb7a301b5cae4927236f5",
   "run_id": "2026-04-09T03:54:25.639Z",
+  "tenant_id": "vent-guys",
   "files_changed": [
     "review-input.json",
     "docs/reconciliation/lock/appendix-a/index.md",
@@ -18,10 +19,10 @@
     "tmp/orchestrator-v2/runner/capture_observed_success.ps1",
     "tmp/orchestrator-v2/runner/run_layer2_pipeline.ps1",
     "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
-    "artifacts/runs/2026-04-09T03-54-25.639Z/manifest.json",
-    "artifacts/runs/2026-04-09T03-54-25.639Z/db_output.txt",
-    "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log",
-    "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
+    "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/manifest.json",
+    "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/db_output.txt",
+    "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log",
+    "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
   ],
   "scope": {
     "included": [
@@ -29,10 +30,10 @@
       "docs/reconciliation/lock/appendix-a/index.md",
       "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_billing-ledger-race-soak.md",
       "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
-      "artifacts/runs/2026-04-09T03-54-25.639Z/manifest.json",
-      "artifacts/runs/2026-04-09T03-54-25.639Z/db_output.txt",
-      "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log",
-      "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
+      "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/manifest.json",
+      "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/db_output.txt",
+      "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log",
+      "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
     ],
     "excluded": []
   },
@@ -54,8 +55,8 @@
       "verification_method": "Observed soak artifacts + Layer2 judgment; see Appendix A evidence doc.",
       "evidence_required": [
         "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_billing-ledger-race-soak.md",
-        "artifacts/runs/2026-04-09T03-54-25.639Z/db_output.txt",
-        "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
+        "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/db_output.txt",
+        "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
       ]
     },
     {
@@ -65,7 +66,7 @@
       "verification_method": "Determinism assertion is proven by stored judgment outputs referenced by EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md.",
       "evidence_required": [
         "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
-        "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
+        "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
       ]
     },
     {
@@ -125,25 +126,25 @@
       "type": "log",
       "label": "Layer 2 pipeline summary log",
       "proof_of": "Human-readable log with run_id and pointers to observed bundle + verdict",
-      "path": "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log"
+      "path": "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log"
     },
     {
       "type": "db_output",
       "label": "DB/output pointer index",
       "proof_of": "Run-scoped pointer list for observed bundle + judgments",
-      "path": "artifacts/runs/2026-04-09T03-54-25.639Z/db_output.txt"
+      "path": "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/db_output.txt"
     },
     {
       "type": "manifest",
       "label": "Run manifest",
       "proof_of": "Run-scoped metadata with run_id and observed bundle root",
-      "path": "artifacts/runs/2026-04-09T03-54-25.639Z/manifest.json"
+      "path": "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/manifest.json"
     },
     {
       "type": "test_result",
       "label": "Observed Layer 2 judgment (machine-checkable)",
       "proof_of": "Judgment JSON that can be validated/replayed without rerunning tests",
-      "path": "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
+      "path": "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
     },
     {
       "type": "code_reference",
@@ -159,10 +160,10 @@
       "docs/reconciliation/lock/appendix-a/index.md",
       "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_billing-ledger-race-soak.md",
       "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
-      "artifacts/runs/2026-04-09T03-54-25.639Z/manifest.json",
-      "artifacts/runs/2026-04-09T03-54-25.639Z/db_output.txt",
-      "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log",
-      "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
+      "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/manifest.json",
+      "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/db_output.txt",
+      "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log",
+      "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
     ],
     "discovery_inputs": [
       "pwsh -NoProfile -File tmp/orchestrator-v2/runner/run_layer2_pipeline.ps1",
@@ -171,7 +172,7 @@
     "excluded_scope": [],
     "uncertainty_boundaries": [
       "Observed bundle is local artifact capture, not production validation.",
-      "A minimal observed-bundle subset is copied into artifacts/runs/<run_id>/observed_bundle (self-contained gate evidence)."
+      "A minimal observed-bundle subset is copied into artifacts/tenants/<tenant_id>/runs/<run_id>/observed_bundle (self-contained gate evidence)."
     ]
   },
   "findings": [
@@ -183,7 +184,7 @@
       "rule_violated": "None (guardrail)",
       "proof": [
         "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
-        "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log"
+        "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log"
       ],
       "recommended_action": "Run a production-targeted validation lane before setting readiness label to P0-02: PRODUCTION-VALIDATED.",
       "verification_method": "Confirm readiness.labels remains LOCAL_PROVEN and does not claim production validation.",

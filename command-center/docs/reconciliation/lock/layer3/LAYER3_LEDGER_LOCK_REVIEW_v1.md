@@ -5,15 +5,16 @@ Audience: internal review (human-optimized)
 SSOT: Layer 3 raw contract doc + Layer 2 judgment JSON (no extra interpretation).
 
 ## Inputs
-- Layer 2 judgment JSON: `./artifacts/runs/2026-04-08T21-02-02.110Z/layer2_observed_judgment.json`
+- Layer 2 judgment JSON: `./artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json`
 - Layer 3 raw contract doc: `./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md`
-- Preferred evidence bundle (committed copy): `./artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/`
+- Preferred evidence bundle (committed copy): `./artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/`
 
 ## Executive Summary
 Layer 2 classified this run as `DEPLOY_CONFIDENCE_INCREASED` with next action type `confidence_rerun` and confidence change `unavailable_no_prior_run`.
 
 ## Snapshot
-- run_id: `2026-04-08T21:02:02.110Z`
+- tenant_id: `vent-guys`
+- run_id: `2026-04-09T03:54:25.639Z`
 - verdict: `DEPLOY_CONFIDENCE_INCREASED`
 - next_action_type: `confidence_rerun`
 - failure_mechanism: `null`
@@ -29,8 +30,8 @@ Layer 2 classified this run as `DEPLOY_CONFIDENCE_INCREASED` with next action ty
 
 ## Evidence Map
 - Raw contract (exact): `./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md`
-- Evidence bundle root: `./artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/`
-- Judgment JSON: `./artifacts/runs/2026-04-08T21-02-02.110Z/layer2_observed_judgment.json`
+- Evidence bundle root: `./artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/`
+- Judgment JSON: `./artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json`
 
 ## Open Risks
 - (none)
@@ -48,5 +49,5 @@ Proceed to Layer 3 document generation using this judgment output.
 ## Reproduce
 - Run Layer 1 deck: `pwsh -NoProfile -File ./tmp/billing-ledger-php/tests/run.ps1`
 - Run Layer 2 evaluation: `pwsh -NoProfile -File ./tmp/orchestrator-v2/runner/ci_layer2_eval.ps1`
-- Re-render docs: `node tmp/orchestrator-v2/layer3/render_layer3_raw.mjs ./artifacts/runs/2026-04-08T21-02-02.110Z/layer2_observed_judgment.json ./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md` + `node tmp/orchestrator-v2/layer3/render_layer3_review.mjs --json ./artifacts/runs/2026-04-08T21-02-02.110Z/layer2_observed_judgment.json --out ./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_REVIEW_v1.md`
+- Re-render docs: `node tmp/orchestrator-v2/layer3/render_layer3_raw.mjs ./artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json ./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md` + `node tmp/orchestrator-v2/layer3/render_layer3_review.mjs --json ./artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json --out ./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_REVIEW_v1.md`
 

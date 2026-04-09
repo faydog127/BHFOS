@@ -44,7 +44,11 @@ test-results/
 ########################################
 tmp/
 archive/
-artifacts/
+artifacts/*
+!artifacts/runs/
+!artifacts/runs/**
+!artifacts/tenants/
+!artifacts/tenants/**
 artifacts/*.log
 artifacts/*.err.log
 .tmp.driveupload/

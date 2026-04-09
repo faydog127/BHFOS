@@ -1,5 +1,6 @@
 param(
-  [string]$BaselineBundleRoot = ".\\artifacts\\runs\\2026-04-09T03-54-25.639Z\\observed_bundle"
+  [string]$TenantId = "vent-guys",
+  [string]$BaselineBundleRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,6 +12,10 @@ function EnsureDir([string]$Path) {
 function CopyDir([string]$Src, [string]$Dst) {
   EnsureDir $Dst
   Copy-Item -Recurse -Force -Path (Join-Path $Src "*") -Destination $Dst
+}
+
+if (-not $BaselineBundleRoot -or $BaselineBundleRoot.Trim() -eq "") {
+  $BaselineBundleRoot = ".\\artifacts\\tenants\\$TenantId\\runs\\2026-04-09T03-54-25.639Z\\observed_bundle"
 }
 
 if (-not (Test-Path $BaselineBundleRoot)) {
@@ -33,4 +38,3 @@ try {
 } finally {
   try { Remove-Item -Recurse -Force -LiteralPath $tempRoot 2>$null } catch { }
 }
-
