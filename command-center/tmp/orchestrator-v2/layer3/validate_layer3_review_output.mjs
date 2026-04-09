@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import { normalizeNewlines, renderLayer3ReviewV1 } from './_review_lib.mjs';
 
 const parseArgs = (argv) => {
-  const args = { mode: 'structural' };
+  const args = { mode: 'exact' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--mode') args.mode = argv[++i];
@@ -17,14 +18,13 @@ const args = parseArgs(process.argv.slice(2));
 if (args.help || !args.doc) {
   console.error(
     'Usage:\n' +
-      '  node tmp/orchestrator-v2/layer3/validate_layer3_review_output.mjs --mode structural --doc <review.md>\n' +
-      '  node tmp/orchestrator-v2/layer3/validate_layer3_review_output.mjs --mode token --json <layer2_observed_judgment.json> --doc <review.md>'
+      '  node tmp/orchestrator-v2/layer3/validate_layer3_review_output.mjs --mode exact --json <layer2_observed_judgment.json> --doc <review.md>\n' +
+      '  node tmp/orchestrator-v2/layer3/validate_layer3_review_output.mjs --mode structural --doc <review.md>'
   );
   process.exit(2);
 }
 
-const normalize = (t) => String(t || '').replace(/\r\n/g, '\n');
-const doc = normalize(fs.readFileSync(args.doc, 'utf8'));
+const doc = normalizeNewlines(fs.readFileSync(args.doc, 'utf8'));
 
 const requiredHeadings = [
   '# Ledger Lock — Review Summary',
@@ -63,32 +63,44 @@ if (args.mode === 'structural') {
   process.exit(0);
 }
 
-if (args.mode !== 'token' || !args.json) {
-  console.error('LAYER3 REVIEW VALIDATION: FAILED\n\nInvalid mode or missing --json for token mode.');
+if (args.mode !== 'exact' || !args.json) {
+  console.error('LAYER3 REVIEW VALIDATION: FAILED\n\nInvalid mode or missing --json for exact mode.');
   process.exit(2);
 }
 
-const src = JSON.parse(fs.readFileSync(args.json, 'utf8'));
-const judgment = src?.judgment || {};
+const observedJudgmentJson = JSON.parse(fs.readFileSync(args.json, 'utf8'));
+const expected = renderLayer3ReviewV1({
+  inputJsonPath: args.json,
+  reviewDocPath: args.doc,
+  rawDocPath: './docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md',
+  preferredEvidenceBundlePath: './artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/',
+  observedJudgmentJson,
+});
 
-const mustContain = [
-  `- run_id: \`${src.run_id}\``,
-  `- verdict: \`${judgment.test_run_verdict}\``,
-  `- next_action_type: \`${judgment.next_action_type}\``,
-];
+const normExpected = normalizeNewlines(expected).trimEnd() + '\n';
+const normActual = normalizeNewlines(doc).trimEnd() + '\n';
 
-for (const s of mustContain) {
-  if (!doc.includes(s)) {
-    console.error(`LAYER3 REVIEW VALIDATION: FAILED\n\nMissing required token line:\n${s}`);
-    process.exit(1);
+if (normExpected !== normActual) {
+  const expLines = normExpected.split('\n');
+  const actLines = normActual.split('\n');
+  const max = Math.max(expLines.length, actLines.length);
+  let firstDiff = -1;
+  for (let i = 0; i < max; i++) {
+    if ((expLines[i] || '') !== (actLines[i] || '')) {
+      firstDiff = i + 1;
+      break;
+    }
   }
-}
-
-// Must explicitly reference raw-contract SSOT to prevent “review doc becomes truth”.
-if (!doc.toLowerCase().includes('ssot')) {
-  console.error('LAYER3 REVIEW VALIDATION: FAILED\n\nMissing SSOT statement (must explicitly defer to raw contract + JSON).');
+  console.error('LAYER3 REVIEW VALIDATION: FAILED\n');
+  if (firstDiff > 0) {
+    console.error(`First difference at line ${firstDiff}:`);
+    console.error(`- expected: ${(expLines[firstDiff - 1] || '').slice(0, 240)}`);
+    console.error(`- actual:   ${(actLines[firstDiff - 1] || '').slice(0, 240)}`);
+    console.error('');
+  }
+  console.error('Fix: re-render the review doc from the JSON input:');
+  console.error(`- node tmp/orchestrator-v2/layer3/render_layer3_review.mjs --json ${args.json} --out ${args.doc}`);
   process.exit(1);
 }
 
-console.log('LAYER3 REVIEW VALIDATION: PASSED (token)');
-
+console.log('LAYER3 REVIEW VALIDATION: PASSED (exact)');
