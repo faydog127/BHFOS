@@ -27,6 +27,9 @@ on:
     # Nightly drift detection (dependency/runner/environment). Runs on default branch only.
     - cron: '17 4 * * *'
 
+permissions:
+  contents: read
+
 concurrency:
   group: ledger-lock-${{ github.ref }}
   cancel-in-progress: true
@@ -53,16 +56,28 @@ jobs:
         run: docker version
 
       - name: Review gate
-        run: npm run review:gate
+        run: node ./tools/review-gate.mjs
 
       - name: Ledger deck (DB-backed)
-        run: pwsh -NoProfile -File ./tmp/billing-ledger-php/tests/run.ps1
+        run: |
+          New-Item -ItemType Directory -Force -Path ./.ci_logs | Out-Null
+          pwsh -NoProfile -File ./tmp/billing-ledger-php/tests/run.ps1 *>&1 | Tee-Object -FilePath ./.ci_logs/ledger_deck.log
+          exit $LASTEXITCODE
 
       - name: Layer 2 baseline evaluation
-        run: pwsh -NoProfile -File ./tmp/orchestrator-v2/runner/ci_layer2_eval.ps1
+        run: |
+          pwsh -NoProfile -File ./tmp/orchestrator-v2/runner/ci_layer2_eval.ps1 *>&1 | Tee-Object -FilePath ./.ci_logs/layer2_eval.log
+          exit $LASTEXITCODE
 
       - name: Layer 3 raw doc contract (baseline)
         run: node ./tmp/orchestrator-v2/layer3/validate_layer3_output.mjs --mode exact --json ./artifacts/runs/2026-04-08T21-02-02.110Z/layer2_observed_judgment.json --doc ./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md
 
       - name: Layer 3 review doc contract (baseline)
         run: node ./tmp/orchestrator-v2/layer3/validate_layer3_review_output.mjs --mode exact --json ./artifacts/runs/2026-04-08T21-02-02.110Z/layer2_observed_judgment.json --doc ./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_REVIEW_v1.md
+
+      - name: Upload logs (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-lock-ci-logs
+          path: command-center/.ci_logs
