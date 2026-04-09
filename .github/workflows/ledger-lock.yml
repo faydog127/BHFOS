@@ -27,6 +27,10 @@ on:
     # Nightly drift detection (dependency/runner/environment). Runs on default branch only.
     - cron: '17 4 * * *'
 
+concurrency:
+  group: ledger-lock-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ledger_lock:
     runs-on: ubuntu-latest
