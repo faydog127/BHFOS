@@ -1,0 +1,52 @@
+# Ledger Lock — Review Summary
+
+Contract: `layer3_review_v1`
+Audience: internal review (human-optimized)
+SSOT: Layer 3 raw contract doc + Layer 2 judgment JSON (no extra interpretation).
+
+## Inputs
+- Layer 2 judgment JSON: `./artifacts/runs/2026-04-08T21-02-02.110Z/layer2_observed_judgment.json`
+- Layer 3 raw contract doc: `./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md`
+- Preferred evidence bundle (committed copy): `./artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/`
+
+## Executive Summary
+Layer 2 classified this run as `DEPLOY_CONFIDENCE_INCREASED` with next action type `confidence_rerun` and confidence change `unavailable_no_prior_run`.
+
+## Snapshot
+- run_id: `2026-04-08T21:02:02.110Z`
+- verdict: `DEPLOY_CONFIDENCE_INCREASED`
+- next_action_type: `confidence_rerun`
+- failure_mechanism: `null`
+
+## Proven Properties
+- refund_cap_under_contention: `proven`
+- repeated_run_determinism_under_contention: `proven`
+- single_winner_credit_allocation: `proven`
+
+## Results (By Test)
+- soak_credit_single_winner: `PASS` (results/soak_credit_single_winner.json)
+- soak_refund_cap_under_contention: `PASS` (results/soak_refund_cap_under_contention.json)
+
+## Evidence Map
+- Raw contract (exact): `./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md`
+- Evidence bundle root: `./artifacts/runs/2026-04-09T03-54-25.639Z/observed_bundle/`
+- Judgment JSON: `./artifacts/runs/2026-04-08T21-02-02.110Z/layer2_observed_judgment.json`
+
+## Open Risks
+- (none)
+
+## Raw Artifact Gaps
+- (none)
+
+## What This Does Not Prove
+- Production validation (unless separately evidenced and labeled).
+- Future correctness under changed schema/services without revalidation.
+
+## Next Best Action
+Proceed to Layer 3 document generation using this judgment output.
+
+## Reproduce
+- Run Layer 1 deck: `pwsh -NoProfile -File ./tmp/billing-ledger-php/tests/run.ps1`
+- Run Layer 2 evaluation: `pwsh -NoProfile -File ./tmp/orchestrator-v2/runner/ci_layer2_eval.ps1`
+- Re-render docs: `node tmp/orchestrator-v2/layer3/render_layer3_raw.mjs ./artifacts/runs/2026-04-08T21-02-02.110Z/layer2_observed_judgment.json ./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md` + `node tmp/orchestrator-v2/layer3/render_layer3_review.mjs --json ./artifacts/runs/2026-04-08T21-02-02.110Z/layer2_observed_judgment.json --out ./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_REVIEW_v1.md`
+

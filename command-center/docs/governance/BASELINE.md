@@ -31,6 +31,7 @@ The lightweight CI lane must run:
 - Layer 1 deck: `pwsh -NoProfile -File ./tmp/billing-ledger-php/tests/run.ps1`
 - Layer 2 evaluation (baseline bundle): `pwsh -NoProfile -File ./tmp/orchestrator-v2/runner/ci_layer2_eval.ps1`
 - Layer 3 raw doc contract (baseline JSON → exact output): `node ./tmp/orchestrator-v2/layer3/validate_layer3_output.mjs --mode exact --json ./artifacts/runs/2026-04-08T21-02-02.110Z/layer2_observed_judgment.json --doc ./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md`
+- Layer 3 review doc contract (human-optimized, SSOT defers to raw): `node ./tmp/orchestrator-v2/layer3/validate_layer3_review_output.mjs --mode token --json ./artifacts/runs/2026-04-08T21-02-02.110Z/layer2_observed_judgment.json --doc ./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_REVIEW_v1.md`
 
 ## Notes
 
