@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import path from 'node:path';
 import { normalizeNewlines, renderLayer3ReviewV1 } from './_review_lib.mjs';
 
 const parseArgs = (argv) => {
@@ -9,6 +10,7 @@ const parseArgs = (argv) => {
     if (a === '--mode') args.mode = argv[++i];
     else if (a === '--json') args.json = argv[++i];
     else if (a === '--doc') args.doc = argv[++i];
+    else if (a === '--raw') args.raw = argv[++i];
     else if (a === '--help') args.help = true;
   }
   return args;
@@ -18,7 +20,7 @@ const args = parseArgs(process.argv.slice(2));
 if (args.help || !args.doc) {
   console.error(
     'Usage:\n' +
-      '  node tmp/orchestrator-v2/layer3/validate_layer3_review_output.mjs --mode exact --json <layer2_observed_judgment.json> --doc <review.md>\n' +
+      '  node tmp/orchestrator-v2/layer3/validate_layer3_review_output.mjs --mode exact --json <layer2_observed_judgment.json> --doc <review.md> [--raw <raw.md>]\n' +
       '  node tmp/orchestrator-v2/layer3/validate_layer3_review_output.mjs --mode structural --doc <review.md>'
   );
   process.exit(2);
@@ -71,10 +73,22 @@ if (args.mode !== 'exact' || !args.json) {
 const observedJudgmentJson = JSON.parse(fs.readFileSync(args.json, 'utf8'));
 const preferredEvidenceBundlePath =
   observedJudgmentJson?.observed_bundle_root || './artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/';
+
+const deriveSiblingRaw = (reviewDocPath) => {
+  if (!reviewDocPath) return null;
+  const candidate = path.join(path.dirname(reviewDocPath), 'layer3_raw.md');
+  return fs.existsSync(candidate) ? candidate : null;
+};
+
+const rawDocPath =
+  args.raw ||
+  deriveSiblingRaw(args.doc) ||
+  './docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md';
+
 const expected = renderLayer3ReviewV1({
   inputJsonPath: args.json,
   reviewDocPath: args.doc,
-  rawDocPath: './docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md',
+  rawDocPath,
   preferredEvidenceBundlePath,
   observedJudgmentJson,
 });
@@ -101,7 +115,8 @@ if (normExpected !== normActual) {
     console.error('');
   }
   console.error('Fix: re-render the review doc from the JSON input:');
-  console.error(`- node tmp/orchestrator-v2/layer3/render_layer3_review.mjs --json ${args.json} --out ${args.doc}`);
+  const rawHint = args.raw ? ` --raw ${args.raw}` : '';
+  console.error(`- node tmp/orchestrator-v2/layer3/render_layer3_review.mjs --json ${args.json} --out ${args.doc}${rawHint}`);
   process.exit(1);
 }
 

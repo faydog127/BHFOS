@@ -29,7 +29,20 @@ const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8'));
 const ensureDir = (p) => fs.mkdirSync(path.dirname(p), { recursive: true });
 
 const src = readJson(args.json);
-const rawDocPath = args.raw || './docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md';
+
+const deriveSiblingRaw = (reviewOutPath) => {
+  if (!reviewOutPath) return null;
+  const dir = path.dirname(reviewOutPath);
+  const candidate = path.join(dir, 'layer3_raw.md');
+  return fs.existsSync(candidate) ? candidate : null;
+};
+
+// For run-scoped outputs, prefer the sibling raw artifact (layer3_raw.md) for clean lineage.
+// For baseline/governance docs, or when no sibling exists, fall back to the locked baseline raw contract doc.
+const rawDocPath =
+  args.raw ||
+  deriveSiblingRaw(args.out) ||
+  './docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md';
 const evidencePath = args.evidence || src?.observed_bundle_root || './artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/';
 
 const out = renderLayer3ReviewV1({
