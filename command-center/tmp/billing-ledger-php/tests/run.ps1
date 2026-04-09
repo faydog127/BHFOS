@@ -20,11 +20,13 @@ function Exec {
 
 Cleanup
 
+$ledgerRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+
 Write-Host "Starting Postgres container: $ContainerName (port $HostPort)"
 docker run -d --rm --name $ContainerName `
   -e POSTGRES_PASSWORD=postgres `
   -p ${HostPort}:5432 `
-  -v "${PWD}\\tmp\\billing-ledger-php:/work" `
+  -v "${ledgerRoot}:/work" `
   postgres:16 | Out-Null
 
 try {
