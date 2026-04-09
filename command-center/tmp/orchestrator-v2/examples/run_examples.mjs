@@ -1,18 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import Ajv2020 from 'ajv/dist/2020.js';
-import addFormats from 'ajv-formats';
+
+import { loadSchemas, readJson, validateOne, hasCorrectnessInvariantFailure } from '../eval/_lib.mjs';
 
 const repoRoot = process.cwd();
 const examplesRoot = path.join(repoRoot, 'tmp', 'orchestrator-v2', 'examples');
 const schemasRoot = path.join(repoRoot, 'tmp', 'orchestrator-v2');
-
-const ajv = new Ajv2020({ allErrors: true, strict: false });
-addFormats(ajv);
-
-function readJson(filePath) {
-  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-}
 
 function readText(filePath) {
   return fs.readFileSync(filePath, 'utf8');
@@ -35,14 +28,6 @@ function parseExpected(readmeText) {
   };
 }
 
-function validateOne(validateFn, obj, label) {
-  const ok = validateFn(obj);
-  if (!ok) {
-    const errors = (validateFn.errors ?? []).map((e) => `${e.instancePath || '(root)'} ${e.message}`).join('; ');
-    throw new Error(`Schema validation failed for ${label}: ${errors}`);
-  }
-}
-
 function loadResultFiles(exampleDir, runSummary) {
   const results = [];
   for (const r of runSummary.test_index.results) {
@@ -51,19 +36,6 @@ function loadResultFiles(exampleDir, runSummary) {
     results.push(readJson(p));
   }
   return results;
-}
-
-const NON_CORRECTNESS_INVARIANTS = new Set(['artifact_completeness']);
-
-function hasCorrectnessInvariantFailure(results) {
-  for (const r of results) {
-    for (const inv of r.invariant_results ?? []) {
-      if (!inv || inv.passed !== false) continue;
-      if (NON_CORRECTNESS_INVARIANTS.has(inv.name)) continue;
-      return true;
-    }
-  }
-  return false;
 }
 
 function anyClassification(results, classifications) {
@@ -111,13 +83,7 @@ function computeVerdictAndNextAction({ runSummary, soakSummary, results }) {
 }
 
 function main() {
-  const runSummarySchema = readJson(path.join(schemasRoot, 'run_summary_schema_v2.json'));
-  const resultSchema = readJson(path.join(schemasRoot, 'result_schema_v2.json'));
-  const soakSchema = readJson(path.join(schemasRoot, 'soak_summary_schema_v2.json'));
-
-  const validateRunSummary = ajv.compile(runSummarySchema);
-  const validateResult = ajv.compile(resultSchema);
-  const validateSoak = ajv.compile(soakSchema);
+  const { validateRunSummary, validateResult, validateSoak } = loadSchemas(schemasRoot);
 
   const exampleDirs = listDirs(examplesRoot);
   const rows = [];
