@@ -1,0 +1,23 @@
+{
+  "confidence_change": "unavailable_no_prior_run",
+  "deployment_risks_still_open": [
+    "No correctness signal; environment prevented execution."
+  ],
+  "failure_mechanism": "environment_config_defect",
+  "next_action_type": "environment_fix",
+  "next_best_action": "Resolve the blocking/caution condition and rerun the same evaluator.",
+  "proven_property_status": {},
+  "raw_artifact_gaps": [
+    "artifacts/race_credit_single_winner/stderr.txt"
+  ],
+  "result_by_test": [
+    {
+      "result_path": "results/race_credit_single_winner_env_fail.json",
+      "status": "FAIL",
+      "test_id": "race_credit_single_winner"
+    }
+  ],
+  "run_summary_line": "run_id=run_03_environment_failure pass=0 fail=1 mode=deterministic",
+  "scope": "bundle=tmp\\orchestrator-v2\\examples\\03_environment_failure lane=race",
+  "test_run_verdict": "DEPLOY_CAUTION"
+}

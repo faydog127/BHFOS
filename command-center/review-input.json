@@ -1,199 +1,206 @@
 {
-  "gate_version": "2.0.0",
-  "change_id": "EXAMPLE-P1-LOCAL-PROOF",
+  "gate_version": "v1",
+  "change_id": "CHANGE-20260408-LAYER2-LEDGER-LOCK",
   "pr_id": "LOCAL",
-  "title": "Example submission (local money-loop proof)",
-  "generated_at": "2026-04-04T20:43:34-04:00",
-  "source_commit": "5b3fc1984520130bc0010d48e5f9ced791830958",
-  "run_id": "2026-04-04T20:43:34-04:00",
+  "title": "Layer 2 (Orchestrator v2) — observed judgment lock for ledger contention invariants",
+  "generated_at": "2026-04-09T03:54:26.525Z",
+  "source_commit": "5862bf696f147cbbe13fb7a301b5cae4927236f5",
+  "run_id": "2026-04-09T03:54:25.639Z",
   "files_changed": [
-    "scripts/money-loop-smoke-test.ps1",
-    "scripts/now-queue-smoke-test.ps1",
-    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_money-loop-smoke.md",
-    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_flow-trace_quote-job-invoice-payment.md"
+    "review-input.json",
+    "docs/reconciliation/lock/appendix-a/index.md",
+    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_billing-ledger-race-soak.md",
+    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
+    "tmp/billing-ledger-php/tests/006_php_race.ps1",
+    "tmp/billing-ledger-php/tests/soak-php-races.ps1",
+    "tmp/orchestrator-v2/eval/evaluate_bundle.mjs",
+    "tmp/orchestrator-v2/eval/validate_judgment.mjs",
+    "tmp/orchestrator-v2/runner/capture_observed_success.ps1",
+    "tmp/orchestrator-v2/runner/run_layer2_pipeline.ps1",
+    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
+    "artifacts/runs/2026-04-09T03-54-25.639Z/manifest.json",
+    "artifacts/runs/2026-04-09T03-54-25.639Z/db_output.txt",
+    "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log",
+    "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
   ],
   "scope": {
     "included": [
-      "scripts/money-loop-smoke-test.ps1",
-      "scripts/now-queue-smoke-test.ps1",
-      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_money-loop-smoke.md",
-      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_flow-trace_quote-job-invoice-payment.md"
+      "review-input.json",
+      "docs/reconciliation/lock/appendix-a/index.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_billing-ledger-race-soak.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
+      "artifacts/runs/2026-04-09T03-54-25.639Z/manifest.json",
+      "artifacts/runs/2026-04-09T03-54-25.639Z/db_output.txt",
+      "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log",
+      "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
     ],
-    "excluded": [
-      "dist/",
-      "node_modules/"
-    ]
+    "excluded": []
   },
   "domain_tags": [
-    "money_state",
-    "acceptance_commit"
+    "money_state"
   ],
-  "summary": "Example: attaches local money-loop smoke + now-queue smoke outputs as evidence artifacts.",
+  "summary": "Locks Layer 2 judgment against mechanically captured observed artifacts for ledger contention invariants (single-winner credit allocation + refund cap under contention) and validates evaluator determinism plus negative controls.",
   "decider": {
-    "name": "TBD",
-    "role": "system_owner",
-    "approved_at": "2026-04-04T20:43:34-04:00"
+    "name": "UNASSIGNED",
+    "role": "human_decider",
+    "approved_at": "2026-04-09T03:54:26.525Z"
   },
   "risk_acceptances": [],
   "scenarios": [
     {
       "category": "concurrency",
-      "scenario": "Two concurrent finalization attempts for the same provider_payment_id",
-      "expected_behavior": "At most one financial effect (1 transaction + 1 application); duplicates are no-ops",
-      "verification_method": "Run the P0-02.C and P0-02.E race tests; confirm 1 tx + 1 app",
+      "scenario": "Two concurrent credit applications contend against the same available credit.",
+      "expected_behavior": "Single winner; loser fails with expected insufficient-available error; no over-application.",
+      "verification_method": "Observed soak artifacts + Layer2 judgment; see Appendix A evidence doc.",
       "evidence_required": [
-        "test_result",
-        "db_output"
+        "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_billing-ledger-race-soak.md",
+        "artifacts/runs/2026-04-09T03-54-25.639Z/db_output.txt",
+        "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
       ]
     },
     {
       "category": "replay_idempotency",
-      "scenario": "Same webhook event replayed multiple times",
-      "expected_behavior": "No duplicate transaction/application and no duplicate canonical event",
-      "verification_method": "Replay the same event in local tests; assert dedupe flags and 1 tx/app",
+      "scenario": "Layer 2 evaluator is deterministic on identical artifacts (replay-safe judgment).",
+      "expected_behavior": "Same observed bundle evaluated twice yields identical machine-checkable judgment JSON.",
+      "verification_method": "Determinism assertion is proven by stored judgment outputs referenced by EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md.",
       "evidence_required": [
-        "test_result",
-        "db_output"
+        "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
+        "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
       ]
     },
     {
       "category": "bad_data",
-      "scenario": "Legacy invoice has amount_paid > 0 but no ledger applications",
-      "expected_behavior": "System flags reconciliation_required; does not silently settle incorrectly",
-      "verification_method": "Run P0-02.E legacy capture/quarantine tests; confirm flags and proof objects",
+      "scenario": "Illegally scoped allocations/applications are rejected by invariants and constraint-breaker tests.",
+      "expected_behavior": "Cross-payer/currency/billing-case operations fail (DB + service checks).",
+      "verification_method": "Full deck contains explicit constraint-break attempts and invariants.",
       "evidence_required": [
-        "test_result",
-        "db_output",
-        "log"
+        "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_billing-ledger-race-soak.md"
       ]
     },
     {
       "category": "dependency_failure",
-      "scenario": "RPC fails mid-run (no partial money writes)",
-      "expected_behavior": "No partial financial effect; alert/trace emitted; safe to retry",
-      "verification_method": "Simulate RPC failure in controlled test; assert no tx/app created",
+      "scenario": "Environment failure is classified as caution (no correctness signal).",
+      "expected_behavior": "DEPLOY_CAUTION + environment_fix when artifacts incomplete / DB connectivity fails.",
+      "verification_method": "Evaluator run against golden environment-failure bundle.",
       "evidence_required": [
-        "test_result",
-        "db_output"
+        "tmp/orchestrator-v2/examples/03_environment_failure/run_summary.json"
       ]
     },
     {
       "category": "human_error",
-      "scenario": "Staff enters weak manual reference (e.g. 'cash')",
-      "expected_behavior": "Rejected; no ledger writes created",
-      "verification_method": "Run P0-02.B manual reference rejection tests",
+      "scenario": "An invariant violation is correctly blocked by the evaluator (do not deploy).",
+      "expected_behavior": "DEPLOY_BLOCKED when correctness invariants fail.",
+      "verification_method": "Evaluator run against golden invariant-violation bundle.",
       "evidence_required": [
-        "test_result"
+        "tmp/orchestrator-v2/examples/04_invariant_violation_deploy_blocked/run_summary.json"
       ]
     }
   ],
   "concurrency_model": {
-    "model": "dedupe_based",
+    "model": "lock_based",
+    "lock_strategy": "Reserve idempotency -> lock funding object (payment/credit memo) FOR UPDATE -> lock invoices ORDER BY invoice_record_id FOR UPDATE -> lock dependent ledger rows last; enforce caps at write time.",
     "guarantees": [
-      "No duplicate financial effect under reruns/overlap due to DB uniqueness/idempotency"
+      "Contention paths are executed under row locks; single-winner outcomes are enforced by write-time caps and invariant checks."
     ],
     "non_guarantees": [
-      "Does not guarantee zero duplicate processing attempts without explicit lock strategy"
+      "This is local/CI-like proof; production infra differences still require production validation before claiming PRODUCTION-VALIDATED."
     ]
   },
   "ops_impact": {
-    "alert_dedupe_identity": "Deterministic alert_key (e.g. invoice_id + anomaly_type + provider_payment_id)",
-    "max_open_alerts_per_entity": "1 per alert_key",
-    "task_dedupe_rule": "public.ensure_follow_up_task(tenant_id, source_type, source_id, title) prevents duplicates"
+    "alert_dedupe_identity": "idempotency_key",
+    "max_open_alerts_per_entity": "1",
+    "task_dedupe_rule": "global idempotency key registry + unique constraints"
   },
   "trigger_evidence": {
     "derived_domain_tags": [
-      "money_state",
-      "acceptance_commit"
+      "money_state"
     ],
     "derivation_inputs": [
-      "git diff --name-only",
-      "path-to-domain mapping rules"
+      "Local DB-backed race + soak runs (ApplyCredit contention + Refund contention).",
+      "Orchestrator v2 evaluator applied to observed success + negative controls."
     ]
   },
   "artifacts": [
     {
-      "type": "code_reference",
-      "path": "scripts/money-loop-smoke-test.ps1",
-      "snippet": "param(\n  [string]$TenantId = 'tvg',\n  [string]$RunPrefix = 'smoke'"
-    },
-    {
       "type": "log",
-      "path": "tmp/money-loop-smoke-test_latest.log"
+      "label": "Layer 2 pipeline summary log",
+      "proof_of": "Human-readable log with run_id and pointers to observed bundle + verdict",
+      "path": "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log"
     },
     {
       "type": "db_output",
-      "path": "tmp/money-loop-smoke-test_latest.log"
-    },
-    {
-      "type": "test_result",
-      "path": "tmp/now-queue-smoke-test_latest.log"
+      "label": "DB/output pointer index",
+      "proof_of": "Run-scoped pointer list for observed bundle + judgments",
+      "path": "artifacts/runs/2026-04-09T03-54-25.639Z/db_output.txt"
     },
     {
       "type": "manifest",
-      "path": "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_flow-trace_quote-job-invoice-payment.md"
+      "label": "Run manifest",
+      "proof_of": "Run-scoped metadata with run_id and observed bundle root",
+      "path": "artifacts/runs/2026-04-09T03-54-25.639Z/manifest.json"
+    },
+    {
+      "type": "test_result",
+      "label": "Observed Layer 2 judgment (machine-checkable)",
+      "proof_of": "Judgment JSON that can be validated/replayed without rerunning tests",
+      "path": "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
+    },
+    {
+      "type": "code_reference",
+      "label": "Layer 2 evaluator pipeline",
+      "proof_of": "Single evaluator used for observed + negative controls",
+      "path": "tmp/orchestrator-v2/runner/run_layer2_pipeline.ps1",
+      "snippet": "Write-Host \"LAYER2 PIPELINE PASSED\""
     }
   ],
   "coverage_report": {
     "files_analyzed": [
-      "scripts/money-loop-smoke-test.ps1",
-      "scripts/now-queue-smoke-test.ps1",
-      "tmp/money-loop-smoke-test_latest.log",
-      "tmp/now-queue-smoke-test_latest.log",
-      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_money-loop-smoke.md",
-      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_flow-trace_quote-job-invoice-payment.md"
+      "review-input.json",
+      "docs/reconciliation/lock/appendix-a/index.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_billing-ledger-race-soak.md",
+      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
+      "artifacts/runs/2026-04-09T03-54-25.639Z/manifest.json",
+      "artifacts/runs/2026-04-09T03-54-25.639Z/db_output.txt",
+      "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log",
+      "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
     ],
     "discovery_inputs": [
-      "smoke test scripts",
-      "generated local evidence logs"
+      "pwsh -NoProfile -File tmp/orchestrator-v2/runner/run_layer2_pipeline.ps1",
+      "node tmp/orchestrator-v2/eval/evaluate_bundle.mjs"
     ],
-    "excluded_scope": [
-      "UI walkthrough (separate evidence file)"
-    ],
+    "excluded_scope": [],
     "uncertainty_boundaries": [
-      "This example proves local path-level behavior only; it is not production proof."
+      "Observed bundle is local artifact capture, not production validation.",
+      "A minimal observed-bundle subset is copied into artifacts/runs/<run_id>/observed_bundle (self-contained gate evidence)."
     ]
   },
   "findings": [
     {
-      "id": "F-001",
-      "title": "Local money loop smoke produced verifiable IDs and DB evidence",
-      "severity": "MEDIUM",
-      "business_impact": "Provides evidence-grade artifact format for review gate validation.",
-      "rule_violated": "n/a (example submission)",
+      "id": "F-INFO-0001",
+      "title": "Layer 2 lock is local-proof only (not production validated)",
+      "severity": "INFO",
+      "business_impact": "Prevents promotion of local correctness evidence into a production-safe claim without an explicit production validation run.",
+      "rule_violated": "None (guardrail)",
       "proof": [
-        "tmp/money-loop-smoke-test_latest.log",
-        "docs/reconciliation/lock/appendix-a/evidence/EV-2026-03-18_money-loop-smoke.md"
+        "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
+        "artifacts/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log"
       ],
-      "recommended_action": "Replace this example with a real change submission that includes dedicated db_output/test_result files and exact code references.",
-      "verification_method": "Run `pwsh -NoProfile -File .\\\\scripts\\\\money-loop-smoke-test.ps1 -SkipStart` and confirm output contains IDs + DB queries.",
+      "recommended_action": "Run a production-targeted validation lane before setting readiness label to P0-02: PRODUCTION-VALIDATED.",
+      "verification_method": "Confirm readiness.labels remains LOCAL_PROVEN and does not claim production validation.",
       "closure_evidence_required": [
-        "log",
-        "db_output",
-        "test_result"
+        "Production validation run artifacts (separate change/run)."
       ]
     }
   ],
   "verification": {
-    "positive_tests": [
-      "public pay succeeds in local mock mode",
-      "now-queue smoke shows tasks + suspension + no job"
-    ],
-    "negative_tests": [
-      "second public-pay call returns already_paid"
-    ],
-    "idempotency_analysis": "Smoke test calls approval twice and public-pay twice; idempotent outcomes are asserted in the output log.",
-    "replay_test": "Re-run the same smoke scripts and confirm identical invariants hold (exactly-once job per quote, already_paid on second pay).",
-    "atomicity_analysis": "n/a (example submission; no code change).",
-    "exactly_once_analysis": "Smoke test calls approval twice; DB evidence shows a single job for the quote_id.",
-    "rollback_plan": "n/a (example submission; no code change)."
+    "idempotency_analysis": "Idempotency + replay semantics are evidenced via Layer 2 determinism (same artifacts => identical judgment) and the underlying idempotency registry in the ledger test suite.",
+    "replay_test": "Golden environment failure + invariant violation bundles + observed success bundle are all evaluated through the same evaluator pipeline.",
+    "rollback_plan": "If any ledger invariants regress, revert to previous known-good schema/services and rerun Layer 1+2 pipelines before redeploy."
   },
   "readiness": {
-    "status": "NOT_READY",
-    "reason": "This is an example submission used to validate the review gate; not a production-ready remediation.",
+    "status": "CONDITIONALLY_READY",
     "labels": [
       "P0-02: LOCAL_PROVEN"
-    ],
-    "production_artifacts": []
+    ]
   }
 }

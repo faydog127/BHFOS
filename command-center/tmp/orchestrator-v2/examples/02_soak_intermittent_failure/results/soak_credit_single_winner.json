@@ -1,0 +1,87 @@
+{
+  "schema_version": "2.0",
+  "test_id": "soak_credit_single_winner",
+  "test_name": "Soak: apply credit vs apply credit (single winner)",
+  "lane": "soak",
+  "iteration": null,
+  "status": "FAIL",
+  "classification": "concurrency_defect",
+  "failure_mode": "intermittent",
+  "failure_signature": "soak_intermit:double_success_or_over_allocation",
+  "outcome_type": "unexpected_double_success",
+  "severity": "critical",
+  "runtime_ms": 600000,
+  "commit_hash": null,
+  "confidence_score": 35,
+  "confidence_score_delta": null,
+  "environment": {
+    "runner": "ci",
+    "php_version": "8.3",
+    "db_engine": "postgres",
+    "db_version": "16",
+    "isolation_level": "read_committed",
+    "php_image": "bhfos-ledger-php-test",
+    "db_container": "postgres:16",
+    "cpu_limit": "2",
+    "memory_limit_mb": 2048
+  },
+  "fixture_id": "fx_credit_single_winner_soak_v1",
+  "pre_state": {
+    "iterations_total": 100,
+    "credit_total_cents": 3000,
+    "requested_cents_each": 2000
+  },
+  "expected": {
+    "success_count": 1,
+    "failure_count": 1,
+    "expected_failure_codes": ["ERR_INSUFFICIENT_AVAILABLE"],
+    "final_state": {
+      "credit_applied_cents_max": 2000
+    },
+    "invariants": [
+      "single_winner_credit_allocation",
+      "no_over_application"
+    ]
+  },
+  "actual": {
+    "success_count": null,
+    "failure_count": null,
+    "failure_codes": [],
+    "db_error_family": null,
+    "final_state": {
+      "unexpected_double_success_count": 2,
+      "invariant_mismatch_count": 2
+    }
+  },
+  "invariant_results": [
+    { "name": "single_winner_credit_allocation", "passed": false, "details": "At least one iteration had two winners." },
+    { "name": "no_over_application", "passed": false, "details": "At least one iteration over-applied credit." }
+  ],
+  "workers": [],
+  "artifacts": {
+    "stdout_path": "artifacts/soak_credit_single_winner/stdout.txt",
+    "stderr_path": "artifacts/soak_credit_single_winner/stderr.txt",
+    "db_snapshot_path": "artifacts/soak_credit_single_winner/db_snapshot.json",
+    "worker_results_path": "artifacts/soak_credit_single_winner/workers.json",
+    "timing_trace_path": "artifacts/soak_credit_single_winner/timing.json"
+  },
+  "artifact_completeness": {
+    "worker_stdout": true,
+    "worker_stderr": true,
+    "db_snapshot": true,
+    "timing_trace": true
+  },
+  "promotion_gate": {
+    "lane_green": false,
+    "merge_recommended": false,
+    "deploy_recommended": false,
+    "reason": "Intermittent correctness failures under contention."
+  },
+  "redaction_policy": {
+    "customer_ids_masked": true,
+    "billing_case_ids_masked": true,
+    "raw_payloads_excluded": true
+  },
+  "notes": "See soak_summary.json for authoritative aggregation."
+}
+

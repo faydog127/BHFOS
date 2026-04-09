@@ -32,8 +32,10 @@ A human decider is required for:
 - irreversible data mutation
 - any claim of `P0-02: PRODUCTION-VALIDATED`
 
-## Trigger domains (must match gate)
-Human approval is mandatory when the change touches any of:
+## Canonical Alignment (Must Match Repo Enforcement)
+
+### Domain tags (authoritative list)
+Must match `review-policy.json`:
 - `tenant_isolation`
 - `money_state`
 - `acceptance_commit`
@@ -89,4 +91,3 @@ Compliance-style outputs are advisory unless explicitly backed by a real legal o
 
 ## Final rule
 Automation may recommend every step. It may not own the last word on production, risk, or doctrine.
-

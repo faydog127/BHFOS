@@ -45,6 +45,32 @@ const resolveRepoPath = (p) => path.resolve(repoRoot, String(p || ''));
 
 const artifactRules = policy.artifact_rules || {};
 const criticalDomains = Array.isArray(policy.critical_domains) ? policy.critical_domains : [];
+const requireRunIdMatchTypes = Array.isArray(artifactRules.require_run_id_match_types)
+  ? artifactRules.require_run_id_match_types
+  : [];
+
+const extractRunIdFromText = (text) => {
+  if (typeof text !== 'string') return null;
+  const m = text.match(/^\s*run_id:\s*(\S+)\s*$/im);
+  return m ? m[1] : null;
+};
+
+const extractRunIdFromFile = (filePath, typeHint) => {
+  try {
+    const lower = String(filePath).toLowerCase();
+    if (typeHint === 'manifest' || lower.endsWith('.json')) {
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const parsed = JSON.parse(raw);
+      const runId = parsed?.run_id;
+      return typeof runId === 'string' && runId.trim() ? runId.trim() : null;
+    }
+
+    const raw = fs.readFileSync(filePath, 'utf8');
+    return extractRunIdFromText(raw.slice(0, 8000));
+  } catch {
+    return null;
+  }
+};
 
 // 1) Top-level fields
 for (const field of policy.required_top_level_fields || []) {
@@ -121,8 +147,15 @@ if (!Array.isArray(input.risk_acceptances)) {
   }
 }
 
+// domain_tags integrity
+const tags = asStringArray(input.domain_tags);
+for (const t of tags) {
+  if (!criticalDomains.includes(t)) {
+    errors.push(`Invalid domain_tag (must be one of policy.critical_domains): ${t}`);
+  }
+}
+
 // scenarios integrity (required when triggered)
-const tags = Array.isArray(input.domain_tags) ? input.domain_tags : [];
 const isTriggered = tags.some((t) => criticalDomains.includes(t));
 if (!Array.isArray(input.scenarios)) {
   errors.push('scenarios must be an array');
@@ -144,6 +177,18 @@ if (!Array.isArray(input.scenarios)) {
       errors.push(`scenarios[${i}].verification_method is required`);
     if (!Array.isArray(s.evidence_required) || s.evidence_required.length === 0)
       errors.push(`scenarios[${i}].evidence_required must be a non-empty array`);
+    if (Array.isArray(s.evidence_required)) {
+      for (const [j, evidencePath] of s.evidence_required.entries()) {
+        if (typeof evidencePath !== 'string' || !evidencePath.trim()) {
+          errors.push(`scenarios[${i}].evidence_required[${j}] must be a non-empty string path`);
+          continue;
+        }
+        const resolved = resolveRepoPath(evidencePath);
+        if (artifactRules.require_paths_exist !== false && !fs.existsSync(resolved)) {
+          errors.push(`scenarios[${i}].evidence_required[${j}] path does not exist: ${evidencePath}`);
+        }
+      }
+    }
 
     if (typeof s.category === 'string' && s.category.trim()) presentCats.add(s.category.trim());
   }
@@ -280,6 +325,17 @@ if (!Array.isArray(input.artifacts) || input.artifacts.length === 0) {
                 `Artifact[${idx}] (${type}) is older than ${maxAgeHours}h relative to generated_at: ${artifact.path}`
               );
             }
+          }
+        }
+
+        if (requireRunIdMatchTypes.includes(type)) {
+          const artifactRunId = extractRunIdFromFile(resolved, type);
+          if (!artifactRunId) {
+            errors.push(`Artifact[${idx}] (${type}) missing run_id header/field: ${artifact.path}`);
+          } else if (artifactRunId !== input.run_id) {
+            errors.push(
+              `Artifact[${idx}] (${type}) run_id mismatch (expected ${input.run_id}, got ${artifactRunId}): ${artifact.path}`
+            );
           }
         }
       }

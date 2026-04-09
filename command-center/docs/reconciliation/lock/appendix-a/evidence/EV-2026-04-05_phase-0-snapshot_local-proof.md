@@ -31,8 +31,8 @@ These proof runners read env vars and will 401 if the service key is missing/wro
 ## Governance Status (2026-04-05)
 
 - Phase 0 overall: **NOT_READY** until foundational locks are proven and follow-on gates are completed.
-- P0-01: **LOCAL_PROVEN** (tenant isolation for public endpoints).
-- P0-02 (B/C/D/E): **LOCAL_PROVEN** (money model lock locally proven).
+- P0-01: locally proven (tenant isolation for public endpoints).
+- P0-02 (B/C/D/E): local proof supports readiness label `P0-02: LOCAL_PROVEN` (local only).
 - Production validation is explicitly tracked as a follow-on gate:
   - `docs/tickets/TICKET_P0-02_production-validation_post-local-gate.md`
   - Board: `tmp/tickets_board.md` (`P0-02-PROD-VALIDATION`)
@@ -192,4 +192,3 @@ If the team uses an external tracker/board, mirror these IDs there to avoid spli
 - P0-02.E tools: `node supabase/tests/node/run-p0-02e.js`
 - P0-02.E sweep: `node supabase/tests/node/run-p0-02e-sweep.js`
 - Review gate: `npm run review:gate`
-

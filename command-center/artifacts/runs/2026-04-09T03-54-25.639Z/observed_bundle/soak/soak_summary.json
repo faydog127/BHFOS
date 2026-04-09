@@ -1,0 +1,32 @@
+{
+  "schema_version": "2.0",
+  "test_id": "soak_php_race_suite",
+  "lane": "soak",
+  "iterations_total": 100,
+  "pass_count": 100,
+  "fail_count": 0,
+  "failure_mode": "deterministic",
+  "outcome_counts": {
+    "expected_single_winner": 100,
+    "unexpected_double_success": 0,
+    "unexpected_double_failure": 0,
+    "invariant_mismatch": 0
+  },
+  "failure_signatures": [],
+  "expected_failure_code_match_rate": 1.0,
+  "invariant_pass_rate": 1.0,
+  "promotion_gate": {
+    "lane_green": true,
+    "merge_recommended": true,
+    "deploy_recommended": true,
+    "reason": "Soak lane passed with stable single-winner outcomes under contention."
+  },
+  "artifact_index": {
+    "failed_iteration_artifacts": [],
+    "sample_pass_iteration_artifacts": [
+      "artifacts/suite_logs/iter_001.log",
+      "artifacts/suite_logs/iter_002.log",
+      "artifacts/suite_logs/iter_003.log"
+    ]
+  }
+}

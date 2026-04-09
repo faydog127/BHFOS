@@ -1,0 +1,89 @@
+{
+  "schema_version": "2.0",
+  "test_id": "race_credit_single_winner",
+  "test_name": "Apply credit vs apply credit (single winner)",
+  "lane": "race",
+  "iteration": null,
+  "status": "FAIL",
+  "classification": "concurrency_defect",
+  "failure_mode": "deterministic",
+  "failure_signature": "invariant_mismatch:over_allocation",
+  "outcome_type": "invariant_mismatch",
+  "severity": "critical",
+  "runtime_ms": 900,
+  "commit_hash": null,
+  "confidence_score": 5,
+  "confidence_score_delta": null,
+  "environment": {
+    "runner": "ci",
+    "php_version": "8.3",
+    "db_engine": "postgres",
+    "db_version": "16",
+    "isolation_level": "read_committed",
+    "php_image": "bhfos-ledger-php-test",
+    "db_container": "postgres:16",
+    "cpu_limit": null,
+    "memory_limit_mb": null
+  },
+  "fixture_id": "fx_credit_single_winner_v1",
+  "pre_state": {
+    "credit_total_cents": 3000,
+    "requested_cents_each": 2000
+  },
+  "expected": {
+    "success_count": 1,
+    "failure_count": 1,
+    "expected_failure_codes": ["ERR_INSUFFICIENT_AVAILABLE"],
+    "final_state": {
+      "credit_applied_cents": 2000
+    },
+    "invariants": [
+      "single_winner_credit_allocation",
+      "no_over_application"
+    ]
+  },
+  "actual": {
+    "success_count": 2,
+    "failure_count": 0,
+    "failure_codes": [],
+    "db_error_family": null,
+    "final_state": {
+      "credit_applied_cents": 4000,
+      "credit_unapplied_cents": 0
+    }
+  },
+  "invariant_results": [
+    { "name": "single_winner_credit_allocation", "passed": false, "details": "Both workers committed successfully." },
+    { "name": "no_over_application", "passed": false, "details": "Applied 4000 > credit_total_cents 3000." }
+  ],
+  "workers": [
+    { "worker_id": "w1", "status": "success", "error_code": null, "duration_ms": 430, "connection_id": "c1", "transaction_start_ts": "2026-04-08T15:00:01Z" },
+    { "worker_id": "w2", "status": "success", "error_code": null, "duration_ms": 440, "connection_id": "c2", "transaction_start_ts": "2026-04-08T15:00:01Z" }
+  ],
+  "artifacts": {
+    "stdout_path": "artifacts/race_credit_single_winner/stdout.txt",
+    "stderr_path": "artifacts/race_credit_single_winner/stderr.txt",
+    "db_snapshot_path": "artifacts/race_credit_single_winner/db_snapshot.json",
+    "worker_results_path": "artifacts/race_credit_single_winner/workers.json",
+    "timing_trace_path": "artifacts/race_credit_single_winner/timing.json"
+  },
+  "artifact_completeness": {
+    "worker_stdout": true,
+    "worker_stderr": true,
+    "db_snapshot": true,
+    "timing_trace": true
+  },
+  "promotion_gate": {
+    "lane_green": false,
+    "merge_recommended": false,
+    "deploy_recommended": false,
+    "reason": "Invariant violation."
+  },
+  "redaction_policy": {
+    "customer_ids_masked": true,
+    "billing_case_ids_masked": true,
+    "raw_payloads_excluded": true
+  },
+  "notes": null
+}
+

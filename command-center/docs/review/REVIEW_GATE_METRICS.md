@@ -41,6 +41,7 @@ The gate requires:
 - `domain_tags[]` (declared)
 - `trigger_evidence.derived_domain_tags[]` (must include all declared `domain_tags`)
 - `trigger_evidence.derivation_inputs[]` (must be non-empty; e.g. `git diff --name-only`)
+- `domain_tags[]` must only contain canonical tags from `review-policy.json.critical_domains`
 
 ---
 
@@ -60,6 +61,9 @@ Each scenario must include:
 - `expected_behavior`
 - `verification_method`
 - `evidence_required[]`
+
+Additionally:
+- `scenarios[*].evidence_required[]` paths must resolve on disk (when `review-policy.json.artifact_rules.require_paths_exist=true`).
 
 ---
 
@@ -151,4 +155,3 @@ If `override` is present, the gate requires:
 - `override.reason`
 - `override.rollback_plan`
 - `override.expires_at` (ISO datetime)
-

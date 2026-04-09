@@ -1,0 +1,40 @@
+{
+  "schema_version": "2.0",
+  "run_id": "run_03_environment_failure",
+  "lane": "race",
+  "started_at": "2026-04-08T14:00:00Z",
+  "ended_at": "2026-04-08T14:00:05Z",
+  "runtime_ms": 5000,
+  "commit_hash": null,
+  "runner": "ci",
+  "pass_count": 0,
+  "fail_count": 1,
+  "flaky_count": 0,
+  "failure_mode": "deterministic",
+  "promotion_gate": {
+    "lane_green": false,
+    "merge_recommended": false,
+    "deploy_recommended": false,
+    "reason": "DB connectivity failed; artifacts incomplete."
+  },
+  "artifact_completeness": {
+    "worker_stdout": false,
+    "worker_stderr": true,
+    "db_snapshot": false,
+    "timing_trace": false
+  },
+  "proven_property_status": null,
+  "open_risks": [
+    "No correctness signal; environment prevented execution."
+  ],
+  "test_index": {
+    "results": [
+      {
+        "test_id": "race_credit_single_winner",
+        "status": "FAIL",
+        "result_path": "results/race_credit_single_winner_env_fail.json"
+      }
+    ]
+  }
+}
+

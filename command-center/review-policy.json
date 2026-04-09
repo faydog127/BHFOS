@@ -71,6 +71,12 @@
       "manifest",
       "test_result"
     ],
+    "require_run_id_match_types": [
+      "log",
+      "db_output",
+      "manifest",
+      "test_result"
+    ],
     "code_reference_must_match_file": true,
     "max_age_hours": 168,
     "max_age_hours_types": [
