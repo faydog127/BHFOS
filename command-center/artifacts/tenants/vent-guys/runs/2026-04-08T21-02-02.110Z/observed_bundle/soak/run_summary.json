@@ -1,0 +1,46 @@
+{
+  "schema_version": "2.0",
+  "run_id": "observed_soak_20260408_150010",
+  "lane": "soak",
+  "started_at": "2026-04-08T15:01:20.6197938-04:00",
+  "ended_at": "2026-04-08T15:30:18.671749-04:00",
+  "runtime_ms": 1754379,
+  "commit_hash": "5862bf696f147cbbe13fb7a301b5cae4927236f5",
+  "runner": "local",
+  "pass_count": 100,
+  "fail_count": 0,
+  "flaky_count": 0,
+  "failure_mode": "deterministic",
+  "promotion_gate": {
+    "lane_green": true,
+    "merge_recommended": true,
+    "deploy_recommended": true,
+    "reason": "Soak lane passed with stable single-winner outcomes under contention."
+  },
+  "artifact_completeness": {
+    "worker_stdout": true,
+    "worker_stderr": true,
+    "db_snapshot": true,
+    "timing_trace": true
+  },
+  "proven_property_status": {
+    "single_winner_credit_allocation": "proven",
+    "refund_cap_under_contention": "proven",
+    "repeated_run_determinism_under_contention": "proven"
+  },
+  "open_risks": null,
+  "test_index": {
+    "results": [
+      {
+        "test_id": "soak_credit_single_winner",
+        "status": "PASS",
+        "result_path": "results/soak_credit_single_winner.json"
+      },
+      {
+        "test_id": "soak_refund_cap_under_contention",
+        "status": "PASS",
+        "result_path": "results/soak_refund_cap_under_contention.json"
+      }
+    ]
+  }
+}

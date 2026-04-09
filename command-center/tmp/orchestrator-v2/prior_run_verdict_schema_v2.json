@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "prior_run_verdict_schema_v2.json",
+  "title": "Prior Run Verdict Schema v2",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "verdict",
+    "confidence_score",
+    "summary",
+    "proven_property_status",
+    "open_risks"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "2.0" },
+    "run_id": { "type": "string" },
+    "verdict": {
+      "type": "string",
+      "enum": ["DEPLOY_BLOCKED", "DEPLOY_CAUTION", "DEPLOY_CONFIDENCE_INCREASED"]
+    },
+    "confidence_score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "summary": {
+      "type": "object",
+      "required": ["pass_count", "fail_count", "intermittent_count"],
+      "properties": {
+        "pass_count": { "type": "integer", "minimum": 0 },
+        "fail_count": { "type": "integer", "minimum": 0 },
+        "intermittent_count": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "proven_property_status": {
+      "type": "object",
+      "required": [
+        "single_winner_credit_allocation",
+        "refund_cap_under_contention"
+      ],
+      "properties": {
+        "single_winner_credit_allocation": {
+          "type": "string",
+          "enum": ["proven", "unproven"]
+        },
+        "refund_cap_under_contention": {
+          "type": "string",
+          "enum": ["proven", "unproven"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "open_risks": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}
+

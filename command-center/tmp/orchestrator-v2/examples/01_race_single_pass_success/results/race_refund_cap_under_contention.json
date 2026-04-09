@@ -1,0 +1,92 @@
+{
+  "schema_version": "2.0",
+  "test_id": "race_refund_cap_under_contention",
+  "test_name": "Refund vs refund (cap under contention)",
+  "lane": "race",
+  "iteration": null,
+  "status": "PASS",
+  "classification": null,
+  "failure_mode": null,
+  "failure_signature": null,
+  "outcome_type": "expected_single_winner",
+  "severity": "critical",
+  "runtime_ms": 960,
+  "commit_hash": null,
+  "confidence_score": 82,
+  "confidence_score_delta": null,
+  "environment": {
+    "runner": "local",
+    "php_version": "8.3",
+    "db_engine": "postgres",
+    "db_version": "16",
+    "isolation_level": "read_committed",
+    "php_image": "bhfos-ledger-php-test",
+    "db_container": "postgres:16",
+    "cpu_limit": null,
+    "memory_limit_mb": null
+  },
+  "fixture_id": "fx_refund_cap_under_contention_v1",
+  "pre_state": {
+    "original_applied_cents": 1000,
+    "requested_refund_cents_each": 800
+  },
+  "expected": {
+    "success_count": 1,
+    "failure_count": 1,
+    "expected_failure_codes": ["ERR_REFUND_EXCEEDS_REFUNDABLE"],
+    "final_state": {
+      "settled_refunds_count": 1,
+      "refund_adjustments_cents": 800
+    },
+    "invariants": [
+      "refund_cap_under_contention",
+      "no_over_refund",
+      "atomic_refund_pairing"
+    ]
+  },
+  "actual": {
+    "success_count": 1,
+    "failure_count": 1,
+    "failure_codes": ["ERR_REFUND_EXCEEDS_REFUNDABLE"],
+    "db_error_family": null,
+    "final_state": {
+      "settled_refunds_count": 1,
+      "refund_adjustments_cents": 800
+    }
+  },
+  "invariant_results": [
+    { "name": "refund_cap_under_contention", "passed": true, "details": "Only one refund committed; second rejected." },
+    { "name": "no_over_refund", "passed": true, "details": "Sum(refund_adjustments) <= original applied." },
+    { "name": "atomic_refund_pairing", "passed": true, "details": "Refund row and adjustment row committed together." }
+  ],
+  "workers": [
+    { "worker_id": "w1", "status": "success", "error_code": null, "duration_ms": 480, "connection_id": "c1", "transaction_start_ts": "2026-04-08T12:00:05Z" },
+    { "worker_id": "w2", "status": "failed", "error_code": "ERR_REFUND_EXCEEDS_REFUNDABLE", "duration_ms": 450, "connection_id": "c2", "transaction_start_ts": "2026-04-08T12:00:05Z" }
+  ],
+  "artifacts": {
+    "stdout_path": "artifacts/race_refund_cap_under_contention/stdout.txt",
+    "stderr_path": "artifacts/race_refund_cap_under_contention/stderr.txt",
+    "db_snapshot_path": "artifacts/race_refund_cap_under_contention/db_snapshot.json",
+    "worker_results_path": "artifacts/race_refund_cap_under_contention/workers.json",
+    "timing_trace_path": "artifacts/race_refund_cap_under_contention/timing.json"
+  },
+  "artifact_completeness": {
+    "worker_stdout": true,
+    "worker_stderr": true,
+    "db_snapshot": true,
+    "timing_trace": true
+  },
+  "promotion_gate": {
+    "lane_green": true,
+    "merge_recommended": true,
+    "deploy_recommended": false,
+    "reason": "Race lane passed; soak not run."
+  },
+  "redaction_policy": {
+    "customer_ids_masked": true,
+    "billing_case_ids_masked": true,
+    "raw_payloads_excluded": true
+  },
+  "notes": null
+}
+

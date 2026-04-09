@@ -8,6 +8,7 @@
   ],
   "required_top_level_fields": [
     "gate_version",
+    "tenant_id",
     "change_id",
     "pr_id",
     "title",
@@ -66,6 +67,12 @@
   "artifact_rules": {
     "require_paths_exist": true,
     "require_non_empty_types": [
+      "log",
+      "db_output",
+      "manifest",
+      "test_result"
+    ],
+    "require_run_id_match_types": [
       "log",
       "db_output",
       "manifest",

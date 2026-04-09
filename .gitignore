@@ -28,6 +28,9 @@ build
 archive/*.zip
 archive/*.tar.gz
 
+# Local prototypes
+routing-prototype/
+
 # Logs
 npm-debug.log*
 yarn-debug.log*

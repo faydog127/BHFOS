@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run_summary_schema_v2.json",
+  "title": "Run Summary Schema v2",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "lane",
+    "started_at",
+    "ended_at",
+    "runtime_ms",
+    "pass_count",
+    "fail_count",
+    "flaky_count",
+    "failure_mode",
+    "promotion_gate",
+    "artifact_completeness",
+    "test_index"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "2.0" },
+    "run_id": { "type": "string" },
+    "lane": { "type": "string", "enum": ["fast", "full", "race", "soak"] },
+    "started_at": { "type": "string", "format": "date-time" },
+    "ended_at": { "type": "string", "format": "date-time" },
+    "runtime_ms": { "type": "integer", "minimum": 0 },
+    "commit_hash": { "type": ["string", "null"] },
+    "runner": { "type": ["string", "null"] },
+    "pass_count": { "type": "integer", "minimum": 0 },
+    "fail_count": { "type": "integer", "minimum": 0 },
+    "flaky_count": { "type": "integer", "minimum": 0 },
+    "failure_mode": {
+      "type": "string",
+      "enum": ["deterministic", "intermittent", "unknown_insufficient_runs"]
+    },
+    "promotion_gate": {
+      "type": "object",
+      "required": ["lane_green", "merge_recommended", "deploy_recommended", "reason"],
+      "properties": {
+        "lane_green": { "type": "boolean" },
+        "merge_recommended": { "type": "boolean" },
+        "deploy_recommended": { "type": "boolean" },
+        "reason": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "artifact_completeness": {
+      "type": "object",
+      "required": [
+        "worker_stdout",
+        "worker_stderr",
+        "db_snapshot",
+        "timing_trace"
+      ],
+      "properties": {
+        "worker_stdout": { "type": "boolean" },
+        "worker_stderr": { "type": "boolean" },
+        "db_snapshot": { "type": "boolean" },
+        "timing_trace": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "proven_property_status": {
+      "type": ["object", "null"],
+      "description": "Optional: orchestrator-owned aggregate proven property status for the run/lane.",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["proven", "unproven"]
+      }
+    },
+    "open_risks": {
+      "type": ["array", "null"],
+      "items": { "type": "string" }
+    },
+    "test_index": {
+      "type": "object",
+      "required": ["results"],
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["test_id", "status", "result_path"],
+            "properties": {
+              "test_id": { "type": "string" },
+              "status": { "type": "string", "enum": ["PASS", "FAIL", "FLAKY"] },
+              "result_path": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
+

@@ -1,0 +1,8 @@
+{
+  "run_id": "2026-04-08T20:59:17.687Z",
+  "change_id": "CHANGE-20260408-LAYER2-LEDGER-LOCK",
+  "title": "Layer 2 (Orchestrator v2) — observed judgment lock for ledger contention invariants",
+  "source_commit": "5862bf696f147cbbe13fb7a301b5cae4927236f5",
+  "observed_bundle_root": ".\\tmp\\orchestrator-v2\\observed\\20260408_150010",
+  "created_at": "2026-04-08T20:59:17.687Z"
+}

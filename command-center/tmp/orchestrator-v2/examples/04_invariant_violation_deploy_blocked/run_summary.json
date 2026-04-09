@@ -1,0 +1,43 @@
+{
+  "schema_version": "2.0",
+  "run_id": "run_04_invariant_violation_deploy_blocked",
+  "lane": "race",
+  "started_at": "2026-04-08T15:00:00Z",
+  "ended_at": "2026-04-08T15:00:08Z",
+  "runtime_ms": 8000,
+  "commit_hash": null,
+  "runner": "ci",
+  "pass_count": 0,
+  "fail_count": 1,
+  "flaky_count": 0,
+  "failure_mode": "deterministic",
+  "promotion_gate": {
+    "lane_green": false,
+    "merge_recommended": false,
+    "deploy_recommended": false,
+    "reason": "Invariant mismatch detected in race lane."
+  },
+  "artifact_completeness": {
+    "worker_stdout": true,
+    "worker_stderr": true,
+    "db_snapshot": true,
+    "timing_trace": true
+  },
+  "proven_property_status": {
+    "single_winner_credit_allocation": "unproven",
+    "refund_cap_under_contention": "unproven"
+  },
+  "open_risks": [
+    "Invariant violation: over-allocation observed."
+  ],
+  "test_index": {
+    "results": [
+      {
+        "test_id": "race_credit_single_winner",
+        "status": "FAIL",
+        "result_path": "results/race_credit_single_winner_invariant_violation.json"
+      }
+    ]
+  }
+}
+

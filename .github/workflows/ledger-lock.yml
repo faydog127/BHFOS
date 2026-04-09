@@ -1,0 +1,83 @@
+name: Ledger Lock
+
+on:
+  pull_request:
+    paths:
+      - 'command-center/tmp/billing-ledger-php/**'
+      - 'command-center/tmp/orchestrator-v2/**'
+      - 'command-center/tools/review-gate.mjs'
+      - 'command-center/review-policy.json'
+      - 'command-center/review-input.json'
+      - 'command-center/docs/reconciliation/lock/**'
+      - 'command-center/docs/governance/**'
+      - '.github/workflows/ledger-lock.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'command-center/tmp/billing-ledger-php/**'
+      - 'command-center/tmp/orchestrator-v2/**'
+      - 'command-center/tools/review-gate.mjs'
+      - 'command-center/review-policy.json'
+      - 'command-center/review-input.json'
+      - 'command-center/docs/reconciliation/lock/**'
+      - 'command-center/docs/governance/**'
+      - '.github/workflows/ledger-lock.yml'
+  schedule:
+    # Nightly drift detection (dependency/runner/environment). Runs on default branch only.
+    - cron: '17 4 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ledger-lock-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+jobs:
+  ledger_lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: command-center
+        shell: pwsh
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Docker info
+        run: docker version
+
+      - name: Review gate
+        run: node ./tools/review-gate.mjs
+
+      - name: Tenant artifact guardrails
+        run: node ./tools/validate-tenant-artifacts.mjs
+
+      - name: Ledger deck (DB-backed)
+        run: |
+          New-Item -ItemType Directory -Force -Path ./.ci_logs | Out-Null
+          pwsh -NoProfile -File ./tmp/billing-ledger-php/tests/run.ps1 *>&1 | Tee-Object -FilePath ./.ci_logs/ledger_deck.log
+          exit $LASTEXITCODE
+
+      - name: Layer 2 baseline evaluation
+        run: |
+          pwsh -NoProfile -File ./tmp/orchestrator-v2/runner/ci_layer2_eval.ps1 *>&1 | Tee-Object -FilePath ./.ci_logs/layer2_eval.log
+          exit $LASTEXITCODE
+
+      - name: Layer 3 raw doc contract (baseline)
+        run: pwsh -NoProfile -File ./tmp/orchestrator-v2/runner/ci_layer3_validate.ps1
+
+      - name: Upload logs (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-lock-ci-logs
+          path: command-center/.ci_logs

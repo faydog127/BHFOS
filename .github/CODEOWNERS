@@ -1,0 +1,17 @@
+# Governance + ledger lock contract owners
+#
+# Update these handles to match your GitHub users/teams.
+
+/.github/workflows/ledger-lock.yml @faydog127
+/.github/workflows/ci.yml @faydog127
+
+/command-center/docs/governance/ @faydog127
+/command-center/docs/reconciliation/lock/ @faydog127
+
+/command-center/tmp/orchestrator-v2/ @faydog127
+/command-center/tmp/billing-ledger-php/ @faydog127
+
+/command-center/tools/review-gate.mjs @faydog127
+/command-center/review-policy.json @faydog127
+/command-center/review-input.json @faydog127
+

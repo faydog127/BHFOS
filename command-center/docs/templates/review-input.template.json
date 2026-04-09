@@ -1,0 +1,79 @@
+{
+  "$schema": "./review-input.schema.json",
+  "gate_version": "v1",
+  "change_id": "CHANGE-REPLACE-ME",
+  "pr_id": "LOCAL",
+  "title": "REPLACE ME",
+  "generated_at": "2026-04-06T00:00:00.000Z",
+  "source_commit": "0000000",
+  "run_id": "2026-04-06T00:00:00.000Z",
+  "files_changed": ["REPLACE/ME.ts"],
+  "scope": {
+    "included": ["REPLACE/ME.ts"],
+    "excluded": []
+  },
+  "domain_tags": [],
+  "summary": "REPLACE ME (what changed, why, and what proofs exist).",
+  "decider": {
+    "name": "REPLACE ME",
+    "role": "REPLACE ME",
+    "approved_at": "2026-04-06T00:00:00.000Z"
+  },
+  "risk_acceptances": [],
+  "scenarios": [
+    {
+      "category": "bad_data",
+      "scenario": "REPLACE ME",
+      "expected_behavior": "REPLACE ME",
+      "verification_method": "REPLACE ME",
+      "evidence_required": ["artifacts:log", "artifacts:test_result"]
+    }
+  ],
+  "concurrency_model": {
+    "model": "dedupe_based",
+    "guarantees": ["REPLACE ME"],
+    "non_guarantees": ["REPLACE ME"]
+  },
+  "ops_impact": {
+    "alert_dedupe_identity": "REPLACE ME",
+    "max_open_alerts_per_entity": "REPLACE ME",
+    "task_dedupe_rule": "REPLACE ME"
+  },
+  "trigger_evidence": {
+    "derived_domain_tags": ["REPLACE ME"],
+    "derivation_inputs": ["git diff --name-only <base>...HEAD"]
+  },
+  "artifacts": [
+    {
+      "type": "log",
+      "label": "REPLACE ME",
+      "proof_of": "REPLACE ME",
+      "path": "artifacts/tenants/REPLACE_TENANT/runs/REPLACE_ME/stdout.log",
+      "created_at": "2026-04-06T00:00:00.000Z"
+    }
+  ],
+  "coverage_report": {
+    "files_analyzed": ["REPLACE/ME.ts"],
+    "discovery_inputs": ["rg -n \"REPLACE\" src"],
+    "excluded_scope": [],
+    "uncertainty_boundaries": ["REPLACE ME"]
+  },
+  "findings": [
+    {
+      "id": "F-0001",
+      "title": "REPLACE ME",
+      "severity": "MEDIUM",
+      "business_impact": "REPLACE ME",
+      "rule_violated": "REPLACE ME",
+      "proof": ["path:line snippet OR artifact path"],
+      "recommended_action": "REPLACE ME",
+      "verification_method": "REPLACE ME",
+      "closure_evidence_required": ["REPLACE ME"]
+    }
+  ],
+  "verification": {},
+  "readiness": {
+    "status": "NOT_READY",
+    "labels": []
+  }
+}

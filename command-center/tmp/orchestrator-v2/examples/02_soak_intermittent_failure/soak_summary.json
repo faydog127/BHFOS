@@ -1,0 +1,47 @@
+{
+  "schema_version": "2.0",
+  "test_id": "soak_credit_single_winner",
+  "lane": "soak",
+  "iterations_total": 100,
+  "pass_count": 96,
+  "fail_count": 4,
+  "failure_mode": "intermittent",
+  "outcome_counts": {
+    "expected_single_winner": 96,
+    "unexpected_double_success": 2,
+    "unexpected_double_failure": 0,
+    "invariant_mismatch": 2
+  },
+  "failure_signatures": [
+    {
+      "signature": "unexpected_double_success",
+      "count": 2,
+      "iteration_ids": [12, 77]
+    },
+    {
+      "signature": "invariant_mismatch:over_allocation",
+      "count": 2,
+      "iteration_ids": [34, 61]
+    }
+  ],
+  "expected_failure_code_match_rate": 1,
+  "invariant_pass_rate": 0.98,
+  "promotion_gate": {
+    "lane_green": false,
+    "merge_recommended": false,
+    "deploy_recommended": false,
+    "reason": "Intermittent correctness failures under contention."
+  },
+  "artifact_index": {
+    "failed_iteration_artifacts": [
+      "iterations/it_12.json",
+      "iterations/it_34.json",
+      "iterations/it_61.json",
+      "iterations/it_77.json"
+    ],
+    "sample_pass_iteration_artifacts": [
+      "iterations/it_01.json"
+    ]
+  }
+}
+

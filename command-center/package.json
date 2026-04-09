@@ -14,7 +14,10 @@
     "test:smoke": "playwright test",
     "verify:live-secrets": "node tools/scan-live-for-secrets.mjs https://app.bhfos.com",
     "validate:document-system": "node scripts/validate-document-system.mjs",
-    "review:gate": "node tools/review-gate.mjs"
+    "review:gate": "node tools/review-gate.mjs",
+    "generate:review-templates": "node tools/generate-review-templates.mjs",
+    "validate:review-governance": "node tools/validate-review-governance.mjs",
+    "test:governance-boundary": "node tools/governance-boundary-tests.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

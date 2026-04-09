@@ -23,6 +23,8 @@ All files below must exist and be non-empty for lock integrity.
 - [EV-2026-04-04_P0-02D_public-pay-initiation-boundary.md](/c:/BHFOS/command-center/docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02D_public-pay-initiation-boundary.md)
 - [EV-2026-04-04_P0-02E_reconciliation-tools.md](/c:/BHFOS/command-center/docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-04_P0-02E_reconciliation-tools.md)
 - [EV-2026-04-05_phase-0-snapshot_local-proof.md](/c:/BHFOS/command-center/docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-05_phase-0-snapshot_local-proof.md)
+- [EV-2026-04-08_billing-ledger-race-soak.md](/c:/BHFOS/command-center/docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_billing-ledger-race-soak.md)
+- [EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md](/c:/BHFOS/command-center/docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md)
 
 ## Decision Records
 

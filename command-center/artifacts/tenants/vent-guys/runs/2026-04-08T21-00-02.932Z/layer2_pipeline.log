@@ -1,0 +1,13 @@
+run_id: 2026-04-08T21:00:02.932Z
+
+Layer 2 lock milestone:
+- observed bundle is mechanically captured (not hand-authored)
+- evaluator output is deterministic (judgment.json identical across two eval runs)
+- negative controls classify correctly
+
+Observed bundle:
+- .\tmp\orchestrator-v2\observed\20260408_150010
+
+Expected outcome (observed success):
+- TEST RUN VERDICT: DEPLOY_CONFIDENCE_INCREASED
+- NEXT ACTION TYPE: confidence_rerun

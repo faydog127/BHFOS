@@ -1,0 +1,43 @@
+{
+  "schema_version": "2.0",
+  "run_id": "run_02_soak_intermittent_failure",
+  "lane": "soak",
+  "started_at": "2026-04-08T13:00:00Z",
+  "ended_at": "2026-04-08T13:10:00Z",
+  "runtime_ms": 600000,
+  "commit_hash": null,
+  "runner": "ci",
+  "pass_count": 96,
+  "fail_count": 4,
+  "flaky_count": 0,
+  "failure_mode": "intermittent",
+  "promotion_gate": {
+    "lane_green": false,
+    "merge_recommended": false,
+    "deploy_recommended": false,
+    "reason": "Soak lane observed unexpected outcomes under contention."
+  },
+  "artifact_completeness": {
+    "worker_stdout": true,
+    "worker_stderr": true,
+    "db_snapshot": true,
+    "timing_trace": true
+  },
+  "proven_property_status": {
+    "single_winner_credit_allocation": "unproven",
+    "refund_cap_under_contention": "unproven"
+  },
+  "open_risks": [
+    "Intermittent nondeterminism under contention observed in soak."
+  ],
+  "test_index": {
+    "results": [
+      {
+        "test_id": "soak_credit_single_winner",
+        "status": "FAIL",
+        "result_path": "results/soak_credit_single_winner.json"
+      }
+    ]
+  }
+}
+

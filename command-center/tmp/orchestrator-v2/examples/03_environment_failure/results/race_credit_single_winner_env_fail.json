@@ -1,0 +1,77 @@
+{
+  "schema_version": "2.0",
+  "test_id": "race_credit_single_winner",
+  "test_name": "Apply credit vs apply credit (single winner)",
+  "lane": "race",
+  "iteration": null,
+  "status": "FAIL",
+  "classification": "environment_config_defect",
+  "failure_mode": "deterministic",
+  "failure_signature": "db_connection_refused",
+  "outcome_type": null,
+  "severity": "high",
+  "runtime_ms": 1200,
+  "commit_hash": null,
+  "confidence_score": 10,
+  "confidence_score_delta": null,
+  "environment": {
+    "runner": "ci",
+    "php_version": "8.3",
+    "db_engine": "postgres",
+    "db_version": "16",
+    "isolation_level": null,
+    "php_image": "bhfos-ledger-php-test",
+    "db_container": "postgres:16",
+    "cpu_limit": null,
+    "memory_limit_mb": null
+  },
+  "fixture_id": "fx_credit_single_winner_v1",
+  "pre_state": {},
+  "expected": {
+    "success_count": 1,
+    "failure_count": 1,
+    "expected_failure_codes": ["ERR_INSUFFICIENT_AVAILABLE"],
+    "final_state": {},
+    "invariants": ["single_winner_credit_allocation"]
+  },
+  "actual": {
+    "success_count": 0,
+    "failure_count": 2,
+    "failure_codes": ["ERR_DB_CONNECT"],
+    "db_error_family": "connectivity",
+    "final_state": {}
+  },
+  "invariant_results": [
+    { "name": "artifact_completeness", "passed": false, "details": "DB snapshot missing; timing trace missing." }
+  ],
+  "workers": [
+    { "worker_id": "w1", "status": "failed", "error_code": "ERR_DB_CONNECT", "duration_ms": 600, "connection_id": null, "transaction_start_ts": null },
+    { "worker_id": "w2", "status": "failed", "error_code": "ERR_DB_CONNECT", "duration_ms": 580, "connection_id": null, "transaction_start_ts": null }
+  ],
+  "artifacts": {
+    "stdout_path": null,
+    "stderr_path": "artifacts/race_credit_single_winner/stderr.txt",
+    "db_snapshot_path": null,
+    "worker_results_path": null,
+    "timing_trace_path": null
+  },
+  "artifact_completeness": {
+    "worker_stdout": false,
+    "worker_stderr": true,
+    "db_snapshot": false,
+    "timing_trace": false
+  },
+  "promotion_gate": {
+    "lane_green": false,
+    "merge_recommended": false,
+    "deploy_recommended": false,
+    "reason": "Environment prevented execution."
+  },
+  "redaction_policy": {
+    "customer_ids_masked": true,
+    "billing_case_ids_masked": true,
+    "raw_payloads_excluded": true
+  },
+  "notes": null
+}
+

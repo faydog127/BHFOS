@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "soak_summary_schema_v2.json",
+  "title": "Soak Summary Schema v2",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "test_id",
+    "lane",
+    "iterations_total",
+    "pass_count",
+    "fail_count",
+    "failure_mode",
+    "outcome_counts",
+    "failure_signatures",
+    "expected_failure_code_match_rate",
+    "invariant_pass_rate",
+    "promotion_gate",
+    "artifact_index"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "2.0" },
+    "test_id": { "type": "string" },
+    "lane": { "type": "string", "const": "soak" },
+    "iterations_total": { "type": "integer", "minimum": 1 },
+    "pass_count": { "type": "integer", "minimum": 0 },
+    "fail_count": { "type": "integer", "minimum": 0 },
+    "failure_mode": {
+      "type": "string",
+      "enum": ["deterministic", "intermittent", "unknown_insufficient_runs"]
+    },
+    "outcome_counts": {
+      "type": "object",
+      "properties": {
+        "expected_single_winner": { "type": "integer", "minimum": 0 },
+        "unexpected_double_success": { "type": "integer", "minimum": 0 },
+        "unexpected_double_failure": { "type": "integer", "minimum": 0 },
+        "invariant_mismatch": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "failure_signatures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["signature", "count", "iteration_ids"],
+        "properties": {
+          "signature": { "type": "string" },
+          "count": { "type": "integer", "minimum": 1 },
+          "iteration_ids": {
+            "type": "array",
+            "items": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "expected_failure_code_match_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "invariant_pass_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "promotion_gate": {
+      "type": "object",
+      "required": ["lane_green", "merge_recommended", "deploy_recommended", "reason"],
+      "properties": {
+        "lane_green": { "type": "boolean" },
+        "merge_recommended": { "type": "boolean" },
+        "deploy_recommended": { "type": "boolean" },
+        "reason": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "artifact_index": {
+      "type": "object",
+      "required": ["failed_iteration_artifacts"],
+      "properties": {
+        "failed_iteration_artifacts": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sample_pass_iteration_artifacts": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
+
