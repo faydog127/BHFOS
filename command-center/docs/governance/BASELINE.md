@@ -30,9 +30,9 @@ Re-run the lock validation lane whenever any of these change:
 The lightweight CI lane must run:
 - Layer 1 deck: `pwsh -NoProfile -File ./tmp/billing-ledger-php/tests/run.ps1`
 - Layer 2 evaluation (baseline bundle): `pwsh -NoProfile -File ./tmp/orchestrator-v2/runner/ci_layer2_eval.ps1`
+- Layer 3 raw doc contract (baseline JSON → exact output): `node ./tmp/orchestrator-v2/layer3/validate_layer3_output.mjs --mode exact --json ./artifacts/runs/2026-04-08T21-02-02.110Z/layer2_observed_judgment.json --doc ./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md`
 
 ## Notes
 
 - This baseline is **local/CI-grade proof**, not production validation.
 - Do not claim `P0-02: PRODUCTION-VALIDATED` without separate production artifacts.
-

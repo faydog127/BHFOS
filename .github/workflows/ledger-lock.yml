@@ -53,3 +53,6 @@ jobs:
 
       - name: Layer 2 baseline evaluation
         run: pwsh -NoProfile -File ./tmp/orchestrator-v2/runner/ci_layer2_eval.ps1
+
+      - name: Layer 3 raw doc contract (baseline)
+        run: node ./tmp/orchestrator-v2/layer3/validate_layer3_output.mjs --mode exact --json ./artifacts/runs/2026-04-08T21-02-02.110Z/layer2_observed_judgment.json --doc ./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md
