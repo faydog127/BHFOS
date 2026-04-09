@@ -79,7 +79,7 @@ try {
   Exec "pwsh -NoProfile -File .\\tmp\\billing-ledger-php\\tests\\006_php_race.ps1 -ContainerName $ContainerName -HostPort $HostPort -PhpImage $PhpImage"
 
   Write-Host "Running concurrency tests..."
-  pwsh -NoProfile -File .\\tmp\\billing-ledger-php\\tests\\002_concurrency.ps1 -ContainerName $ContainerName
+  Exec "pwsh -NoProfile -File .\\tmp\\billing-ledger-php\\tests\\002_concurrency.ps1 -ContainerName $ContainerName"
 
   Write-Host "ALL TESTS PASSED"
 } finally {

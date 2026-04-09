@@ -33,6 +33,16 @@ The lightweight CI lane must run:
 - Layer 3 raw doc contract (baseline JSON → exact output): `node ./tmp/orchestrator-v2/layer3/validate_layer3_output.mjs --mode exact --json ./artifacts/runs/2026-04-08T21-02-02.110Z/layer2_observed_judgment.json --doc ./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md`
 - Layer 3 review doc contract (human-optimized, exact + governed): `node ./tmp/orchestrator-v2/layer3/validate_layer3_review_output.mjs --mode exact --json ./artifacts/runs/2026-04-08T21-02-02.110Z/layer2_observed_judgment.json --doc ./docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_REVIEW_v1.md`
 
+## Governance enforcement (required)
+
+- Milestone tags must exist on origin:
+  - `layer1-lock-v1`
+  - `layer2-lock-v1`
+  - `layer3-raw-lock-v1`
+  - `layer3-review-lock-v1`
+- Branch protection must require `CI` and `Ledger Lock` checks on `main`.
+  - See: `docs/governance/BRANCH_PROTECTION.md`
+
 ## Notes
 
 - This baseline is **local/CI-grade proof**, not production validation.
