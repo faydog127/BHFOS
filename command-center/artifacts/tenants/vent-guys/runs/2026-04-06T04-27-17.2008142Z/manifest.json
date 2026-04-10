@@ -1,16 +1,16 @@
 {
+  "manifest_version": "2.0",
   "run_id": "2026-04-06T04:27:17.2008142Z",
-  "generated_at": "2026-04-06T04:37:47.5130944Z",
+  "tenant_id": "vent-guys",
+  "artifact_class": "legacy",
+  "created_at": "2026-04-06T04:37:47.5130944Z",
   "source_commit": "3c9785ee279b5d41b3e7755debae71a696d9df04",
-  "artifacts": [
-    {
-      "type": "db_output",
-      "path": "artifacts/runs/2026-04-06T04-27-17.2008142Z/db_output.txt"
-    },
-    {
-      "type": "manifest",
-      "path": "artifacts/runs/2026-04-06T04-27-17.2008142Z/manifest.json"
-    }
-  ],
-  "note": "Manifest is a run-scoped index. Hashing can be added later if/when enforcement is required."
+  "paths": {
+    "judgment_json": null,
+    "raw_doc": null,
+    "review_doc": null,
+    "observed_bundle_root": null,
+    "manifest": "artifacts/tenants/vent-guys/runs/2026-04-06T04-27-17.2008142Z/manifest.json"
+  },
+  "note": "Legacy run (pre-ledger-lock). Not a self-contained observed bundle."
 }

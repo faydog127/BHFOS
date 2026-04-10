@@ -50,8 +50,9 @@ RequirePath (Join-Path $ObservedBundleRoot "layer2_eval_env_control\\judgment.js
 RequirePath (Join-Path $ObservedBundleRoot "layer2_eval_invariant_control\\judgment.json") "Observed invariant-control judgment.json"
 
 $runId = IsoUtcNow
-$generatedAt = $null
+$createdAt = $runId
 $approvedAt = $null
+$artifactClass = "ledger_lock_layer2_only"
 
 $sourceCommit = (& git rev-parse HEAD).Trim()
 if (-not $sourceCommit) { throw "Unable to determine git HEAD sha" }
@@ -59,6 +60,7 @@ if (-not $sourceCommit) { throw "Unable to determine git HEAD sha" }
 $runFolder = SanitizeRunFolder $runId
 $runArtifactsDir = Join-Path ".\\artifacts\\tenants\\$TenantId\\runs" $runFolder
 EnsureDir $runArtifactsDir
+$runArtifactsDirRel = "artifacts/tenants/$TenantId/runs/$runFolder"
 
 $manifestPath = Join-Path $runArtifactsDir "manifest.json"
 $dbOutputPath = Join-Path $runArtifactsDir "db_output.txt"
@@ -69,14 +71,26 @@ $observedJudgment = Get-Content -Raw (Join-Path $ObservedBundleRoot "layer2_eval
 
 $bundleCopyRoot = Join-Path $runArtifactsDir "observed_bundle"
 
+$paths = [ordered]@{
+  judgment_json = "$runArtifactsDirRel/layer2_observed_judgment.json"
+  raw_doc = "$runArtifactsDirRel/layer3_raw.md"
+  review_doc = "$runArtifactsDirRel/layer3_review.md"
+  observed_bundle_root = "$runArtifactsDirRel/observed_bundle"
+  manifest = "$runArtifactsDirRel/manifest.json"
+}
+
 $manifest = [ordered]@{
+  manifest_version = "2.0"
   run_id = $runId
+  tenant_id = $TenantId
+  artifact_class = $artifactClass
+  created_at = $createdAt
   change_id = $ChangeId
   title = $Title
   source_commit = $sourceCommit
   observed_bundle_root = $bundleCopyRoot
   source_observed_bundle_root = $ObservedBundleRoot
-  created_at = $generatedAt
+  paths = $paths
 }
 WriteJson $manifestPath $manifest
 
@@ -162,7 +176,7 @@ foreach ($rel in $toCopy) {
   Copy-Item -Force $src $dst
 }
 
-# Use a post-write timestamp so artifact mtimes are not after generated_at.
+# Use a post-write timestamp for governance files that are regenerated (review-input.json).
 $generatedAt = IsoUtcNow
 $approvedAt = $generatedAt
 
