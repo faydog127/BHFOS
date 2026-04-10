@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import path from 'node:path';
 import { normalizeNewlines, renderLayer3Raw } from './_render_lib.mjs';
+import {
+  assertManifestJudgmentConsistency,
+  findSiblingManifestForJson,
+  loadJson,
+} from '../eval/validate_tenant_scope.mjs';
 
 const parseArgs = (argv) => {
   const args = { mode: 'exact' };
@@ -60,6 +66,25 @@ if (args.mode === 'structural') {
 }
 
 const observedJudgmentJson = JSON.parse(fs.readFileSync(args.json, 'utf8'));
+
+// Manifest-first consistency check (when present) so the raw contract doc never drifts from the run index.
+const resolveRepoPath = (p) => path.resolve(process.cwd(), String(p || '').replaceAll('\\', '/').replace(/^\.\//, ''));
+const siblingManifest = findSiblingManifestForJson(resolveRepoPath(args.json));
+if (siblingManifest) {
+  try {
+    const manifest = loadJson(siblingManifest);
+    assertManifestJudgmentConsistency({
+      manifestPath: siblingManifest,
+      manifest,
+      judgmentPath: resolveRepoPath(args.json),
+      judgment: observedJudgmentJson,
+    });
+  } catch (e) {
+    console.error(`LAYER3 VALIDATION: FAILED\n\n${e?.message || String(e)}`);
+    process.exit(1);
+  }
+}
+
 const expected = renderLayer3Raw({ inputPath: args.json, observedJudgmentJson });
 const actual = docText;
 
