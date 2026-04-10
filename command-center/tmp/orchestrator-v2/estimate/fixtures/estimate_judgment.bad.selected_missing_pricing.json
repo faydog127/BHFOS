@@ -1,0 +1,47 @@
+{
+  "schema_version": "estimate_judgment_v1.0",
+  "tenant_id": "vent-guys",
+  "estimate_record_id": "ESTREC-BAD-SEL-NO-PRICING",
+  "estimate_number": "BAD-0003",
+  "job_id": "JOB-BAD-0003",
+  "status": "draft",
+  "issue_date": "2026-04-09",
+  "valid_through_date": "2026-04-15",
+  "timezone": "America/New_York",
+  "currency_code": "USD",
+  "version_label": "v1",
+  "evidence_refs": [
+    { "type": "crm_quote_pdf", "id": "BAD-0003", "uri": "./source/BAD.pdf" }
+  ],
+  "situation_summary": { "headline": "Bad fixture", "observations": [], "notes": [] },
+  "risk_impact": { "risk_level": "low", "customer_facing_impacts": [], "what_if_ignored": [] },
+  "recommendation": { "recommended_option_key": "good", "reason": "Bad fixture." },
+  "approval_terms": { "terms_reference": "standard_estimate_terms_v1", "approval_copy": "Bad fixture." },
+  "boundary_inheritance_policy": "render_universal_plus_selected_option",
+  "universal_boundaries": { "not_included": [] },
+  "options": {
+    "good": {
+      "label": "GOOD",
+      "name": "Good",
+      "recommended": true,
+      "is_fully_quoted": true,
+      "line_items": [
+        { "line_id": "LI-1", "name": "X", "quantity": 1, "unit": "ea", "unit_price_cents": 100, "amount_cents": 100, "taxable": false }
+      ],
+      "pricing": { "subtotal_cents": 100, "tax_total_cents": 0, "total_cents": 100 },
+      "scope_boundaries": { "included": [], "not_included": [] }
+    },
+    "better": {
+      "label": "BETTER",
+      "name": "Better",
+      "recommended": false,
+      "is_fully_quoted": false,
+      "line_items": [
+        { "line_id": "LI-2", "name": "Y", "quantity": 1, "unit": "ea", "unit_price_cents": 200, "amount_cents": 200, "taxable": false }
+      ],
+      "price_range": { "min_total_cents": 200, "max_total_cents": 300, "notes": "Bad fixture." },
+      "scope_boundaries": { "included": [], "not_included": [] }
+    }
+  },
+  "selection": { "selected_option_key": "better" }
+}
