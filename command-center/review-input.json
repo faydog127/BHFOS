@@ -1,5 +1,6 @@
 {
   "gate_version": "v1",
+  "tenant_id": "tvg",
   "pr_id": "LOCAL",
   "trigger_evidence": {
     "derived_domain_tags": [

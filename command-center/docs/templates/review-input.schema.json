@@ -6,6 +6,7 @@
   "additionalProperties": true,
   "required": [
     "gate_version",
+    "tenant_id",
     "change_id",
     "pr_id",
     "title",
@@ -30,6 +31,12 @@
   ],
   "properties": {
     "gate_version": { "type": "string", "minLength": 1 },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "description": "Lowercase tenant slug like \"tvg\" or \"vent-guys\"."
+    },
     "change_id": { "type": "string", "minLength": 1 },
     "pr_id": { "type": "string", "minLength": 1, "description": "Use \"LOCAL\" when not in a PR." },
     "title": { "type": "string", "minLength": 1 },
