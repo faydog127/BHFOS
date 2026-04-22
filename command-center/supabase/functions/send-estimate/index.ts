@@ -1818,6 +1818,8 @@ Deno.serve(async (req) => {
 
     let providerId: string | null = null;
     let smsResult: Awaited<ReturnType<typeof sendDocumentSms>> | null = null;
+    let deliveryProvider: string | null = null;
+    let deliveryMocked: boolean | null = null;
 
     if (deliveryChannel === 'sms') {
       const duplicateSms = await hasRecentEvent({
@@ -1893,6 +1895,12 @@ Deno.serve(async (req) => {
       providerId = (provider as Record<string, unknown>)?.id
         ? String((provider as Record<string, unknown>).id)
         : null;
+
+      // `sendEmail` returns { provider: 'mock', mocked: true } in local mock mode.
+      // Resend's API response does not include a `provider` field, so default to `resend`.
+      const providerRecord = provider as Record<string, unknown> | null;
+      deliveryProvider = providerRecord?.provider ? String(providerRecord.provider) : 'resend';
+      deliveryMocked = providerRecord?.mocked === true;
     }
 
     const currentQuoteStatus = asString(quote.status).toLowerCase();
@@ -1941,6 +1949,8 @@ Deno.serve(async (req) => {
         delivery_channel: deliveryChannel,
         requested_delivery_channel: requestedDeliveryChannel,
         delivery_resolution_reason: deliveryResolution.resolutionReason,
+        delivery_provider: deliveryProvider,
+        delivery_mocked: deliveryMocked,
         attachments_count: attachments.length,
         sent_timestamp: now.toISOString(),
       },
@@ -1972,6 +1982,8 @@ Deno.serve(async (req) => {
         delivery_channel: deliveryChannel,
         requested_delivery_channel: requestedDeliveryChannel,
         delivery_resolution_reason: deliveryResolution.resolutionReason,
+        delivery_provider: deliveryProvider,
+        delivery_mocked: deliveryMocked,
         attachments_count: attachments.length,
       },
     });

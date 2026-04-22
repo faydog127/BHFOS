@@ -1,0 +1,12 @@
+
+> web-app@0.0.0 review:gate
+> node tools/review-gate.mjs
+
+
+REVIEW GATE: PASSED
+
+Warnings:
+- Artifact[0] (log) mtime is after generated_at: artifacts/tenants/tvg/runs/2026-04-18T15-31-17.9061297+00-00/logs/h1a_verification_stdout.log
+- Artifact[1] (db_output) mtime is after generated_at: artifacts/tenants/tvg/runs/2026-04-18T15-31-17.9061297+00-00/evidence/db_appointments_policies.txt
+- Artifact[2] (manifest) mtime is after generated_at: artifacts/tenants/tvg/runs/2026-04-18T15-31-17.9061297+00-00/manifest.json
+- Artifact[3] (test_result) mtime is after generated_at: artifacts/tenants/tvg/runs/2026-04-18T15-31-17.9061297+00-00/outputs/h1a_verification_result.json

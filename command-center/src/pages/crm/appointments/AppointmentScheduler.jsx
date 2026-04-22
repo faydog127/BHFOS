@@ -614,13 +614,15 @@ const AppointmentScheduler = () => {
                     <SelectTrigger id="appointment-technician" aria-label="Appointment Technician">
                       <SelectValue placeholder="Unassigned" />
                     </SelectTrigger>
-                    <SelectContent>
+                      <SelectContent>
                       <SelectItem value="unassigned">Unassigned</SelectItem>
-                      {technicians.map((tech) => (
-                        <SelectItem key={tech.id} value={tech.id}>
-                          {tech.full_name}
-                        </SelectItem>
-                      ))}
+                      {technicians
+                        .filter((tech) => tech?.user_id)
+                        .map((tech) => (
+                          <SelectItem key={tech.user_id} value={tech.user_id}>
+                            {tech.full_name}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>

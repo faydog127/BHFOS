@@ -1,0 +1,46 @@
+[
+  {
+    "notes": "Uses anon key + caller JWT; rejects tenant mismatch when body.tenant_id provided.",
+    "trusts_body_tenant_id": false,
+    "domain_tag": "tenant_isolation",
+    "tenant_source": "verified_jwt_claims.app_metadata.tenant_id",
+    "function": "create-appointment",
+    "risk_status": "reduced",
+    "uses_service_role": false,
+    "rls_enforced": true,
+    "path": "supabase/functions/create-appointment/index.ts"
+  },
+  {
+    "notes": "Uses anon key + caller JWT; loads appointment scoped by tenant_id; rejects mismatch when body.tenant_id provided.",
+    "trusts_body_tenant_id": false,
+    "domain_tag": "tenant_isolation",
+    "tenant_source": "verified_jwt_claims.app_metadata.tenant_id",
+    "function": "update-appointment-status",
+    "risk_status": "reduced",
+    "uses_service_role": false,
+    "rls_enforced": true,
+    "path": "supabase/functions/update-appointment-status/index.ts"
+  },
+  {
+    "notes": "Uses service_role via supabaseAdmin for automation. Tenant isolation enforced by verified JWT claim + explicit tenant filters on every query.",
+    "trusts_body_tenant_id": false,
+    "domain_tag": "tenant_isolation",
+    "tenant_source": "verified_jwt_claims.app_metadata.tenant_id",
+    "function": "run-appointment-reminders",
+    "risk_status": "accepted_with_guardrails",
+    "uses_service_role": true,
+    "rls_enforced": false,
+    "path": "supabase/functions/run-appointment-reminders/index.ts"
+  },
+  {
+    "notes": "Job updates use service_role; appointment conflict checks/upserts use anon key + caller JWT (RLS enforced). Rejects body.tenant_id mismatch.",
+    "trusts_body_tenant_id": false,
+    "domain_tag": "tenant_isolation",
+    "tenant_source": "verified_jwt_claims.app_metadata.tenant_id",
+    "function": "work-order-update (appointments lane)",
+    "risk_status": "reduced",
+    "uses_service_role": true,
+    "rls_enforced": "appointments_only",
+    "path": "supabase/functions/work-order-update/index.ts"
+  }
+]

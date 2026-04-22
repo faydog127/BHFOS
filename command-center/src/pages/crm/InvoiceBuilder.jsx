@@ -24,6 +24,7 @@ import {
 import DeliveryHistoryCard from '@/components/crm/documents/DeliveryHistoryCard';
 import { sendReceiptDocument } from '@/services/documentDeliveryService';
 import { clearBuilderDraft, loadBuilderDraft, saveBuilderDraft } from '@/lib/builderDrafts';
+import { getWorkOrderDisplayId } from '@/lib/workOrderIdentity';
 
 const PROCESSING_RATE = 0.03;
 const INVOICE_BUILDER_DRAFT_KEY = 'invoice_builder';
@@ -272,7 +273,7 @@ const InvoiceBuilder = () => {
 
   async function hydrateInvoiceFromWorkOrder(jobId, fallbackQuoteId = null) {
     const { job, quote, items } = await fetchWorkOrderSource(jobId, fallbackQuoteId);
-    const workOrderLabel = String(job.work_order_number || job.job_number || job.id || '').trim().toUpperCase();
+    const workOrderLabel = getWorkOrderDisplayId(job);
 
     setInvoice((prev) => ({
       ...prev,
@@ -488,9 +489,7 @@ const InvoiceBuilder = () => {
   const normalizeStatus = (value) => String(value || '').toLowerCase();
 
   const getWorkOrderLabel = (job) => {
-    const tracking = String(job?.work_order_number || job?.job_number || '').trim().toUpperCase();
-    if (tracking) return tracking;
-    return `WO-LEGACY-${String(job?.id || '').slice(0, 8).toUpperCase()}`;
+    return getWorkOrderDisplayId(job);
   };
 
   const refreshBillingGuard = async (jobId, currentInvoiceId = null) => {
@@ -583,16 +582,28 @@ const InvoiceBuilder = () => {
       .filter((i) => Boolean(i.is_taxable))
       .reduce((sum, item) => sum + (Number(item.total_price) || 0), 0);
 
-    const discount = Number(invoice.discount_amount) || 0;
-
     const storedSubtotal = Number(invoice.subtotal);
     const storedTaxAmount = Number(invoice.tax_amount);
     const storedTotal = Number(invoice.total_amount);
     const storedTaxRate = Number(invoice.tax_rate);
     const storedBalanceDue = Number(invoice.balance_due);
 
-    const subtotal =
-      isFinalized && Number.isFinite(storedSubtotal) && storedSubtotal > 0 ? storedSubtotal : computedSubtotal;
+    const hasLineItems = Array.isArray(invoice.items) && invoice.items.some((item) => {
+      const description = String(item?.description || '').trim();
+      const quantity = Number(item?.quantity || 0);
+      const unitPrice = Number(item?.unit_price || 0);
+      const totalPrice = Number(item?.total_price || 0);
+      return Boolean(description) || totalPrice > 0 || unitPrice > 0 || quantity > 1;
+    });
+
+    const creditRaw = Number(invoice.discount_amount);
+    const credit = Number.isFinite(creditRaw) ? Math.max(creditRaw, 0) : 0;
+
+    const subtotal = hasLineItems
+      ? computedSubtotal
+      : Number.isFinite(storedSubtotal) && storedSubtotal > 0
+        ? storedSubtotal
+        : computedSubtotal;
 
     const taxRateFromAmounts =
       Number.isFinite(storedTaxAmount) && storedTaxAmount > 0 && subtotal > 0
@@ -600,27 +611,37 @@ const InvoiceBuilder = () => {
         : 0;
 
     const taxRate =
-      isFinalized && Number.isFinite(storedTaxRate) && storedTaxRate > 0
+      Number.isFinite(storedTaxRate) && storedTaxRate > 0
         ? storedTaxRate
-        : isFinalized && taxRateFromAmounts > 0
+        : taxRateFromAmounts > 0
           ? taxRateFromAmounts
           : PROCESSING_RATE;
 
-    const taxableSubtotal = taxRate === PROCESSING_RATE ? computedTaxableSubtotal : subtotal;
+    const taxableSubtotal = taxRate === PROCESSING_RATE
+      ? (hasLineItems ? computedTaxableSubtotal : subtotal)
+      : subtotal;
 
     const computedTaxAmount = taxableSubtotal * taxRate;
-    const taxAmount =
-      isFinalized && Number.isFinite(storedTaxAmount) && storedTaxAmount >= 0 ? storedTaxAmount : computedTaxAmount;
+    const taxAmount = hasLineItems
+      ? computedTaxAmount
+      : Number.isFinite(storedTaxAmount) && storedTaxAmount >= 0
+        ? storedTaxAmount
+        : computedTaxAmount;
 
-    const computedTotal = subtotal + taxAmount - discount;
-    const total = isFinalized && Number.isFinite(storedTotal) && storedTotal > 0 ? storedTotal : computedTotal;
+    const computedPreCreditTotal = subtotal + taxAmount;
+    const preCreditTotal = hasLineItems
+      ? computedPreCreditTotal
+      : Number.isFinite(storedTotal) && storedTotal > 0
+        ? storedTotal
+        : computedPreCreditTotal;
+
+    const total = Math.max(preCreditTotal - credit, 0);
 
     const amountPaid = Number(invoice.amount_paid) || 0;
     const computedBalance = total - amountPaid;
-    const balance =
-      Number.isFinite(storedBalanceDue) && storedBalanceDue >= 0 ? storedBalanceDue : computedBalance;
+    const balance = Math.max(computedBalance, 0);
 
-    return { subtotal, taxableSubtotal, taxRate, taxAmount, total, balance, isFinalized };
+    return { subtotal, taxableSubtotal, taxRate, taxAmount, total, balance, isFinalized, credit, preCreditTotal };
   };
 
   
@@ -714,7 +735,9 @@ const InvoiceBuilder = () => {
     } finally {
       setProcessingPayment(false);
     }
-  };const handleSave = async (newStatus = null) => {
+  };
+
+  const handleSave = async (newStatus = null) => {
     if (!invoice.lead_id) {
         toast({ variant: 'destructive', title: 'Error', description: 'Please select a customer.' });
         return;
@@ -726,7 +749,10 @@ const InvoiceBuilder = () => {
     }
 
     setLoading(true);
-    const { subtotal, taxAmount, total, taxRate } = calculateTotals();
+    const { subtotal, taxAmount, total, taxRate, credit, preCreditTotal } = calculateTotals();
+    const normalizedRequestedStatus = newStatus ? normalizeStatus(newStatus) : null;
+    const shouldSendNow = normalizedRequestedStatus === 'sent';
+
     const statusToSave = newStatus || invoice.status;
     const normalizedStatusToSave = normalizeStatus(statusToSave);
     const normalizedJobStatus = normalizeStatus(billingGuard.jobStatus);
@@ -766,7 +792,7 @@ const InvoiceBuilder = () => {
       return;
     }
 
-    if (normalizedStatusToSave === 'sent') {
+    if (shouldSendNow) {
       const deliveryPlan = resolveLeadDelivery({ lead: recipientLead, requestedChannel: sendChannel });
       if (!recipientLead || !deliveryPlan.channel) {
         setLoading(false);
@@ -779,7 +805,7 @@ const InvoiceBuilder = () => {
       }
     }
 
-    if (normalizedStatusToSave === 'sent' && !invoice.release_approved) {
+    if (shouldSendNow && !invoice.release_approved) {
       setLoading(false);
       toast({ variant: 'destructive', title: 'Release approval required', description: 'Partner approval is required before sending.' });
       return;
@@ -792,6 +818,27 @@ const InvoiceBuilder = () => {
         variant: 'destructive',
         title: 'Invoice exceeds remaining balance',
         description: `Remaining contract balance is $${remainingBefore.toFixed(2)}. Reduce invoice total or split billing.`,
+      });
+      return;
+    }
+
+    const amountPaid = Number(invoice.amount_paid) || 0;
+    if (credit > 0 && credit - (Number(preCreditTotal) || 0) > 0.009) {
+      setLoading(false);
+      toast({
+        variant: 'destructive',
+        title: 'Credit too large',
+        description: `Credit ($${credit.toFixed(2)}) cannot exceed the invoice total before credit ($${Number(preCreditTotal || 0).toFixed(2)}).`,
+      });
+      return;
+    }
+
+    if (amountPaid > 0 && total + 0.009 < amountPaid) {
+      setLoading(false);
+      toast({
+        variant: 'destructive',
+        title: 'Credit exceeds collected amount',
+        description: `This credit would reduce the total to $${total.toFixed(2)}, but $${amountPaid.toFixed(2)} is already recorded as paid. Use a smaller credit or handle a refund/adjustment separately.`,
       });
       return;
     }
@@ -828,11 +875,11 @@ const InvoiceBuilder = () => {
         tax_amount: taxAmount,
         discount_amount: invoice.discount_amount,
         total_amount: total,
-        amount_paid: invoice.amount_paid || 0,
+        amount_paid: amountPaid,
         // `balance_due` is a generated column in prod; never attempt to write it.
         invoice_number: invoice.invoice_number,
         public_token: publicToken,
-        sent_at: statusToSave === 'sent' && invoice.status !== 'sent' ? new Date() : invoice.sent_at,
+        sent_at: shouldSendNow && invoice.status !== 'sent' ? new Date() : invoice.sent_at,
         tenant_id: tenantId, // Explicit insert
         items: invoice.items.map(item => ({
           description: item.description,
@@ -852,7 +899,7 @@ const InvoiceBuilder = () => {
           invoiceId = persistedInvoice.id;
         }
 
-        if (statusToSave === 'sent') {
+        if (shouldSendNow) {
             const { data: sendData, error: sendError } = await supabase.functions.invoke('send-invoice', {
                 body: {
                   invoice_id: invoiceId,
@@ -889,7 +936,13 @@ const InvoiceBuilder = () => {
                 });
             }
         } else {
-            toast({ title: 'Success', description: 'Invoice saved successfully.' });
+            const savedStatus = normalizeStatus(statusToSave);
+            toast({
+              title: 'Saved',
+              description: savedStatus === 'sent'
+                ? 'Invoice saved (no resend). Use Save & Send to deliver again.'
+                : 'Invoice saved successfully.',
+            });
         }
 
         clearBuilderDraft(INVOICE_BUILDER_DRAFT_KEY, tenantId, id || 'new');
@@ -1039,7 +1092,7 @@ const InvoiceBuilder = () => {
     }
   };
 
-  const { subtotal, taxableSubtotal, taxRate, taxAmount, total, balance } = calculateTotals();
+  const { subtotal, taxableSubtotal, taxRate, taxAmount, total, balance, credit, preCreditTotal } = calculateTotals();
   const usesProcessingFee = Math.abs(Number(taxRate || 0) - PROCESSING_RATE) < 0.0005;
   const taxLabel = usesProcessingFee
     ? `Card Processing (${Math.round(PROCESSING_RATE * 100)}%)`
@@ -1427,11 +1480,45 @@ const InvoiceBuilder = () => {
                         <span>{taxLabel}</span>
                         <span>${taxAmount.toFixed(2)}</span>
                     </div>
+                    <div className="flex items-center justify-between gap-3 text-slate-300">
+                        <div className="space-y-1">
+                          <div className="text-sm">Adjustment / Credit</div>
+                          <div className="text-[11px] text-slate-400">
+                            Enter <span className="font-mono">750</span> to reduce the total by $750.
+                          </div>
+                        </div>
+                        <div className="w-[8.5rem]">
+                          <Input
+                            value={credit ? String(credit) : ''}
+                            onChange={(e) => {
+                              const raw = String(e.target.value || '').trim();
+                              if (!raw) {
+                                setInvoice((prev) => ({ ...prev, discount_amount: 0 }));
+                                return;
+                              }
+                              const next = Number(raw);
+                              setInvoice((prev) => ({
+                                ...prev,
+                                discount_amount: Number.isFinite(next) ? Math.max(next, 0) : (prev.discount_amount || 0),
+                              }));
+                            }}
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            className="h-8 bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 text-right"
+                            disabled={String(invoice.status || '').toLowerCase() === 'paid'}
+                          />
+                        </div>
+                    </div>
                     <Separator className="bg-slate-700" />
                     <div className="flex justify-between text-lg font-bold text-white">
                         <span>Total</span>
                         <span>${total.toFixed(2)}</span>
                     </div>
+                    {credit > 0 && (
+                      <div className="text-[11px] text-slate-400">
+                        Before credit: ${Number(preCreditTotal || 0).toFixed(2)}
+                      </div>
+                    )}
                 </CardContent>
             </Card>
             {id && (

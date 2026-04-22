@@ -40,7 +40,7 @@ const quoteColumnKey = (statusRaw: unknown) => {
 
 const jobColumnKey = (statusRaw: unknown) => {
   const status = normalizeStatus(statusRaw);
-  if (!status || ['scheduled', 'in_progress', 'pending'].includes(status)) return 'job_scheduled';
+  if (!status || ['unscheduled', 'pending_schedule', 'scheduled', 'in_progress'].includes(status)) return 'job_scheduled';
   if (status === 'completed') return 'job_completed';
   if (['invoiced', 'archived'].includes(status)) return null;
   return null;

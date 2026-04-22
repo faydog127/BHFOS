@@ -29,7 +29,7 @@ const BuildHealthWidget = ({ className }) => {
     "Main Workflows": [
       { name: 'Leads', path: '/crm/leads', status: 'wired' },
       { name: 'Pipeline', path: '/crm/pipeline', status: 'wired' },
-      { name: 'Estimates', path: '/crm/estimates', status: 'wired' },
+      { name: 'Quotes', path: '/crm/estimates', status: 'wired' },
       { name: 'Proposals', path: '/crm/proposals', status: 'wired' },
       { name: 'Work Orders', path: '/crm/jobs', status: 'wired' },
       { name: 'Invoices', path: '/crm/invoices', status: 'wired' },

@@ -2,6 +2,7 @@ import { corsHeaders } from '../_lib/cors.ts';
 import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
 import { getTenantIdFromClaims, getVerifiedClaims } from '../_shared/auth.ts';
 import { getDispatchAddressValidation } from '../_shared/dispatchAddress.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const JOB_STATUS_ALIAS_MAP: Record<string, string> = {
   inprogress: 'in_progress',
@@ -9,8 +10,10 @@ const JOB_STATUS_ALIAS_MAP: Record<string, string> = {
   complete: 'completed',
   done: 'completed',
   pending: 'unscheduled',
-  pendingschedule: 'pending_schedule',
-  'pending-schedule': 'pending_schedule',
+  pending_schedule: 'unscheduled',
+  'pending schedule': 'unscheduled',
+  pendingschedule: 'unscheduled',
+  'pending-schedule': 'unscheduled',
 };
 
 const PAYMENT_STATUS_ALIAS_MAP: Record<string, string> = {
@@ -43,18 +46,17 @@ const CUSTOMER_TYPE_ALIAS_MAP: Record<string, string> = {
 };
 
 const STATUS_TRANSITIONS: Record<string, string[]> = {
-  unscheduled: ['unscheduled', 'pending_schedule', 'scheduled', 'on_hold', 'cancelled'],
-  pending_schedule: ['pending_schedule', 'unscheduled', 'scheduled', 'on_hold', 'cancelled'],
-  scheduled: ['scheduled', 'pending_schedule', 'en_route', 'in_progress', 'on_hold', 'cancelled', 'completed'],
+  unscheduled: ['unscheduled', 'scheduled', 'on_hold', 'cancelled'],
+  scheduled: ['scheduled', 'unscheduled', 'en_route', 'in_progress', 'on_hold', 'cancelled', 'completed'],
   en_route: ['en_route', 'scheduled', 'in_progress', 'on_hold', 'cancelled'],
   in_progress: ['in_progress', 'on_hold', 'completed', 'cancelled'],
-  on_hold: ['on_hold', 'pending_schedule', 'scheduled', 'in_progress', 'cancelled'],
+  on_hold: ['on_hold', 'unscheduled', 'scheduled', 'in_progress', 'cancelled'],
   completed: ['completed'],
   cancelled: ['cancelled'],
 };
 
 const JOB_SELECT =
-  'id, status, scheduled_start, scheduled_end, service_address, technician_id, payment_status, updated_at, total_amount, work_order_number, job_number, quote_id, lead_id';
+  'id, status, scheduled_start, scheduled_end, service_address, technician_id, payment_status, updated_at, total_amount, work_order_number, job_number, quote_id, lead_id, scope_summary, special_conditions, property_notes, execution_checklist, execution_findings, execution_photos, technician_notes, customer_summary, follow_up_required, follow_up_notes, report_url';
 
 const INVOICE_SELECT =
   'id, invoice_number, status, sent_at, paid_at, amount_paid, total_amount, balance_due, payment_method, job_id, quote_id, lead_id, tenant_id, customer_email, public_token';
@@ -141,6 +143,25 @@ const asNullableNumber = (value: unknown) => {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+};
+
+const asBooleanOrNull = (value: unknown) => {
+  if (value === null) return null;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return null;
+    if (['true', 't', 'yes', 'y', '1'].includes(normalized)) return true;
+    if (['false', 'f', 'no', 'n', '0'].includes(normalized)) return false;
+  }
+  return null;
+};
+
+const asJsonbArray = (value: unknown) => {
+  if (value === null) return [];
+  if (Array.isArray(value)) return value;
+  return [];
 };
 
 const asIsoDate = (value: unknown) => {
@@ -389,6 +410,7 @@ const updateJobRow = async (jobId: string, tenantId: string, patch: Record<strin
 };
 
 const findSchedulingConflict = async (
+  supabaseRls: ReturnType<typeof createClient>,
   jobId: string,
   tenantId: string,
   technicianId: string | null,
@@ -399,15 +421,18 @@ const findSchedulingConflict = async (
     return null;
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('jobs')
-    .select('id, work_order_number, scheduled_start, scheduled_end, service_address, status')
+  // Packet 008 contract: appointments are the scheduling source-of-truth.
+  // Conflicts should be detected on appointments, not on mirrored job rows.
+  // IMPORTANT (H1a): use the caller JWT + anon key so RLS is enforced on appointments.
+  const { data, error } = await supabaseRls
+    .from('appointments')
+    .select('id, job_id, scheduled_start, scheduled_end, service_address, status')
     .eq('tenant_id', tenantId)
     .eq('technician_id', technicianId)
-    .neq('id', jobId)
+    .neq('job_id', jobId)
     .not('scheduled_start', 'is', null)
     .not('scheduled_end', 'is', null)
-    .in('status', ['scheduled', 'en_route', 'in_progress', 'on_hold']);
+    .in('status', ['confirmed', 'rescheduled']);
 
   if (error) {
     throw error;
@@ -416,11 +441,99 @@ const findSchedulingConflict = async (
   const nextStart = new Date(scheduledStart).getTime();
   const nextEnd = new Date(scheduledEnd).getTime();
 
-  return (data || []).find((row) => {
+  const conflict = (data || []).find((row) => {
     const existingStart = new Date(String(row.scheduled_start)).getTime();
     const existingEnd = new Date(String(row.scheduled_end)).getTime();
     return existingStart < nextEnd && existingEnd > nextStart;
-  }) || null;
+  }) as Record<string, unknown> | undefined;
+
+  if (!conflict) return null;
+
+  const conflictJobId = asNullableString(conflict.job_id);
+  if (!conflictJobId) {
+    return {
+      id: conflict.id,
+      work_order_number: null,
+      status: conflict.status,
+      scheduled_start: conflict.scheduled_start,
+      scheduled_end: conflict.scheduled_end,
+      service_address: conflict.service_address,
+    };
+  }
+
+  const { data: jobRow } = await supabaseAdmin
+    .from('jobs')
+    .select('id, work_order_number, status, scheduled_start, scheduled_end, service_address')
+    .eq('id', conflictJobId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+
+  return jobRow || {
+    id: conflictJobId,
+    work_order_number: null,
+    status: conflict.status,
+    scheduled_start: conflict.scheduled_start,
+    scheduled_end: conflict.scheduled_end,
+    service_address: conflict.service_address,
+  };
+};
+
+const upsertJobAppointment = async (
+  supabaseRls: ReturnType<typeof createClient>,
+  job: Record<string, unknown>,
+  tenantId: string,
+) => {
+  const jobId = asString(job.id);
+  if (!jobId) return null;
+
+  const scheduledStart = asNullableString(job.scheduled_start);
+  const scheduledEnd = asNullableString(job.scheduled_end);
+  if (!scheduledStart || !scheduledEnd) return null;
+
+  const leadId = asNullableString(job.lead_id);
+  const technicianId = asNullableString(job.technician_id);
+
+  const start = new Date(scheduledStart);
+  const end = new Date(scheduledEnd);
+  const durationMinutes =
+    Number.isFinite(start.valueOf()) && Number.isFinite(end.valueOf())
+      ? Math.max(15, Math.round((end.getTime() - start.getTime()) / 60000))
+      : 120;
+
+  const payload: Record<string, unknown> = {
+    tenant_id: tenantId,
+    job_id: jobId,
+    lead_id: leadId,
+    technician_id: technicianId,
+    service_name:
+      asNullableString(job.service_type) ||
+      asNullableString(job.service_name) ||
+      asNullableString(job.scope_summary) ||
+      asNullableString(job.work_order_number) ||
+      'Work Order',
+    scheduled_start: scheduledStart,
+    scheduled_end: scheduledEnd,
+    duration_minutes: durationMinutes,
+    status: 'confirmed',
+    service_address: asNullableString(job.service_address),
+    admin_notes: `work_order_job_id=${jobId}`,
+    reminders_enabled: false,
+    updated_at: new Date().toISOString(),
+  };
+
+  // IMPORTANT (H1a): use the caller JWT + anon key so RLS is enforced on appointments.
+  const { data, error } = await supabaseRls
+    .from('appointments')
+    .upsert(payload, { onConflict: 'job_id' })
+    .select('id, job_id, scheduled_start, scheduled_end, technician_id, status')
+    .maybeSingle();
+
+  if (error) {
+    console.warn('work-order-update appointment mirror failed:', error.message || error);
+    return null;
+  }
+
+  return data || null;
 };
 
 const createInvoiceForCompletedJob = async (job: Record<string, unknown>, tenantId: string) => {
@@ -639,6 +752,19 @@ const buildPatch = (input: Record<string, unknown>) => {
   if ('service_address' in input) patch.service_address = asNullableString(input.service_address);
   if ('technician_id' in input) patch.technician_id = asNullableString(input.technician_id);
   if ('technician_notes' in input) patch.technician_notes = asNullableString(input.technician_notes);
+  if ('scope_summary' in input) patch.scope_summary = asNullableString(input.scope_summary);
+  if ('special_conditions' in input) patch.special_conditions = asNullableString(input.special_conditions);
+  if ('property_notes' in input) patch.property_notes = asNullableString(input.property_notes);
+  if ('execution_checklist' in input) patch.execution_checklist = asJsonbArray(input.execution_checklist);
+  if ('execution_findings' in input) patch.execution_findings = asJsonbArray(input.execution_findings);
+  if ('execution_photos' in input) patch.execution_photos = asJsonbArray(input.execution_photos);
+  if ('customer_summary' in input) patch.customer_summary = asNullableString(input.customer_summary);
+  if ('follow_up_required' in input) {
+    const value = asBooleanOrNull(input.follow_up_required);
+    patch.follow_up_required = value === null ? false : value;
+  }
+  if ('follow_up_notes' in input) patch.follow_up_notes = asNullableString(input.follow_up_notes);
+  if ('report_url' in input) patch.report_url = asNullableString(input.report_url);
   if ('signature_url' in input) patch.signature_url = asNullableString(input.signature_url);
   if ('payment_terms' in input) {
     const paymentTerms = normalizePaymentTerms(input.payment_terms);
@@ -674,11 +800,34 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { claims } = await getVerifiedClaims(req);
-    const jwtTenantId = getTenantIdFromClaims(claims);
-    if (!jwtTenantId) {
-      return json({ error: 'Unauthorized: missing tenant claim' }, 403);
+    let token: string;
+    let claims: Awaited<ReturnType<typeof getVerifiedClaims>>['claims'];
+    try {
+      const verified = await getVerifiedClaims(req);
+      token = verified.token;
+      claims = verified.claims;
+    } catch {
+      return json({ error: 'Unauthorized' }, 401);
     }
+
+    const jwtTenantId = getTenantIdFromClaims(claims);
+    if (!jwtTenantId) return json({ error: 'Unauthorized: missing tenant claim' }, 401);
+
+    const supabaseUrl = (Deno.env.get('SUPABASE_URL') ?? '').trim();
+    const supabaseAnonKey = (Deno.env.get('SUPABASE_ANON_KEY') ?? '').trim();
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return json({ error: 'Missing SUPABASE_URL or SUPABASE_ANON_KEY' }, 500);
+    }
+
+    // Use the caller JWT + anon key for appointment reads/writes so RLS is enforced (H1a).
+    const supabaseRls = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
     const body = await req.json();
     const jobId = asString(body?.job_id);
@@ -688,10 +837,7 @@ Deno.serve(async (req) => {
     if (!jobId) {
       return json({ error: 'Missing job_id' }, 400);
     }
-    if (!requestedTenantId) {
-      return json({ error: 'Missing tenant_id' }, 400);
-    }
-    if (requestedTenantId !== jwtTenantId) {
+    if (requestedTenantId && requestedTenantId !== jwtTenantId) {
       return json({ error: 'Tenant mismatch' }, 403);
     }
     if (!patchInput || typeof patchInput !== 'object' || Array.isArray(patchInput)) {
@@ -734,6 +880,20 @@ Deno.serve(async (req) => {
       if (!asNullableString(mergedJob.scheduled_start)) {
         return json({ error: 'Scheduled start is required before dispatching this work order.' }, 400);
       }
+      if (!asNullableString(mergedJob.scheduled_end)) {
+        return json({
+          error: nextStatus === 'scheduled'
+            ? 'Scheduled end is required before scheduling this work order.'
+            : 'Scheduled end is required before dispatching this work order.',
+        }, 400);
+      }
+      if (!asNullableString(mergedJob.technician_id)) {
+        return json({
+          error: nextStatus === 'scheduled'
+            ? 'Technician assignment is required before scheduling this work order.'
+            : 'Technician assignment is required before dispatching this work order.',
+        }, 400);
+      }
       const addressValidation = getDispatchAddressValidation(mergedJob.service_address);
       if (!addressValidation.hasDispatchableAddress) {
         return json({ error: 'Service address must include street, city, and state before dispatching this work order.' }, 400);
@@ -741,6 +901,7 @@ Deno.serve(async (req) => {
     }
 
     const schedulingConflict = await findSchedulingConflict(
+      supabaseRls,
       jobId,
       jwtTenantId,
       asNullableString(mergedJob.technician_id),
@@ -778,6 +939,7 @@ Deno.serve(async (req) => {
 
     let invoiceResult: Record<string, unknown> | null = null;
     const jobForInvoice = { ...existingJob, ...data, tenant_id: jwtTenantId };
+    const appointmentMirror = await upsertJobAppointment(supabaseRls, jobForInvoice, jwtTenantId);
 
     if (nextStatus === 'completed') {
       try {
@@ -819,11 +981,13 @@ Deno.serve(async (req) => {
 
     return json({
       job: data,
+      appointment: appointmentMirror,
       invoice: invoiceResult?.invoice ?? null,
       invoice_result: invoiceResult,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('work-order-update unhandled error:', message, error);
     return json({ error: message }, 500);
   }
 });

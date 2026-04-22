@@ -932,11 +932,11 @@ Deno.serve(async (req) => {
     if (data.lead_id) {
       const nowIsoForLead = new Date().toISOString();
       const leadUpdateCandidates: Array<Record<string, unknown>> = [
-        { status: 'scheduled', stage: 'scheduled', pipeline_stage: 'scheduled', updated_at: nowIsoForLead },
-        { status: 'scheduled', stage: 'scheduled', pipeline_stage: 'scheduled' },
-        { status: 'scheduled', pipeline_stage: 'scheduled' },
-        { status: 'scheduled', stage: 'scheduled' },
-        { status: 'scheduled' },
+        { status: 'converted', stage: 'scheduled', pipeline_stage: 'scheduled', updated_at: nowIsoForLead },
+        { status: 'converted', stage: 'scheduled', pipeline_stage: 'scheduled' },
+        { status: 'converted', pipeline_stage: 'scheduled' },
+        { status: 'converted', stage: 'scheduled' },
+        { status: 'converted' },
       ];
 
       let leadUpdated = false;
@@ -967,7 +967,7 @@ Deno.serve(async (req) => {
         entityId: data.lead_id,
         eventType: 'LeadUpdated',
         actorType: 'system',
-        payload: { status: 'scheduled', quote_id: data.id },
+        payload: { status: 'converted', quote_id: data.id },
       });
     }
 

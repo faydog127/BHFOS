@@ -51,6 +51,20 @@ const resolveJwtSecret = (): string | null => {
 
 const isLocalIssuer = (issuer: string) => /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?(?:\/|$)/i.test(issuer);
 
+type JwtHeader = {
+  alg?: string;
+  kid?: string;
+  typ?: string;
+  [k: string]: unknown;
+};
+
+const decodeJwtHeader = (token: string): JwtHeader => {
+  const parts = token.split('.');
+  if (parts.length !== 3) throw new Error('Invalid JWT format.');
+  const headerJson = base64UrlDecodeToString(parts[0]);
+  return JSON.parse(headerJson);
+};
+
 const resolveIssuer = (claims: JwtClaims): string | null => {
   if (typeof claims.iss === 'string' && claims.iss.trim()) return claims.iss;
 
@@ -60,8 +74,23 @@ const resolveIssuer = (claims: JwtClaims): string | null => {
   return `${supabaseUrl.replace(/\/$/, '')}/auth/v1`;
 };
 
+const resolveJwksUrl = (issuer: string) => {
+  // Tokens minted by local Supabase often use an `iss` like:
+  //   http://127.0.0.1:25431/auth/v1
+  // That URL is NOT reachable from inside the Edge Runtime container, so we
+  // fetch JWKS via the container-reachable SUPABASE_URL instead (Kong).
+  if (isLocalIssuer(issuer)) {
+    const supabaseUrl = (Deno.env.get('SUPABASE_URL') ?? '').trim();
+    if (supabaseUrl) {
+      return new URL(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/.well-known/jwks.json`);
+    }
+  }
+
+  return new URL(`${issuer.replace(/\/$/, '')}/.well-known/jwks.json`);
+};
+
 const getRemoteJwks = (issuer: string) => {
-  const jwksUrl = new URL(`${issuer.replace(/\/$/, '')}/.well-known/jwks.json`);
+  const jwksUrl = resolveJwksUrl(issuer);
   const cacheKey = jwksUrl.toString();
   const cached = jwksCache.get(cacheKey);
   if (cached) return cached;
@@ -82,11 +111,19 @@ const verifyWithSharedSecret = async (token: string, issuer: string, secret: str
 
 export const verifyJwtClaims = async (token: string): Promise<JwtClaims> => {
   const untrusted = decodeJwtClaims(token);
+  const header = decodeJwtHeader(token);
   const issuer = resolveIssuer(untrusted);
   if (!issuer) throw new Error('Missing iss claim.');
 
+  const algorithm = typeof header.alg === 'string' ? header.alg.trim() : '';
+  const isHmacAlgorithm = algorithm.startsWith('HS');
   const sharedSecret = resolveJwtSecret() || (isLocalIssuer(issuer) ? LOCAL_SUPABASE_JWT_SECRET : null);
-  if (sharedSecret && isLocalIssuer(issuer)) {
+
+  // Local Supabase can mint either:
+  // - HS256 tokens (shared secret), or
+  // - ES256 tokens (JWKS).
+  // Never attempt shared-secret verification for non-HS algorithms.
+  if (isHmacAlgorithm && sharedSecret && isLocalIssuer(issuer)) {
     return verifyWithSharedSecret(token, issuer, sharedSecret);
   }
 
@@ -99,7 +136,7 @@ export const verifyJwtClaims = async (token: string): Promise<JwtClaims> => {
 
     return payload as JwtClaims;
   } catch (error) {
-    if (sharedSecret && isLocalIssuer(issuer)) {
+    if (isHmacAlgorithm && sharedSecret && isLocalIssuer(issuer)) {
       return verifyWithSharedSecret(token, issuer, sharedSecret);
     }
     throw error;

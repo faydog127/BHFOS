@@ -125,8 +125,11 @@ $envMap = Parse-EnvOutput -Lines $envLines
 
 $anon = $envMap['ANON_KEY']
 $functionsUrl = $envMap['FUNCTIONS_URL']
+if (-not $functionsUrl -and $envMap['API_URL']) {
+  $functionsUrl = ($envMap['API_URL'].TrimEnd('/') + '/functions/v1')
+}
 if (-not $anon -or -not $functionsUrl) {
-  throw "Could not read ANON_KEY / FUNCTIONS_URL from supabase status. Output:`n$($envLines -join "`n")"
+  throw "Could not read ANON_KEY / FUNCTIONS_URL (or API_URL fallback) from supabase status. Output:`n$($envLines -join "`n")"
 }
 
 $runId = "$RunPrefix-$(Get-Date -Format 'yyyyMMdd_HHmmss')"
@@ -229,12 +232,38 @@ ins_quote AS (
   FROM ins_lead
   RETURNING id
 ),
+ins_job AS (
+  INSERT INTO public.jobs (
+    tenant_id,
+    lead_id,
+    quote_id,
+    status,
+    payment_status,
+    total_amount,
+    created_at,
+    updated_at
+  )
+  SELECT
+    '$TenantId',
+    ins_lead.id,
+    ins_quote.id,
+    'unscheduled',
+    'unpaid',
+    100,
+    now(),
+    now()
+  FROM ins_lead, ins_quote
+  RETURNING id
+),
 ins_invoice AS (
   INSERT INTO public.invoices (
     tenant_id,
     lead_id,
+    quote_id,
+    job_id,
     invoice_number,
     status,
+    invoice_type,
     subtotal,
     tax_rate,
     tax_amount,
@@ -248,8 +277,11 @@ ins_invoice AS (
   SELECT
     '$TenantId',
     ins_lead.id,
+    ins_quote.id,
+    ins_job.id,
     'SMOKE-INV-STRIPE',
-    'sent',
+    'draft',
+    'final',
     100,
     0,
     0,
@@ -259,7 +291,7 @@ ins_invoice AS (
     current_date + 7,
     now(),
     now()
-  FROM ins_lead
+  FROM ins_lead, ins_quote, ins_job
   RETURNING id, public_token
 )
 SELECT

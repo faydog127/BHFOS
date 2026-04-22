@@ -1,6 +1,6 @@
 import { corsHeaders } from '../_shared/cors.ts';
 import { getTenantIdFromClaims, getVerifiedClaims } from '../_shared/auth.ts';
-import { supabaseAdmin } from '../_shared/supabaseAdmin.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
   isAppointmentActiveStatus,
   normalizeAppointmentStatus,
@@ -46,8 +46,41 @@ Deno.serve(async (req) => {
 
   try {
     const body = await parseJson(req);
-    const { claims } = await getVerifiedClaims(req);
-    const tenantId = asString(body.tenant_id) || getTenantIdFromClaims(claims) || 'tvg';
+
+    let token: string;
+    let claims: Awaited<ReturnType<typeof getVerifiedClaims>>['claims'];
+    try {
+      const verified = await getVerifiedClaims(req);
+      token = verified.token;
+      claims = verified.claims;
+    } catch {
+      return respondJson({ error: 'Unauthorized' }, 401);
+    }
+
+    const supabaseUrl = (Deno.env.get('SUPABASE_URL') ?? '').trim();
+    const supabaseAnonKey = (Deno.env.get('SUPABASE_ANON_KEY') ?? '').trim();
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return respondJson({ error: 'Missing SUPABASE_URL or SUPABASE_ANON_KEY' }, 500);
+    }
+
+    // Use the caller JWT + anon key so PostgREST enforces RLS (service_role would bypass it).
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    // IMPORTANT: Do not trust client-provided tenant_id.
+    const tenantFromClaims = getTenantIdFromClaims(claims);
+    if (!tenantFromClaims) return respondJson({ error: 'Missing tenant claim' }, 401);
+    const requestedTenantId = asString(body.tenant_id);
+    if (requestedTenantId && requestedTenantId !== tenantFromClaims) {
+      return respondJson({ error: 'Tenant mismatch' }, 403);
+    }
+    const tenantId = tenantFromClaims;
     const actorId = typeof claims.sub === 'string' ? claims.sub : null;
 
     const leadId = asString(body.lead_id);
@@ -58,10 +91,11 @@ Deno.serve(async (req) => {
       return respondJson({ error: 'scheduled_start must be a valid ISO datetime' }, 400);
     }
 
-    const { data: lead, error: leadError } = await supabaseAdmin
+    const { data: lead, error: leadError } = await supabase
       .from('leads')
       .select('id, email')
       .eq('id', leadId)
+      .eq('tenant_id', tenantId)
       .maybeSingle();
 
     if (leadError || !lead?.id) {
@@ -78,7 +112,7 @@ Deno.serve(async (req) => {
     const priceBookId = asString(body.price_book_id) || null;
     let priceBook: Record<string, unknown> | null = null;
     if (priceBookId) {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('price_book')
         .select('id, code, name, category, base_price, price_type, description, active')
         .eq('id', priceBookId)
@@ -131,7 +165,7 @@ Deno.serve(async (req) => {
       payload.confirmation_sent_at = nowIso;
     }
 
-    const { data: appointment, error: insertError } = await supabaseAdmin
+    const { data: appointment, error: insertError } = await supabase
       .from('appointments')
       .insert(payload)
       .select(`

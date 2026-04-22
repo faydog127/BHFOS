@@ -7,6 +7,30 @@ on:
       - main
 
 jobs:
+  review-gate:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    defaults:
+      run:
+        working-directory: command-center
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.1
+
+      - name: Review gate (v1)
+        env:
+          GATE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GATE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node tools/review-gate.mjs
+
   lint:
     runs-on: ubuntu-latest
     defaults:

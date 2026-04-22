@@ -34,10 +34,10 @@ const getChannel = (payload = {}, eventType = '') => {
   return 'email';
 };
 
-const getEventLabel = (eventType = '') => {
+const getEventLabel = (eventType = '', payload = {}) => {
   switch (eventType) {
     case 'QuoteSent':
-      return 'Quote sent';
+      return payload.delivery_mocked ? 'Quote sent (mock)' : 'Quote sent';
     case 'EstimateSmsSent':
       return 'Quote texted';
     case 'estimate.send_previewed':
@@ -45,7 +45,7 @@ const getEventLabel = (eventType = '') => {
     case 'estimate.send_requested':
       return 'Send requested';
     case 'estimate.sent':
-      return 'Delivery completed';
+      return payload.delivery_mocked ? 'Delivery completed (mock)' : 'Delivery completed';
     case 'InvoiceSent':
       return 'Invoice sent';
     case 'InvoiceSmsSent':
@@ -132,7 +132,7 @@ const DeliveryHistoryCard = ({ entityType, entityId, tenantId }) => {
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
                     {channel === 'sms' ? <MessageSquare className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
-                    {getEventLabel(event.event_type)}
+                    {getEventLabel(event.event_type, event.payload)}
                   </div>
                   <Badge variant="outline" className="capitalize">
                     {channel}
@@ -144,6 +144,11 @@ const DeliveryHistoryCard = ({ entityType, entityId, tenantId }) => {
                 {recipient && (
                   <div className="mt-1 text-xs text-slate-600">
                     {recipient}
+                  </div>
+                )}
+                {event.payload?.delivery_provider && (
+                  <div className="mt-1 text-[11px] text-slate-500">
+                    Provider: {String(event.payload.delivery_provider)}
                   </div>
                 )}
               </div>

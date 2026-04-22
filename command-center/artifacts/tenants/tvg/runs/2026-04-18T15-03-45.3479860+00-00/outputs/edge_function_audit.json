@@ -1,0 +1,45 @@
+{
+  "audit": [
+    {
+      "function": "create-appointment",
+      "notes": "Supabase client uses anon key + caller JWT.",
+      "domain_tag": "tenant_isolation",
+      "trusts_body_tenant_id": "no (mismatch rejected)",
+      "tenant_from": "verified_jwt_claims(app_metadata.tenant_id)",
+      "uses_service_role": false,
+      "rls_enforced": true,
+      "path": "supabase/functions/create-appointment/index.ts"
+    },
+    {
+      "function": "update-appointment-status",
+      "notes": "Supabase client uses anon key + caller JWT.",
+      "domain_tag": "tenant_isolation",
+      "trusts_body_tenant_id": "no (mismatch rejected)",
+      "tenant_from": "verified_jwt_claims(app_metadata.tenant_id)",
+      "uses_service_role": false,
+      "rls_enforced": true,
+      "path": "supabase/functions/update-appointment-status/index.ts"
+    },
+    {
+      "function": "work-order-update",
+      "notes": "Appointments reads/writes now use RLS client; invoices still use service_role.",
+      "domain_tag": "tenant_isolation",
+      "trusts_body_tenant_id": "no (mismatch rejected; optional)",
+      "tenant_from": "verified_jwt_claims(app_metadata.tenant_id)",
+      "uses_service_role": "mixed",
+      "rls_enforced": "appointments: yes (anon+jwt); other tables: service_role for privileged flows",
+      "path": "supabase/functions/work-order-update/index.ts"
+    },
+    {
+      "function": "run-appointment-reminders",
+      "notes": "Automation path uses service_role; tenant scoped via verified claims + explicit tenant_id filters.",
+      "domain_tag": "tenant_isolation",
+      "trusts_body_tenant_id": "no (mismatch rejected)",
+      "tenant_from": "verified_jwt_claims(app_metadata.tenant_id)",
+      "uses_service_role": true,
+      "rls_enforced": false,
+      "path": "supabase/functions/run-appointment-reminders/index.ts"
+    }
+  ],
+  "run_id": "2026-04-18T11:03:45.347986-04:00"
+}
