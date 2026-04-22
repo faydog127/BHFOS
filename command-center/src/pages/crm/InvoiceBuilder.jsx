@@ -584,7 +584,6 @@ const InvoiceBuilder = () => {
 
     const storedSubtotal = Number(invoice.subtotal);
     const storedTaxAmount = Number(invoice.tax_amount);
-    const storedTotal = Number(invoice.total_amount);
     const storedTaxRate = Number(invoice.tax_rate);
     const storedBalanceDue = Number(invoice.balance_due);
 
@@ -629,11 +628,7 @@ const InvoiceBuilder = () => {
         : computedTaxAmount;
 
     const computedPreCreditTotal = subtotal + taxAmount;
-    const preCreditTotal = hasLineItems
-      ? computedPreCreditTotal
-      : Number.isFinite(storedTotal) && storedTotal > 0
-        ? storedTotal
-        : computedPreCreditTotal;
+    const preCreditTotal = computedPreCreditTotal;
 
     const total = Math.max(preCreditTotal - credit, 0);
 
