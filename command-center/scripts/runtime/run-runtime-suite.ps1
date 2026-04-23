@@ -150,12 +150,12 @@ if ($Environment -eq 'local') {
   Write-ArtifactIndexLine $artifactIndex ("- probes/now-queue-smoke-test.log -- proves: local now_queue + task generation behavior")
   if ($code1 -ne 0) { Write-Host "Probe failed: now-queue-smoke-test (exit_code=$code1)" -ForegroundColor Red }
 
-  $moneyLog = Join-Path $probesDir 'money-loop-smoke-test.log'
-  $code2 = Run-Probe -Name 'money-loop-smoke-test' `
-    -Cmd ("pwsh -NoProfile -File scripts/money-loop-smoke-test.ps1 -TenantId " + $TenantId + " -SkipStart") `
+  $moneyLog = Join-Path $probesDir 'rvh-p0-a-revenue-chain.log'
+  $code2 = Run-Probe -Name 'rvh-p0-a-revenue-chain' `
+    -Cmd ("pwsh -NoProfile -File scripts/runtime/rvh-p0-a-revenue-chain.ps1 -TenantId " + $TenantId + " -SkipStart") `
     -OutFile $moneyLog
-  Write-ArtifactIndexLine $artifactIndex ("- probes/money-loop-smoke-test.log -- proves: local money loop chain (mock payments_mode)")
-  if ($code2 -ne 0) { Write-Host "Probe failed: money-loop-smoke-test (exit_code=$code2)" -ForegroundColor Red }
+  Write-ArtifactIndexLine $artifactIndex ("- probes/rvh-p0-a-revenue-chain.log -- proves: local revenue chain (public-pay test bypass + webhook simulation)")
+  if ($code2 -ne 0) { Write-Host "Probe failed: rvh-p0-a-revenue-chain (exit_code=$code2)" -ForegroundColor Red }
 
   if ($IncludeStripeLocal) {
     $stripeLog = Join-Path $probesDir 'stripe-intent-smoke-test.log'

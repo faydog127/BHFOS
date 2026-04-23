@@ -274,42 +274,6 @@ Deno.serve(async (req) => {
 
   if (paymentsMode && paymentsMode.startsWith('stripe')) {
     try {
-      const stripeSecretKey = (Deno.env.get('STRIPE_SECRET_KEY') ?? '').trim();
-      if (!stripeSecretKey) {
-        const message = 'Payment processing is not configured.';
-
-        await logPublicEvent({
-          kind: 'public_pay',
-          tenantId,
-          invoiceId: invoice.id,
-          token,
-          status: 'blocked',
-          ip,
-          userAgent,
-          metadata: { run_id: runId, error: 'missing_stripe_secret_key', payments_mode: paymentsMode },
-        });
-
-        await logMoneyLoopEvent({
-          tenantId,
-          entityType: 'invoice',
-          entityId: invoice.id,
-          eventType: 'PaymentFailed',
-          actorType: 'public',
-          payload: { amount: amountToCharge, method, run_id: runId, error: 'missing_stripe_secret_key' },
-        });
-
-        await createMoneyLoopTask({
-          tenantId,
-          sourceType: 'invoice',
-          sourceId: invoice.id,
-          title: 'Payment Failed – Follow Up',
-          leadId: invoice.lead_id ?? null,
-          metadata: { run_id: runId, error: 'missing_stripe_secret_key' },
-        });
-
-        return respondJson({ error: message, blocked: true }, 501, cors.headers);
-      }
-
       if (method !== 'card') {
         const message = 'ACH checkout is not configured on this payment page yet.';
 
@@ -327,7 +291,6 @@ Deno.serve(async (req) => {
         return respondJson({ error: message, blocked: true }, 501, cors.headers);
       }
 
-      const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
       const invoiceId = invoice.id as string;
 
       const amountCents = Math.round(amountToCharge * 100);
@@ -405,13 +368,51 @@ Deno.serve(async (req) => {
         isLocalRequest(req) &&
         (await isExplicitTestModeEnabled());
 
+      const stripeSecretKey = (Deno.env.get('STRIPE_SECRET_KEY') ?? '').trim();
+      if (!stripeSecretKey && !isLocalBypass) {
+        const message = 'Payment processing is not configured.';
+
+        await logPublicEvent({
+          kind: 'public_pay',
+          tenantId,
+          invoiceId: invoice.id,
+          token,
+          status: 'blocked',
+          ip,
+          userAgent,
+          metadata: { run_id: runId, error: 'missing_stripe_secret_key', payments_mode: paymentsMode },
+        });
+
+        await logMoneyLoopEvent({
+          tenantId,
+          entityType: 'invoice',
+          entityId: invoice.id,
+          eventType: 'PaymentFailed',
+          actorType: 'public',
+          payload: { amount: amountToCharge, method, run_id: runId, error: 'missing_stripe_secret_key' },
+        });
+
+        await createMoneyLoopTask({
+          tenantId,
+          sourceType: 'invoice',
+          sourceId: invoice.id,
+          title: 'Payment Failed – Follow Up',
+          leadId: invoice.lead_id ?? null,
+          metadata: { run_id: runId, error: 'missing_stripe_secret_key' },
+        });
+
+        return respondJson({ error: message, blocked: true }, 501, cors.headers);
+      }
+
+      const stripe = isLocalBypass ? null : new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
+
       const session = isLocalBypass
         ? ({
             id: `cs_test_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`,
             url: `${returnBaseUrl}?checkout=success`,
             payment_intent: { id: `pi_test_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}` },
           } as unknown as Stripe.Checkout.Session)
-        : await stripe.checkout.sessions.create(
+        : await stripe!.checkout.sessions.create(
             {
               mode: 'payment',
               success_url: `${returnBaseUrl}?checkout=success`,
