@@ -132,7 +132,18 @@ async function saveInvoiceRecord(invoicePayload, invoiceId = null) {
     },
   });
 
-  if (error) throw error;
+  if (error) {
+    const contextBody = error?.context?.body;
+    if (typeof contextBody === 'string' && contextBody.trim()) {
+      try {
+        const parsed = JSON.parse(contextBody);
+        if (parsed?.error) throw new Error(String(parsed.error));
+      } catch {
+        // fall through
+      }
+    }
+    throw error;
+  }
   if (data?.error) throw new Error(data.error);
   if (!data?.invoice) throw new Error('Invoice save returned no row.');
 
@@ -807,7 +818,8 @@ const InvoiceBuilder = () => {
     }
 
     const remainingBefore = Number(billingGuard.remainingBefore) || 0;
-    if (!id && remainingBefore > 0 && total - remainingBefore > 0.009) {
+    const normalizedSaveStatus = normalizeStatus(statusToSave);
+    if (normalizedSaveStatus !== 'void' && remainingBefore > 0 && total - remainingBefore > 0.009) {
       setLoading(false);
       toast({
         variant: 'destructive',
