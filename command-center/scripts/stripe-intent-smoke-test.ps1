@@ -218,7 +218,7 @@ ins_quote AS (
   SELECT
     '$TenantId',
     ins_lead.id,
-    'SMOKE-QUOTE-STRIPE',
+    'SMOKE-QUOTE-STRIPE-$runId',
     'sent',
     100,
     0,
@@ -279,7 +279,7 @@ ins_invoice AS (
     ins_lead.id,
     ins_quote.id,
     ins_job.id,
-    'SMOKE-INV-STRIPE',
+    'SMOKE-INV-STRIPE-$runId',
     'draft',
     'final',
     100,

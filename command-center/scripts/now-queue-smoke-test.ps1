@@ -185,7 +185,7 @@ ins_quote AS (
   SELECT
     '$TenantId',
     ins_lead.id,
-    'SMOKE-QUOTE-Q',
+    'SMOKE-QUOTE-Q-$runId',
     'sent',
     100,
     0,
