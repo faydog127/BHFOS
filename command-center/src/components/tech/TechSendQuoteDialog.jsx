@@ -55,6 +55,7 @@ export default function TechSendQuoteDialog({
   const [toEmail, setToEmail] = useState('');
   const [toPhone, setToPhone] = useState('');
   const [subjectPrefix, setSubjectPrefix] = useState('');
+  const [attachInspectionReportPdf, setAttachInspectionReportPdf] = useState(false);
 
   const [checks, setChecks] = useState({
     scope: false,
@@ -130,6 +131,7 @@ export default function TechSendQuoteDialog({
     setToEmail(leadEmail || asText(quote?.customer_email) || '');
     setToPhone(leadPhone || asText(quote?.customer_phone) || '');
     setSubjectPrefix('');
+    setAttachInspectionReportPdf(false);
     setChecks({
       scope: false,
       report: false,
@@ -205,6 +207,7 @@ export default function TechSendQuoteDialog({
         lead,
         deliveryChannel: channel,
         attachPdf: false,
+        attachInspectionReportPdf: channel === 'email' ? attachInspectionReportPdf : false,
         recipientEmail: channel === 'email' ? asText(toEmail) : null,
         recipientPhone: channel === 'sms' ? asText(toPhone) : null,
         customSubject: channel === 'email' ? subject : undefined,
@@ -421,6 +424,25 @@ export default function TechSendQuoteDialog({
                 </Label>
               </div>
             </div>
+
+            {channel === 'email' ? (
+              <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                <div className="font-semibold text-slate-900">Attachments</div>
+                <div className="mt-2">
+                  <Label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={attachInspectionReportPdf}
+                      onChange={() => setAttachInspectionReportPdf((v) => !v)}
+                    />
+                    Attach inspection report PDF
+                  </Label>
+                  <div className="mt-1 text-xs text-slate-500">
+                    Generates/attaches a customer-facing inspection report PDF (includes photos embedded server-side). No photo links are exposed.
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             {!recipientIsCustomer ? (
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800">

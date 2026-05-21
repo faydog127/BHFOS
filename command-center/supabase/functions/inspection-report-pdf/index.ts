@@ -73,7 +73,13 @@ const buildInspectionHtml = async (params: {
   const technician = params.technician || {};
   const findings = (params.findings || []).filter((row) => (row as any)?.is_customer_visible !== false);
   const recommendations = (params.recommendations || []).filter((row) => (row as any)?.is_customer_visible !== false);
-  const photos = (params.photos || []).filter((row) => (row as any)?.is_voided !== true);
+  // Only include non-voided photos that are fully uploaded.
+  // Allow empty upload_state for backwards compatibility in older/local environments.
+  const photos = (params.photos || []).filter((row) => {
+    if ((row as any)?.is_voided === true) return false;
+    const uploadState = normalize((row as any)?.upload_state);
+    return !uploadState || uploadState === 'complete';
+  });
 
   const customerName =
     asString(lead.company) ||
@@ -476,21 +482,24 @@ Deno.serve(async (req) => {
 
   try {
     const { claims } = await getVerifiedClaims(req);
-    const jwtTenantId = getTenantIdFromClaims(claims);
-    if (!jwtTenantId) return json({ error: 'Unauthorized: missing tenant claim' }, 403);
-
     const body = (await req.json().catch(() => ({}))) as JsonObject;
     const requestedTenantId = asNullableString(body.tenant_id);
     const inspectionId = asNullableString(body.inspection_id);
     const storeArtifact = body.store === true || body.store === '1' || body.store === 1;
     const returnPdf = body.return_pdf !== false;
 
-    if (!requestedTenantId || requestedTenantId !== jwtTenantId) {
-      return json({ error: 'Tenant mismatch' }, 403);
-    }
+    if (!requestedTenantId) return json({ error: 'Missing tenant_id' }, 400);
     if (!inspectionId) return json({ error: 'Missing inspection_id' }, 400);
 
-    const tenantId = jwtTenantId;
+    const role = normalize((claims as any)?.role);
+    const jwtTenantId = getTenantIdFromClaims(claims);
+
+    if (role !== 'service_role') {
+      if (!jwtTenantId) return json({ error: 'Unauthorized: missing tenant claim' }, 403);
+      if (requestedTenantId !== jwtTenantId) return json({ error: 'Tenant mismatch' }, 403);
+    }
+
+    const tenantId = requestedTenantId;
 
     const { data: inspection, error: inspectionError } = await supabaseAdmin
       .from('inspections')
