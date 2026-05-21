@@ -75,6 +75,13 @@ const resolveIssuer = (claims: JwtClaims): string | null => {
 };
 
 const resolveJwksUrl = (issuer: string) => {
+  // Some Supabase keys (anon/service_role) use a non-URL issuer like "supabase" / "supabase-demo".
+  // These tokens are HS256-signed with the JWT secret and should be verified via shared secret,
+  // not via a remote JWKS URL.
+  if (!issuer.includes('://')) {
+    throw new Error(`Cannot resolve JWKS URL for non-URL issuer: ${issuer}`);
+  }
+
   // Tokens minted by local Supabase often use an `iss` like:
   //   http://127.0.0.1:25431/auth/v1
   // That URL is NOT reachable from inside the Edge Runtime container, so we
@@ -100,11 +107,17 @@ const getRemoteJwks = (issuer: string) => {
   return jwks;
 };
 
-const verifyWithSharedSecret = async (token: string, issuer: string, secret: string): Promise<JwtClaims> => {
-  const { payload } = await jwtVerify(token, new TextEncoder().encode(secret), {
-    issuer,
-    audience: 'authenticated',
-  });
+const verifyWithSharedSecret = async (
+  token: string,
+  issuer: string,
+  secret: string,
+  audience?: string | string[],
+): Promise<JwtClaims> => {
+  const options: Record<string, unknown> = { issuer };
+  // Only enforce audience when provided by the caller.
+  if (audience) options.audience = audience;
+
+  const { payload } = await jwtVerify(token, new TextEncoder().encode(secret), options as any);
 
   return payload as JwtClaims;
 };
@@ -118,26 +131,37 @@ export const verifyJwtClaims = async (token: string): Promise<JwtClaims> => {
   const algorithm = typeof header.alg === 'string' ? header.alg.trim() : '';
   const isHmacAlgorithm = algorithm.startsWith('HS');
   const sharedSecret = resolveJwtSecret() || (isLocalIssuer(issuer) ? LOCAL_SUPABASE_JWT_SECRET : null);
+  const audience = typeof untrusted.aud === 'string' || Array.isArray(untrusted.aud) ? (untrusted.aud as any) : undefined;
+  const isUrlIssuer = issuer.includes('://');
+
+  // Supabase anon/service keys can have an issuer like "supabase" or "supabase-demo" (not a URL).
+  // These are HS256 tokens, so verify using the shared secret and skip JWKS.
+  // Allow missing `aud` ONLY for these non-URL issuers (local-style keys).
+  if (isHmacAlgorithm && sharedSecret && !isUrlIssuer) {
+    return verifyWithSharedSecret(token, issuer, sharedSecret, audience);
+  }
 
   // Local Supabase can mint either:
   // - HS256 tokens (shared secret), or
   // - ES256 tokens (JWKS).
   // Never attempt shared-secret verification for non-HS algorithms.
   if (isHmacAlgorithm && sharedSecret && isLocalIssuer(issuer)) {
-    return verifyWithSharedSecret(token, issuer, sharedSecret);
+    // URL issuer: enforce audience (default to "authenticated" if missing).
+    return verifyWithSharedSecret(token, issuer, sharedSecret, audience ?? 'authenticated');
   }
 
   const jwks = getRemoteJwks(issuer);
   try {
     const { payload } = await jwtVerify(token, jwks, {
       issuer,
-      audience: 'authenticated',
+      // URL issuer: enforce audience (default to "authenticated" if missing).
+      audience: audience ?? 'authenticated',
     });
 
     return payload as JwtClaims;
   } catch (error) {
     if (isHmacAlgorithm && sharedSecret && isLocalIssuer(issuer)) {
-      return verifyWithSharedSecret(token, issuer, sharedSecret);
+      return verifyWithSharedSecret(token, issuer, sharedSecret, audience ?? 'authenticated');
     }
     throw error;
   }
