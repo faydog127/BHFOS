@@ -302,7 +302,7 @@ test.describe.serial('UAT LOCAL schedule dispatch board', () => {
           };
         }, { timeout: 20000 })
         .toEqual({
-          technicianId: technicianUserId,
+          technicianId: technicianRecordId,
           status: 'scheduled',
         });
 
@@ -344,7 +344,7 @@ test.describe.serial('UAT LOCAL schedule dispatch board', () => {
             technicianId: data?.technician_id || null,
           };
         }, { timeout: 20000 })
-        .toEqual({ status: 'scheduled', hasSchedule: true, technicianId: technicianUserId });
+        .toEqual({ status: 'scheduled', hasSchedule: true, technicianId: technicianRecordId });
 
       await expect(
         page
@@ -465,7 +465,7 @@ test.describe.serial('UAT LOCAL schedule dispatch board', () => {
         service_address: '100 Conflict Ave, Titusville, FL 32780',
         payment_status: 'unpaid',
         total_amount: 149,
-        technician_id: technicianUserId,
+        technician_id: technicianRecordId,
         scheduled_start: toIsoAt(1, 9, 0),
         scheduled_end: toIsoAt(1, 11, 0),
         created_at: toIsoAt(-1, 8, 0),
@@ -735,7 +735,7 @@ test.describe.serial('UAT LOCAL schedule dispatch board', () => {
           status: 'scheduled',
           serviceAddress: '930 Alabama St, Titusville, FL 32796',
           hasScheduledStart: true,
-          technicianId: technicianUserId,
+          technicianId: technicianRecordId,
         });
     } finally {
       if (jobIds.length > 0) {

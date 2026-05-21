@@ -44,7 +44,12 @@ const KanbanCard = ({ id, card, onClick, isOverlay }) => {
   const formatTracking = (trackingValue) => (trackingValue == null ? '' : String(trackingValue).trim().toUpperCase());
   
   // Reference Numbers
-  const refNumber = card.invoice_number || card.job_number || card.quote_number || card.estimate_number || card.work_order_number;
+  const refNumber =
+    card.invoice_number ||
+    card.work_order_number ||
+    card.job_number ||
+    card.quote_number ||
+    card.estimate_number;
   const refNumberLabel = formatTracking(refNumber);
   const isLinkedRecord = Boolean(card?.entity_type && card?.entity_id);
   

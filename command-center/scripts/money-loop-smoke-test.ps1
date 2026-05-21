@@ -110,8 +110,11 @@ $envMap = Parse-EnvOutput -Lines $envLines
 
 $anon = $envMap['ANON_KEY']
 $functionsUrl = $envMap['FUNCTIONS_URL']
+if (-not $functionsUrl -and $envMap['API_URL']) {
+  $functionsUrl = ($envMap['API_URL'].TrimEnd('/') + '/functions/v1')
+}
 if (-not $anon -or -not $functionsUrl) {
-  throw "Could not read ANON_KEY / FUNCTIONS_URL from supabase status. Output:`n$($envLines -join "`n")"
+  throw "Could not read ANON_KEY / FUNCTIONS_URL (or API_URL fallback) from supabase status. Output:`n$($envLines -join "`n")"
 }
 
 $runId = "$RunPrefix-$(Get-Date -Format 'yyyyMMdd_HHmmss')"
@@ -200,7 +203,7 @@ ins_quote AS (
   SELECT
     '$TenantId',
     ins_lead.id,
-    'SMOKE-QUOTE-1',
+    'SMOKE-QUOTE-$runId',
     'sent',
     100,
     0,

@@ -1,0 +1,4 @@
+run_id: 2026-04-18T15:23:55.1489223+00:00
+
+cmd: rg -n --hidden -S \
+cmd: rg -n --hidden -S \

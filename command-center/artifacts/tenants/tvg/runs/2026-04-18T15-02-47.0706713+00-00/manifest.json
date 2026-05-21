@@ -1,0 +1,50 @@
+{
+  "items": [
+    {
+      "path": "meta.json",
+      "sha256": "28e9d6c2fa634b3457fa9bfd801afb46200b64f3219b7948787be335a7d6b32d"
+    },
+    {
+      "path": "result.json",
+      "sha256": "63e4038deb28a674d17fccf33f4cad4009222792ab46205aa15c7afe4b5e1ca8"
+    },
+    {
+      "path": "stdout.log",
+      "sha256": "bc712aae1d769b86a375422eab6bf6c4816d48eff4a5d07b2d78aaad6be732bd"
+    },
+    {
+      "path": "stderr.log",
+      "sha256": "2fc2f312f4214d96504be93748f4e8fcbe3ed296aebccbebb72b65f4da6f5071"
+    },
+    {
+      "path": "logs/command_log.txt",
+      "sha256": "313215b9489a5e254aecf6cd26b7aad9838fd2fd642ffbef3173b2a8a1d783ac"
+    },
+    {
+      "path": "logs/h1a_verification_stdout.log",
+      "sha256": "dce2600d4bbae4c5fc6fbc3b66760ce07d48716098d205874ae4b59b8a8225ee"
+    },
+    {
+      "path": "logs/h1a_verification_stderr.log",
+      "sha256": "5c8f7b468c80a4053d7e6a4ca4e2502a3a599857c025842c03277077ee0f67bb"
+    },
+    {
+      "path": "evidence/db_appointments_rls_status.txt",
+      "sha256": "99db0991d93e4655922a020fa50072d7395c722e10167c8a4b68aa1b2e8cd4ae"
+    },
+    {
+      "path": "evidence/db_appointments_policies.txt",
+      "sha256": "9dc28962d484b91c9de69992c7329aec37fd3cc1f30c53c2ee8a9afe7ded181c"
+    },
+    {
+      "path": "evidence/db_appointments_schema.sql",
+      "sha256": "35f26dc640f945e05ef93825af90b82f76aea0d729080b312591bea4163a02c5"
+    },
+    {
+      "path": "outputs/h1a_verification_result.json",
+      "sha256": "66a65cd09e205908c8646a17fbec75cb484e244c107c901b8e5c3ff5d4fd363b"
+    }
+  ],
+  "run_id": "2026-04-18T15:02:47.0706713+00:00",
+  "generated_at": "2026-04-18T15:02:47.0706713+00:00"
+}

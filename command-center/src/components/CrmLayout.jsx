@@ -34,7 +34,8 @@ const CrmLayout = () => {
     { name: 'Pipeline', href: '/crm/pipeline', icon: LayoutGrid },
     { name: 'Leads', href: '/crm/leads', icon: Users },
     { name: 'Work Orders', href: '/crm/jobs', icon: Briefcase },
-    { name: 'Estimates', href: '/crm/estimates', icon: ClipboardCheck },
+    // NOTE: `/crm/estimates` is the active Quotes/Proposals surface today (legacy route name).
+    { name: 'Quotes', href: '/crm/estimates', icon: ClipboardCheck },
     { name: 'Proposals', href: '/crm/proposals', icon: FileText },
     { name: 'Smart Call Console', href: '/crm/call-console', icon: Phone },
     { name: 'Inbox', href: '/crm/inbox', icon: Mail },

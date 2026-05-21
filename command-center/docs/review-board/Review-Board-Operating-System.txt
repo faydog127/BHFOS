@@ -1,0 +1,11 @@
+# Canonical Review Board Contract (Source of Truth)
+#
+# Paste the full Review Board Operating System contract text here.
+# This file is the canonical, version-controlled reference for:
+# - classification taxonomy
+# - the 4 routes (Exploration / Hardening / Recursive Audit / High-Stakes)
+# - board roles
+# - decision ladder
+# - required output keys + meanings
+#
+# Workflows should not maintain multiple divergent copies of this content.

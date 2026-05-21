@@ -215,7 +215,22 @@ const Leads = () => {
       }
 
       if (stageFilter !== 'all') {
-        query = query.eq('pipeline_stage', stageFilter);
+        const normalizedStage = String(stageFilter ?? '').toLowerCase().trim();
+        const statusForFilter =
+          normalizedStage === 'scheduled' || normalizedStage === 'job_complete'
+            ? 'converted'
+            : normalizedStage === 'nurture'
+              ? 'contacted'
+              : ['new', 'contacted', 'qualified', 'converted', 'lost'].includes(normalizedStage)
+                ? normalizedStage
+                : null;
+
+        if (statusForFilter) {
+          // Prefer canonical status as the truth; keep pipeline stage as compatibility for legacy rows.
+          query = query.or(`status.eq.${statusForFilter},pipeline_stage.eq.${normalizedStage},stage.eq.${normalizedStage}`);
+        } else {
+          query = query.or(`pipeline_stage.eq.${normalizedStage},stage.eq.${normalizedStage}`);
+        }
       }
       if (personaFilter !== 'all') {
         query = query.eq('persona', personaFilter);
@@ -335,7 +350,7 @@ const Leads = () => {
     new: 'new',
     contacted: 'contacted',
     qualified: 'qualified',
-    scheduled: 'scheduled',
+    scheduled: 'converted',
     job_complete: 'converted',
     nurture: 'contacted',
     lost: 'lost',
@@ -355,15 +370,13 @@ const Leads = () => {
     attempting: 'contacted',
     dormant: 'contacted',
     qualified: 'qualified',
-    scheduled: 'scheduled',
+    scheduled: 'job_complete',
     converted: 'job_complete',
     completed: 'job_complete',
     lost: 'lost',
     junk: 'lost',
     archived: 'lost',
   };
-
-  const PIPELINE_STATUS_SET = new Set(Object.keys(STATUS_TO_STAGE_MAP));
 
   const resolveLeadNotes = (lead) => lead?.notes ?? lead?.[NOTES_FALLBACK_FIELD] ?? '';
 
@@ -389,6 +402,12 @@ const Leads = () => {
   };
 
   const resolvePipelineStage = (lead) => {
+    const rawStatus = normalizeStageValue(lead?.status);
+    const canonicalStatus = rawStatus === 'scheduled' ? 'converted' : rawStatus;
+    if (canonicalStatus && STATUS_TO_STAGE_MAP[canonicalStatus]) {
+      return STATUS_TO_STAGE_MAP[canonicalStatus];
+    }
+
     const stageCandidate = normalizeStage(lead?.pipeline_stage || lead?.stage, {
       lead_id: lead?.id,
       pipeline_stage: lead?.pipeline_stage ?? lead?.stage ?? null,
@@ -396,16 +415,16 @@ const Leads = () => {
     });
     if (stageCandidate) return stageCandidate;
 
-    const status = normalizeStageValue(lead?.status);
-    if (!status) return 'new';
-    if (STATUS_TO_STAGE_MAP[status]) return STATUS_TO_STAGE_MAP[status];
-    console.warn('[Leads] Pipeline stage fallback to default:', {
-      ...buildPipelineWarnContext({
-        lead_id: lead?.id,
-        pipeline_stage: lead?.pipeline_stage ?? lead?.stage ?? null,
-        status: lead?.status ?? null,
-      }),
-    });
+    if (rawStatus && !STATUS_TO_STAGE_MAP[canonicalStatus]) {
+      console.warn('[Leads] Unknown lead status for stage mapping:', {
+        ...buildPipelineWarnContext({
+          lead_id: lead?.id,
+          pipeline_stage: lead?.pipeline_stage ?? lead?.stage ?? null,
+          status: lead?.status ?? null,
+        }),
+      });
+    }
+
     return 'new';
   };
 
@@ -415,20 +434,6 @@ const Leads = () => {
     return STAGE_TO_STATUS_MAP[stage] || 'new';
   };
 
-  const computeStatusForSave = (lead, stageValue) => {
-    const normalizedCurrent = normalizeStageValue(lead?.status);
-    const currentStage = resolvePipelineStage(lead);
-    const nextStage = normalizeStageValue(stageValue) || currentStage || 'new';
-    const mappedStatus = mapStageToStatus(nextStage);
-
-    const shouldSyncStatus =
-      !normalizedCurrent ||
-      PIPELINE_STATUS_SET.has(normalizedCurrent) ||
-      normalizeStageValue(currentStage) !== normalizeStageValue(nextStage);
-
-    return shouldSyncStatus ? mappedStatus : lead?.status || mappedStatus;
-  };
-
   const buildLeadPayloadFromForm = (nowIso) => ({
     first_name: drawerFormData.firstName,
     last_name: drawerFormData.lastName,
@@ -436,7 +441,7 @@ const Leads = () => {
     phone: drawerFormData.phone || null,
     service: drawerFormData.service || null,
     pipeline_stage: normalizeStageValue(drawerFormData.pipelineStage) || 'new',
-    status: computeStatusForSave(selectedLead, drawerFormData.pipelineStage),
+    status: mapStageToStatus(drawerFormData.pipelineStage),
     preferred_document_delivery:
       normalizePreferredDocumentDelivery(drawerFormData.preferredDocumentDelivery) === 'auto'
         ? null

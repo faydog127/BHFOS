@@ -18,14 +18,16 @@ export const FeatureFlagProvider = ({ children }) => {
     enableCallConsole: true,
     enableSMS: true,
     enableContacts: true,
+    enableInspections: true,
     enablePricebook: true,
     enablePartners: true,
+    enableTechPwa: String(import.meta?.env?.VITE_TECH_PWA_ENABLED || 'true').toLowerCase() !== 'false',
     // Explicitly disabling visualEditor to prevent MIME/Load errors
     visualEditor: false 
   });
 
   return (
-    <FeatureFlagContext.Provider value={{ flags, setFlags }}>
+    <FeatureFlagContext.Provider value={{ flags, setFlags, isLoading: false }}>
       {children}
     </FeatureFlagContext.Provider>
   );

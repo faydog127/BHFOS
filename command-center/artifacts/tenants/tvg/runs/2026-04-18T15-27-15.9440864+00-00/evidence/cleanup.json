@@ -1,0 +1,13 @@
+{
+  "run_id": "2026-04-18T15:27:15.9440864+00:00",
+  "deleted": [
+    "appointments.rest:43292956-4c83-4d6e-a909-f64b185ff275",
+    "appointments.edge:bb5fd4eb-746d-47fe-81de-9c6e88c82ac0",
+    "leads:8bc0c6ed-3958-40e8-8b9c-d48a736d1a06",
+    "leads:f4b57dcd-f26b-4634-9ccc-2457e8e49646",
+    "auth.users:e4d30158-f66c-4f52-816d-e54250e05193",
+    "auth.users:6f8f4082-f4a4-4f91-ac9d-7bc8b1ef78d6"
+  ],
+  "errors": [],
+  "attempted_at": "2026-04-18T15:27:19.0549326+00:00"
+}

@@ -1,0 +1,64 @@
+run_id: 2026-04-18T15:36:32.0786518+00:00
+**********************
+PowerShell transcript start
+Start time: 20260418113634
+Username: DESKTOP-85O8NJT\ol_mann
+RunAs User: DESKTOP-85O8NJT\ol_mann
+Configuration Name: 
+Machine: DESKTOP-85O8NJT (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -File scripts/runtime/h1a-appointments-tenant-isolation.ps1 -RunId 2026-04-18T15-36-32.0786518+00-00 -RunIdIso 2026-04-18T15:36:32.0786518+00:00 -RunRoot C:\BHFOS\command-center\artifacts\tenants\tvg\runs\2026-04-18T15-36-32.0786518+00-00 -ApiUrl http://127.0.0.1:25431 -TenantA tvg -TenantB other-tenant
+Process ID: 25748
+PSVersion: 7.5.5
+PSEdition: Core
+GitCommitId: 7.5.5
+OS: Microsoft Windows 10.0.26200
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+run_id_slug=2026-04-18T15-36-32.0786518+00-00
+run_id_iso=2026-04-18T15:36:32.0786518+00:00
+api_url=http://127.0.0.1:25431
+tenant_a=tvg jwt_a=eyJh...X9sg
+tenant_b=other-tenant jwt_b=eyJh...I_FQ
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "code": "42501",
+  "details": null,
+  "hint": null,
+  "message": "new row violates row-level security policy for table \u0022appointments\u0022"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Tenant mismatch"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Unauthorized"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Appointment not found"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Tenant mismatch"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Unauthorized"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Tenant mismatch"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Work order not found"
+}"
+**********************
+PowerShell transcript end
+End time: 20260418113638
+**********************

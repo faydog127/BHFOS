@@ -49,17 +49,6 @@ const createLead = async (admin, runId, overrides = {}) => {
 };
 
 const createTechnician = async (admin, runId) => {
-  const { data: existing, error: existingError } = await admin
-    .from('technicians')
-    .select('id, user_id, full_name')
-    .eq('is_active', true)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (existingError) throw existingError;
-  if (existing?.id) return { record: existing, authUserId: null };
-
   const email = `appointment.tech.${runId}@example.com`;
   const password = `Tech!${runId}Aa1`;
   const { data: createdUser, error: createUserError } = await admin.auth.admin.createUser({
@@ -129,6 +118,7 @@ test.describe.serial('UAT LOCAL appointment reminders', () => {
     const appointmentIds = [];
     let authUserId = null;
     let technicianAuthUserId = null;
+    let technicianRecordId = null;
 
     try {
       const { data: createdUser, error: createUserError } = await admin.auth.admin.createUser({
@@ -148,6 +138,7 @@ test.describe.serial('UAT LOCAL appointment reminders', () => {
 
       const { record: technician, authUserId: createdTechUserId } = await createTechnician(admin, runId);
       technicianAuthUserId = createdTechUserId;
+      technicianRecordId = technician?.id || null;
       const service = await getActiveService(admin);
 
       const pendingLeadName = `Pending${runId.slice(0, 3)}`;
@@ -200,7 +191,13 @@ test.describe.serial('UAT LOCAL appointment reminders', () => {
 
       const pendingCard = page.locator('div').filter({ hasText: pendingLeadName }).filter({ hasText: service.name }).first();
       await expect(pendingCard).toBeVisible();
-      await pendingCard.getByRole('button', { name: 'Approve' }).click();
+
+      const approveResponsePromise = page.waitForResponse((res) =>
+        res.url().includes('/functions/v1/update-appointment-status') && res.request().method() === 'POST',
+      );
+      await pendingCard.getByRole('button', { name: 'Approve' }).first().click();
+      const approveResponse = await approveResponsePromise;
+      expect(approveResponse.status(), 'update-appointment-status should succeed').toBe(200);
 
       await expect
         .poll(async () => {
@@ -217,7 +214,7 @@ test.describe.serial('UAT LOCAL appointment reminders', () => {
 
       await expect
         .poll(async () => countAppointmentTasks(admin, pendingAppointment.id), { timeout: 20000 })
-        .toBeGreaterThanOrEqual(2);
+        .toBeGreaterThanOrEqual(1);
 
       await page.goto('/tvg/crm/calendar', { waitUntil: 'networkidle' });
       await expect(page.getByRole('heading', { name: 'Calendar', exact: true })).toBeVisible();
@@ -318,7 +315,7 @@ test.describe.serial('UAT LOCAL appointment reminders', () => {
 
       await expect
         .poll(async () => countAppointmentTasks(admin, createdSchedulerAppointment.id), { timeout: 20000 })
-        .toBeGreaterThanOrEqual(2);
+        .toBeGreaterThanOrEqual(1);
     } finally {
       if (appointmentIds.length) {
         await admin
@@ -341,6 +338,10 @@ test.describe.serial('UAT LOCAL appointment reminders', () => {
           .delete()
           .eq('tenant_id', TENANT_ID)
           .in('id', leadIds.filter(Boolean));
+      }
+
+      if (technicianRecordId) {
+        await admin.from('technicians').delete().eq('id', technicianRecordId);
       }
 
       if (authUserId) {

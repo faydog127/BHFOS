@@ -1,0 +1,10 @@
+{
+  "verification_result": "outputs/h1a_verification_result.json",
+  "unverified_scenarios": [],
+  "run_id": "2026-04-18T15:29:22.9635632+00:00",
+  "status": "FAIL",
+  "failed_scenarios": [
+    "unauthorized_update_blocked_rest",
+    "cross_tenant_update_blocked_rest"
+  ]
+}

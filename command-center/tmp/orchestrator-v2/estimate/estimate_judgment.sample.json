@@ -1,0 +1,211 @@
+{
+  "schema_version": "estimate_judgment_v1.0",
+  "tenant_id": "vent-guys",
+
+  "estimate_record_id": "ESTREC-SAMPLE-2026-04-09-001",
+  "estimate_number": "20261094",
+  "job_id": "PENDING-687115",
+
+  "status": "draft",
+  "issue_date": "2026-04-09",
+  "valid_through_date": "2026-04-15",
+  "timezone": "America/New_York",
+  "currency_code": "USD",
+  "version_label": "v1",
+
+  "prepared_for": {
+    "name": "ERRON FAYSON",
+    "email": "info@vent-guys.com",
+    "phone": "3217478194",
+    "property_label": "ERRON FAYSON Property"
+  },
+
+  "service_location": {
+    "location_name": "ERRON FAYSON Property",
+    "address_line_1": null,
+    "address_line_2": null,
+    "city": null,
+    "state": null,
+    "postal_code": null,
+    "country_code": "US"
+  },
+
+  "evidence_refs": [
+    {
+      "type": "crm_quote_pdf",
+      "id": "20261094",
+      "uri": "./source/The Vent Guys CRM_test001.pdf"
+    }
+  ],
+
+  "situation_summary": {
+    "headline": "Listing-ready HVAC refresh with targeted return-side improvements",
+    "observations": [
+      "This quote is intended to support a listing-ready refresh and return-side airflow improvements."
+    ],
+    "notes": [
+      "Insert technician evaluation notes/photos here if available. Keep language descriptive (no over-claiming)."
+    ]
+  },
+
+  "risk_impact": {
+    "risk_level": "moderate",
+    "customer_facing_impacts": [
+      "Comfort and perceived air quality can impact walkthrough confidence.",
+      "Skipping the refresh may leave avoidable dust/odor sensitivity for occupants or buyers."
+    ],
+    "what_if_ignored": [
+      "The system may remain functional but not presentation-optimized."
+    ]
+  },
+
+  "recommendation": {
+    "recommended_option_key": "better",
+    "reason": "Best balance of presentation, comfort, and time-to-schedule without expanding into custom system-wide balancing."
+  },
+
+  "approval_terms": {
+    "terms_reference": "standard_estimate_terms_v1",
+    "approval_copy": "Approve this estimate to lock scope, pricing, and scheduling. Any scope changes after approval require a formal change order tied to this estimate version."
+  },
+
+  "boundary_inheritance_policy": "render_universal_plus_selected_option",
+
+  "universal_boundaries": {
+    "not_included": [
+      "Dryer appliance repair or replacement",
+      "Hidden damage, code upgrades, or material replacement not listed",
+      "Access conditions that materially change labor or equipment requirements"
+    ]
+  },
+
+  "options": {
+    "good": {
+      "label": "GOOD",
+      "name": "Realtor Refresh (baseline)",
+      "recommended": false,
+      "is_fully_quoted": true,
+      "line_items": [
+        {
+          "line_id": "LI-GOOD-001",
+          "name": "Package: Realtor Refresh",
+          "quantity": 1,
+          "unit": "ea",
+          "unit_price_cents": 59900,
+          "amount_cents": 59900,
+          "taxable": false
+        }
+      ],
+      "pricing": {
+        "subtotal_cents": 59900,
+        "tax_total_cents": 0,
+        "total_cents": 59900
+      },
+      "scope_boundaries": {
+        "included": [
+          "Package: Realtor Refresh",
+          "Arrival-ready documentation and service coordination"
+        ],
+        "not_included": [
+          "Additional return adjustments (unless added by change order)",
+          "Dryer appliance repair or replacement",
+          "Hidden damage, code upgrades, or material replacement not listed",
+          "Access conditions that materially change labor or equipment requirements"
+        ]
+      }
+    },
+
+    "better": {
+      "label": "BETTER",
+      "name": "Realtor Refresh + Additional Returns (recommended)",
+      "recommended": true,
+      "is_fully_quoted": true,
+      "line_items": [
+        {
+          "line_id": "LI-BETTER-001",
+          "name": "Package: Realtor Refresh",
+          "quantity": 1,
+          "unit": "ea",
+          "unit_price_cents": 59900,
+          "amount_cents": 59900,
+          "taxable": false
+        },
+        {
+          "line_id": "LI-BETTER-002",
+          "name": "Additional Return (Each)",
+          "quantity": 5,
+          "unit": "ea",
+          "unit_price_cents": 4500,
+          "amount_cents": 22500,
+          "taxable": false
+        }
+      ],
+      "pricing": {
+        "subtotal_cents": 82400,
+        "tax_total_cents": 0,
+        "total_cents": 82400
+      },
+      "scope_boundaries": {
+        "included": [
+          "Package: Realtor Refresh",
+          "Additional Return (Each) x5",
+          "Arrival-ready documentation and service coordination"
+        ],
+        "not_included": [
+          "Dryer appliance repair or replacement",
+          "Hidden damage, code upgrades, or material replacement not listed",
+          "Access conditions that materially change labor or equipment requirements"
+        ]
+      }
+    },
+
+    "best": {
+      "label": "BEST",
+      "name": "Full Return Optimization (custom scope)",
+      "recommended": false,
+      "is_fully_quoted": false,
+      "line_items": [
+        {
+          "line_id": "LI-BEST-001",
+          "name": "Package: Realtor Refresh",
+          "quantity": 1,
+          "unit": "ea",
+          "unit_price_cents": 59900,
+          "amount_cents": 59900,
+          "taxable": false
+        },
+        {
+          "line_id": "LI-BEST-002",
+          "name": "Additional Return Adjustments (beyond initial 5)",
+          "quantity": 1,
+          "unit": "lot",
+          "unit_price_cents": 0,
+          "amount_cents": 0,
+          "taxable": false,
+          "notes": "Final quantity/scope priced after confirmation."
+        }
+      ],
+      "price_range": {
+        "min_total_cents": 82400,
+        "max_total_cents": 129900,
+        "notes": "Best option is a scoped optimization. Range is a placeholder for v1 sample; final price is issued after confirmed scope."
+      },
+      "scope_boundaries": {
+        "included": [
+          "Package: Realtor Refresh",
+          "Expanded return-side optimization (scoped after confirmation)",
+          "Arrival-ready documentation and service coordination"
+        ],
+        "not_included": [
+          "Dryer appliance repair or replacement",
+          "Hidden damage, code upgrades, or material replacement not listed",
+          "Access conditions that materially change labor or equipment requirements"
+        ]
+      }
+    }
+  },
+
+  "selection": {
+    "selected_option_key": "better"
+  }
+}

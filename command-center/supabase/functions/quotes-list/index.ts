@@ -62,8 +62,15 @@ Deno.serve(async (req) => {
       .eq('tenant_id', effectiveTenantId)
       .order('created_at', { ascending: false });
 
-    if (status && status !== 'all') {
-      query = query.eq('status', status);
+    const normalizedStatus = typeof status === 'string' ? status.trim().toLowerCase() : String(status ?? '').trim().toLowerCase();
+
+    if (normalizedStatus && normalizedStatus !== 'all') {
+      // Canonical "won" status is accepted. We still allow filtering legacy approved rows for back-compat.
+      if (normalizedStatus === 'accepted') {
+        query = query.in('status', ['accepted', 'approved']);
+      } else {
+        query = query.eq('status', status);
+      }
     }
 
     return query;

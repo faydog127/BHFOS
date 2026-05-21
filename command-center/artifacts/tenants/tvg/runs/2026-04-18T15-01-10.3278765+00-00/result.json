@@ -1,0 +1,10 @@
+{
+  "verification_result": "outputs/h1a_verification_result.json",
+  "run_id": "2026-04-18T15:01:10.3278765+00:00",
+  "failed_scenarios": [
+    "cross_tenant_write_blocked_edge_work_order_update",
+    "authorized_same_tenant_write_edge_work_order_update"
+  ],
+  "unverified_scenarios": [],
+  "status": "FAIL"
+}

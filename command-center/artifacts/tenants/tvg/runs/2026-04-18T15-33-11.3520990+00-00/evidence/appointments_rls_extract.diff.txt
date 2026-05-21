@@ -1,0 +1,71 @@
+diff --git a/C:/BHFOS/command-center/artifacts/tenants/tvg/runs/2026-04-18T15-33-11.3520990+00-00/evidence/extract_pre_appointments_table.sql b/C:/BHFOS/command-center/artifacts/tenants/tvg/runs/2026-04-18T15-33-11.3520990+00-00/evidence/extract_post_appointments_rls.sql
+index 75072df..4c86983 100644
+--- a/C:/BHFOS/command-center/artifacts/tenants/tvg/runs/2026-04-18T15-33-11.3520990+00-00/evidence/extract_pre_appointments_table.sql
++++ b/C:/BHFOS/command-center/artifacts/tenants/tvg/runs/2026-04-18T15-33-11.3520990+00-00/evidence/extract_post_appointments_rls.sql
+@@ -1,60 +1,6 @@
+--- Name: appointments; Type: TABLE; Schema: public; Owner: postgres
+---
+-
+-CREATE TABLE IF NOT EXISTS "public"."appointments" (
+-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+-    "tenant_id" "text" DEFAULT 'tvg'::"text" NOT NULL,
+-    "lead_id" "uuid",
+-    "technician_id" "uuid",
+-    "price_book_id" "uuid",
+-    "service_name" "text" NOT NULL,
+-    "service_category" "text",
+-    "pricing_snapshot" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
+-    "scheduled_start" timestamp with time zone NOT NULL,
+-    "scheduled_end" timestamp with time zone NOT NULL,
+-    "arrival_window_start" timestamp with time zone,
+-    "arrival_window_end" timestamp with time zone,
+-    "duration_minutes" integer DEFAULT 120 NOT NULL,
+-    "status" "text" DEFAULT 'pending'::"text" NOT NULL,
+-    "service_address" "text",
+-    "customer_notes" "text",
+-    "admin_notes" "text",
+-    "reminders_enabled" boolean DEFAULT true NOT NULL,
+-    "confirmation_sent_at" timestamp with time zone,
+-    "confirmed_at" timestamp with time zone,
+-    "completed_at" timestamp with time zone,
+-    "cancelled_at" timestamp with time zone,
+-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+-    "job_id" "uuid"
+-);
+-
+-
+-ALTER TABLE "public"."appointments" OWNER TO "postgres";
+-
+---
+--- Name: automation_suspensions; Type: TABLE; Schema: public; Owner: postgres
+---
+-
+-CREATE TABLE IF NOT EXISTS "public"."automation_suspensions" (
+-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+-    "tenant_id" "text",
+-    "entity_type" "text" NOT NULL,
+-    "entity_id" "uuid" NOT NULL,
+-    "reason" "text" NOT NULL,
+-    "suspended_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+-    "resumed_at" timestamp with time zone
+-);
+-
+-
+-ALTER TABLE "public"."automation_suspensions" OWNER TO "postgres";
+-
+---
+--- Name: COLUMN "automation_suspensions"."tenant_id"; Type: COMMENT; Schema: public; Owner: postgres
+---
+-
+-COMMENT ON COLUMN "public"."automation_suspensions"."tenant_id" IS 'Tenant scope (optional in v1; reserved for multi-tenant).';
+-
+-
+---
+--- Name: business_settings; Type: TABLE; Schema: public; Owner: postgres
++5104:CREATE POLICY "Appointments are deletable by tenant" ON "public"."appointments" FOR DELETE TO "authenticated" USING (("tenant_id" = (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'tenant_id'::"text")));
++5111:CREATE POLICY "Appointments are insertable by tenant" ON "public"."appointments" FOR INSERT TO "authenticated" WITH CHECK (("tenant_id" = (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'tenant_id'::"text")));
++5118:CREATE POLICY "Appointments are readable by tenant" ON "public"."appointments" FOR SELECT TO "authenticated" USING (("tenant_id" = (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'tenant_id'::"text")));
++5125:CREATE POLICY "Appointments are updatable by tenant" ON "public"."appointments" FOR UPDATE TO "authenticated" USING (("tenant_id" = (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'tenant_id'::"text"))) WITH CHECK (("tenant_id" = (("auth"."jwt"() -> 'app_metadata'::"text") ->> 'tenant_id'::"text")));
++5132:CREATE POLICY "Appointments service role full access" ON "public"."appointments" TO "service_role" USING (true) WITH CHECK (true);
++5403:ALTER TABLE "public"."appointments" ENABLE ROW LEVEL SECURITY;

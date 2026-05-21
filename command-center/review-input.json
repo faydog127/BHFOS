@@ -1,207 +1,229 @@
 {
   "gate_version": "v1",
-  "change_id": "CHANGE-20260408-LAYER2-LEDGER-LOCK",
+  "tenant_id": "tvg",
   "pr_id": "LOCAL",
-  "title": "Layer 2 (Orchestrator v2) — observed judgment lock for ledger contention invariants",
-  "generated_at": "2026-04-09T19:27:08.796Z",
-  "source_commit": "5862bf696f147cbbe13fb7a301b5cae4927236f5",
-  "run_id": "2026-04-09T03:54:25.639Z",
-  "tenant_id": "vent-guys",
-  "files_changed": [
-    "review-input.json",
-    "docs/reconciliation/lock/appendix-a/index.md",
-    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_billing-ledger-race-soak.md",
-    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
-    "tmp/billing-ledger-php/tests/006_php_race.ps1",
-    "tmp/billing-ledger-php/tests/soak-php-races.ps1",
-    "tmp/orchestrator-v2/eval/evaluate_bundle.mjs",
-    "tmp/orchestrator-v2/eval/validate_judgment.mjs",
-    "tmp/orchestrator-v2/runner/capture_observed_success.ps1",
-    "tmp/orchestrator-v2/runner/run_layer2_pipeline.ps1",
-    "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
-    "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/manifest.json",
-    "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/db_output.txt",
-    "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log",
-    "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
-  ],
-  "scope": {
-    "included": [
-      "review-input.json",
-      "docs/reconciliation/lock/appendix-a/index.md",
-      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_billing-ledger-race-soak.md",
-      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
-      "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/manifest.json",
-      "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/db_output.txt",
-      "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log",
-      "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
-    ],
-    "excluded": []
-  },
-  "domain_tags": [
-    "money_state"
-  ],
-  "summary": "Locks Layer 2 judgment against mechanically captured observed artifacts for ledger contention invariants (single-winner credit allocation + refund cap under contention) and validates evaluator determinism plus negative controls.",
-  "decider": {
-    "name": "UNASSIGNED",
-    "role": "human_decider",
-    "approved_at": "2026-04-09T19:27:08.796Z"
-  },
-  "risk_acceptances": [],
-  "scenarios": [
-    {
-      "category": "concurrency",
-      "scenario": "Two concurrent credit applications contend against the same available credit.",
-      "expected_behavior": "Single winner; loser fails with expected insufficient-available error; no over-application.",
-      "verification_method": "Observed soak artifacts + Layer2 judgment; see Appendix A evidence doc.",
-      "evidence_required": [
-        "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_billing-ledger-race-soak.md",
-        "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/db_output.txt",
-        "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
-      ]
-    },
-    {
-      "category": "replay_idempotency",
-      "scenario": "Layer 2 evaluator is deterministic on identical artifacts (replay-safe judgment).",
-      "expected_behavior": "Same observed bundle evaluated twice yields identical machine-checkable judgment JSON.",
-      "verification_method": "Determinism assertion is proven by stored judgment outputs referenced by EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md.",
-      "evidence_required": [
-        "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
-        "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
-      ]
-    },
-    {
-      "category": "bad_data",
-      "scenario": "Illegally scoped allocations/applications are rejected by invariants and constraint-breaker tests.",
-      "expected_behavior": "Cross-payer/currency/billing-case operations fail (DB + service checks).",
-      "verification_method": "Full deck contains explicit constraint-break attempts and invariants.",
-      "evidence_required": [
-        "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_billing-ledger-race-soak.md"
-      ]
-    },
-    {
-      "category": "dependency_failure",
-      "scenario": "Environment failure is classified as caution (no correctness signal).",
-      "expected_behavior": "DEPLOY_CAUTION + environment_fix when artifacts incomplete / DB connectivity fails.",
-      "verification_method": "Evaluator run against golden environment-failure bundle.",
-      "evidence_required": [
-        "tmp/orchestrator-v2/examples/03_environment_failure/run_summary.json"
-      ]
-    },
-    {
-      "category": "human_error",
-      "scenario": "An invariant violation is correctly blocked by the evaluator (do not deploy).",
-      "expected_behavior": "DEPLOY_BLOCKED when correctness invariants fail.",
-      "verification_method": "Evaluator run against golden invariant-violation bundle.",
-      "evidence_required": [
-        "tmp/orchestrator-v2/examples/04_invariant_violation_deploy_blocked/run_summary.json"
-      ]
-    }
-  ],
-  "concurrency_model": {
-    "model": "lock_based",
-    "lock_strategy": "Reserve idempotency -> lock funding object (payment/credit memo) FOR UPDATE -> lock invoices ORDER BY invoice_record_id FOR UPDATE -> lock dependent ledger rows last; enforce caps at write time.",
-    "guarantees": [
-      "Contention paths are executed under row locks; single-winner outcomes are enforced by write-time caps and invariant checks."
-    ],
-    "non_guarantees": [
-      "This is local/CI-like proof; production infra differences still require production validation before claiming PRODUCTION-VALIDATED."
-    ]
-  },
-  "ops_impact": {
-    "alert_dedupe_identity": "idempotency_key",
-    "max_open_alerts_per_entity": "1",
-    "task_dedupe_rule": "global idempotency key registry + unique constraints"
-  },
   "trigger_evidence": {
     "derived_domain_tags": [
-      "money_state"
+      "tenant_isolation"
     ],
     "derivation_inputs": [
-      "Local DB-backed race + soak runs (ApplyCredit contention + Refund contention).",
-      "Orchestrator v2 evaluator applied to observed success + negative controls."
+      "rg -n --hidden -S \"\\\\bappointments\\\\b\" supabase src scripts",
+      "git diff --name-only (manual scope list for H1a)"
     ]
   },
+  "concurrency_model": {
+    "guarantees": [
+      "RLS prevents cross-tenant reads/writes for authenticated callers based on JWT tenant claim."
+    ],
+    "model": "dedupe_based",
+    "non_guarantees": [
+      "Does not prove multi-tenant role/RBAC separation beyond tenant_id isolation."
+    ]
+  },
+  "run_id": "2026-04-18T15:36:32.0786518+00:00",
+  "readiness": {
+    "status": "READY",
+    "labels": [
+      "P0-02: LOCAL_PROVEN"
+    ]
+  },
+  "verification": {
+    "runtime_negative_test": "h1a-appointments-tenant-isolation.ps1 covers anon + cross-tenant + spoofed tenant_id scenarios; see outputs/h1a_verification_result.json.",
+    "tenant_boundary_analysis": "RLS policies + edge audit recorded; see db_appointments_policies.txt and edge_function_audit.json.",
+    "rollback_plan": "Revert by dropping appointment policies and disabling RLS via a rollback migration (LOCAL only). Pre-change artifacts captured in artifacts/tenants/tvg/runs/h1a_appointments_rls_20260418_101415/."
+  },
+  "summary": "Enable RLS + tenant-scoped policies on public.appointments and ensure appointment-related edge functions derive tenant scope from verified JWT claims (never request body). Verified via local harness with positive and negative tenant isolation tests.",
+  "files_changed": [
+    "supabase/migrations/20260417120000_h1a_appointments_rls_policies.sql",
+    "supabase/functions/_shared/auth.ts",
+    "supabase/functions/create-appointment/index.ts",
+    "supabase/functions/update-appointment-status/index.ts",
+    "supabase/functions/run-appointment-reminders/index.ts",
+    "supabase/functions/work-order-update/index.ts",
+    "scripts/runtime/h1a-appointments-tenant-isolation.ps1",
+    "scripts/runtime/run-h1a-appointments-rls.ps1"
+  ],
+  "source_commit": "699707415d5a7977821fbaa6e02491249b7958e5",
+  "ops_impact": {
+    "alert_dedupe_identity": "tenant_id:appointment_id",
+    "max_open_alerts_per_entity": "n/a (local hardening run)",
+    "task_dedupe_rule": "n/a (no async dispatcher changes)"
+  },
+  "domain_tags": [
+    "tenant_isolation"
+  ],
+  "generated_at": "2026-04-18T15:36:32.0786518+00:00",
+  "findings": [
+    {
+      "proof": [
+        "artifacts/tenants/tvg/runs/h1a_appointments_rls_20260418_101415/evidence/db_pre_appointments_rls_status.txt",
+        "supabase/migrations/20260417120000_h1a_appointments_rls_policies.sql"
+      ],
+      "verification_method": "Local harness executes REST and edge negative tests.",
+      "closure_evidence_required": [
+        "artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/outputs/h1a_verification_result.json",
+        "artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/evidence/db_appointments_policies.txt"
+      ],
+      "title": "public.appointments lacked RLS coverage in canonical migrations",
+      "id": "F-H1A-0001",
+      "rule_violated": "tenant_isolation: scheduling SSOT must be tenant-scoped at DB layer",
+      "business_impact": "Potential tenant bleed via direct PostgREST access if JWT tenant claim is ignored by DB.",
+      "recommended_action": "Enable RLS + tenant-scoped SELECT/INSERT/UPDATE/DELETE policies; verify runtime negative tests.",
+      "severity": "HIGH"
+    },
+    {
+      "proof": [
+        "artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/outputs/edge_function_audit.json",
+        "supabase/functions/_shared/auth.ts"
+      ],
+      "verification_method": "Harness asserts tenant mismatch returns 403 for service_role automation and edge write paths.",
+      "closure_evidence_required": [
+        "artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/outputs/h1a_verification_result.json"
+      ],
+      "title": "Service-role edge functions can bypass RLS unless tenant is enforced from verified JWT",
+      "id": "F-H1A-0002",
+      "rule_violated": "tenant_isolation: service_role must not trust client-scoped tenant inputs",
+      "business_impact": "Edge functions could become cross-tenant write path if they trust body tenant_id or skip tenant filters.",
+      "recommended_action": "Derive tenantId from verified JWT claims; reject mismatched body.tenant_id; enforce tenant filters on service_role queries.",
+      "severity": "HIGH"
+    }
+  ],
+  "decider": {
+    "approved_at": "2026-04-18T15:36:32.0786518+00:00",
+    "name": "Erron Fayson",
+    "role": "Human Decider"
+  },
+  "title": "H1a (tenant_isolation): RLS coverage + edge tenant enforcement for public.appointments",
   "artifacts": [
     {
+      "created_at": "2026-04-18T15:36:32.0786518+00:00",
+      "proof_of": "runtime_negative_test + happy_path",
+      "path": "artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/logs/h1a_verification_stdout.log",
       "type": "log",
-      "label": "Layer 2 pipeline summary log",
-      "proof_of": "Human-readable log with run_id and pointers to observed bundle + verdict",
-      "path": "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log"
+      "label": "H1a verification stdout"
     },
     {
+      "created_at": "2026-04-18T15:36:32.0786518+00:00",
+      "proof_of": "tenant_boundary_analysis",
+      "path": "artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/evidence/db_appointments_policies.txt",
       "type": "db_output",
-      "label": "DB/output pointer index",
-      "proof_of": "Run-scoped pointer list for observed bundle + judgments",
-      "path": "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/db_output.txt"
+      "label": "appointments RLS policies"
     },
     {
+      "created_at": "2026-04-18T15:36:32.0786518+00:00",
+      "proof_of": "artifact_integrity",
+      "path": "artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/manifest.json",
       "type": "manifest",
-      "label": "Run manifest",
-      "proof_of": "Run-scoped metadata with run_id and observed bundle root",
-      "path": "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/manifest.json"
+      "label": "run manifest"
     },
     {
+      "created_at": "2026-04-18T15:36:32.0786518+00:00",
+      "proof_of": "runtime_negative_test",
+      "path": "artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/outputs/h1a_verification_result.json",
       "type": "test_result",
-      "label": "Observed Layer 2 judgment (machine-checkable)",
-      "proof_of": "Judgment JSON that can be validated/replayed without rerunning tests",
-      "path": "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
+      "label": "H1a scenario outcomes"
     },
     {
       "type": "code_reference",
-      "label": "Layer 2 evaluator pipeline",
-      "proof_of": "Single evaluator used for observed + negative controls",
-      "path": "tmp/orchestrator-v2/runner/run_layer2_pipeline.ps1",
-      "snippet": "Write-Host \"LAYER2 PIPELINE PASSED\""
+      "label": "create-appointment tenant enforcement",
+      "path": "supabase/functions/create-appointment/index.ts",
+      "created_at": "2026-04-18T15:36:32.0786518+00:00",
+      "snippet": "IMPORTANT: Do not trust client-provided tenant_id.",
+      "proof_of": "service_role_bypass_audit"
     }
   ],
-  "coverage_report": {
-    "files_analyzed": [
-      "review-input.json",
-      "docs/reconciliation/lock/appendix-a/index.md",
-      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_billing-ledger-race-soak.md",
-      "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
-      "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/manifest.json",
-      "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/db_output.txt",
-      "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log",
-      "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json"
-    ],
-    "discovery_inputs": [
-      "pwsh -NoProfile -File tmp/orchestrator-v2/runner/run_layer2_pipeline.ps1",
-      "node tmp/orchestrator-v2/eval/evaluate_bundle.mjs"
-    ],
-    "excluded_scope": [],
-    "uncertainty_boundaries": [
-      "Observed bundle is local artifact capture, not production validation.",
-      "A minimal observed-bundle subset is copied into artifacts/tenants/<tenant_id>/runs/<run_id>/observed_bundle (self-contained gate evidence)."
-    ]
-  },
-  "findings": [
+  "risk_acceptances": [],
+  "scenarios": [
     {
-      "id": "F-INFO-0001",
-      "title": "Layer 2 lock is local-proof only (not production validated)",
-      "severity": "INFO",
-      "business_impact": "Prevents promotion of local correctness evidence into a production-safe claim without an explicit production validation run.",
-      "rule_violated": "None (guardrail)",
-      "proof": [
-        "docs/reconciliation/lock/appendix-a/evidence/EV-2026-04-08_layer2_orchestrator-v2_observed_judgment.md",
-        "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_pipeline.log"
-      ],
-      "recommended_action": "Run a production-targeted validation lane before setting readiness label to P0-02: PRODUCTION-VALIDATED.",
-      "verification_method": "Confirm readiness.labels remains LOCAL_PROVEN and does not claim production validation.",
-      "closure_evidence_required": [
-        "Production validation run artifacts (separate change/run)."
+      "verification_method": "RLS policies enforced via REST insert/read in harness.",
+      "scenario": "Concurrent appointment inserts with different tenants",
+      "category": "concurrency",
+      "expected_behavior": "Each insert is isolated to caller tenant; no cross-tenant visibility.",
+      "evidence_required": [
+        "artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/outputs/h1a_verification_result.json",
+        "artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/evidence/db_appointments_policies.txt"
+      ]
+    },
+    {
+      "verification_method": "Harness calls create-appointment with TenantB JWT + body.tenant_id=TenantA.",
+      "scenario": "Edge create-appointment rejects spoofed tenant_id on retry",
+      "category": "replay_idempotency",
+      "expected_behavior": "Retry with mismatched tenant_id is rejected (403) or ignored; cannot write cross-tenant.",
+      "evidence_required": [
+        "artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/outputs/h1a_verification_result.json",
+        "artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/logs/h1a_verification_stdout.log"
+      ]
+    },
+    {
+      "verification_method": "Harness GET as anon returns 0 rows or error.",
+      "scenario": "Anon read blocked",
+      "category": "bad_data",
+      "expected_behavior": "Anon cannot read appointment rows.",
+      "evidence_required": [
+        "artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/outputs/h1a_verification_result.json",
+        "artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/logs/h1a_verification_stdout.log"
+      ]
+    },
+    {
+      "verification_method": "Code inspection + harness edge calls; audit output.",
+      "scenario": "Edge runtime uses caller JWT for RLS lane",
+      "category": "dependency_failure",
+      "expected_behavior": "Functions that must enforce RLS construct client with anon key + caller JWT; service_role is not used for appointment writes.",
+      "evidence_required": [
+        "artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/outputs/edge_function_audit.json",
+        "supabase/functions/create-appointment/index.ts"
+      ]
+    },
+    {
+      "verification_method": "Harness covers mismatch; code rejects mismatch.",
+      "scenario": "Operator attempts to pass tenant_id in request body",
+      "category": "human_error",
+      "expected_behavior": "Mismatch is rejected; match is optional and not trusted as authority.",
+      "evidence_required": [
+        "artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/outputs/h1a_verification_result.json",
+        "supabase/functions/_shared/auth.ts"
       ]
     }
   ],
-  "verification": {
-    "idempotency_analysis": "Idempotency + replay semantics are evidenced via Layer 2 determinism (same artifacts => identical judgment) and the underlying idempotency registry in the ledger test suite.",
-    "replay_test": "Golden environment failure + invariant violation bundles + observed success bundle are all evaluated through the same evaluator pipeline.",
-    "rollback_plan": "If any ledger invariants regress, revert to previous known-good schema/services and rerun Layer 1+2 pipelines before redeploy."
+  "change_id": "H1A-APPOINTMENTS-RLS-LOCAL",
+  "coverage_report": {
+    "discovery_inputs": [
+      "rg -n --hidden -S \"\\\\bappointments\\\\b\" supabase src scripts",
+      "rg -n --hidden -S \"\\\\btenant_id\\\\b\" supabase/functions src",
+      "rg -n --hidden -S \"service_role|SUPABASE_SERVICE_ROLE_KEY|supabaseAdmin\" supabase/functions"
+    ],
+    "files_analyzed": [
+      "supabase/migrations/20260417120000_h1a_appointments_rls_policies.sql",
+      "supabase/functions/_shared/auth.ts",
+      "supabase/functions/create-appointment/index.ts",
+      "supabase/functions/update-appointment-status/index.ts",
+      "supabase/functions/run-appointment-reminders/index.ts",
+      "supabase/functions/work-order-update/index.ts",
+      "scripts/runtime/h1a-appointments-tenant-isolation.ps1",
+      "scripts/runtime/run-h1a-appointments-rls.ps1"
+    ],
+    "excluded_scope": [
+      "remote/prod access",
+      "n8n",
+      "KAQI"
+    ],
+    "uncertainty_boundaries": [
+      "Other tables may still lack RLS (out of H1a scope).",
+      "service_role paths rely on explicit tenant filters; DB cannot enforce RLS under service_role."
+    ]
   },
-  "readiness": {
-    "status": "CONDITIONALLY_READY",
-    "labels": [
-      "P0-02: LOCAL_PROVEN"
+  "tenant_id": "tvg",
+  "scope": {
+    "excluded": [],
+    "included": [
+      "supabase/migrations/20260417120000_h1a_appointments_rls_policies.sql",
+      "supabase/functions/_shared/auth.ts",
+      "supabase/functions/create-appointment/index.ts",
+      "supabase/functions/update-appointment-status/index.ts",
+      "supabase/functions/run-appointment-reminders/index.ts",
+      "supabase/functions/work-order-update/index.ts",
+      "scripts/runtime/h1a-appointments-tenant-isolation.ps1",
+      "scripts/runtime/run-h1a-appointments-rls.ps1"
     ]
   }
 }

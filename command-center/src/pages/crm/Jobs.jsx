@@ -34,6 +34,8 @@ import {
   formatPaymentTermsLabel,
   normalizeWorkOrderPaymentTerms,
 } from '@/lib/workOrderOperational';
+import { getWorkOrderDisplayId } from '@/lib/workOrderIdentity';
+import { getDispatchAddressValidation } from '@/lib/dispatchAddress';
 import { sendReceiptDocument } from '@/services/documentDeliveryService';
 import {
   AlertDialog,
@@ -77,6 +79,7 @@ const Jobs = () => {
   const [scheduleDuration, setScheduleDuration] = useState('120');
   const [scheduleAddress, setScheduleAddress] = useState('');
   const [scheduleTechnicianId, setScheduleTechnicianId] = useState('unassigned');
+  const [scheduleErrors, setScheduleErrors] = useState({});
   const [technicians, setTechnicians] = useState([]);
   const [recordStart, setRecordStart] = useState('');
   const [recordTechnicianId, setRecordTechnicianId] = useState('unassigned');
@@ -128,7 +131,8 @@ const Jobs = () => {
   const normalizeStatus = (status) => normalizeJobStatus(status);
   const resolveStatusForWrite = (nextStatus) => normalizeJobStatus(nextStatus);
   const activeStatuses = ['scheduled', 'in_progress', 'en_route', 'pending_schedule', 'on_hold'];
-  const assignableTechnicians = technicians.filter((tech) => tech.user_id);
+  // Canonical technician identifier is technicians.id (NOT auth.users.id).
+  const assignableTechnicians = technicians.filter((tech) => tech && tech.is_active !== false);
 
   const matchesFilter = (jobRow, filterValue) => {
     const status = normalizeStatus(jobRow?.status);
@@ -161,7 +165,7 @@ const Jobs = () => {
   const resolveTechnicianSelection = (technicianId) => {
     if (!technicianId) return 'unassigned';
     const technician = technicians.find((t) => t.user_id === technicianId || t.id === technicianId);
-    return technician?.user_id || 'unassigned';
+    return technician?.id || 'unassigned';
   };
 
   const toDatetimeLocal = (value) => {
@@ -173,11 +177,7 @@ const Jobs = () => {
   };
 
   const getWorkOrderLabel = (job) => {
-    const wo = asTracking(job?.work_order_number);
-    if (wo) return wo;
-    const legacy = asTracking(job?.job_number);
-    if (legacy) return legacy;
-    return `WO-LEGACY-${String(job?.id || '').slice(0, 8).toUpperCase()}`;
+    return getWorkOrderDisplayId(job);
   };
 
   const fetchJobs = async () => {
@@ -583,6 +583,7 @@ const Jobs = () => {
     }
     setScheduleAddress(job.service_address || '');
     setScheduleTechnicianId(resolveTechnicianSelection(job.technician_id));
+    setScheduleErrors({});
     setScheduleModalOpen(true);
   };
 
@@ -605,8 +606,32 @@ const Jobs = () => {
     }
 
     const normalizedAddress = scheduleAddress?.trim() || scheduleJob?.service_address?.trim() || '';
+    const nextErrors = {};
+
     if (!normalizedAddress) {
-      toast({ variant: 'destructive', title: 'Address required', description: 'Service address is required before scheduling.' });
+      nextErrors.address = 'Service address is required before scheduling.';
+    } else {
+      const addressValidation = getDispatchAddressValidation(normalizedAddress);
+      if (!addressValidation.hasDispatchableAddress) {
+        nextErrors.address = 'Service address must include street, city, and state before scheduling.';
+      }
+    }
+
+    if (!scheduleTechnicianId || scheduleTechnicianId === 'unassigned') {
+      nextErrors.technician = assignableTechnicians.length
+        ? 'Technician assignment is required before scheduling.'
+        : 'No active technicians are available to assign.';
+    }
+
+    setScheduleErrors(nextErrors);
+
+    if (nextErrors.address) {
+      toast({ variant: 'destructive', title: 'Address required', description: nextErrors.address });
+      return;
+    }
+
+    if (nextErrors.technician) {
+      toast({ variant: 'destructive', title: 'Technician required', description: nextErrors.technician });
       return;
     }
 
@@ -617,12 +642,9 @@ const Jobs = () => {
       scheduled_start: start.toISOString(),
       scheduled_end: end.toISOString(),
       service_address: normalizedAddress,
+      technician_id: scheduleTechnicianId === 'unassigned' ? null : scheduleTechnicianId,
       updated_at: new Date().toISOString(),
     };
-
-    if (scheduleTechnicianId && scheduleTechnicianId !== 'unassigned') {
-      payload.technician_id = scheduleTechnicianId;
-    }
 
     setProcessingId(scheduleJob.id);
     try {
@@ -994,7 +1016,7 @@ const Jobs = () => {
                     <SelectContent>
                       <SelectItem value="unassigned">Unassigned</SelectItem>
                       {assignableTechnicians.map((tech) => (
-                        <SelectItem key={tech.id} value={tech.user_id}>
+                        <SelectItem key={tech.id} value={tech.id}>
                           {tech.full_name}
                         </SelectItem>
                       ))}
@@ -1150,37 +1172,69 @@ const Jobs = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label>Technician (optional)</Label>
-                  <Select value={scheduleTechnicianId} onValueChange={setScheduleTechnicianId}>
+              <Label>Technician *</Label>
+                  <Select
+                    value={scheduleTechnicianId}
+                    onValueChange={(value) => {
+                      setScheduleTechnicianId(value);
+                      setScheduleErrors((prev) => ({ ...prev, technician: null }));
+                    }}
+                  >
                 <SelectTrigger>
-                  <SelectValue placeholder="Unassigned" />
+                  <SelectValue placeholder="Select technician" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  <SelectItem value="unassigned">Select technician</SelectItem>
                   {assignableTechnicians.map((tech) => (
-                    <SelectItem key={tech.id} value={tech.user_id}>
+                    <SelectItem key={tech.id} value={tech.id}>
                       {tech.full_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {scheduleErrors.technician ? (
+                <p className="text-sm text-red-600">{scheduleErrors.technician}</p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label>Service Address *</Label>
               <AddressAutocomplete
                 name="schedule_service_address"
                 value={scheduleAddress}
-                onChange={(e) => setScheduleAddress(e.target.value)}
-                onAddressSelect={(addressData) => setScheduleAddress(formatSelectedAddress(addressData))}
+                onChange={(e) => {
+                  setScheduleAddress(e.target.value);
+                  setScheduleErrors((prev) => ({ ...prev, address: null }));
+                }}
+                onAddressSelect={(addressData) => {
+                  setScheduleAddress(formatSelectedAddress(addressData));
+                  setScheduleErrors((prev) => ({ ...prev, address: null }));
+                }}
                 placeholder="Street, City, State ZIP"
               />
+              {scheduleErrors.address ? (
+                <p className="text-sm text-red-600">{scheduleErrors.address}</p>
+              ) : (
+                <p className="text-xs text-slate-500">Manual entry is allowed, but it must include street, city, and state.</p>
+              )}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setScheduleModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleScheduleSubmit} disabled={!scheduleStart || processingId === scheduleJob?.id}>
+            <Button
+              onClick={handleScheduleSubmit}
+              disabled={(() => {
+                if (processingId === scheduleJob?.id) return true;
+                if (!scheduleStart) return true;
+                const duration = Number(scheduleDuration);
+                if (!Number.isFinite(duration) || duration <= 0) return true;
+                if (!scheduleTechnicianId || scheduleTechnicianId === 'unassigned') return true;
+                const normalizedAddress = scheduleAddress?.trim() || scheduleJob?.service_address?.trim() || '';
+                if (!normalizedAddress) return true;
+                return !getDispatchAddressValidation(normalizedAddress).hasDispatchableAddress;
+              })()}
+            >
               {processingId === scheduleJob?.id ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
               Confirm Schedule
             </Button>

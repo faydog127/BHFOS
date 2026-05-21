@@ -181,6 +181,17 @@ const upsertInvoice = async (invoiceId: string | null, patch: Record<string, unk
   throw new Error('Invoice save failed after removing incompatible columns.');
 };
 
+const getErrorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const maybeMessage = (error as { message?: unknown }).message;
+    if (typeof maybeMessage === 'string' && maybeMessage.trim()) return maybeMessage.trim();
+    const maybeError = (error as { error?: unknown }).error;
+    if (typeof maybeError === 'string' && maybeError.trim()) return maybeError.trim();
+  }
+  return 'Unknown error';
+};
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -249,7 +260,7 @@ Deno.serve(async (req) => {
 
     return json({ invoice: hydratedInvoice });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    const message = getErrorMessage(error);
     console.error('invoice-save failed:', error);
     return json({ error: message }, 500);
   }

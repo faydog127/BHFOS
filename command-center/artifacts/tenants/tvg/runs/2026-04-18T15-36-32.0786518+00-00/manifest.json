@@ -1,0 +1,94 @@
+{
+  "run_id": "2026-04-18T15:36:32.0786518+00:00",
+  "items": [
+    {
+      "path": "meta.json",
+      "sha256": "bab7a0c4928cfcb79903c610fcb8e5c5a3f582ecbcb858a3a2e291098036bd3a"
+    },
+    {
+      "path": "result.json",
+      "sha256": "12759c707d3ee7059d6674960b22c1946086d6aed963f4831763b7a2ca302cd1"
+    },
+    {
+      "path": "stdout.log",
+      "sha256": "66faef4d5deeb66e818369c39b8d3322464b845ede85f7ba79d685b97d1359d9"
+    },
+    {
+      "path": "stderr.log",
+      "sha256": "1859b71566d13ed41ef9fbd26642d3df2c2d96d58ed3583b1cd90e12217b73c0"
+    },
+    {
+      "path": "logs/command_log.txt",
+      "sha256": "299e3aacce198fab0cd0b38119d9373990d1cde26b3cd30ef637c309f13a43b6"
+    },
+    {
+      "path": "logs/h1a_verification_stdout.log",
+      "sha256": "74ad082fb3c2b1d123b0cc10b111b44e09db64b5ff033deff053a5a19a9fb13c"
+    },
+    {
+      "path": "logs/h1a_verification_stderr.log",
+      "sha256": "0483f5e7b1d57c56e03df041d2cc287205939f9f920e7bd26b84ce322505c549"
+    },
+    {
+      "path": "logs/review_gate_stdout.log",
+      "sha256": "a33f0d2ac9a0c9d19c1812a7d8f55275df94bdcf5687ba1ff441523feb1cf8fc"
+    },
+    {
+      "path": "logs/review_gate_stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "evidence/db_appointments_rls_status.txt",
+      "sha256": "24bfc3da76188d1e5ae1343c843215d11ebd67b820d77d3053ffc6251d8435d6"
+    },
+    {
+      "path": "evidence/db_appointments_policies.txt",
+      "sha256": "306259083688a6e11c6f571a0c55b0f3fccbc84074bd66e1ed160f593554261b"
+    },
+    {
+      "path": "evidence/db_appointments_schema.sql",
+      "sha256": "bf5a3a425e90be85b0920f545368e25b4e2c694129402de475b8ede4e9bccd91"
+    },
+    {
+      "path": "evidence/db_pre_appointments_rls_status.txt",
+      "sha256": "b2db4a1955da5e9b6910467de9ba2acda7aeada8561c24980516abda45a8560e"
+    },
+    {
+      "path": "evidence/db_pre_appointments_policies.txt",
+      "sha256": "5ebd104c137af74cb2b5cbac3f7b684df88674066f493dd1bcd1f86baefbf97d"
+    },
+    {
+      "path": "evidence/appointments_rls_status.diff.txt",
+      "sha256": "67ea11bcced11b88edfea54efad86dcf6326e5f0733bb07f4c544f1028117ff1"
+    },
+    {
+      "path": "evidence/appointments_policies.diff.txt",
+      "sha256": "ac0333b4a6adaa08b77b52443cf25e5355f98b4136d772d6fc0e2c202943b656"
+    },
+    {
+      "path": "outputs/h1a_verification_result.json",
+      "sha256": "5981c8a2b86aa99b9e44cdae62baceaefbd20591ef55a427e62a38c25bb70a0d"
+    },
+    {
+      "path": "outputs/edge_function_audit.json",
+      "sha256": "2519bd35272f15c7887cec43dda2a9b1b0b42fb46cfbf7f3b95dc0f1337ce272"
+    },
+    {
+      "path": "analysis/rg_appointments.txt",
+      "sha256": "14c3d3960422df583695de233e9d4b7834fc974ebd7e9b83ddfd43120ee003e3"
+    },
+    {
+      "path": "analysis/rg_tenant_id.txt",
+      "sha256": "81a54d8c3d552df166cbf1440e40fbd776e222ed55f1a8cc9b85d7ad15133457"
+    },
+    {
+      "path": "analysis/rg_service_role.txt",
+      "sha256": "1e1ec72d9916d1a936b0cd57a742c5d99514e8f10634bfc73e86fbf2bfe3a365"
+    },
+    {
+      "path": "review-input.json",
+      "sha256": "5e167c3291badb5e795e637ec4b38b405f71d54f472d56e3b2afefa5e47d83a5"
+    }
+  ],
+  "generated_at": "2026-04-18T15:36:32.0786518+00:00"
+}
