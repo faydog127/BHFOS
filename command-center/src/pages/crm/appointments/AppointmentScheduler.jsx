@@ -617,9 +617,9 @@ const AppointmentScheduler = () => {
                       <SelectContent>
                       <SelectItem value="unassigned">Unassigned</SelectItem>
                       {technicians
-                        .filter((tech) => tech?.user_id)
+                        .filter((tech) => tech && tech.is_active !== false)
                         .map((tech) => (
-                          <SelectItem key={tech.user_id} value={tech.user_id}>
+                          <SelectItem key={tech.id} value={tech.id}>
                             {tech.full_name}
                           </SelectItem>
                         ))}

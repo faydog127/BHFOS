@@ -131,7 +131,8 @@ const Jobs = () => {
   const normalizeStatus = (status) => normalizeJobStatus(status);
   const resolveStatusForWrite = (nextStatus) => normalizeJobStatus(nextStatus);
   const activeStatuses = ['scheduled', 'in_progress', 'en_route', 'pending_schedule', 'on_hold'];
-  const assignableTechnicians = technicians.filter((tech) => tech.user_id);
+  // Canonical technician identifier is technicians.id (NOT auth.users.id).
+  const assignableTechnicians = technicians.filter((tech) => tech && tech.is_active !== false);
 
   const matchesFilter = (jobRow, filterValue) => {
     const status = normalizeStatus(jobRow?.status);
@@ -164,7 +165,7 @@ const Jobs = () => {
   const resolveTechnicianSelection = (technicianId) => {
     if (!technicianId) return 'unassigned';
     const technician = technicians.find((t) => t.user_id === technicianId || t.id === technicianId);
-    return technician?.user_id || 'unassigned';
+    return technician?.id || 'unassigned';
   };
 
   const toDatetimeLocal = (value) => {
@@ -641,7 +642,7 @@ const Jobs = () => {
       scheduled_start: start.toISOString(),
       scheduled_end: end.toISOString(),
       service_address: normalizedAddress,
-      technician_id: scheduleTechnicianId,
+      technician_id: scheduleTechnicianId === 'unassigned' ? null : scheduleTechnicianId,
       updated_at: new Date().toISOString(),
     };
 
@@ -1015,7 +1016,7 @@ const Jobs = () => {
                     <SelectContent>
                       <SelectItem value="unassigned">Unassigned</SelectItem>
                       {assignableTechnicians.map((tech) => (
-                        <SelectItem key={tech.id} value={tech.user_id}>
+                        <SelectItem key={tech.id} value={tech.id}>
                           {tech.full_name}
                         </SelectItem>
                       ))}
@@ -1185,7 +1186,7 @@ const Jobs = () => {
                 <SelectContent>
                   <SelectItem value="unassigned">Select technician</SelectItem>
                   {assignableTechnicians.map((tech) => (
-                    <SelectItem key={tech.id} value={tech.user_id}>
+                    <SelectItem key={tech.id} value={tech.id}>
                       {tech.full_name}
                     </SelectItem>
                   ))}

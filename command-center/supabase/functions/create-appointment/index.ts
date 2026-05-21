@@ -160,6 +160,38 @@ Deno.serve(async (req) => {
       updated_at: nowIso,
     };
 
+    // Server-side conflict check (do not rely on UI-only overlap prevention).
+    // DB-level trigger also enforces overlap protection; this is for a clearer error response.
+    const technicianId = asString(payload.technician_id);
+    if (technicianId) {
+      const { data: conflictRows, error: conflictError } = await supabase
+        .from('appointments')
+        .select('id, scheduled_start, scheduled_end, status, leads(first_name,last_name,email)')
+        .eq('tenant_id', tenantId)
+        .eq('technician_id', technicianId)
+        .lt('scheduled_start', scheduledEndIso)
+        .gt('scheduled_end', scheduledStartIso)
+        .order('scheduled_start', { ascending: true })
+        .limit(5);
+
+      if (!conflictError && Array.isArray(conflictRows) && conflictRows.length) {
+        const blocking = conflictRows.find((row) => {
+          const normalized = normalizeAppointmentStatus((row as Record<string, unknown>).status);
+          return !['cancelled', 'completed', 'no_show'].includes(normalized);
+        });
+
+        if (blocking) {
+          return respondJson(
+            {
+              error: 'Scheduling conflict with another appointment for this technician.',
+              conflict: blocking,
+            },
+            409,
+          );
+        }
+      }
+    }
+
     if (isAppointmentActiveStatus(status)) {
       payload.confirmed_at = nowIso;
       payload.confirmation_sent_at = nowIso;
@@ -176,6 +208,10 @@ Deno.serve(async (req) => {
       .single();
 
     if (insertError || !appointment) {
+      const rawMessage = String(insertError?.message || '');
+      if (/scheduling conflict/i.test(rawMessage) || /overlap/i.test(rawMessage)) {
+        return respondJson({ error: 'Scheduling conflict with another appointment for this technician.' }, 409);
+      }
       return respondJson({ error: insertError?.message || 'Failed to create appointment' }, 500);
     }
 

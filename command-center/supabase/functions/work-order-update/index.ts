@@ -447,7 +447,32 @@ const findSchedulingConflict = async (
     return existingStart < nextEnd && existingEnd > nextStart;
   }) as Record<string, unknown> | undefined;
 
-  if (!conflict) return null;
+  if (!conflict) {
+    // Fallback for legacy/seeded rows: if a scheduled job exists without an appointment mirror,
+    // we still must block overlaps server-side to prevent double-booking.
+    const { data: jobRows, error: jobError } = await supabaseAdmin
+      .from('jobs')
+      .select('id, work_order_number, status, scheduled_start, scheduled_end, service_address')
+      .eq('tenant_id', tenantId)
+      .eq('technician_id', technicianId)
+      .neq('id', jobId)
+      .not('scheduled_start', 'is', null)
+      .not('scheduled_end', 'is', null)
+      .in('status', ['scheduled', 'en_route', 'in_progress']);
+
+    if (jobError) {
+      console.warn('Unable to query job overlap fallback:', jobError.message || jobError);
+      return null;
+    }
+
+    const jobConflict = (jobRows || []).find((row) => {
+      const existingStart = new Date(String((row as Record<string, unknown>).scheduled_start)).getTime();
+      const existingEnd = new Date(String((row as Record<string, unknown>).scheduled_end)).getTime();
+      return existingStart < nextEnd && existingEnd > nextStart;
+    }) as Record<string, unknown> | undefined;
+
+    return jobConflict || null;
+  }
 
   const conflictJobId = asNullableString(conflict.job_id);
   if (!conflictJobId) {

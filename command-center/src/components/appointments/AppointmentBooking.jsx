@@ -110,8 +110,8 @@ export default function AppointmentBooking({ leadId, onSuccess, className }) {
     try {
       const service = services.find((entry) => entry.id === selectedServiceId);
       const defaultTech =
-        technicians.find((tech) => tech.is_primary_default && tech.user_id) ||
-        technicians.find((tech) => tech.user_id) ||
+        technicians.find((tech) => tech.is_primary_default && tech.is_active !== false) ||
+        technicians.find((tech) => tech && tech.is_active !== false) ||
         null;
       const startTime = new Date(selectedTimeSlot);
 
@@ -123,7 +123,7 @@ export default function AppointmentBooking({ leadId, onSuccess, className }) {
           service_category: service?.category,
           scheduled_start: startTime.toISOString(),
           duration_minutes: Number(settings?.appointment_slot_duration || 60),
-          technician_id: defaultTech?.user_id || null,
+          technician_id: defaultTech?.id || null,
           customer_notes: customerNotes.trim() || null,
           status: 'pending',
         },

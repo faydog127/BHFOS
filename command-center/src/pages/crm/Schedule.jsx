@@ -216,7 +216,7 @@ const getTechnicianDisplayName = (technicians, technicianId) => {
 const resolveTechnicianSelection = (technicians, technicianId) => {
   if (!technicianId) return 'unassigned';
   const technician = technicians.find((entry) => entry.user_id === technicianId || entry.id === technicianId);
-  return technician?.user_id || 'unassigned';
+  return technician?.id || 'unassigned';
 };
 
 const MetricCard = ({ icon: Icon, label, value, tone = 'slate', detail }) => (
@@ -1432,9 +1432,9 @@ export default function Schedule() {
                               <SelectContent>
                                 <SelectItem value="unassigned">Unassigned</SelectItem>
                                 {technicians
-                                  .filter((technician) => technician?.user_id)
+                                  .filter((technician) => technician && technician.is_active !== false)
                                   .map((technician) => (
-                                  <SelectItem key={technician.user_id} value={technician.user_id}>
+                                  <SelectItem key={technician.id} value={technician.id}>
                                     {technician.full_name}
                                   </SelectItem>
                                 ))}
