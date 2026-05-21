@@ -1613,7 +1613,7 @@ Deno.serve(async (req) => {
       ${tierCardsHtml}
 
       <h3 style="margin:18px 0 8px 0;font-size:18px;color:#111827;">Scope Summary</h3>
-      <p style="margin:0 0 10px 0;color:#374151;">This quote includes the services listed below and is structured to improve airflow efficiency, reduce dust circulation, and support healthier indoor air. The quoted price includes cleaning of the coil, blower, and AHU housing.</p>
+      <p style="margin:0 0 10px 0;color:#374151;">This quote includes the services listed below and is structured to improve airflow efficiency, reduce dust circulation, and support healthier indoor air.</p>
 
       <h3 style="margin:18px 0 8px 0;font-size:18px;color:#111827;">Line Items</h3>
       ${lineItemsTableHtml}

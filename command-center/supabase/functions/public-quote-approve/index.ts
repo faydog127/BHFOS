@@ -491,7 +491,8 @@ Deno.serve(async (req) => {
   );
 
   const patch: Record<string, unknown> = {
-    status: isDecline ? 'declined' : 'approved',
+    // Canonical "won" status is accepted. (DB also normalizes approved -> accepted.)
+    status: isDecline ? 'declined' : 'accepted',
   };
 
   let resolvedInvoiceId: string | null = null;
@@ -726,7 +727,7 @@ Deno.serve(async (req) => {
     tenantId,
     quoteId: data.id,
     token,
-    status: isDecline ? 'declined' : 'approved',
+    status: isDecline ? 'declined' : 'accepted',
     ip,
     userAgent,
     metadata: { run_id: runId },

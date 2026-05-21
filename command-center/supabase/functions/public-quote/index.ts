@@ -454,7 +454,7 @@ Deno.serve(async (req) => {
     tenantId: derivedTenantId,
     sourceType: 'quote',
     sourceId: quoteId,
-    title: 'Quote Viewed – Follow Up',
+    title: 'Quote Viewed - Follow Up',
     leadId,
     metadata: { run_id: runId },
   });

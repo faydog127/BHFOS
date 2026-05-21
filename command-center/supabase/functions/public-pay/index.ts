@@ -396,7 +396,7 @@ Deno.serve(async (req) => {
           tenantId,
           sourceType: 'invoice',
           sourceId: invoice.id,
-          title: 'Payment Failed – Follow Up',
+          title: 'Payment Failed - Follow Up',
           leadId: invoice.lead_id ?? null,
           metadata: { run_id: runId, error: 'missing_stripe_secret_key' },
         });
@@ -629,7 +629,7 @@ Deno.serve(async (req) => {
         tenantId,
         sourceType: 'invoice',
         sourceId: invoice.id,
-        title: 'Payment Failed – Follow Up',
+        title: 'Payment Failed - Follow Up',
         leadId: invoice.lead_id ?? null,
         metadata: { run_id: runId, error: message },
       });
