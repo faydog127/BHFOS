@@ -6,6 +6,7 @@ import {
   Megaphone,
   Calendar,
   ClipboardCheck,
+  ClipboardList,
   FileText,
   CreditCard,
   Settings,
@@ -89,6 +90,7 @@ const BHFSidebar = ({ onNavigate = null }) => {
     {
       title: 'Operations',
       items: [
+        { name: 'Inspections', path: '/crm/inspections', icon: ClipboardList },
         { name: 'Work Orders', path: '/crm/jobs', icon: Hammer },
         { name: 'Dispatch', path: '/crm/dispatch', icon: Calendar },
       ],
