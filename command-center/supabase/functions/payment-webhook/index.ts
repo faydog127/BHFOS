@@ -13,10 +13,38 @@ const respondJson = (body: Record<string, unknown>, status = 200) =>
 const formatError = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 const getStripeEvent = async (req: Request) => {
+  const isLocalRequest = () => {
+    const supabaseUrl = (Deno.env.get('SUPABASE_URL') ?? '').trim();
+    if (/^http:\/\//i.test(supabaseUrl) && !/supabase\.co/i.test(supabaseUrl)) return true;
+    try {
+      const url = new URL(req.url);
+      if (/^(?:127\.0\.0\.1|localhost)$/i.test(url.hostname)) return true;
+    } catch {
+      // ignore
+    }
+    const host = req.headers.get('host') ?? '';
+    if (/^(?:127\.0\.0\.1|localhost)(?::\d+)?$/i.test(host)) return true;
+    return false;
+  };
+
+  const isExplicitTestModeEnabled = async () => {
+    if (/^(true|1)$/i.test((Deno.env.get('TEST_MODE') ?? '').trim())) return true;
+    try {
+      const { data } = await supabaseAdmin
+        .from('global_config')
+        .select('value')
+        .eq('key', 'test_mode')
+        .maybeSingle();
+      return /^(true|1)$/i.test(String(data?.value ?? '').trim());
+    } catch {
+      return false;
+    }
+  };
+
   const allowTestBypass =
     req.headers.get('x-test-webhook') === '1' &&
-    /^(true|1)$/i.test(Deno.env.get('TEST_MODE') ?? '') &&
-    /^(?:http:\/\/)?(?:127\.0\.0\.1|localhost)(?::\d+)?/i.test(Deno.env.get('SUPABASE_URL') ?? '');
+    isLocalRequest() &&
+    (await isExplicitTestModeEnabled());
 
   if (allowTestBypass) {
     return (await req.json()) as Stripe.Event;

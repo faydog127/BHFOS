@@ -44,7 +44,7 @@ const TechSchedule = () => {
                     leads ( first_name, last_name, phone ),
                     properties ( address1, city, zip )
                 `)
-                .eq('technician_id', techData.user_id || techData.id)
+                .eq('technician_id', techData.id)
                 .gte('scheduled_start', start)
                 .lte('scheduled_start', end)
                 .order('scheduled_start', { ascending: true });

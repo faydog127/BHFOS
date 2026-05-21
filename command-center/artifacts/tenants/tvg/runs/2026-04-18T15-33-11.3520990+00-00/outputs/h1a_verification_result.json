@@ -1,0 +1,253 @@
+{
+  "run_id": "2026-04-18T15:33:11.3520990+00:00",
+  "scenarios": [
+    {
+      "outcome": "PASS",
+      "scenario": "authorized_same_tenant_write_rest",
+      "details": {
+        "status": 201,
+        "appointment_id": "e77f4578-081d-4bc3-a338-9cbe844b68ee"
+      }
+    },
+    {
+      "outcome": "PASS",
+      "scenario": "authorized_same_tenant_read_rest",
+      "details": {
+        "rows": 1,
+        "status": 200,
+        "body": {
+          "id": "e77f4578-081d-4bc3-a338-9cbe844b68ee",
+          "tenant_id": "tvg"
+        }
+      }
+    },
+    {
+      "outcome": "PASS",
+      "scenario": "unauthorized_read_blocked_rest",
+      "details": {
+        "rows": 0,
+        "status": 200,
+        "body": null
+      }
+    },
+    {
+      "outcome": "PASS",
+      "scenario": "cross_tenant_read_blocked_rest",
+      "details": {
+        "rows": 0,
+        "status": 200,
+        "body": null
+      }
+    },
+    {
+      "outcome": "PASS",
+      "scenario": "unauthorized_update_blocked_rest",
+      "details": {
+        "after_service_name": "H1a RLS Smoke",
+        "status": 200,
+        "original_service_name": "H1a RLS Smoke",
+        "body": null,
+        "error": null
+      }
+    },
+    {
+      "outcome": "PASS",
+      "scenario": "cross_tenant_update_blocked_rest",
+      "details": {
+        "after_service_name": "H1a RLS Smoke",
+        "status": 200,
+        "original_service_name": "H1a RLS Smoke",
+        "body": null,
+        "error": null
+      }
+    },
+    {
+      "outcome": "PASS",
+      "scenario": "cross_tenant_write_blocked_rest",
+      "details": {
+        "status": 403,
+        "body": null,
+        "error": "Response status code does not indicate success: 403 (Forbidden)."
+      }
+    },
+    {
+      "outcome": "PASS",
+      "scenario": "spoofed_tenant_id_blocked_edge_create_appointment",
+      "details": {
+        "status": 403,
+        "body": null
+      }
+    },
+    {
+      "outcome": "PASS",
+      "scenario": "authorized_same_tenant_write_edge_create_appointment",
+      "details": {
+        "status": 200,
+        "appointment_id": "6aa1fe76-5c1f-415f-a15e-8e61ccede7c3"
+      }
+    },
+    {
+      "outcome": "PASS",
+      "scenario": "unauthorized_write_blocked_edge_create_appointment",
+      "details": {
+        "status": 401,
+        "body": null
+      }
+    },
+    {
+      "outcome": "PASS",
+      "scenario": "cross_tenant_update_blocked_edge_update_appointment_status",
+      "details": {
+        "status": 404,
+        "body": null
+      }
+    },
+    {
+      "outcome": "PASS",
+      "scenario": "authorized_same_tenant_update_edge_update_appointment_status",
+      "details": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "appointment": {
+            "id": "6aa1fe76-5c1f-415f-a15e-8e61ccede7c3",
+            "tenant_id": "tvg",
+            "lead_id": "56266ceb-0755-43e6-a60e-5ce0bad25aea",
+            "technician_id": null,
+            "price_book_id": null,
+            "service_name": "H1a Edge Happy",
+            "service_category": null,
+            "pricing_snapshot": {
+              "code": null,
+              "name": "H1a Edge Happy",
+              "price": 0,
+              "category": null,
+              "price_type": null,
+              "captured_at": "2026-04-18T15:33:16.151Z",
+              "description": null
+            },
+            "scheduled_start": "2026-04-19T11:33:13.456-04:00",
+            "scheduled_end": "2026-04-19T12:33:13.456-04:00",
+            "arrival_window_start": "2026-04-19T11:33:13.456-04:00",
+            "arrival_window_end": "2026-04-19T12:33:13.456-04:00",
+            "duration_minutes": 60,
+            "status": "confirmed",
+            "service_address": null,
+            "customer_notes": null,
+            "admin_notes": null,
+            "reminders_enabled": false,
+            "confirmation_sent_at": "2026-04-18T11:33:16.391-04:00",
+            "confirmed_at": "2026-04-18T11:33:16.391-04:00",
+            "completed_at": null,
+            "cancelled_at": null,
+            "created_at": "2026-04-18T11:33:16.151-04:00",
+            "updated_at": "2026-04-18T11:33:16.391-04:00",
+            "job_id": null,
+            "technicians": null,
+            "leads": {
+              "id": "56266ceb-0755-43e6-a60e-5ce0bad25aea",
+              "email": "h1a-lead-a@example.com",
+              "phone": "555-0001",
+              "last_name": "LeadA",
+              "first_name": "H1a"
+            }
+          },
+          "reminder_result": null
+        },
+        "error": null
+      }
+    },
+    {
+      "outcome": "PASS",
+      "scenario": "spoofed_tenant_id_blocked_edge_run_appointment_reminders",
+      "details": {
+        "status": 403,
+        "body": null
+      }
+    },
+    {
+      "outcome": "PASS",
+      "scenario": "unauthorized_blocked_edge_work_order_update",
+      "details": {
+        "status": 401,
+        "body": null
+      }
+    },
+    {
+      "outcome": "PASS",
+      "scenario": "spoofed_tenant_id_blocked_edge_work_order_update",
+      "details": {
+        "status": 403,
+        "body": null
+      }
+    },
+    {
+      "outcome": "PASS",
+      "scenario": "cross_tenant_write_blocked_edge_work_order_update",
+      "details": {
+        "status": 404,
+        "body": null
+      }
+    },
+    {
+      "outcome": "PASS",
+      "scenario": "authorized_same_tenant_write_edge_work_order_update",
+      "details": {
+        "status": 200,
+        "body": {
+          "job": {
+            "id": "435c2ded-7b77-4d94-be9d-1db0f8500890",
+            "status": "unscheduled",
+            "scheduled_start": null,
+            "scheduled_end": null,
+            "service_address": null,
+            "technician_id": null,
+            "payment_status": null,
+            "updated_at": "2026-04-18T11:33:16.763-04:00",
+            "total_amount": null,
+            "work_order_number": null,
+            "job_number": null,
+            "quote_id": null,
+            "lead_id": "df05a8a4-4fbb-4243-a174-0333cb541d77",
+            "scope_summary": null,
+            "special_conditions": null,
+            "property_notes": null,
+            "execution_checklist": [],
+            "execution_findings": [],
+            "execution_photos": [],
+            "technician_notes": null,
+            "customer_summary": null,
+            "follow_up_required": false,
+            "follow_up_notes": null,
+            "report_url": null
+          },
+          "appointment": null,
+          "invoice": null,
+          "invoice_result": null
+        }
+      }
+    }
+  ],
+  "fixtures": {
+    "leads": [
+      "56266ceb-0755-43e6-a60e-5ce0bad25aea",
+      "ce0cf7b6-ad08-4141-9ba1-e54f3abd2bf6"
+    ],
+    "job_id": "435c2ded-7b77-4d94-be9d-1db0f8500890",
+    "user_ids": {
+      "a": "69f14258-11e2-4772-8268-d5fecd014a7c",
+      "b": "35b881a9-531c-4dbd-9747-92334fbf50b1"
+    },
+    "appointments": {
+      "edge": "6aa1fe76-5c1f-415f-a15e-8e61ccede7c3",
+      "rest": "e77f4578-081d-4bc3-a338-9cbe844b68ee"
+    },
+    "job_fixture_created": false
+  },
+  "tenants": {
+    "a": "tvg",
+    "b": "other-tenant"
+  },
+  "api_url": "http://127.0.0.1:25431",
+  "domain_tag": "tenant_isolation"
+}

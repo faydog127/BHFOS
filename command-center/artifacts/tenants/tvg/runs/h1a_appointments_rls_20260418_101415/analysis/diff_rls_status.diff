@@ -1,0 +1,11 @@
+diff --git a/artifacts/tenants/tvg/runs/h1a_appointments_rls_20260418_101415/evidence/db_pre_appointments_rls_status.txt b/artifacts/tenants/tvg/runs/h1a_appointments_rls_20260418_101415/evidence/db_post_appointments_rls_status.txt
+index fe5246f..d542bf7 100644
+--- a/artifacts/tenants/tvg/runs/h1a_appointments_rls_20260418_101415/evidence/db_pre_appointments_rls_status.txt
++++ b/artifacts/tenants/tvg/runs/h1a_appointments_rls_20260418_101415/evidence/db_post_appointments_rls_status.txt
+@@ -1,5 +1,5 @@
+  schema |    table     | rls_enabled | rls_forced 
+ --------+--------------+-------------+------------
+- public | appointments | f           | f
++ public | appointments | t           | f
+ (1 row)
+ 

@@ -83,8 +83,25 @@ Deno.serve(async (req) => {
 
   try {
     const body = await parseJson(req);
-    const { claims } = await getVerifiedClaims(req);
-    const tenantId = asString(body.tenant_id) || getTenantIdFromClaims(claims) || 'tvg';
+
+    let claims: Awaited<ReturnType<typeof getVerifiedClaims>>['claims'];
+    try {
+      const verified = await getVerifiedClaims(req);
+      claims = verified.claims;
+    } catch {
+      return respondJson({ error: 'Unauthorized' }, 401);
+    }
+
+    // IMPORTANT: Do not trust client-provided tenant_id.
+    // This function uses `supabaseAdmin` (service_role) for automation actions, so tenant isolation must be
+    // derived strictly from verified JWT claims.
+    const tenantFromClaims = getTenantIdFromClaims(claims);
+    if (!tenantFromClaims) return respondJson({ error: 'Missing tenant claim' }, 401);
+    const requestedTenantId = asString(body.tenant_id);
+    if (requestedTenantId && requestedTenantId !== tenantFromClaims) {
+      return respondJson({ error: 'Tenant mismatch' }, 403);
+    }
+    const tenantId = tenantFromClaims;
     const actorId = typeof claims.sub === 'string' ? claims.sub : null;
     const dryRun = body.dry_run === true;
     const limit = Math.max(1, Math.min(50, Number(body.limit) || 25));

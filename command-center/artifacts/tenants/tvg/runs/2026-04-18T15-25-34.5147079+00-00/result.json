@@ -1,0 +1,7 @@
+{
+  "run_id": "2026-04-18T15:25:34.5147079+00:00",
+  "status": "PASS",
+  "failed_scenarios": [],
+  "unverified_scenarios": [],
+  "verification_result": "outputs/h1a_verification_result.json"
+}

@@ -1,0 +1,325 @@
+[
+  {
+    "name": "TVG State Update (Webhook → Validate → Drive → Respond)",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "tvg-state-update",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "state-webhook",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [-900, 0],
+        "webhookId": "tvg-state-update"
+      },
+      {
+        "parameters": {
+          "jsCode": "const headers = ($json && typeof $json === 'object' && $json.headers && typeof $json.headers === 'object') ? $json.headers : {};\nconst body = ($json && typeof $json === 'object') ? ($json.body ?? $json) : {};\n\nconst getHeader = (name) => {\n  const target = String(name).toLowerCase();\n  for (const [k, v] of Object.entries(headers)) {\n    if (String(k).toLowerCase() === target) return v;\n  }\n  return undefined;\n};\n\nconst expectedSecret = $env.TVG_STATE_SECRET;\nif (!expectedSecret || String(expectedSecret).trim() === '') {\n  return [{ json: { status:'error', error_type:'config_missing', message:'Missing env var TVG_STATE_SECRET', details:'', error_http_code:500 } }];\n}\n\nconst incomingSecret = getHeader('X-State-Secret');\nif (!incomingSecret || String(incomingSecret).trim() === '' || String(incomingSecret) !== String(expectedSecret)) {\n  return [{ json: { status:'error', error_type:'auth_failed', message:'Missing or invalid X-State-Secret', details:'', error_http_code:401 } }];\n}\n\nif (!body || typeof body !== 'object' || Array.isArray(body)) {\n  return [{ json: { status:'error', error_type:'validation_failed', message:'Payload must be a JSON object', details:'Invalid payload shape', error_http_code:400 } }];\n}\n\nconst asString = (v) => (typeof v === 'string' ? v.trim() : (v === null || v === undefined ? '' : String(v).trim()));\nconst asStringList = (v) => Array.isArray(v) ? v.map(asString).filter(Boolean).slice(0, 60) : null;\n\nconst lastUpdated = asString(body.last_updated);\nconst completed = asStringList(body.completed);\nconst inProgress = asStringList(body.in_progress);\nconst nextStep = asStringList(body.next_step);\n\nconst missing = [];\nif (!completed) missing.push('completed');\nif (!inProgress) missing.push('in_progress');\nif (!nextStep) missing.push('next_step');\n\nif (missing.length) {\n  return [{ json: { status:'error', error_type:'validation_failed', message:'Missing/invalid required fields', details: JSON.stringify({ missing_fields: missing }), error_http_code:400 } }];\n}\n\nconst todayIso = new Date().toISOString().slice(0, 10);\nconst effectiveDate = lastUpdated && /^\\d{4}-\\d{2}-\\d{2}$/.test(lastUpdated) ? lastUpdated : todayIso;\n\nconst renderList = (items) => items.length ? items.map(i => `- ${i}`).join('\\n') : '-';\n\nconst stateMd = [\n  `Last Updated: ${effectiveDate}`,\n  '',\n  '## Completed',\n  renderList(completed),\n  '',\n  '## In Progress',\n  renderList(inProgress),\n  '',\n  '## Next Step',\n  renderList(nextStep),\n  '',\n].join('\\n');\n\nconst rootFolderId = $env.TVG_SYSTEM_ROOT_FOLDER_ID;\nif (!rootFolderId || String(rootFolderId).trim() === '') {\n  return [{ json: { status:'error', error_type:'config_missing', message:'Missing env var TVG_SYSTEM_ROOT_FOLDER_ID', details:'', error_http_code:500 } }];\n}\n\nreturn [{ json: { status:'pass', state_md: stateMd, drive_root_folder_id: String(rootFolderId).trim(), command_center_folder_name:'Command-Center', pilot_reports_folder_name:'Pilot-Reports', state_file_name:'state.md' } }];\n"
+        },
+        "id": "state-validate",
+        "name": "Validate + Build State",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [-660, 0]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.status }}",
+                "operation": "equal",
+                "value2": "pass"
+              }
+            ]
+          }
+        },
+        "id": "state-pass?",
+        "name": "Passed Validation?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [-420, 0]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ { status: 'error', error_type: $json.error_type || 'unknown_error', message: $json.message || 'An error occurred', details: $json.details || '' } }}",
+          "options": {
+            "responseCode": "={{ $json.error_http_code || 500 }}",
+            "responseHeaders": {
+              "entries": [
+                { "name": "Content-Type", "value": "application/json" }
+              ]
+            }
+          }
+        },
+        "id": "state-respond-error",
+        "name": "Respond Error",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [-180, 180]
+      },
+      {
+        "parameters": {
+          "resource": "fileFolder",
+          "operation": "search",
+          "searchMethod": "query",
+          "queryString": "={{ \"mimeType = 'application/vnd.google-apps.folder' and name = '\" + $json.command_center_folder_name + \"' and trashed = false\" }}",
+          "returnAll": false,
+          "limit": 10,
+          "filter": {
+            "folderId": { "mode": "id", "value": "={{ $json.drive_root_folder_id }}" },
+            "whatToSearch": "folders",
+            "includeTrashed": false
+          }
+        },
+        "id": "state-drive-search-cc",
+        "name": "Drive Search Command-Center",
+        "type": "n8n-nodes-base.googleDrive",
+        "typeVersion": 3,
+        "position": [-180, -160],
+        "continueOnFail": true,
+        "settings": { "alwaysOutputData": true }
+      },
+      {
+        "parameters": {
+          "jsCode": "const ctx = $items('Validate + Build State')[0]?.json;\nconst items = $input.all().map(i => i.json);\nconst errItem = items.find(j => j && typeof j === 'object' && j.error);\nif (errItem) {\n  return [{ json: { status:'error', error_type:'drive_failed', message:'Drive folder search failed', details: JSON.stringify(errItem), error_http_code:502 } }];\n}\nconst folders = items.filter(j => j && typeof j === 'object' && typeof j.id === 'string' && j.id && j.name === ctx.command_center_folder_name);\nif (folders.length > 1) return [{ json: { status:'error', error_type:'drive_failed', message:'Multiple Command-Center folders found; cannot proceed safely', details: JSON.stringify({ folder_ids: folders.map(f => f.id) }), error_http_code:502 } }];\nif (folders.length === 1) return [{ json: { status:'found', command_center_folder_id: folders[0].id } }];\nreturn [{ json: { status:'create', command_center_folder_name: ctx.command_center_folder_name, drive_root_folder_id: ctx.drive_root_folder_id } }];\n"
+        },
+        "id": "state-pick-cc",
+        "name": "Pick/Create Command-Center",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [60, -160]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              { "value1": "={{ $json.status }}", "operation": "equal", "value2": "found" }
+            ]
+          }
+        },
+        "id": "state-have-cc?",
+        "name": "Have Command-Center?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [300, -160]
+      },
+      {
+        "parameters": {
+          "resource": "folder",
+          "operation": "create",
+          "name": "={{ $json.command_center_folder_name }}",
+          "folderId": { "mode": "id", "value": "={{ $json.drive_root_folder_id }}" },
+          "options": {}
+        },
+        "id": "state-create-cc",
+        "name": "Drive Create Command-Center",
+        "type": "n8n-nodes-base.googleDrive",
+        "typeVersion": 3,
+        "position": [540, -40],
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const created = $json;\nif (created && typeof created === 'object' && created.error) {\n  return [{ json: { status:'error', error_type:'drive_failed', message:'Failed to create Command-Center folder', details: JSON.stringify({ message: created.error.message, name: created.error.name }), error_http_code:502 } }];\n}\nif (!created || typeof created.id !== 'string' || !created.id) {\n  return [{ json: { status:'error', error_type:'drive_failed', message:'Drive did not return folder id for Command-Center', details:'', error_http_code:502 } }];\n}\nreturn [{ json: { status:'pass', command_center_folder_id: created.id } }];\n"
+        },
+        "id": "state-cc-create-result",
+        "name": "Command-Center Create Result",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [780, -40]
+      },
+      {
+        "parameters": {
+          "resource": "fileFolder",
+          "operation": "search",
+          "searchMethod": "query",
+          "queryString": "={{ \"name = '\" + $items('Validate + Build State')[0].json.state_file_name + \"' and trashed = false\" }}",
+          "returnAll": false,
+          "limit": 10,
+          "filter": {
+            "folderId": {
+              "mode": "id",
+              "value": "={{ $items('Pick/Create Command-Center')[0].json.command_center_folder_id || $items('Command-Center Create Result')[0].json.command_center_folder_id }}"
+            },
+            "whatToSearch": "files",
+            "includeTrashed": false
+          }
+        },
+        "id": "state-drive-search-file",
+        "name": "Drive Search state.md",
+        "type": "n8n-nodes-base.googleDrive",
+        "typeVersion": 3,
+        "position": [1020, -160],
+        "continueOnFail": true,
+        "settings": { "alwaysOutputData": true }
+      },
+      {
+        "parameters": {
+          "jsCode": "const ctx = $items('Validate + Build State')[0]?.json;\nconst items = $input.all().map(i => i.json);\nconst errItem = items.find(j => j && typeof j === 'object' && j.error);\nif (errItem) {\n  return [{ json: { status:'error', error_type:'drive_failed', message:'Drive state.md search failed', details: JSON.stringify(errItem), error_http_code:502 } }];\n}\nconst found = items.filter(j => j && typeof j === 'object' && typeof j.id === 'string' && j.id && j.name === ctx.state_file_name);\nif (found.length > 1) return [{ json: { status:'error', error_type:'drive_failed', message:'Multiple state.md files found; cannot proceed safely', details: JSON.stringify({ file_ids: found.map(f => f.id) }), error_http_code:502 } }];\nif (found.length === 1) return [{ json: { status:'update', state_file_id: found[0].id } }];\nreturn [{ json: { status:'create' } }];\n"
+        },
+        "id": "state-pick-file",
+        "name": "Pick Create vs Update",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1260, -160]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              { "value1": "={{ $json.status }}", "operation": "equal", "value2": "update" }
+            ]
+          }
+        },
+        "id": "state-update?",
+        "name": "Update Existing?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [1500, -160]
+      },
+      {
+        "parameters": {
+          "mode": "jsonToBinary",
+          "setAllData": false,
+          "sourceKey": "state_md",
+          "destinationKey": "data",
+          "options": {
+            "encoding": "utf8",
+            "keepSource": false,
+            "keepAsBase64": false
+          }
+        },
+        "id": "state-to-binary",
+        "name": "State → Binary",
+        "type": "n8n-nodes-base.moveBinaryData",
+        "typeVersion": 1,
+        "position": [1740, -280]
+      },
+      {
+        "parameters": {
+          "resource": "file",
+          "operation": "update",
+          "fileId": { "mode": "id", "value": "={{ $items('Pick Create vs Update')[0].json.state_file_id }}" },
+          "changeFileContent": true,
+          "inputDataFieldName": "data",
+          "updateFields": { "newFileName": "={{ $items('Validate + Build State')[0].json.state_file_name }}" },
+          "options": {}
+        },
+        "id": "state-drive-update",
+        "name": "Drive Update state.md",
+        "type": "n8n-nodes-base.googleDrive",
+        "typeVersion": 3,
+        "position": [1980, -280],
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "resource": "file",
+          "operation": "createFromText",
+          "content": "={{ $items('Validate + Build State')[0].json.state_md }}",
+          "name": "={{ $items('Validate + Build State')[0].json.state_file_name }}",
+          "folderId": {
+            "mode": "id",
+            "value": "={{ $items('Pick/Create Command-Center')[0].json.command_center_folder_id || $items('Command-Center Create Result')[0].json.command_center_folder_id }}"
+          },
+          "options": {}
+        },
+        "id": "state-drive-create",
+        "name": "Drive Create state.md",
+        "type": "n8n-nodes-base.googleDrive",
+        "typeVersion": 3,
+        "position": [1980, -40],
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const created = $json;\nif (created && typeof created === 'object' && created.error) {\n  return [{ json: { status:'error', error_type:'drive_failed', message:'Drive state.md write failed', details: JSON.stringify({ message: created.error.message, name: created.error.name }), error_http_code:502 } }];\n}\nif (!created || typeof created.id !== 'string' || !created.id) {\n  return [{ json: { status:'error', error_type:'drive_failed', message:'Drive did not return file id for state.md', details:'', error_http_code:502 } }];\n}\nreturn [{ json: { status:'pass', state_file_id: created.id } }];\n"
+        },
+        "id": "state-write-result",
+        "name": "Drive Write Result",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [2220, -160]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              { "value1": "={{ $json.status }}", "operation": "equal", "value2": "pass" }
+            ]
+          }
+        },
+        "id": "state-write-ok?",
+        "name": "Drive Write OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [2460, -160]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ { status: 'success', state_file_id: $json.state_file_id, updated_at: $now.toISO() } }}",
+          "options": {
+            "responseCode": 200,
+            "responseHeaders": { "entries": [ { "name": "Content-Type", "value": "application/json" } ] }
+          }
+        },
+        "id": "state-respond-ok",
+        "name": "Respond Success",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [2700, -280]
+      }
+    ],
+    "connections": {
+      "Webhook": { "main": [ [ { "node": "Validate + Build State", "type": "main", "index": 0 } ] ] },
+      "Validate + Build State": { "main": [ [ { "node": "Passed Validation?", "type": "main", "index": 0 } ] ] },
+      "Passed Validation?": {
+        "main": [
+          [ { "node": "Drive Search Command-Center", "type": "main", "index": 0 } ],
+          [ { "node": "Respond Error", "type": "main", "index": 0 } ]
+        ]
+      },
+      "Drive Search Command-Center": { "main": [ [ { "node": "Pick/Create Command-Center", "type": "main", "index": 0 } ] ] },
+      "Pick/Create Command-Center": { "main": [ [ { "node": "Have Command-Center?", "type": "main", "index": 0 } ] ] },
+      "Have Command-Center?": {
+        "main": [
+          [ { "node": "Drive Search state.md", "type": "main", "index": 0 } ],
+          [ { "node": "Drive Create Command-Center", "type": "main", "index": 0 } ]
+        ]
+      },
+      "Drive Create Command-Center": { "main": [ [ { "node": "Command-Center Create Result", "type": "main", "index": 0 } ] ] },
+      "Command-Center Create Result": { "main": [ [ { "node": "Drive Search state.md", "type": "main", "index": 0 } ] ] },
+      "Drive Search state.md": { "main": [ [ { "node": "Pick Create vs Update", "type": "main", "index": 0 } ] ] },
+      "Pick Create vs Update": { "main": [ [ { "node": "Update Existing?", "type": "main", "index": 0 } ] ] },
+      "Update Existing?": {
+        "main": [
+          [ { "node": "State → Binary", "type": "main", "index": 0 } ],
+          [ { "node": "Drive Create state.md", "type": "main", "index": 0 } ]
+        ]
+      },
+      "State → Binary": { "main": [ [ { "node": "Drive Update state.md", "type": "main", "index": 0 } ] ] },
+      "Drive Update state.md": { "main": [ [ { "node": "Drive Write Result", "type": "main", "index": 0 } ] ] },
+      "Drive Create state.md": { "main": [ [ { "node": "Drive Write Result", "type": "main", "index": 0 } ] ] },
+      "Drive Write Result": { "main": [ [ { "node": "Drive Write OK?", "type": "main", "index": 0 } ] ] },
+      "Drive Write OK?": {
+        "main": [
+          [ { "node": "Respond Success", "type": "main", "index": 0 } ],
+          [ { "node": "Respond Error", "type": "main", "index": 0 } ]
+        ]
+      }
+    },
+    "settings": {},
+    "staticData": null,
+    "meta": {
+      "notes": "Creates/updates /TVG-System/Command-Center/state.md from three lists: completed/in_progress/next_step."
+    }
+  }
+]

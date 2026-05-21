@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { Search, Loader2, DollarSign, Wrench, CheckCircle2 } from 'lucide-react';
+import { getWorkOrderDisplayId } from '@/lib/workOrderIdentity';
 
 const JobManager = () => {
     const [jobs, setJobs] = useState([]);
@@ -56,7 +57,7 @@ const JobManager = () => {
     const filteredJobs = jobs.filter(j => 
         j.leads?.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         j.leads?.last_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        asTracking(j.job_number).includes(searchTerm.toUpperCase())
+        asTracking(getWorkOrderDisplayId(j)).includes(searchTerm.toUpperCase())
     );
 
     if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-blue-600"/></div>;
@@ -130,7 +131,7 @@ const JobManager = () => {
                             ) : (
                                 filteredJobs.map((job) => (
                                     <TableRow key={job.id}>
-                                        <TableCell className="font-mono">{asTracking(job.job_number) || '---'}</TableCell>
+                                        <TableCell className="font-mono">{getWorkOrderDisplayId(job)}</TableCell>
                                         <TableCell>
                                             <div className="font-medium">{job.leads?.first_name} {job.leads?.last_name}</div>
                                             <div className="text-xs text-muted-foreground">{job.leads?.email}</div>

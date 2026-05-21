@@ -1,6 +1,7 @@
 {
   "$schema": "./review-input.schema.json",
   "gate_version": "v1",
+  "tenant_id": "REPLACE-TENANT",
   "change_id": "CHANGE-REPLACE-ME",
   "pr_id": "LOCAL",
   "title": "REPLACE ME",

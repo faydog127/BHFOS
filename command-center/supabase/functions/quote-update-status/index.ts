@@ -48,13 +48,19 @@ Deno.serve(async (req) => {
   }
 
   const normalizedStatus = String(status).toLowerCase();
-  const updateData: Record<string, unknown> = { status };
+  // Canonical "won" status is accepted. Treat approved/won as aliases but persist accepted.
+  const canonicalStatus =
+    normalizedStatus === 'approved' || normalizedStatus === 'won'
+      ? 'accepted'
+      : normalizedStatus;
 
-  if (['accepted', 'approved'].includes(normalizedStatus)) {
+  const updateData: Record<string, unknown> = { status: canonicalStatus };
+
+  if (canonicalStatus === 'accepted') {
     updateData.accepted_at = new Date().toISOString();
   }
 
-  if (['rejected', 'declined'].includes(normalizedStatus)) {
+  if (['rejected', 'declined'].includes(canonicalStatus)) {
     updateData.rejected_at = new Date().toISOString();
     if (rejectionReason) updateData.rejection_reason = rejectionReason;
   }
@@ -71,7 +77,7 @@ Deno.serve(async (req) => {
     return respondJson({ error: error?.message || 'Quote not found' }, 404, cors.headers);
   }
 
-  if (['accepted', 'approved'].includes(normalizedStatus)) {
+  if (canonicalStatus === 'accepted') {
     await closeFollowUpTasks({
       tenantId: quote.tenant_id || jwtTenantId,
       sourceType: 'quote',

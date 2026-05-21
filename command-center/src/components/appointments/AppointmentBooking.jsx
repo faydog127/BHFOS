@@ -109,7 +109,10 @@ export default function AppointmentBooking({ leadId, onSuccess, className }) {
     setSubmitting(true);
     try {
       const service = services.find((entry) => entry.id === selectedServiceId);
-      const defaultTech = technicians.find((tech) => tech.is_primary_default) || technicians[0] || null;
+      const defaultTech =
+        technicians.find((tech) => tech.is_primary_default && tech.is_active !== false) ||
+        technicians.find((tech) => tech && tech.is_active !== false) ||
+        null;
       const startTime = new Date(selectedTimeSlot);
 
       const result = await appointmentService.createAppointment(

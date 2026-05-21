@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -43,6 +44,54 @@ const warnings = [];
 
 const repoRoot = process.cwd();
 const resolveRepoPath = (p) => path.resolve(repoRoot, String(p || ''));
+
+// ------------------------------------------------------------
+// V1 Governance Presence Gate (Fail Closed)
+// ------------------------------------------------------------
+const REQUIRED_GOVERNANCE_ROOT_FILES = [
+  'SOURCE_OF_TRUTH_MAP.md',
+  'STATUS_VOCABULARY_LOCK_V1.md',
+  'P0_BREACH_PATCH_PACKET_V1.md',
+  'REVIEW_GATE_UPDATE_V1.md',
+  'CI_ENFORCEMENT_PACKET_V1.md',
+  'DECISION_LOG.md',
+];
+
+const safeExec = (cmd) => {
+  try {
+    return execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch {
+    return null;
+  }
+};
+
+const resolveCiDiffRange = () => {
+  const base = process.env.GATE_BASE_SHA || process.env.GITHUB_BASE_SHA || '';
+  const head = process.env.GATE_HEAD_SHA || process.env.GITHUB_HEAD_SHA || process.env.GITHUB_SHA || '';
+  if (!process.env.GITHUB_ACTIONS) return null;
+  if (!isHexSha(base) || !isHexSha(head)) return null;
+  return { base: base.trim(), head: head.trim() };
+};
+
+const findTrackedMatches = (fileName) => {
+  const ls = safeExec('git ls-files');
+  if (!ls) return [];
+  const lines = ls.split(/\r?\n/).filter(Boolean);
+  const lower = fileName.toLowerCase();
+  return lines
+    .filter((p) => String(p).toLowerCase().endsWith(`/${lower}`) || String(p).toLowerCase().endsWith(`\\${lower}`) || String(p).toLowerCase() === lower)
+    .slice(0, 5);
+};
+
+const missingGovernance = REQUIRED_GOVERNANCE_ROOT_FILES.filter((file) => !fs.existsSync(resolveRepoPath(file)));
+if (missingGovernance.length) {
+  const evidence = missingGovernance.map((file) => {
+    const matches = findTrackedMatches(file);
+    const matchText = matches.length ? `found elsewhere: ${matches.join(', ')}` : 'repo-wide match: none (git ls-files)';
+    return `BLOCKED: missing required governance file at repo root: ${file} (${matchText})`;
+  });
+  fail(evidence);
+}
 
 const artifactRules = policy.artifact_rules || {};
 const criticalDomains = Array.isArray(policy.critical_domains) ? policy.critical_domains : [];
@@ -468,6 +517,192 @@ if (tags.includes('state_machine')) {
 
 if (tags.includes('tenant_isolation')) {
   if (!verification.runtime_negative_test) errors.push('tenant_isolation changes require runtime_negative_test');
+}
+
+// ------------------------------------------------------------
+// V1 Vocabulary / Shadow Authority Gate (Regex, diff-based)
+// ------------------------------------------------------------
+const V1 = {
+  jobs: {
+    allowed: new Set(['unscheduled', 'scheduled', 'in_progress', 'completed', 'cancelled', 'invoiced']),
+    deprecated: new Set(['pending', 'pending_schedule', 'en_route']),
+  },
+  leads: {
+    allowed: new Set(['new', 'contacted', 'qualified', 'converted', 'lost']),
+    deprecated: new Set(['scheduled']),
+  },
+};
+
+const SCAN_EXTS = new Set(['.js', '.jsx', '.ts', '.tsx', '.sql']);
+const SCAN_ROOTS = ['src/', 'supabase/'];
+
+const isScanEligiblePath = (p) => {
+  const rel = String(p || '').replace(/\\/g, '/');
+  if (!SCAN_ROOTS.some((root) => rel.startsWith(root))) return false;
+  if (rel.toLowerCase().endsWith('.md')) return false;
+  const ext = path.extname(rel).toLowerCase();
+  return SCAN_EXTS.has(ext);
+};
+
+const listChangedFilesFromGit = () => {
+  const changed = new Set();
+  const ciRange = resolveCiDiffRange();
+  const ci = ciRange
+    ? safeExec(`git -c diff.relative=true diff --name-only --diff-filter=ACMRTUXB ${ciRange.base}...${ciRange.head}`)
+    : null;
+
+  const unstaged = ci ? null : safeExec('git diff --name-only --diff-filter=ACMRTUXB');
+  const staged = ci ? null : safeExec('git diff --name-only --cached --diff-filter=ACMRTUXB');
+  const untracked = ci ? null : safeExec('git ls-files --others --exclude-standard');
+
+  for (const out of [ci, unstaged, staged, untracked]) {
+    if (!out) continue;
+    for (const line of out.split(/\r?\n/)) {
+      const file = String(line || '').trim();
+      if (!file) continue;
+      const normalized = file.replace(/\\/g, '/');
+      if (isScanEligiblePath(normalized)) changed.add(normalized);
+    }
+  }
+
+  return Array.from(changed);
+};
+
+const isCommentLine = (line) => {
+  const trimmed = String(line || '').trim();
+  if (!trimmed) return true;
+  if (trimmed.startsWith('//')) return true;
+  if (trimmed.startsWith('/*') || trimmed.startsWith('*') || trimmed.startsWith('*/')) return true;
+  if (trimmed.startsWith('--')) return true;
+  return false;
+};
+
+const DIFF_HEADER_RE = /^(diff --git |index |--- |\+\+\+ )/;
+
+const parseDiffHunks = (diffText) => {
+  const hunks = [];
+  let current = null;
+  for (const rawLine of String(diffText || '').split(/\r?\n/)) {
+    if (DIFF_HEADER_RE.test(rawLine)) continue;
+    if (rawLine.startsWith('@@')) {
+      current = { lines: [] };
+      hunks.push(current);
+      continue;
+    }
+    if (!current) continue;
+
+    if (rawLine.startsWith('+') && !rawLine.startsWith('+++')) current.lines.push({ kind: 'add', text: rawLine.slice(1) });
+    else if (rawLine.startsWith(' ') && !rawLine.startsWith('+++')) current.lines.push({ kind: 'ctx', text: rawLine.slice(1) });
+    else if (rawLine.startsWith('-') && !rawLine.startsWith('---')) current.lines.push({ kind: 'del', text: rawLine.slice(1) });
+  }
+  return hunks;
+};
+
+const TABLE_FROM_RE = /\.from\(\s*['"]([a-z_]+)['"]\s*\)/i;
+const SQL_TABLE_RE = /\b(?:insert\s+into|update)\s+public\.([a-z_]+)\b/i;
+const STATUS_KV_RE = /\bstatus\s*:\s*['"]([a-z_]+)['"]/i;
+const STATUS_SQL_RE = /\bstatus\b\s*=\s*'([a-z_]+)'/i;
+
+const inferEntityFromHunk = (hunkLines, idx) => {
+  for (let i = idx; i >= 0; i -= 1) {
+    const line = hunkLines[i]?.text || '';
+    const fromMatch = line.match(TABLE_FROM_RE);
+    if (fromMatch?.[1]) return String(fromMatch[1]).toLowerCase();
+    const sqlMatch = line.match(SQL_TABLE_RE);
+    if (sqlMatch?.[1]) return String(sqlMatch[1]).toLowerCase();
+  }
+  return null;
+};
+
+const pipelineStageAuthorityLine = (line) => {
+  const text = String(line || '');
+  if (!/\bpipeline_stage\b|\bpipelineStage\b/i.test(text)) return false;
+  if (!/\b(if|else if|switch|case)\b|[=!]==?|<=|>=|<|>|\?/.test(text)) return false;
+  return /\b(update|insert|upsert|delete|invoke|rpc|trigger|automation|transition|mutate)\b/i.test(text) || /\bstatus\b\s*[:=]/i.test(text);
+};
+
+const scanFileDiffForViolations = (filePath) => {
+  const violations = [];
+  const diffs = [];
+
+  const ciRange = resolveCiDiffRange();
+  if (ciRange) {
+    const ranged = safeExec(
+      `git -c diff.relative=true diff -U3 --no-color ${ciRange.base}...${ciRange.head} -- ${filePath}`
+    );
+    if (ranged) diffs.push(ranged);
+  } else {
+    const staged = safeExec(`git diff --cached -U3 --no-color -- ${filePath}`);
+    const unstaged = safeExec(`git diff -U3 --no-color -- ${filePath}`);
+    if (staged) diffs.push(staged);
+    if (unstaged) diffs.push(unstaged);
+  }
+
+  // Untracked files won't appear in git diff output; treat full file as added.
+  if (diffs.length === 0) {
+    const abs = resolveRepoPath(filePath);
+    if (fs.existsSync(abs)) {
+      const raw = fs.readFileSync(abs, 'utf8');
+      const synthetic = raw
+        .split(/\r?\n/)
+        .map((l) => (l ? `+${l}` : '+'))
+        .join('\n');
+      diffs.push(`@@\n${synthetic}`);
+    }
+  }
+
+  for (const diffText of diffs) {
+    const hunks = parseDiffHunks(diffText);
+    for (const hunk of hunks) {
+      const lines = hunk.lines || [];
+      for (let i = 0; i < lines.length; i += 1) {
+        const entry = lines[i];
+        if (entry.kind !== 'add') continue;
+        if (isCommentLine(entry.text)) continue;
+
+        // pipeline_stage authority violations (single-line and same-hunk patterns)
+        if (pipelineStageAuthorityLine(entry.text)) {
+          violations.push(`${filePath}: pipeline_stage used as execution authority: ${entry.text.trim()}`);
+        }
+
+        // status writes (jobs/leads only), entity inferred from nearby `.from()` / SQL table name
+        const kv = entry.text.match(STATUS_KV_RE);
+        const sql = entry.text.match(STATUS_SQL_RE);
+        const status = (kv?.[1] || sql?.[1] || '').toLowerCase();
+        if (!status) continue;
+
+        const entity = inferEntityFromHunk(lines, i);
+        if (entity !== 'jobs' && entity !== 'leads') continue; // avoid false positives on other entities
+
+        const rule = entity === 'jobs' ? V1.jobs : V1.leads;
+
+        if (rule.deprecated.has(status)) {
+          violations.push(`${filePath}: deprecated ${entity}.status write detected: '${status}'`);
+          continue;
+        }
+
+        if (!rule.allowed.has(status)) {
+          violations.push(`${filePath}: illegal ${entity}.status write detected (not in v1 lock): '${status}'`);
+        }
+      }
+
+      // pipeline_stage authority multi-line heuristic (if condition + mutation in same hunk)
+      const addedTexts = lines.filter((l) => l.kind === 'add' && !isCommentLine(l.text)).map((l) => l.text);
+      const hasPipelineBranch = addedTexts.some((t) => /\bpipeline_stage\b|\bpipelineStage\b/i.test(t) && /\b(if|else if|switch|case)\b|[=!]==?|\?/.test(t));
+      const hasMutationHint = addedTexts.some((t) => /\bstatus\b\s*[:=]/i.test(t) || /\.(update|insert|upsert|delete|invoke|rpc)\b/i.test(t));
+      if (hasPipelineBranch && hasMutationHint) {
+        violations.push(`${filePath}: pipeline_stage authority pattern detected (branch + mutation in same diff hunk)`);
+      }
+    }
+  }
+
+  return violations;
+};
+
+const scanTargets = listChangedFilesFromGit();
+for (const filePath of scanTargets) {
+  const v = scanFileDiffForViolations(filePath);
+  for (const msg of v) errors.push(`V1-GATE: ${msg}`);
 }
 
 // 8) Stronger quality checks

@@ -1,0 +1,21 @@
+{
+  "files_changed": [
+    "supabase/migrations/20260417120000_h1a_appointments_rls_policies.sql",
+    "supabase/functions/_shared/auth.ts",
+    "supabase/functions/create-appointment/index.ts",
+    "supabase/functions/update-appointment-status/index.ts",
+    "supabase/functions/run-appointment-reminders/index.ts",
+    "supabase/functions/work-order-update/index.ts",
+    "scripts/runtime/h1a-appointments-tenant-isolation.ps1",
+    "scripts/runtime/run-h1a-appointments-rls.ps1"
+  ],
+  "run_id_slug": "2026-04-18T15-31-17.9061297+00-00",
+  "timestamp": "2026-04-18T15:31:17.9061297+00:00",
+  "domain_tags_derived": [
+    "tenant_isolation"
+  ],
+  "pr_id": "LOCAL",
+  "tenant_id": "tvg",
+  "run_id": "2026-04-18T15:31:17.9061297+00:00",
+  "source_commit": "699707415d5a7977821fbaa6e02491249b7958e5"
+}
