@@ -54,6 +54,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Customer doc encoding hygiene
+        run: npm run check:customer-doc-encoding
+
       - name: Lint
         run: npm run lint
 
