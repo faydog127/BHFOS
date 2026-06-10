@@ -208,9 +208,9 @@ const insertQuoteItemsWithSchemaFallback = async (items) => {
 
 const fetchLeadsWithFallback = async (tenantId) => {
   const selectVariants = [
-    '*, contact:contacts!leads_contact_id_fkey(preferred_contact_method), property:property_id(address1,address2,city,state,zip)',
-    '*, property:property_id(address1,address2,city,state,zip)',
     '*',
+    '*, property:property_id(address1,address2,city,state,zip)',
+    '*, contact:contacts!leads_contact_id_fkey(preferred_contact_method), property:property_id(address1,address2,city,state,zip)',
   ];
 
   for (const selectClause of selectVariants) {
@@ -256,6 +256,12 @@ const formatSelectedAddress = (addressData) => {
   const zip = normalizeAddress(addressData.zip);
   const composed = [street, [city, state, zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
   return normalizeAddress(composed || addressData.formatted_address || '');
+};
+
+const formatLeadDisplayName = (lead) => {
+  if (!lead || typeof lead !== 'object') return '';
+  const fullName = [lead.first_name, lead.last_name].map((part) => String(part || '').trim()).filter(Boolean).join(' ');
+  return fullName || String(lead.company || '').trim();
 };
 
 const searchableTokens = (item) =>
@@ -304,9 +310,9 @@ const ProposalBuilder = () => {
   const proposalLoadedRef = useRef(false);
   
   // Customer Selection State
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState('');
-  const [customerView, setCustomerView] = useState('search'); 
   const [createLoading, setCreateLoading] = useState(false);
   const [newCustomer, setNewCustomer] = useState({
     firstName: '',
@@ -334,7 +340,7 @@ const ProposalBuilder = () => {
   useEffect(() => {
     restoredDraftRef.current = false;
     proposalLoadedRef.current = false;
-  }, [id, activeTenantId]);
+  }, [id, resolvedTenantId]);
 
   const handleServiceAddressSelect = (addressData) => {
     const selected = formatSelectedAddress(addressData);
@@ -343,16 +349,16 @@ const ProposalBuilder = () => {
   };
 
   useEffect(() => {
-    if (activeTenantId) {
+    if (resolvedTenantId) {
       fetchInitialData();
     }
-  }, [id, activeTenantId]);
+  }, [id, resolvedTenantId]);
 
   useEffect(() => {
-    if (!activeTenantId || restoredDraftRef.current || !proposalLoadedRef.current || loading) return;
+    if (!resolvedTenantId || restoredDraftRef.current || !proposalLoadedRef.current || loading) return;
 
     restoredDraftRef.current = true;
-    const storedDraft = loadBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, activeTenantId, id || 'new');
+    const storedDraft = loadBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, resolvedTenantId, id || 'new');
     if (!storedDraft?.proposal) return;
 
     setProposal((prev) => ({
@@ -369,21 +375,21 @@ const ProposalBuilder = () => {
       title: 'Draft restored',
       description: 'Your in-progress quote was restored after leaving the page.',
     });
-  }, [id, activeTenantId, loading, toast]);
+  }, [id, resolvedTenantId, loading, toast]);
 
   useEffect(() => {
-    if (!activeTenantId || !proposalLoadedRef.current || loading) return;
+    if (!resolvedTenantId || !proposalLoadedRef.current || loading) return;
 
     if (!hasMeaningfulProposalDraft(proposal, sendChannel)) {
-      clearBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, activeTenantId, id || 'new');
+      clearBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, resolvedTenantId, id || 'new');
       return;
     }
 
-    saveBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, activeTenantId, id || 'new', {
+    saveBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, resolvedTenantId, id || 'new', {
       proposal,
       sendChannel,
     });
-  }, [id, activeTenantId, loading, proposal, sendChannel]);
+  }, [id, resolvedTenantId, loading, proposal, sendChannel]);
 
   useEffect(() => {
     if (!hasMeaningfulProposalDraft(proposal, sendChannel)) return undefined;
@@ -434,7 +440,7 @@ const ProposalBuilder = () => {
 
   useEffect(() => {
     const detectExistingActiveQuote = async () => {
-      if (id || !proposal.lead_id || !activeTenantId) {
+      if (id || !proposal.lead_id || !resolvedTenantId) {
         setExistingActiveQuote(null);
         return;
       }
@@ -444,7 +450,7 @@ const ProposalBuilder = () => {
           .from('quotes')
           .select('id,quote_number,status,updated_at')
           .eq('lead_id', proposal.lead_id)
-          .eq('tenant_id', activeTenantId)
+          .eq('tenant_id', resolvedTenantId)
           .order('updated_at', { ascending: false });
 
         if (error) throw error;
@@ -462,31 +468,57 @@ const ProposalBuilder = () => {
     };
 
     detectExistingActiveQuote();
-  }, [id, proposal.lead_id, activeTenantId]);
+  }, [id, proposal.lead_id, resolvedTenantId]);
 
   const fetchInitialData = async () => {
     setLoading(true);
     try {
-      console.log(`Fetching leads for activeTenantId=${activeTenantId}`);
-      console.log(`Fetching price_book for activeTenantId=${activeTenantId}`);
+      console.log(`Fetching leads for resolvedTenantId=${resolvedTenantId}`);
+      console.log(`Fetching price_book for resolvedTenantId=${resolvedTenantId}`);
 
-      const [leadsRes, priceBookRes] = await Promise.all([
-          fetchLeadsWithFallback(activeTenantId),
-          supabase.from('price_book')
-            .select('*')
-            .eq('active', true)
-            .in('tenant_id', [activeTenantId || 'default', 'default'])
-            .order('name')
+      const [leadsRes, priceBookRes] = await Promise.allSettled([
+        fetchLeadsWithFallback(resolvedTenantId),
+        supabase
+          .from('price_book')
+          .select('*')
+          .eq('active', true)
+          .in('tenant_id', [resolvedTenantId || 'default', 'default'])
+          .order('name'),
       ]);
 
-      if (leadsRes.error) throw leadsRes.error;
-      if (priceBookRes.error) throw priceBookRes.error;
+      let leadsData = [];
 
-      if (leadsRes.data) setLeads(leadsRes.data);
-      if (priceBookRes.data) {
-        const sorted = [...priceBookRes.data].sort((a, b) => {
-          const aRank = a.tenant_id === activeTenantId ? 0 : 1;
-          const bRank = b.tenant_id === activeTenantId ? 0 : 1;
+      if (leadsRes.status === 'fulfilled') {
+        if (leadsRes.value.error) {
+          console.error('Error loading leads:', leadsRes.value.error);
+          toast({
+            variant: 'destructive',
+            title: 'Lead list unavailable',
+            description: 'Customer search could not load, but the price book is still available.',
+          });
+        } else if (Array.isArray(leadsRes.value.data)) {
+          leadsData = leadsRes.value.data;
+          setLeads(leadsData);
+        }
+      } else {
+        console.error('Error loading leads:', leadsRes.reason);
+        toast({
+          variant: 'destructive',
+          title: 'Lead list unavailable',
+          description: 'Customer search could not load, but the price book is still available.',
+        });
+      }
+
+      if (priceBookRes.status === 'rejected') {
+        throw priceBookRes.reason;
+      }
+
+      if (priceBookRes.value.error) throw priceBookRes.value.error;
+
+      if (priceBookRes.value.data) {
+        const sorted = [...priceBookRes.value.data].sort((a, b) => {
+          const aRank = a.tenant_id === resolvedTenantId ? 0 : 1;
+          const bRank = b.tenant_id === resolvedTenantId ? 0 : 1;
           if (aRank !== bRank) return aRank - bRank;
           return (a.name || '').localeCompare(b.name || '');
         });
@@ -503,12 +535,12 @@ const ProposalBuilder = () => {
       }
 
       if (id) {
-          console.log(`Fetching quotes for activeTenantId=${activeTenantId}`);
+          console.log(`Fetching quotes for resolvedTenantId=${resolvedTenantId}`);
           const { data: prop, error } = await supabase
               .from('quotes')
               .select('*, quote_items(*)')
               .eq('id', id)
-              .eq('tenant_id', activeTenantId) // Added tenant filter
+              .eq('tenant_id', resolvedTenantId) // Added tenant filter
               .maybeSingle();
               
           if (error) throw error;
@@ -519,13 +551,13 @@ const ProposalBuilder = () => {
           if (prop) {
               let items = prop.quote_items || [];
               let updated = false;
-              const leadForQuote = (leadsRes.data || []).find((lead) => lead.id === prop.lead_id);
+              const leadForQuote = leadsData.find((lead) => lead.id === prop.lead_id);
               const leadAddress = formatLeadServiceAddress(leadForQuote);
 
               if (['Draft', 'pending_review'].includes(prop.status)) {
                   items = items.map(item => {
                       if (item.price_book_code) {
-                          const currentPriceItem = priceBookRes.data?.find(pb => pb.code === item.price_book_code);
+                          const currentPriceItem = priceBookRes.value.data?.find(pb => pb.code === item.price_book_code);
                           if (currentPriceItem && Number(currentPriceItem.base_price) !== Number(item.unit_price)) {
                               updated = true;
                               return {
@@ -695,8 +727,8 @@ const ProposalBuilder = () => {
         'Dryer Vent base clean',
         () =>
           resolvePriceBookItem({
-            codes: ['DV-STD'],
-            nameMatchers: [/dryer vent.*(clean|safety)/i],
+            codes: ['DV-STD', 'PKG-MIN'],
+            nameMatchers: [/dryer vent.*(clean|safety)/i, /safety clean/i, /standard dryer vent/i],
           }),
         1
       );
@@ -717,8 +749,8 @@ const ProposalBuilder = () => {
           'Roof access modifier',
           () =>
             resolvePriceBookItem({
-              codes: ['ACC-ROOF'],
-              nameMatchers: [/roof access/i],
+              codes: ['ACC-ROOF', 'DV-ROOF'],
+              nameMatchers: [/roof access/i, /dryer access:\s*roof/i],
             }),
           1
         );
@@ -728,8 +760,8 @@ const ProposalBuilder = () => {
           'Transition upgrade',
           () =>
             resolvePriceBookItem({
-              codes: ['ACC-TRANSITION'],
-              nameMatchers: [/transition upgrade/i],
+              codes: ['ACC-TRANSITION', 'DV-TRANS-HD'],
+              nameMatchers: [/transition upgrade/i, /metal transition/i],
             }),
           1
         );
@@ -739,8 +771,8 @@ const ProposalBuilder = () => {
           'Bird guard / vent hood replacement',
           () =>
             resolvePriceBookItem({
-              codes: ['BIRD-GUARD'],
-              nameMatchers: [/bird guard/i, /vent hood replacement/i],
+              codes: ['BIRD-GUARD', 'EXT-GUARD-STD'],
+              nameMatchers: [/bird guard/i, /vent hood replacement/i, /bird\/rodent guard/i],
             }),
           1
         );
@@ -761,7 +793,7 @@ const ProposalBuilder = () => {
       } else {
         plannedItems.push(asLineItem(baseSystem, 1));
         const additionalSystem = resolvePriceBookItem({
-          codes: ['DUCT-SYS-ADD'],
+          codes: ['DUCT-SYS-ADD', 'DUCT-SYS2'],
           nameMatchers: [/additional hvac system/i, /additional system/i],
         });
         if (additionalSystem) {
@@ -789,8 +821,8 @@ const ProposalBuilder = () => {
           'Blower cleaning',
           () =>
             resolvePriceBookItem({
-              codes: ['BLOWER-CLEAN'],
-              nameMatchers: [/blower.*clean/i],
+              codes: ['BLOWER-CLEAN', 'BLOWER-RESTORE'],
+              nameMatchers: [/blower.*clean/i, /blower restore/i],
             }),
           1
         );
@@ -812,12 +844,12 @@ const ProposalBuilder = () => {
       const packageRow =
         config.packageType === 'pco'
           ? resolvePriceBookItem({
-              codes: ['PCO-WHOLEHOME', 'PCO-SYS'],
-              nameMatchers: [/whole[- ]home pco system/i, /pco system/i],
+              codes: ['PCO-WHOLEHOME', 'PCO-SYS', 'HDW-PCO-010'],
+              nameMatchers: [/whole[- ]home pco system/i, /pco system/i, /\bpco\b/i],
             })
           : resolvePriceBookItem({
-              codes: ['UV-C-INSTALLED', 'UV-C'],
-              nameMatchers: [/uv[- ]c light system/i],
+              codes: ['UV-C-INSTALLED', 'UV-C', 'HDW-UV-010'],
+              nameMatchers: [/uv[- ]c light system/i, /\buv[- ]c\b/i, /\bbasic uv\b/i],
             });
 
       if (!packageRow) {
@@ -842,8 +874,8 @@ const ProposalBuilder = () => {
           'Blower cleaning',
           () =>
             resolvePriceBookItem({
-              codes: ['BLOWER-CLEAN'],
-              nameMatchers: [/blower.*clean/i],
+              codes: ['BLOWER-CLEAN', 'BLOWER-RESTORE'],
+              nameMatchers: [/blower.*clean/i, /blower restore/i],
             }),
           1
         );
@@ -898,15 +930,21 @@ const ProposalBuilder = () => {
               pipeline_stage: 'new',
               source: 'proposal_builder',
               notes: `Lead Temperature: ${newCustomer.temperature}`,
-              tenant_id: activeTenantId // Ensuring insert has tenant_id
+              tenant_id: resolvedTenantId // Ensuring insert has tenant_id
           });
 
           if (error) throw error;
 
           setLeads((prev) => [data, ...prev.filter((lead) => lead.id !== data.id)]);
-          setProposal(prev => ({ ...prev, lead_id: data.id, service_address: '' }));
+          setProposal((prev) => ({
+            ...prev,
+            lead_id: data.id,
+            service_address: '',
+            customer_name: formatLeadDisplayName(data),
+            customer_email: data.email || '',
+            customer_phone: data.phone || '',
+          }));
           setIsCustomerModalOpen(false);
-          setCustomerView('search');
           toast({ title: "Success", description: "Customer created and selected." });
       } catch (err) {
           const isRlsError =
@@ -919,6 +957,26 @@ const ProposalBuilder = () => {
       } finally {
           setCreateLoading(false);
       }
+  };
+
+  const handleSelectLead = (lead) => {
+    if (!lead) return;
+    const leadAddress = formatLeadServiceAddress(lead);
+    setProposal((prev) => ({
+      ...prev,
+      lead_id: lead.id,
+      service_address: leadAddress || prev.service_address || '',
+      customer_name: formatLeadDisplayName(lead),
+      customer_email: lead.email || '',
+      customer_phone: lead.phone || '',
+    }));
+    setCustomerPickerOpen(false);
+  };
+
+  const openCreateCustomerDialog = () => {
+    setCustomerPickerOpen(false);
+    setCustomerSearch('');
+    setIsCustomerModalOpen(true);
   };
 
   const addItem = () => {
@@ -1093,7 +1151,7 @@ const ProposalBuilder = () => {
       setOverrideReason('');
       setOverrideAcknowledged(false);
       setPendingOverridePayload(null);
-      clearBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, activeTenantId, id || 'new');
+      clearBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, resolvedTenantId, id || 'new');
 
       toast({
         title: 'Sent',
@@ -1164,8 +1222,8 @@ const ProposalBuilder = () => {
     const isReleasedEdit = Boolean(id) && isReleasedQuoteStatus(normalizedCurrentStatus);
     const statusToPersist = isSendAttempt ? 'draft' : (isReleasedEdit ? 'draft' : normalizedStatusToSave);
     
-    // 3. Use activeTenantId from context
-    console.log(`Saving proposal with activeTenantId=${activeTenantId}`);
+    // Use the auth tenant when present, otherwise fall back to the route tenant.
+    console.log(`Saving proposal with resolvedTenantId=${resolvedTenantId}`);
 
     const quoteNumber = isReleasedEdit ? generateQuoteNumber() : (proposal.quote_number || generateQuoteNumber());
     const baseQuoteData = {
@@ -1186,8 +1244,7 @@ const ProposalBuilder = () => {
         quote_number: quoteNumber,
     };
 
-    // 4. Include tenant_id: activeTenantId in payload
-    const quoteDataWithTenant = { ...baseQuoteData, tenant_id: activeTenantId };
+    const quoteDataWithTenant = { ...baseQuoteData, tenant_id: resolvedTenantId };
 
     try {
         let quoteId = id;
@@ -1199,8 +1256,8 @@ const ProposalBuilder = () => {
               .update({ status: nextStatus, updated_at: new Date().toISOString() })
               .eq('id', quoteIdToUpdate);
 
-            if (useTenantScope && activeTenantId) {
-              statusQuery = statusQuery.eq('tenant_id', activeTenantId);
+            if (useTenantScope && resolvedTenantId) {
+              statusQuery = statusQuery.eq('tenant_id', resolvedTenantId);
             }
 
             const result = await statusQuery;
@@ -1228,7 +1285,7 @@ const ProposalBuilder = () => {
               .eq('lead_id', proposal.lead_id)
               .order('updated_at', { ascending: false });
 
-            if (activeTenantId) quotesQuery.eq('tenant_id', activeTenantId);
+            if (resolvedTenantId) quotesQuery.eq('tenant_id', resolvedTenantId);
 
             const { data: candidateQuotes, error: findError } = await quotesQuery;
             if (findError) throw findError;
@@ -1247,8 +1304,8 @@ const ProposalBuilder = () => {
               .update(payload)
               .eq('id', existingActive.id);
 
-            if (useTenantPayload && activeTenantId) {
-              updateQuery = updateQuery.eq('tenant_id', activeTenantId);
+            if (useTenantPayload && resolvedTenantId) {
+              updateQuery = updateQuery.eq('tenant_id', resolvedTenantId);
             }
 
             const { error: updateError } = await updateQuery;
@@ -1274,7 +1331,7 @@ const ProposalBuilder = () => {
               .eq('lead_id', proposal.lead_id)
               .order('updated_at', { ascending: false });
 
-            if (activeTenantId) quotesQuery.eq('tenant_id', activeTenantId);
+            if (resolvedTenantId) quotesQuery.eq('tenant_id', resolvedTenantId);
 
             const { data: candidateQuotes, error: findError } = await quotesQuery;
             if (findError) throw findError;
@@ -1298,7 +1355,7 @@ const ProposalBuilder = () => {
                         .from('quotes')
                         .update(quoteDataWithTenant)
                         .eq('id', id)
-                        .eq('tenant_id', activeTenantId); // Added safety filter
+                        .eq('tenant_id', resolvedTenantId); // Added safety filter
                     if (error) throw error;
                     return { id };
                 } catch (err) {
@@ -1391,7 +1448,7 @@ const ProposalBuilder = () => {
 
         // Replace Items
         if (shouldReplaceItems) {
-            console.log(`Fetching quote_items for activeTenantId=${activeTenantId}`);
+            console.log(`Fetching quote_items for resolvedTenantId=${resolvedTenantId}`);
             // Note: quote_items does not have a tenant_id directly. RLS on quote_items ensures proper access.
             // Filtering by quote_id is sufficient here, as quote_id itself is tenant-isolated by the quotes table.
             const { error: deleteItemsError } = await supabase
@@ -1401,7 +1458,7 @@ const ProposalBuilder = () => {
             if (deleteItemsError) throw deleteItemsError;
         }
         
-        console.log(`Fetching quote_items for activeTenantId=${activeTenantId}`);
+        console.log(`Fetching quote_items for resolvedTenantId=${resolvedTenantId}`);
         const itemsToInsert = proposal.items.map(item => ({
             quote_id: quoteId,
             description: item.description,
@@ -1443,7 +1500,7 @@ const ProposalBuilder = () => {
                     to_phone: recipientLead?.phone || null,
                     delivery_channel: sendChannel,
                     lead_id: selectedLead?.id,
-                    tenant_id: activeTenantId
+                    tenant_id: resolvedTenantId
                  };
 
                  const data = await invokeSendEstimate(edgeFunctionPayload);
@@ -1695,17 +1752,72 @@ const ProposalBuilder = () => {
                 <CardHeader>
                     <CardTitle className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <span>Customer Information</span>
-                        <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => setIsCustomerModalOpen(true)}>
-                            {proposal.lead_id ? 'Change Customer' : 'Select Customer'}
-                        </Button>
+                        <Popover
+                          open={customerPickerOpen}
+                          onOpenChange={(open) => {
+                            setCustomerPickerOpen(open);
+                            if (open) setCustomerSearch('');
+                          }}
+                        >
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" size="sm" className="w-full sm:w-auto">
+                              {proposal.lead_id ? 'Change Customer' : 'Select Customer'}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-[min(520px,calc(100vw-2rem))] p-0">
+                            <div className="space-y-3 p-3">
+                              <div className="flex flex-col gap-2 sm:flex-row">
+                                <div className="relative flex-1">
+                                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                                  <Input
+                                    placeholder="Search by name, phone, or company..."
+                                    className="pl-9"
+                                    value={customerSearch}
+                                    onChange={(e) => setCustomerSearch(e.target.value)}
+                                  />
+                                </div>
+                                <Button type="button" onClick={openCreateCustomerDialog}>
+                                  <UserPlus className="mr-2 h-4 w-4" /> New Customer
+                                </Button>
+                              </div>
+                              <div className="max-h-[360px] space-y-2 overflow-y-auto">
+                                {filteredLeads.map((lead) => (
+                                  <button
+                                    key={lead.id}
+                                    type="button"
+                                    className="flex w-full items-center justify-between rounded-lg border p-3 text-left transition-colors hover:bg-slate-50"
+                                    onClick={() => handleSelectLead(lead)}
+                                  >
+                                    <div className="min-w-0">
+                                      <div className="font-bold text-slate-900">
+                                        {lead.first_name} {lead.last_name}
+                                      </div>
+                                      <div className="truncate text-xs text-slate-500">
+                                        {[lead.email, lead.phone ? formatPhoneNumber(lead.phone) : '', lead.company]
+                                          .filter(Boolean)
+                                          .join(' • ')}
+                                      </div>
+                                    </div>
+                                    {lead.id === proposal.lead_id ? <Check className="h-5 w-5 text-blue-600" /> : null}
+                                  </button>
+                                ))}
+                                {filteredLeads.length === 0 ? (
+                                  <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+                                    No customers matched that search. Use `New Customer` if this person is not in the list.
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
                     {!selectedLead ? (
-                        <div className="text-center py-8 bg-slate-50 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => setIsCustomerModalOpen(true)}>
+                        <div className="text-center py-8 bg-slate-50 border-2 border-dashed border-slate-200 rounded-lg">
                             <UserPlus className="w-8 h-8 mx-auto text-slate-300 mb-2" />
                             <p className="text-slate-500 font-medium">No Customer Selected</p>
-                            <p className="text-xs text-slate-400">Click to select or create a new customer</p>
+                            <p className="text-xs text-slate-400">Use Select Customer to choose from your customer list or add a new one</p>
                         </div>
                     ) : (
                         <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2212,7 +2324,7 @@ const ProposalBuilder = () => {
                 </CardContent>
             </Card>
             {id && (
-              <DeliveryHistoryCard entityType="quote" entityId={id} tenantId={activeTenantId} />
+              <DeliveryHistoryCard entityType="quote" entityId={id} tenantId={resolvedTenantId} />
             )}
         </div>
       </div>
@@ -2371,66 +2483,12 @@ const ProposalBuilder = () => {
         open={isCustomerModalOpen}
         onOpenChange={(open) => {
           setIsCustomerModalOpen(open);
-          if (open) {
-            setCustomerView('search');
-            setCustomerSearch('');
-          }
         }}
       >
          <DialogContent className="sm:max-w-[600px] w-[95vw] max-h-[85vh] flex flex-col overflow-hidden">
              <DialogHeader>
-                 <DialogTitle>{customerView === 'search' ? 'Select Customer' : 'Create New Customer'}</DialogTitle>
+                 <DialogTitle>Create New Customer</DialogTitle>
              </DialogHeader>
-
-             {customerView === 'search' ? (
-                 <div className="space-y-4 flex-1 min-h-0 overflow-y-auto p-1">
-                     <div className="flex flex-col gap-2 sm:flex-row">
-                         <div className="relative flex-1">
-                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-                             <Input 
-                                placeholder="Search by name, phone, or company..." 
-                                className="pl-9"
-                                value={customerSearch}
-                                onChange={(e) => setCustomerSearch(e.target.value)}
-                             />
-                         </div>
-                         <Button onClick={() => setCustomerView('create')}>
-                             <UserPlus className="w-4 h-4 mr-2" /> New
-                         </Button>
-                     </div>
-                     <div className="space-y-2 mt-4">
-                         {filteredLeads.map(lead => (
-                                 <div 
-                                key={lead.id} 
-                                className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
-                                onClick={() => {
-                                    const leadAddress = formatLeadServiceAddress(lead);
-                                    setProposal(prev => ({
-                                      ...prev,
-                                      lead_id: lead.id,
-                                      service_address: leadAddress || '',
-                                    }));
-                                    setIsCustomerModalOpen(false);
-                                }}
-                             >
-                                 <div>
-                                     <div className="font-bold text-slate-900">{lead.first_name} {lead.last_name}</div>
-                                     <div className="text-xs text-slate-500 flex gap-3">
-                                         <span>{lead.email}</span>
-                                         {lead.phone && <span>• {formatPhoneNumber(lead.phone)}</span>}
-                                     </div>
-                                 </div>
-                                 {lead.id === proposal.lead_id && <Check className="w-5 h-5 text-blue-600" />}
-                             </div>
-                         ))}
-                         {filteredLeads.length === 0 && (
-                             <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
-                                 No customers matched that search. Try name, email, company, or phone.
-                             </div>
-                         )}
-                     </div>
-                 </div>
-             ) : (
                  <div className="space-y-4 py-2 flex-1 min-h-0 overflow-y-auto pr-1">
                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                          <div className="space-y-2">
@@ -2507,14 +2565,13 @@ const ProposalBuilder = () => {
                      </div>
 
                      <DialogFooter className="mt-6">
-                         <Button variant="ghost" onClick={() => setCustomerView('search')}>Back to Search</Button>
+                         <Button variant="ghost" onClick={() => setIsCustomerModalOpen(false)}>Cancel</Button>
                          <Button onClick={handleCreateCustomer} disabled={createLoading}>
                              {createLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                              Create Customer
                          </Button>
                      </DialogFooter>
                  </div>
-             )}
          </DialogContent>
       </Dialog>
 

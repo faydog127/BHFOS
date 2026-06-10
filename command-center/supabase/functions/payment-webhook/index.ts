@@ -246,7 +246,23 @@ Deno.serve(async (req) => {
     }
 
     if (invoice) {
-      await convertContactToCustomer({ leadId: invoice.lead_id ?? null });
+      const convertedContactId = await convertContactToCustomer({ leadId: invoice.lead_id ?? null });
+
+      if (convertedContactId) {
+        await logMoneyLoopEvent({
+          tenantId,
+          entityType: 'contact',
+          entityId: convertedContactId,
+          eventType: 'CustomerConvertedAuto',
+          actorType: 'system',
+          payload: {
+            lead_id: invoice.lead_id ?? null,
+            invoice_id: invoice.id,
+            provider: 'stripe',
+            provider_payment_id: providerPaymentId,
+          },
+        });
+      }
 
       try {
         await closeFollowUpTasks({
@@ -269,6 +285,52 @@ Deno.serve(async (req) => {
           provider: 'stripe',
           paymentIntentId: providerPaymentId,
         });
+      }
+
+      if (invoice.lead_id) {
+        const { count: unpaidInvoiceCount, error: unpaidInvoiceError } = await supabaseAdmin
+          .from('invoices')
+          .select('id', { count: 'exact', head: true })
+          .eq('tenant_id', tenantId)
+          .eq('lead_id', invoice.lead_id)
+          .not('status', 'in', '(paid,void)');
+
+        if (unpaidInvoiceError) {
+          console.error('Failed to evaluate lead paid rollup after webhook:', unpaidInvoiceError.message || unpaidInvoiceError);
+        } else if ((unpaidInvoiceCount ?? 0) === 0) {
+          const leadUpdatedAt = new Date().toISOString();
+          const leadPatchCandidates: Array<Record<string, unknown>> = [
+            { status: 'paid', updated_at: leadUpdatedAt },
+            { status: 'paid' },
+          ];
+
+          for (const patchCandidate of leadPatchCandidates) {
+            const leadUpdate = await supabaseAdmin
+              .from('leads')
+              .update(patchCandidate)
+              .eq('id', invoice.lead_id);
+
+            if (!leadUpdate.error) {
+              break;
+            }
+
+            console.warn('Unable to roll lead to paid after webhook:', leadUpdate.error.message || leadUpdate.error);
+          }
+
+          await logMoneyLoopEvent({
+            tenantId,
+            entityType: 'lead',
+            entityId: invoice.lead_id,
+            eventType: 'LeadUpdated',
+            actorType: 'system',
+            payload: {
+              status: 'paid',
+              invoice_id: invoice.id,
+              provider: 'stripe',
+              provider_payment_id: providerPaymentId,
+            },
+          });
+        }
       }
     }
   }

@@ -476,10 +476,15 @@ Deno.serve(async (req) => {
         }
       }
 
-      if (!paymentIntentId) {
-        throw new Error('Missing provider_payment_id');
-      }
       const checkoutUrl = session?.url ?? null;
+      if (!checkoutUrl) {
+        throw new Error('Missing checkout_url');
+      }
+
+      // Stripe Checkout may not expose a PaymentIntent id at session-creation time.
+      // Persist the initiation by checkout_session_id and let webhook settlement backfill
+      // the canonical provider_payment_id when Stripe emits the final payment event.
+      const providerPaymentId = paymentIntentId ?? null;
 
       // Record initiation attempt (DB-backed idempotency + linkage to webhook provider_payment_id).
       await supabaseAdmin.from('public_payment_attempts').upsert(
@@ -494,11 +499,15 @@ Deno.serve(async (req) => {
           idempotency_key: idempotencyKey,
           checkout_session_id: session.id,
           checkout_url: checkoutUrl,
-          provider_payment_id: paymentIntentId,
+          provider_payment_id: providerPaymentId,
           attempt_status: 'initiated',
           run_id: runId,
           client_ip: ip,
           user_agent: userAgent,
+          metadata: {
+            payment_intent_pending: !providerPaymentId,
+            payments_mode: paymentsMode,
+          },
           last_seen_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
@@ -508,7 +517,7 @@ Deno.serve(async (req) => {
       await supabaseAdmin
         .from('invoices')
         .update({
-          provider_payment_id: paymentIntentId ? (invoice.provider_payment_id ?? paymentIntentId) : invoice.provider_payment_id ?? null,
+          provider_payment_id: providerPaymentId ? (invoice.provider_payment_id ?? providerPaymentId) : invoice.provider_payment_id ?? null,
           provider_payment_status: 'initiated',
           updated_at: new Date().toISOString(),
         })
@@ -526,7 +535,8 @@ Deno.serve(async (req) => {
         metadata: {
           run_id: runId,
           checkout_session_id: session.id,
-          provider_payment_id: paymentIntentId,
+          provider_payment_id: providerPaymentId,
+          payment_intent_pending: !providerPaymentId,
           payments_mode: paymentsMode,
         },
       });
@@ -595,9 +605,9 @@ Deno.serve(async (req) => {
           success: true,
           mode: 'stripe_checkout',
           payment_status: 'pending_confirmation',
-          checkout_url: session.url,
+          checkout_url: checkoutUrl,
           session_id: session.id,
-          provider_payment_id: paymentIntentId,
+          provider_payment_id: providerPaymentId,
         },
         200,
         cors.headers
