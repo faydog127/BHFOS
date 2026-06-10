@@ -1,0 +1,65 @@
+name: Estimate Contract
+
+on:
+  pull_request:
+    paths:
+      - 'command-center/tmp/orchestrator-v2/estimate/**'
+      - 'command-center/docs/governance/ESTIMATE_RENDERER_CONTRACT.md'
+      - '.github/workflows/estimate-contract.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'command-center/tmp/orchestrator-v2/estimate/**'
+      - 'command-center/docs/governance/ESTIMATE_RENDERER_CONTRACT.md'
+      - '.github/workflows/estimate-contract.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: estimate-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  estimate_contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: command-center
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.1
+
+      - name: Contract fixtures (positive + negative)
+        run: node ./tmp/orchestrator-v2/estimate/run_estimate_fixtures.mjs
+
+      - name: Render + validate (exact)
+        run: |
+          JSON="./tmp/orchestrator-v2/estimate/estimate_judgment.sample.json"
+          RAW="${RUNNER_TEMP}/estimate_raw.md"
+          REVIEW="${RUNNER_TEMP}/estimate_review.md"
+
+          node ./tmp/orchestrator-v2/estimate/render_estimate_raw.mjs "${JSON}" "${RAW}"
+          node ./tmp/orchestrator-v2/estimate/validate_estimate_raw_output.mjs --mode exact --json "${JSON}" --doc "${RAW}"
+
+          node ./tmp/orchestrator-v2/estimate/render_estimate_review.mjs --json "${JSON}" --out "${REVIEW}" --raw "${RAW}"
+          node ./tmp/orchestrator-v2/estimate/validate_estimate_review_output.mjs --mode exact --json "${JSON}" --doc "${REVIEW}" --raw "${RAW}"
+
+      - name: Upload rendered outputs (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: estimate-contract-outputs
+          path: |
+            ${{ runner.temp }}/estimate_raw.md
+            ${{ runner.temp }}/estimate_review.md
+

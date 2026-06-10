@@ -1,0 +1,11 @@
+run_id: 2026-04-18T15:33:11.3520990+00:00
+              policyname               |      roles      |  cmd   | permissive |                                    qual                                    |                                 with_check                                 
+---------------------------------------+-----------------+--------+------------+----------------------------------------------------------------------------+----------------------------------------------------------------------------
+ Appointments are deletable by tenant  | {authenticated} | DELETE | PERMISSIVE | (tenant_id = ((auth.jwt() -> 'app_metadata'::text) ->> 'tenant_id'::text)) | 
+ Appointments are insertable by tenant | {authenticated} | INSERT | PERMISSIVE |                                                                            | (tenant_id = ((auth.jwt() -> 'app_metadata'::text) ->> 'tenant_id'::text))
+ Appointments are readable by tenant   | {authenticated} | SELECT | PERMISSIVE | (tenant_id = ((auth.jwt() -> 'app_metadata'::text) ->> 'tenant_id'::text)) | 
+ Appointments are updatable by tenant  | {authenticated} | UPDATE | PERMISSIVE | (tenant_id = ((auth.jwt() -> 'app_metadata'::text) ->> 'tenant_id'::text)) | (tenant_id = ((auth.jwt() -> 'app_metadata'::text) ->> 'tenant_id'::text))
+ Appointments service role full access | {service_role}  | ALL    | PERMISSIVE | true                                                                       | true
+(5 rows)
+
+

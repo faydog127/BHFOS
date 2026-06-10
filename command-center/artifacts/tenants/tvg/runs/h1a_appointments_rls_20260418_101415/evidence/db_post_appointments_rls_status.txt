@@ -1,0 +1,5 @@
+ schema |    table     | rls_enabled | rls_forced 
+--------+--------------+-------------+------------
+ public | appointments | t           | f
+(1 row)
+

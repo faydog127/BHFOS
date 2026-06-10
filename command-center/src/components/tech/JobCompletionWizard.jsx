@@ -6,7 +6,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/customSupabaseClient';
 import { jobService } from '@/services/jobService';
 import { Loader2, Camera, CheckCircle2, ArrowRight } from 'lucide-react';
 import SignaturePad from '@/components/tech/SignaturePad';
@@ -43,33 +42,33 @@ const JobCompletionWizard = ({ job, onComplete }) => {
     };
 
     const handleSubmit = async () => {
-        if (!signature) {
-            toast({ variant: "destructive", title: "Signature Required", description: "Please capture customer signature." });
-            return;
-        }
-
         setLoading(true);
         try {
+            const checklistItems = [
+                { id: 'site_clean', label: 'Work area cleaned & debris removed', done: Boolean(checklist.site_clean) },
+                { id: 'system_tested', label: 'System operation tested', done: Boolean(checklist.system_tested) },
+                { id: 'customer_demo', label: 'Customer demo completed', done: Boolean(checklist.customer_demo) },
+            ];
+
+            const photoRefs = (photos || []).map((photo) => ({
+                kind: 'completion',
+                ref: photo?.url,
+                name: photo?.name,
+            })).filter((entry) => Boolean(entry.ref));
+
             // 1. Update Job Status
             const result = await jobService.updateWorkOrder(job.id, {
                     status: 'completed', // Or 'pending_invoice' depending on workflow
                     completed_at: new Date().toISOString(),
                     technician_notes: notes,
-                    satisfaction_rating: parseInt(satisfaction),
-                    signature_url: signature, // In real app, upload base64/blob to storage first
-                    photos_json: photos
+                    execution_checklist: checklistItems,
+                    execution_photos: photoRefs,
+                    execution_findings: satisfaction
+                        ? [{ kind: 'satisfaction', rating: parseInt(satisfaction, 10) }]
+                        : [],
                 });
 
             if (!result.success) throw new Error(result.error);
-
-            // 2. Log Survey/Review if needed
-            if (satisfaction) {
-                await supabase.from('job_surveys').insert({
-                    job_id: job.id,
-                    rating: parseInt(satisfaction),
-                    feedback: notes
-                });
-            }
 
             toast({ 
                 title: "Work Order Completed!", 

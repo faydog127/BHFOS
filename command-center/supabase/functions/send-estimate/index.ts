@@ -130,6 +130,17 @@ const parseJson = async (req: Request): Promise<JsonObject> => {
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
 
+const asBoolean = (value: unknown): boolean => {
+  if (value === true) return true;
+  if (value === false || value == null) return false;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
+  }
+  return false;
+};
+
 const asNumber = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && value.trim() !== '') {
@@ -1298,6 +1309,7 @@ Deno.serve(async (req) => {
     const ccRecipients = normalizeEmailList(body.cc);
     const bccRecipients = normalizeEmailList(body.bcc);
     const attachPdf = deliveryChannel === 'email' && body.attach_pdf !== false;
+    const attachInspectionReportPdf = deliveryChannel === 'email' && asBoolean(body.attach_inspection_report_pdf);
 
     const requiredFieldErrors: string[] = [];
     if (!quote.quote_number) requiredFieldErrors.push('quote_number');
@@ -1613,7 +1625,7 @@ Deno.serve(async (req) => {
       ${tierCardsHtml}
 
       <h3 style="margin:18px 0 8px 0;font-size:18px;color:#111827;">Scope Summary</h3>
-      <p style="margin:0 0 10px 0;color:#374151;">This quote includes the services listed below and is structured to improve airflow efficiency, reduce dust circulation, and support healthier indoor air. The quoted price includes cleaning of the coil, blower, and AHU housing.</p>
+      <p style="margin:0 0 10px 0;color:#374151;">This quote includes the services listed below and is structured to improve airflow efficiency, reduce dust circulation, and support healthier indoor air.</p>
 
       <h3 style="margin:18px 0 8px 0;font-size:18px;color:#111827;">Line Items</h3>
       ${lineItemsTableHtml}
@@ -1659,6 +1671,148 @@ Deno.serve(async (req) => {
       bodyHtml: customBodyHtml || bodyHtml,
     });
     const wantsHtml = String(body.pdf_renderer || '').toLowerCase() !== 'text';
+
+    const MAX_INSPECTION_REPORT_ATTACHMENT_BYTES = 8 * 1024 * 1024; // 8 MB safety cap
+    const downloadPdfBytesFromStorage = async (bucket: string, filePath: string) => {
+      const { data, error } = await supabaseAdmin.storage.from(bucket).download(filePath);
+      if (error || !data) {
+        throw new Error(error?.message || 'inspection_report_download_failed');
+      }
+      return new Uint8Array(await data.arrayBuffer());
+    };
+
+    const buildInspectionReportAttachment = async () => {
+      const reportTenantId = asString(quote.tenant_id);
+      if (!reportTenantId) {
+        return {
+          ok: false as const,
+          code: 'QUOTE_TENANT_MISSING',
+          error: 'Quote tenant_id is missing; cannot attach inspection report.',
+        };
+      }
+
+      const { data: inspection, error: inspectionError } = await supabaseAdmin
+        .from('inspections')
+        .select('id')
+        .eq('tenant_id', reportTenantId)
+        .eq('quote_id', quote.id)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (inspectionError) {
+        return { ok: false as const, code: 'INSPECTION_LOOKUP_FAILED', error: inspectionError.message };
+      }
+      if (!inspection?.id) {
+        return { ok: false as const, code: 'INSPECTION_NOT_LINKED', error: 'No inspection is linked to this quote.' };
+      }
+
+      const { data: pendingPhotos, error: pendingError } = await supabaseAdmin
+        .from('inspection_photos')
+        .select('id, upload_state, is_voided')
+        .eq('tenant_id', reportTenantId)
+        .eq('inspection_id', inspection.id)
+        .eq('is_voided', false)
+        .neq('upload_state', 'complete');
+
+      if (pendingError) {
+        return { ok: false as const, code: 'INSPECTION_PHOTO_STATE_LOOKUP_FAILED', error: pendingError.message };
+      }
+
+      if ((pendingPhotos ?? []).length > 0) {
+        return {
+          ok: false as const,
+          code: 'INSPECTION_PHOTOS_PENDING',
+          error: 'Inspection photos are still uploading. Finish uploads before attaching the inspection report.',
+        };
+      }
+
+      const getLatestReport = async () =>
+        supabaseAdmin
+          .from('inspection_reports')
+          .select('id, file_path, status, report_version, inspection_revision, generated_at')
+          .eq('tenant_id', reportTenantId)
+          .eq('inspection_id', inspection.id)
+          .in('status', ['generated', 'sent'])
+          .order('generated_at', { ascending: false })
+          .order('report_version', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+      let { data: report, error: reportError } = await getLatestReport();
+      if (reportError) {
+        return { ok: false as const, code: 'INSPECTION_REPORT_LOOKUP_FAILED', error: reportError.message };
+      }
+
+      if (!report?.file_path) {
+        const { data: invokeData, error: invokeError } = await (supabaseAdmin as any).functions.invoke('inspection-report-pdf', {
+          body: {
+            tenant_id: reportTenantId,
+            inspection_id: inspection.id,
+            store: true,
+            return_pdf: false,
+          },
+        });
+
+        if (invokeError) {
+          return {
+            ok: false as const,
+            code: 'INSPECTION_REPORT_GENERATION_FAILED',
+            error: invokeError.message || 'Could not generate inspection report PDF.',
+          };
+        }
+
+        if (invokeData?.error) {
+          return {
+            ok: false as const,
+            code: 'INSPECTION_REPORT_GENERATION_FAILED',
+            error: String(invokeData.error || 'Could not generate inspection report PDF.'),
+          };
+        }
+
+        ({ data: report, error: reportError } = await getLatestReport());
+        if (reportError) {
+          return { ok: false as const, code: 'INSPECTION_REPORT_LOOKUP_FAILED', error: reportError.message };
+        }
+      }
+
+      const filePath = asString((report as any)?.file_path);
+      if (!filePath) {
+        return {
+          ok: false as const,
+          code: 'INSPECTION_REPORT_NOT_AVAILABLE',
+          error: 'Inspection report PDF is not available to attach yet.',
+        };
+      }
+
+      let bytes: Uint8Array;
+      try {
+        bytes = await downloadPdfBytesFromStorage('inspection-reports', filePath);
+      } catch (err) {
+        return {
+          ok: false as const,
+          code: 'INSPECTION_REPORT_DOWNLOAD_FAILED',
+          error: err instanceof Error ? err.message : 'Inspection report download failed.',
+        };
+      }
+
+      if (bytes.length > MAX_INSPECTION_REPORT_ATTACHMENT_BYTES) {
+        return {
+          ok: false as const,
+          code: 'INSPECTION_REPORT_TOO_LARGE',
+          error: `Inspection report PDF is too large to attach (${Math.ceil(bytes.length / 1024 / 1024)}MB).`,
+        };
+      }
+
+      return {
+        ok: true as const,
+        attachment: pdfAttachmentFromBytes({
+          filename: `inspection-report-${String(inspection.id).slice(0, 8)}.pdf`,
+          bytes,
+        }),
+      };
+    };
+
     let attachments: Array<Record<string, unknown>> = [];
     if (attachPdf) {
       let pdfAttachment: Record<string, unknown> | null = null;
@@ -1710,6 +1864,21 @@ Deno.serve(async (req) => {
       }
 
       attachments = [pdfAttachment];
+    }
+
+    if (attachInspectionReportPdf) {
+      const reportResult = await buildInspectionReportAttachment();
+      if (!reportResult.ok) {
+        return respondJson(
+          {
+            error: reportResult.error,
+            code: reportResult.code,
+          },
+          409,
+        );
+      }
+
+      attachments = [...attachments, reportResult.attachment];
     }
 
     if (asString(quote.status).toLowerCase() === 'superseded') {
@@ -1818,6 +1987,8 @@ Deno.serve(async (req) => {
 
     let providerId: string | null = null;
     let smsResult: Awaited<ReturnType<typeof sendDocumentSms>> | null = null;
+    let deliveryProvider: string | null = null;
+    let deliveryMocked: boolean | null = null;
 
     if (deliveryChannel === 'sms') {
       const duplicateSms = await hasRecentEvent({
@@ -1893,6 +2064,12 @@ Deno.serve(async (req) => {
       providerId = (provider as Record<string, unknown>)?.id
         ? String((provider as Record<string, unknown>).id)
         : null;
+
+      // `sendEmail` returns { provider: 'mock', mocked: true } in local mock mode.
+      // Resend's API response does not include a `provider` field, so default to `resend`.
+      const providerRecord = provider as Record<string, unknown> | null;
+      deliveryProvider = providerRecord?.provider ? String(providerRecord.provider) : 'resend';
+      deliveryMocked = providerRecord?.mocked === true;
     }
 
     const currentQuoteStatus = asString(quote.status).toLowerCase();
@@ -1941,6 +2118,8 @@ Deno.serve(async (req) => {
         delivery_channel: deliveryChannel,
         requested_delivery_channel: requestedDeliveryChannel,
         delivery_resolution_reason: deliveryResolution.resolutionReason,
+        delivery_provider: deliveryProvider,
+        delivery_mocked: deliveryMocked,
         attachments_count: attachments.length,
         sent_timestamp: now.toISOString(),
       },
@@ -1972,6 +2151,8 @@ Deno.serve(async (req) => {
         delivery_channel: deliveryChannel,
         requested_delivery_channel: requestedDeliveryChannel,
         delivery_resolution_reason: deliveryResolution.resolutionReason,
+        delivery_provider: deliveryProvider,
+        delivery_mocked: deliveryMocked,
         attachments_count: attachments.length,
       },
     });

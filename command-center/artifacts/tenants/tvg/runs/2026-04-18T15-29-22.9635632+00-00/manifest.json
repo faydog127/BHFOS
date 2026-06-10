@@ -1,0 +1,82 @@
+{
+  "generated_at": "2026-04-18T15:29:22.9635632+00:00",
+  "run_id": "2026-04-18T15:29:22.9635632+00:00",
+  "items": [
+    {
+      "sha256": "c7807b5f3491328275727b871958ec161ae12282e642938eabb15d914ad44750",
+      "path": "meta.json"
+    },
+    {
+      "sha256": "e9c71bdf05272dc850e64e25893d45a4ec25bbb711475cf088825635ffd39c86",
+      "path": "result.json"
+    },
+    {
+      "sha256": "af07d06e3e1fac9f2db0d01b56b782f6d31cd00e139afebfa4771f2ddd1e94cc",
+      "path": "stdout.log"
+    },
+    {
+      "sha256": "21d9e5be8155ea20f21c179e2f863c639af1683f4500afd4d81cf93db822ea80",
+      "path": "stderr.log"
+    },
+    {
+      "sha256": "d15529957b120a25be1502a4d421dafd31efe05665b616b22a6304e077342c8f",
+      "path": "logs/command_log.txt"
+    },
+    {
+      "sha256": "690b534fc9355ce309f2e8f51bdaac73f94848ea9571a584905b0faa941b05d4",
+      "path": "logs/h1a_verification_stdout.log"
+    },
+    {
+      "sha256": "49cb370f156fe25cdc4592a71a517b049926215b480550b2d89111f3dd8b76e9",
+      "path": "logs/h1a_verification_stderr.log"
+    },
+    {
+      "sha256": "42325222e32a8a8c9f080c7870e2abdd5b6b8c989ec7f085618a2f819361af30",
+      "path": "logs/review_gate_stdout.log"
+    },
+    {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "path": "logs/review_gate_stderr.log"
+    },
+    {
+      "sha256": "84c9ede7546e09c02578f81e7e7c51a847f4c3a7b5b1da98b46295faea0a0d6c",
+      "path": "evidence/db_appointments_rls_status.txt"
+    },
+    {
+      "sha256": "1a78246dc2d83240d03ec79459126f420c5268852be8704a9e96555050cb411a",
+      "path": "evidence/db_appointments_policies.txt"
+    },
+    {
+      "sha256": "e043fa43aefe8a8965cb97188db76a889f87fb63af42d23ff33e9a0bf1be266d",
+      "path": "evidence/db_appointments_schema.sql"
+    },
+    {
+      "sha256": "6d31ac9050ff20329ec19c033857ec6db4375a0ee53212b9baf431d298e0c604",
+      "path": "evidence/appointments_rls_extract.diff.txt"
+    },
+    {
+      "sha256": "50ec274e650640cade512d5283574219979255d55cf6a7eddbd78ef5c8ceef55",
+      "path": "outputs/h1a_verification_result.json"
+    },
+    {
+      "sha256": "a3b372f7c5db9b2563b0c7afb02574be92fdb27dd7073ffde2a89f850a25aefc",
+      "path": "outputs/edge_function_audit.json"
+    },
+    {
+      "sha256": "1cf594a6c03bf3e4b5e8dd9feb609b8645dca74f942837063d17fb8c9971d645",
+      "path": "analysis/rg_appointments.txt"
+    },
+    {
+      "sha256": "81bab58428157d777f48c4042602d2fde7cfec895ec3dd867cfee85c0958ea7e",
+      "path": "analysis/rg_tenant_id.txt"
+    },
+    {
+      "sha256": "c68bca772829eede6dc3aab6780fecb2190ca17b35ef877fdeac45b9c58e2fe4",
+      "path": "analysis/rg_service_role.txt"
+    },
+    {
+      "sha256": "56e843038735fd140d61e2d63f0e0fe1f3159a96cd9eaa5e243751e563e76c69",
+      "path": "review-input.json"
+    }
+  ]
+}

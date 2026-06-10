@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Loader2, CheckCircle2, AlertTriangle, Upload, Mail } from 'lucide-react';
 import { generateHygieneReportEmail } from '@/templates/HygieneReportTemplateV2';
 import { generateLoyaltyCode } from '@/services/discountService'; // Import added
+import { getWorkOrderDisplayId } from '@/lib/workOrderIdentity';
 
 const JobCompletion = () => {
     const [searchParams] = useSearchParams();
@@ -29,7 +30,7 @@ const JobCompletion = () => {
     const [newFinding, setNewFinding] = useState('');
     const [photos, setPhotos] = useState([]); // Simplified for UI demo
     const [emailCustomer, setEmailCustomer] = useState(true);
-    const trackingLabel = String(job?.job_number || job?.id || '').toUpperCase();
+    const trackingLabel = getWorkOrderDisplayId(job);
 
     useEffect(() => {
         if (!jobId) {

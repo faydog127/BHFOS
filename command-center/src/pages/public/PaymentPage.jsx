@@ -33,6 +33,13 @@ const PaymentPage = () => {
   const autoRedirectStartedRef = useRef(false);
   const checkoutState = searchParams.get('checkout');
 
+  const formatDateSafe = (value) => {
+    if (!value) return '';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.valueOf())) return '';
+    return format(parsed, 'MMM d, yyyy');
+  };
+
   const isInvoicePaid = (invoiceRow) =>
     String(invoiceRow?.status || '').toLowerCase() === 'paid' ||
     Number(invoiceRow?.amount_paid || 0) > 0 ||
@@ -160,7 +167,7 @@ const PaymentPage = () => {
             You have successfully paid <strong>${getReceiptAmount(invoice).toFixed(2)}</strong>.
           </p>
           <p className="text-sm text-slate-500">
-            A receipt has been emailed to {receiptEmail}.
+            Payment received. A receipt will be sent to {receiptEmail}. If you do not receive it, contact us.
           </p>
           <p className="text-sm text-slate-600">
             If we took good care of you, we would appreciate a quick Google review.
@@ -187,6 +194,7 @@ const PaymentPage = () => {
     'Customer';
   const showCancelledState = checkoutState === 'cancelled';
   const showPendingState = checkoutState === 'success' && !paymentSuccess;
+  const invoiceDateLabel = formatDateSafe(invoice.issue_date || invoice.created_at) || 'Date unavailable';
 
   return (
     <div className="min-h-screen bg-slate-50 py-6 px-4 sm:px-6 lg:px-8">
@@ -200,7 +208,7 @@ const PaymentPage = () => {
               <h1 className="text-xl font-bold text-slate-900 truncate">{COMPANY_NAME}</h1>
               <p className="text-xs text-slate-500 flex flex-wrap gap-x-2">
                 <span>Licensed &amp; Insured</span>
-                <span>•</span>
+                <span>|</span>
                 <span>{COMPANY_LICENSE}</span>
               </p>
             </div>
@@ -211,7 +219,7 @@ const PaymentPage = () => {
               <CardTitle className="flex justify-between items-start">
                 <span className="text-lg">Invoice #{invoice.invoice_number}</span>
                 <span className="text-sm font-normal text-slate-500">
-                  {format(new Date(invoice.issue_date), 'MMM d, yyyy')}
+                  {invoiceDateLabel}
                 </span>
               </CardTitle>
               <CardDescription className="mt-1">

@@ -13,10 +13,38 @@ const respondJson = (body: Record<string, unknown>, status = 200) =>
 const formatError = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 const getStripeEvent = async (req: Request) => {
+  const isLocalRequest = () => {
+    const supabaseUrl = (Deno.env.get('SUPABASE_URL') ?? '').trim();
+    if (/^http:\/\//i.test(supabaseUrl) && !/supabase\.co/i.test(supabaseUrl)) return true;
+    try {
+      const url = new URL(req.url);
+      if (/^(?:127\.0\.0\.1|localhost)$/i.test(url.hostname)) return true;
+    } catch {
+      // ignore
+    }
+    const host = req.headers.get('host') ?? '';
+    if (/^(?:127\.0\.0\.1|localhost)(?::\d+)?$/i.test(host)) return true;
+    return false;
+  };
+
+  const isExplicitTestModeEnabled = async () => {
+    if (/^(true|1)$/i.test((Deno.env.get('TEST_MODE') ?? '').trim())) return true;
+    try {
+      const { data } = await supabaseAdmin
+        .from('global_config')
+        .select('value')
+        .eq('key', 'test_mode')
+        .maybeSingle();
+      return /^(true|1)$/i.test(String(data?.value ?? '').trim());
+    } catch {
+      return false;
+    }
+  };
+
   const allowTestBypass =
     req.headers.get('x-test-webhook') === '1' &&
-    /^(true|1)$/i.test(Deno.env.get('TEST_MODE') ?? '') &&
-    /^(?:http:\/\/)?(?:127\.0\.0\.1|localhost)(?::\d+)?/i.test(Deno.env.get('SUPABASE_URL') ?? '');
+    isLocalRequest() &&
+    (await isExplicitTestModeEnabled());
 
   if (allowTestBypass) {
     return (await req.json()) as Stripe.Event;
@@ -218,7 +246,23 @@ Deno.serve(async (req) => {
     }
 
     if (invoice) {
-      await convertContactToCustomer({ leadId: invoice.lead_id ?? null });
+      const convertedContactId = await convertContactToCustomer({ leadId: invoice.lead_id ?? null });
+
+      if (convertedContactId) {
+        await logMoneyLoopEvent({
+          tenantId,
+          entityType: 'contact',
+          entityId: convertedContactId,
+          eventType: 'CustomerConvertedAuto',
+          actorType: 'system',
+          payload: {
+            lead_id: invoice.lead_id ?? null,
+            invoice_id: invoice.id,
+            provider: 'stripe',
+            provider_payment_id: providerPaymentId,
+          },
+        });
+      }
 
       try {
         await closeFollowUpTasks({
@@ -241,6 +285,52 @@ Deno.serve(async (req) => {
           provider: 'stripe',
           paymentIntentId: providerPaymentId,
         });
+      }
+
+      if (invoice.lead_id) {
+        const { count: unpaidInvoiceCount, error: unpaidInvoiceError } = await supabaseAdmin
+          .from('invoices')
+          .select('id', { count: 'exact', head: true })
+          .eq('tenant_id', tenantId)
+          .eq('lead_id', invoice.lead_id)
+          .not('status', 'in', '(paid,void)');
+
+        if (unpaidInvoiceError) {
+          console.error('Failed to evaluate lead paid rollup after webhook:', unpaidInvoiceError.message || unpaidInvoiceError);
+        } else if ((unpaidInvoiceCount ?? 0) === 0) {
+          const leadUpdatedAt = new Date().toISOString();
+          const leadPatchCandidates: Array<Record<string, unknown>> = [
+            { status: 'paid', updated_at: leadUpdatedAt },
+            { status: 'paid' },
+          ];
+
+          for (const patchCandidate of leadPatchCandidates) {
+            const leadUpdate = await supabaseAdmin
+              .from('leads')
+              .update(patchCandidate)
+              .eq('id', invoice.lead_id);
+
+            if (!leadUpdate.error) {
+              break;
+            }
+
+            console.warn('Unable to roll lead to paid after webhook:', leadUpdate.error.message || leadUpdate.error);
+          }
+
+          await logMoneyLoopEvent({
+            tenantId,
+            entityType: 'lead',
+            entityId: invoice.lead_id,
+            eventType: 'LeadUpdated',
+            actorType: 'system',
+            payload: {
+              status: 'paid',
+              invoice_id: invoice.id,
+              provider: 'stripe',
+              provider_payment_id: providerPaymentId,
+            },
+          });
+        }
       }
     }
   }

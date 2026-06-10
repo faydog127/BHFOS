@@ -30,6 +30,11 @@ test.describe.serial('UAT LOCAL work-order flow smoke', () => {
     const email = `uat.admin.${runId}@example.com`;
     const password = `Uat!${shortId}Aa1`;
     let authUserId = null;
+    let technicianUserId = null;
+    let technicianRecordId = null;
+    let leadId = null;
+    let quoteId = null;
+    let jobId = null;
 
     try {
       const { data: createdUser, error: createUserError } = await admin.auth.admin.createUser({
@@ -47,6 +52,31 @@ test.describe.serial('UAT LOCAL work-order flow smoke', () => {
       if (createUserError) throw createUserError;
       authUserId = createdUser?.user?.id || null;
 
+      const technicianName = `UAT Tech ${shortId}`;
+      const { data: createdTechUser, error: createTechUserError } = await admin.auth.admin.createUser({
+        email: `uat.tech.${runId}@example.com`,
+        password: `Tech!${shortId}Aa1`,
+        email_confirm: true,
+        app_metadata: {
+          tenant_id: 'tvg',
+          role: 'technician',
+        },
+        user_metadata: {
+          role: 'technician',
+        },
+      });
+      if (createTechUserError) throw createTechUserError;
+      technicianUserId = createdTechUser?.user?.id || null;
+
+      const technicianInsert = await insertWithRetry(admin, 'technicians', {
+        user_id: technicianUserId,
+        full_name: technicianName,
+        email: `uat.tech.${runId}@example.com`,
+        is_active: true,
+      });
+      if (technicianInsert.error) throw technicianInsert.error;
+      technicianRecordId = technicianInsert.data.id;
+
     const leadResult = await insertWithRetry(
       admin,
       'leads',
@@ -58,7 +88,7 @@ test.describe.serial('UAT LOCAL work-order flow smoke', () => {
       }),
     );
     if (leadResult.error) throw leadResult.error;
-    const leadId = leadResult.data.id;
+    leadId = leadResult.data.id;
 
     const quoteResult = await insertWithRetry(
       admin,
@@ -68,7 +98,7 @@ test.describe.serial('UAT LOCAL work-order flow smoke', () => {
       }),
     );
     if (quoteResult.error) throw quoteResult.error;
-    const quoteId = quoteResult.data.id;
+    quoteId = quoteResult.data.id;
     const quoteToken = quoteResult.data.public_token;
 
     const quoteItemResult = await insertWithRetry(
@@ -94,7 +124,8 @@ test.describe.serial('UAT LOCAL work-order flow smoke', () => {
 
     const quoteRow = await selectSingle(admin, 'quotes', { id: quoteId });
     expect(quoteRow.error).toBeNull();
-    expect(String(quoteRow.data?.status || '').toLowerCase()).toBe('approved');
+    // Canonical "won" status is accepted. DB normalizes approved -> accepted.
+    expect(String(quoteRow.data?.status || '').toLowerCase()).toBe('accepted');
 
     const { data: workOrderData, error: workOrderError } = await admin
       .from('jobs')
@@ -107,7 +138,7 @@ test.describe.serial('UAT LOCAL work-order flow smoke', () => {
 
     if (workOrderError) throw workOrderError;
     expect(workOrderData?.id).toBeTruthy();
-    const jobId = workOrderData.id;
+    jobId = workOrderData.id;
     expect(String(workOrderData.status || '').toLowerCase()).toContain('unscheduled');
 
     await page.goto('/tvg/login', { waitUntil: 'networkidle' });
@@ -130,19 +161,8 @@ test.describe.serial('UAT LOCAL work-order flow smoke', () => {
     await scheduleDialog.locator('input[type="number"]').fill('120');
     await scheduleDialog.getByPlaceholder('Street, City, State ZIP').fill(serviceAddress);
 
-    const { data: techniciansData, error: techniciansError } = await admin
-      .from('technicians')
-      .select('id, full_name')
-      .eq('is_active', true)
-      .order('full_name', { ascending: true })
-      .limit(1);
-    if (techniciansError) throw techniciansError;
-
-    if ((techniciansData || []).length > 0) {
-      const technicianName = techniciansData[0].full_name;
-      await scheduleDialog.getByRole('combobox').click();
-      await page.getByRole('option', { name: technicianName }).first().click();
-    }
+    await scheduleDialog.getByRole('combobox').click();
+    await page.getByRole('option', { name: technicianName }).first().click();
 
     await scheduleDialog.getByRole('button', { name: /confirm schedule/i }).click();
 
@@ -270,6 +290,22 @@ test.describe.serial('UAT LOCAL work-order flow smoke', () => {
     expect(Boolean(invoiceRows[0].release_approved)).toBeTruthy();
     expect(invoiceRows[0].public_token).toBeTruthy();
     } finally {
+      if (jobId) {
+        await admin.from('jobs').delete().eq('id', jobId);
+      }
+      if (quoteId) {
+        await admin.from('quote_items').delete().eq('quote_id', quoteId);
+        await admin.from('quotes').delete().eq('id', quoteId);
+      }
+      if (leadId) {
+        await admin.from('leads').delete().eq('id', leadId);
+      }
+      if (technicianRecordId) {
+        await admin.from('technicians').delete().eq('id', technicianRecordId);
+      }
+      if (technicianUserId) {
+        await admin.auth.admin.deleteUser(technicianUserId);
+      }
       if (authUserId) {
         await admin.auth.admin.deleteUser(authUserId);
       }

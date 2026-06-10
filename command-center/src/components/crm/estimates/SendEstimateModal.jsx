@@ -65,6 +65,7 @@ const SendEstimateModal = ({ open, onOpenChange, estimate, lead }) => {
                 deliveryChannel: sendChannel,
                 recipientEmail: formData.to_email,
                 recipientPhone: formData.to_phone,
+                attachPdf: false,
                 customSubject: sendChannel === 'email' ? formData.subject : undefined,
                 customBodyHtml: sendChannel === 'email' ? formData.message.replace(/\n/g, '<br/>') : undefined,
             });

@@ -1,0 +1,466 @@
+src\hooks\useKanbanBoardData.js:177:      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads', filter: `tenant_id=eq.${activeTenantId}` }, handleChange)
+src\hooks\useKanbanBoardData.js:178:      .on('postgres_changes', { event: '*', schema: 'public', table: 'quotes', filter: `tenant_id=eq.${activeTenantId}` }, handleChange)
+src\hooks\useKanbanBoardData.js:179:      .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs', filter: `tenant_id=eq.${activeTenantId}` }, handleChange)
+src\hooks\useKanbanBoardData.js:180:      .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices', filter: `tenant_id=eq.${activeTenantId}` }, handleChange)
+src\contexts\SupabaseAuthContext.jsx:36:          tokenTenantId = decoded.app_metadata?.tenant_id;
+supabase/functions\execute-sql\scripts.ts:66:            and (new.tenant_id is null or j.tenant_id is not distinct from new.tenant_id)
+supabase/functions\execute-sql\scripts.ts:73:              new.tenant_id,
+supabase/functions\execute-sql\scripts.ts:91:              new.tenant_id,
+supabase/functions\execute-sql\index.ts:33:    const { scriptKey, tenant_id: bodyTenantId } = await req.json();
+src\services\calendarService.js:18:      .eq('tenant_id', tenantId)
+src\services\calendarService.js:48:        .eq('tenant_id', tenantId)
+src\services\calendarService.js:65:        .eq('tenant_id', tenantId)
+src\services\appointmentService.js:86:      .eq('tenant_id', tenantId)
+src\services\appointmentService.js:106:        .eq('tenant_id', tenantId);
+src\services\appointmentService.js:161:      .select('id, tenant_id, code, name, category, base_price, price_type, description, active')
+src\services\appointmentService.js:163:      .in('tenant_id', tenantIds)
+src\services\appointmentService.js:169:      const leftRank = left?.tenant_id === tenantId ? 0 : 1;
+src\services\appointmentService.js:170:      const rightRank = right?.tenant_id === tenantId ? 0 : 1;
+src\services\appointmentService.js:207:        .eq('tenant_id', tenantId)
+src\services\appointmentService.js:240:      tenant_id: tenantId,
+src\services\appointmentService.js:274:        tenant_id: tenantId,
+src\services\appointmentService.js:285:        tenant_id: tenantId,
+src\config\featureFlags.js:5:const TENANT_ID = DEFAULT_TENANT_ID;
+src\config\featureFlags.js:18:  const tenantConfig = brandConfig.tenants[TENANT_ID]?.features || {};
+src\config\featureFlags.js:45:    console.groupCollapsed(`[BHF Config] Resolved Flags for Tenant: ${TENANT_ID}`);
+src\services\emailService.js:100:        .eq('tenant_id', tenantId)
+src\services\emailService.js:108:        tenant_id: tenantId,
+src\services\emailService.js:446:            const tenantId = metadata?.tenant_id || docData?.tenant_id || null;
+src\services\leadService.js:27:                    tenant_id: getTenantId()
+src\services\leadService.js:60:            tenant_id: getTenantId(),
+src\services\jobService.js:27:    .eq('tenant_id', tenantId)
+src\services\jobService.js:49:    .eq('tenant_id', tenantId)
+src\services\jobService.js:93:    .eq('tenant_id', tenantId)
+src\services\jobService.js:127:          tenant_id: tenantId,
+src\services\jobService.js:279:          tenant_id: tenantId,
+src\services\invoicePreviewService.js:15:    url.searchParams.set('tenant_id', tenantId);
+src\services\invoicePreviewService.js:37:    query = query.eq('tenant_id', tenantId);
+src\services\invoicePreviewService.js:59:      updateQuery = updateQuery.eq('tenant_id', tenantId);
+src\services\documentDeliveryService.js:27:    .eq('tenant_id', tenantId)
+src\services\documentDeliveryService.js:60:  tenant_id: tenantId,
+src\services\documentDeliveryService.js:107:  tenant_id: tenantId,
+src\services\documentDeliveryService.js:123:  tenant_id: tenantId,
+src\services\workOrderBoardService.js:11:  tenant_id,
+src\services\workOrderBoardService.js:110:      .eq('tenant_id', tenantId)
+src\services\workOrderBoardService.js:142:      .eq('tenant_id', tenantId)
+src\services\quoteService.js:61:                tenant_id: getTenantId()
+src\services\moneyLoopDeleteService.js:32:        tenant_id: tenantId,
+supabase/functions\create-appointment\index.ts:76:    // IMPORTANT: Do not trust client-provided tenant_id.
+supabase/functions\create-appointment\index.ts:79:    const requestedTenantId = asString(body.tenant_id);
+supabase/functions\create-appointment\index.ts:98:      .eq('tenant_id', tenantId)
+supabase/functions\create-appointment\index.ts:142:      tenant_id: tenantId,
+supabase/functions\calls\index.ts:57:      .eq('tenant_id', tenantId);
+supabase/functions\calls\index.ts:123:    if (body.tenant_id && body.tenant_id !== jwtTenantId) {
+supabase/functions\calls\index.ts:131:      .eq('tenant_id', jwtTenantId)
+supabase/functions\calls\index.ts:153:      tenant_id: jwtTenantId,
+src\services\quotePreviewService.js:15:    url.searchParams.set('tenant_id', tenantId);
+src\services\quotePreviewService.js:46:    query = query.eq('tenant_id', tenantId);
+src\services\quotePreviewService.js:69:      updateQuery = updateQuery.eq('tenant_id', tenantId);
+supabase/functions\quote-update-status\index.ts:38:  const bodyTenantId = body?.tenant_id || null;
+supabase/functions\quote-update-status\index.ts:66:    .eq('tenant_id', jwtTenantId)
+supabase/functions\quote-update-status\index.ts:67:    .select('id, status, tenant_id')
+supabase/functions\quote-update-status\index.ts:76:      tenantId: quote.tenant_id || jwtTenantId,
+supabase/functions\public-quote-approve\index.ts:128:    .eq('tenant_id', tenantId)
+supabase/functions\public-quote-approve\index.ts:146:    .eq('tenant_id', tenantId)
+supabase/functions\public-quote-approve\index.ts:182:    .eq('tenant_id', tenantId)
+supabase/functions\public-quote-approve\index.ts:223:  url.searchParams.set('tenant_id', params.tenantId);
+supabase/functions\public-quote-approve\index.ts:241:  url.searchParams.set('tenant_id', params.tenantId);
+supabase/functions\public-quote-approve\index.ts:262:    appUrl.searchParams.set('tenant_id', params.tenantId);
+supabase/functions\public-quote-approve\index.ts:270:    fallback.searchParams.set('tenant_id', params.tenantId);
+supabase/functions\public-quote-approve\index.ts:278:    fallback.searchParams.set('tenant_id', params.tenantId);
+supabase/functions\public-quote-approve\index.ts:284:  fallback.searchParams.set('tenant_id', params.tenantId);
+supabase/functions\public-quote-approve\index.ts:460:    asString(body?.tenant_id) ||
+supabase/functions\public-quote-approve\index.ts:461:    asString(url.searchParams.get('tenant_id')) ||
+supabase/functions\public-quote-approve\index.ts:525:      tenant_id
+supabase/functions\public-quote-approve\index.ts:566:  const derivedTenantId = asString(existingQuote.tenant_id);
+supabase/functions\public-quote-approve\index.ts:688:    .eq('tenant_id', tenantId)
+supabase/functions\public-quote-approve\index.ts:706:      tenant_id
+supabase/functions\public-quote-approve\index.ts:788:      tenant_id: tenantId,
+supabase/functions\public-quote-approve\index.ts:830:          .eq('tenant_id', tenantId)
+supabase/functions\public-quote-approve\index.ts:977:      .eq('tenant_id', tenantId)
+supabase/functions\public-quote-approve\index.ts:991:      .eq('tenant_id', tenantId)
+supabase/functions\run-invoice-reminders\index.ts:11:  tenant_id: string;
+supabase/functions\run-invoice-reminders\index.ts:28:  tenant_id: string | null;
+supabase/functions\run-invoice-reminders\index.ts:101:    .eq('tenant_id', tenantId)
+supabase/functions\run-invoice-reminders\index.ts:116:    const tenantId = asString(body.tenant_id) || getTenantIdFromClaims(claims) || 'tvg';
+supabase/functions\run-invoice-reminders\index.ts:129:      .select('id, tenant_id, source_id, lead_id, title, due_at, metadata')
+supabase/functions\run-invoice-reminders\index.ts:130:      .eq('tenant_id', tenantId)
+supabase/functions\run-invoice-reminders\index.ts:172:          tenant_id,
+supabase/functions\run-invoice-reminders\index.ts:190:        .eq('tenant_id', tenantId)
+supabase/functions\run-invoice-reminders\index.ts:306:      tenant_id: tenantId,
+supabase/functions\send-invoice\index.ts:54:  tenant_id: string | null;
+supabase/functions\send-invoice\index.ts:695:    metadata: tenantId ? { tenant_id: tenantId } : undefined,
+supabase/functions\send-invoice\index.ts:709:    invoice.tenant_id,
+supabase/functions\send-invoice\index.ts:725:      tenant_id: invoice.tenant_id ?? '',
+supabase/functions\send-invoice\index.ts:809:    const bodyTenantId = asString(body.tenant_id);
+supabase/functions\send-invoice\index.ts:816:        tenant_id,
+supabase/functions\send-invoice\index.ts:858:    if (claimsTenantId && invoice.tenant_id && claimsTenantId !== invoice.tenant_id) {
+supabase/functions\send-invoice\index.ts:862:    if (bodyTenantId && invoice.tenant_id && bodyTenantId !== invoice.tenant_id) {
+supabase/functions\send-invoice\index.ts:951:      tenantId: invoice.tenant_id || bodyTenantId || claimsTenantId || null,
+supabase/functions\send-invoice\index.ts:1212:        tenantId: invoice.tenant_id || bodyTenantId || null,
+supabase/functions\send-invoice\index.ts:1266:      tenantId: invoice.tenant_id || bodyTenantId || 'tvg',
+supabase/functions\send-invoice\index.ts:1274:      tenantId: invoice.tenant_id || bodyTenantId || claimsTenantId || null,
+supabase/functions\send-invoice\index.ts:1280:      tenantId: invoice.tenant_id || bodyTenantId || null,
+supabase/functions\public-quote\index.ts:86:  if (params.tenantId) url.searchParams.set('tenant_id', params.tenantId);
+supabase/functions\public-quote\index.ts:149:        <input type="hidden" name="tenant_id" value="${escapeHtml(params.tenantId)}" />
+supabase/functions\public-quote\index.ts:156:        <input type="hidden" name="tenant_id" value="${escapeHtml(params.tenantId)}" />
+supabase/functions\public-quote\index.ts:254:  const requestedTenantId = params.get('tenant_id') || body?.tenant_id || null;
+supabase/functions\public-quote\index.ts:292:      tenant_id,
+supabase/functions\public-quote\index.ts:351:  const derivedTenantId = asString((data as Record<string, unknown>).tenant_id);
+supabase/functions\run-appointment-reminders\index.ts:32:  tenant_id: string | null;
+supabase/functions\run-appointment-reminders\index.ts:95:    // IMPORTANT: Do not trust client-provided tenant_id.
+supabase/functions\run-appointment-reminders\index.ts:100:    const requestedTenantId = asString(body.tenant_id);
+supabase/functions\run-appointment-reminders\index.ts:118:      .eq('tenant_id', tenantId)
+supabase/functions\run-appointment-reminders\index.ts:175:          tenant_id,
+supabase/functions\run-appointment-reminders\index.ts:189:        .eq('tenant_id', tenantId)
+supabase/functions\run-appointment-reminders\index.ts:327:      tenant_id: tenantId,
+supabase/functions\_shared\taskUtils.ts:31:    .eq('tenant_id', tenantId)
+supabase/functions\_shared\taskUtils.ts:70:      .eq('tenant_id', tenantId)
+supabase/functions\_shared\taskUtils.ts:97:      tenant_id: tenantId,
+supabase/functions\_shared\taskUtils.ts:120:          tenant_id: tenantId,
+supabase/functions\send-estimate\index.ts:35:  tenant_id: string | null;
+supabase/functions\send-estimate\index.ts:246:    if (params.tenantId) appUrl.searchParams.set('tenant_id', params.tenantId);
+supabase/functions\send-estimate\index.ts:260:  if (params.tenantId) url.searchParams.set('tenant_id', params.tenantId);
+supabase/functions\send-estimate\index.ts:294:  if (params.tenantId) url.searchParams.set('tenant_id', params.tenantId);
+supabase/functions\send-estimate\index.ts:1032:    tenant_id: params.tenantId,
+supabase/functions\send-estimate\index.ts:1064:    .select('id,tenant_id,estimate_id,public_token')
+supabase/functions\send-estimate\index.ts:1078:    tenantId: quote.tenant_id,
+supabase/functions\send-estimate\index.ts:1104:      tenantId: quote.tenant_id,
+supabase/functions\send-estimate\index.ts:1136:    const bodyTenantId = asString(body.tenant_id);
+supabase/functions\send-estimate\index.ts:1159:      return respondJson({ error: 'Missing tenant_id.' }, 400);
+supabase/functions\send-estimate\index.ts:1170:      .select('id,tenant_id,lead_id,estimate_id,customer_name,customer_email,customer_phone,quote_number,status,subtotal,tax_amount,total_amount,valid_until,created_at,public_token,line_items,service_address')
+supabase/functions\send-estimate\index.ts:1172:      .eq('tenant_id', effectiveTenantId)
+supabase/functions\send-estimate\index.ts:1178:        .select('id,tenant_id,lead_id,estimate_id,customer_email,quote_number,status,subtotal,tax_amount,total_amount,valid_until,created_at,public_token,line_items')
+supabase/functions\send-estimate\index.ts:1180:        .eq('tenant_id', effectiveTenantId)
+supabase/functions\send-estimate\index.ts:1219:        .eq('tenant_id', effectiveTenantId);
+supabase/functions\send-estimate\index.ts:1265:      tenantId: quote.tenant_id ?? effectiveTenantId,
+supabase/functions\send-estimate\index.ts:1317:        tenantId: quote.tenant_id,
+supabase/functions\send-estimate\index.ts:1388:            tenantId: quote.tenant_id,
+supabase/functions\send-estimate\index.ts:1418:          tenantId: quote.tenant_id,
+supabase/functions\send-estimate\index.ts:1454:            tenantId: quote.tenant_id,
+supabase/functions\send-estimate\index.ts:1469:            tenantId: quote.tenant_id,
+supabase/functions\send-estimate\index.ts:1495:      tenantId: quote.tenant_id,
+supabase/functions\send-estimate\index.ts:1527:        tenantId: quote.tenant_id,
+supabase/functions\send-estimate\index.ts:1737:          tenantId: quote.tenant_id,
+supabase/functions\send-estimate\index.ts:1773:        tenantId: quote.tenant_id,
+supabase/functions\send-estimate\index.ts:1864:        tenantId: quote.tenant_id,
+supabase/functions\send-estimate\index.ts:1892:          { name: 'tenant_id', value: effectiveTenantId },
+supabase/functions\send-estimate\index.ts:1922:      tenantId: quote.tenant_id || effectiveTenantId || 'tvg',
+supabase/functions\send-estimate\index.ts:1930:      tenantId: quote.tenant_id ?? effectiveTenantId ?? null,
+supabase/functions\send-estimate\index.ts:1936:      tenantId: quote.tenant_id,
+supabase/functions\send-estimate\index.ts:1960:      tenantId: quote.tenant_id,
+supabase/functions\public-pay\index.ts:136:  const requestedTenantId = body?.tenant_id != null ? String(body.tenant_id).trim() : null;
+supabase/functions\public-pay\index.ts:189:  const derivedTenantId = String(invoice.tenant_id ?? '').trim();
+supabase/functions\public-pay\index.ts:344:        .eq('tenant_id', tenantId)
+supabase/functions\public-pay\index.ts:395:          .eq('tenant_id', tenantId)
+supabase/functions\public-pay\index.ts:437:                  tenant_id: tenantId,
+supabase/functions\public-pay\index.ts:444:                tenant_id: tenantId,
+supabase/functions\public-pay\index.ts:486:          tenant_id: tenantId,
+supabase/functions\public-pay\index.ts:514:        .eq('tenant_id', tenantId)
+supabase/functions\public-pay\index.ts:550:                tenant_id: tenantId,
+supabase/functions\_shared\receiptUtils.ts:18:  tenant_id?: string | null;
+supabase/functions\_shared\receiptUtils.ts:75:    .eq('tenant_id', tenantId)
+supabase/functions\_shared\receiptUtils.ts:165:    .eq('tenant_id', tenantId)
+supabase/functions\_shared\receiptUtils.ts:178:  const tenantId = input.tenantId ?? input.invoice.tenant_id ?? null;
+supabase/functions\run-quote-reminders\index.ts:11:  tenant_id: string;
+supabase/functions\run-quote-reminders\index.ts:28:  tenant_id: string | null;
+supabase/functions\run-quote-reminders\index.ts:81:  url.searchParams.set('tenant_id', tenantId);
+supabase/functions\run-quote-reminders\index.ts:102:    .eq('tenant_id', tenantId)
+supabase/functions\run-quote-reminders\index.ts:130:    const tenantId = asString(body.tenant_id) || getTenantIdFromClaims(claims) || 'tvg';
+supabase/functions\run-quote-reminders\index.ts:143:      .select('id, tenant_id, source_id, lead_id, title, due_at, metadata')
+supabase/functions\run-quote-reminders\index.ts:144:      .eq('tenant_id', tenantId)
+supabase/functions\run-quote-reminders\index.ts:183:          tenant_id,
+supabase/functions\run-quote-reminders\index.ts:197:        .eq('tenant_id', tenantId)
+supabase/functions\run-quote-reminders\index.ts:332:      tenant_id: tenantId,
+supabase/functions\_shared\publicUtils.ts:103:      tenant_id: input.tenantId,
+supabase/functions\_shared\auth.ts:155:  const tid = app?.tenant_id;
+supabase/functions\quotes-list\index.ts:42:  const bodyTenantId = typeof body?.tenant_id === 'string' && body.tenant_id.trim() ? body.tenant_id : null;
+supabase/functions\quotes-list\index.ts:62:      .eq('tenant_id', effectiveTenantId)
+supabase/functions\_shared\appointmentUtils.ts:145:    .eq('tenant_id', params.tenantId)
+supabase/functions\_shared\moneyLoopUtils.ts:23:      tenant_id: input.tenantId,
+supabase/functions\_shared\moneyLoopUtils.ts:105:      query = query.eq('tenant_id', params.tenantId);
+supabase/functions\_shared\moneyLoopUtils.ts:107:      query = query.is('tenant_id', null);
+supabase/functions\_shared\moneyLoopUtils.ts:121:      tenant_id: params.tenantId ?? null,
+supabase/functions\_shared\moneyLoopUtils.ts:319:      query = query.eq('tenant_id', params.tenantId);
+supabase/functions\_shared\moneyLoopUtils.ts:321:      query = query.is('tenant_id', null);
+supabase/functions\_shared\moneyLoopUtils.ts:337:      tenant_id: params.tenantId ?? null,
+supabase/functions\public-invoice\index.ts:255:  const requestedTenantId = params.get('tenant_id') || body?.tenant_id || null;
+supabase/functions\public-invoice\index.ts:294:      tenant_id,
+supabase/functions\public-invoice\index.ts:346:  const derivedTenantId = String(invoice.tenant_id ?? '').trim();
+supabase/functions\send-email\index.ts:103:      tenant_id: tenantId || null,
+supabase/functions\_shared\documentDelivery.ts:362:    leadQuery = leadQuery.eq('tenant_id', params.tenantId);
+supabase/functions\_shared\documentDelivery.ts:390:    tenantId: asString((leadRow as Record<string, unknown>).tenant_id) || params.tenantId || null,
+supabase/functions\_shared\documentDelivery.ts:422:    leadQuery = leadQuery.eq('tenant_id', params.tenantId);
+supabase/functions\_shared\documentDelivery.ts:437:    updateLeadQuery = updateLeadQuery.eq('tenant_id', params.tenantId);
+supabase/functions\lead-update-stage\index.ts:52:  const bodyTenantId = body?.tenant_id || null;
+supabase/functions\lead-update-stage\index.ts:78:    .eq('tenant_id', jwtTenantId)
+supabase/functions\lead-update-stage\index.ts:79:    .select('id, pipeline_stage, status, tenant_id')
+supabase/functions\lead-update-stage\index.ts:97:      tenantId: lead.tenant_id || jwtTenantId,
+supabase/functions\payment-webhook\index.ts:202:    const tenantId = invoice?.tenant_id ?? null;
+supabase/functions\_shared\businessHours.ts:141:        const { data, error } = await baseQuery.eq('tenant_id', tenantId).maybeSingle();
+supabase/functions\money-loop-delete\index.ts:48:    .eq('tenant_id', tenantId)
+supabase/functions\money-loop-delete\index.ts:59:    .eq('tenant_id', tenantId)
+supabase/functions\money-loop-delete\index.ts:70:  await runDelete('crm_tasks', (query) => query.eq('tenant_id', tenantId).eq('source_type', 'quote').in('source_id', ids));
+supabase/functions\money-loop-delete\index.ts:71:  await runDelete('events', (query) => query.eq('tenant_id', tenantId).eq('entity_type', 'quote').in('entity_id', ids));
+supabase/functions\money-loop-delete\index.ts:73:    query.eq('tenant_id', tenantId).eq('entity_type', 'quote').in('entity_id', ids),
+supabase/functions\money-loop-delete\index.ts:76:    query.eq('tenant_id', tenantId).in('quote_id', ids),
+supabase/functions\money-loop-delete\index.ts:79:    query.eq('tenant_id', tenantId).in('quote_id', ids),
+supabase/functions\money-loop-delete\index.ts:86:  await runDelete('crm_tasks', (query) => query.eq('tenant_id', tenantId).in('source_type', ['job', 'work_order']).in('source_id', ids));
+supabase/functions\money-loop-delete\index.ts:87:  await runDelete('events', (query) => query.eq('tenant_id', tenantId).eq('entity_type', 'job').in('entity_id', ids));
+supabase/functions\money-loop-delete\index.ts:89:    query.eq('tenant_id', tenantId).eq('entity_type', 'job').in('entity_id', ids),
+supabase/functions\money-loop-delete\index.ts:96:    await runDelete('invoices', (query) => query.eq('tenant_id', tenantId).in('id', invoiceIds));
+supabase/functions\money-loop-delete\index.ts:103:  await runDelete('crm_tasks', (query) => query.eq('tenant_id', tenantId).eq('source_type', 'invoice').in('source_id', ids));
+supabase/functions\money-loop-delete\index.ts:104:  await runDelete('events', (query) => query.eq('tenant_id', tenantId).eq('entity_type', 'invoice').in('entity_id', ids));
+supabase/functions\money-loop-delete\index.ts:105:  await runDelete('events', (query) => query.eq('tenant_id', tenantId).eq('entity_type', 'payment').in('entity_id', ids));
+supabase/functions\money-loop-delete\index.ts:107:    query.eq('tenant_id', tenantId).eq('entity_type', 'invoice').in('entity_id', ids),
+supabase/functions\money-loop-delete\index.ts:110:  await runDelete('transactions', (query) => query.eq('tenant_id', tenantId).in('invoice_id', ids));
+supabase/functions\money-loop-delete\index.ts:157:  const bodyTenantId = asString(body?.tenant_id);
+supabase/functions\money-loop-delete\index.ts:184:      .eq('tenant_id', tenantId)
+supabase/functions\manual-convert-customer\index.ts:62:      .eq('tenant_id', tenantId)
+supabase/functions\work-order-update\index.ts:61:  'id, invoice_number, status, sent_at, paid_at, amount_paid, total_amount, balance_due, payment_method, job_id, quote_id, lead_id, tenant_id, customer_email, public_token';
+supabase/functions\work-order-update\index.ts:234:    .eq('tenant_id', tenantId)
+supabase/functions\work-order-update\index.ts:259:    .eq('tenant_id', tenantId)
+supabase/functions\work-order-update\index.ts:277:    .eq('tenant_id', tenantId)
+supabase/functions\work-order-update\index.ts:305:    .eq('tenant_id', tenantId)
+supabase/functions\work-order-update\index.ts:316:    .eq('tenant_id', tenantId)
+supabase/functions\work-order-update\index.ts:363:      .eq('tenant_id', tenantId)
+supabase/functions\work-order-update\index.ts:391:      .eq('tenant_id', tenantId)
+supabase/functions\work-order-update\index.ts:429:    .eq('tenant_id', tenantId)
+supabase/functions\work-order-update\index.ts:467:    .eq('tenant_id', tenantId)
+supabase/functions\work-order-update\index.ts:503:    tenant_id: tenantId,
+supabase/functions\work-order-update\index.ts:568:    tenant_id: tenantId,
+supabase/functions\work-order-update\index.ts:833:    const requestedTenantId = asString(body?.tenant_id);
+supabase/functions\work-order-update\index.ts:860:      .eq('tenant_id', jwtTenantId)
+supabase/functions\work-order-update\index.ts:940:    const jobForInvoice = { ...existingJob, ...data, tenant_id: jwtTenantId };
+supabase/functions\send-receipt\index.ts:15:  tenant_id: string | null;
+supabase/functions\send-receipt\index.ts:92:    const bodyTenantId = asString(body.tenant_id);
+supabase/functions\send-receipt\index.ts:109:        tenant_id,
+supabase/functions\send-receipt\index.ts:136:      invoiceQuery = invoiceQuery.eq('tenant_id', effectiveTenantId);
+supabase/functions\send-receipt\index.ts:146:    if (claimsTenantId && invoice.tenant_id && claimsTenantId !== invoice.tenant_id) {
+supabase/functions\send-receipt\index.ts:167:      tenantId: invoice.tenant_id || effectiveTenantId,
+supabase/functions\send-receipt\index.ts:210:      tenantId: invoice.tenant_id || effectiveTenantId,
+supabase/functions\update-appointment-status\index.ts:77:    // IMPORTANT: Do not trust client-provided tenant_id.
+supabase/functions\update-appointment-status\index.ts:80:    const requestedTenantId = asString(body.tenant_id);
+supabase/functions\update-appointment-status\index.ts:93:      .eq('tenant_id', tenantId)
+supabase/functions\update-appointment-status\index.ts:135:      .eq('tenant_id', tenantId)
+src\components\BHFCrmLayout.jsx:14:  const TENANT_ID = DEFAULT_TENANT_ID;
+src\components\BHFCrmLayout.jsx:16:  const isDemo = TENANT_ID === 'demo';
+src\components\BHFCrmLayout.jsx:17:  const isInstallWorxs = TENANT_ID === 'installworxs';
+src\components\crm\appointments\BookingVerification.jsx:30:        .eq('tenant_id', tenantId)
+src\components\crm\action-hub\ActionHubKanbanView.jsx:73:        const resolvedTenantId = card.tenant_id || tenantId;
+src\components\crm\documents\DeliveryHistoryCard.jsx:86:          query = query.eq('tenant_id', tenantId);
+src\components\TenantGuard.jsx:77:          jwtTenant = decoded.app_metadata?.tenant_id;
+src\components\TenantGuard.jsx:99:              const newJwtTenant = newDecoded.app_metadata?.tenant_id;
+src\components\crm\call-console\PostCallAutomation.jsx:28:        // Retrieve current user to get tenant_id context indirectly via RLS or explicit insert if needed
+src\components\crm\call-console\PostCallAutomation.jsx:29:        // Note: In standard Supabase RLS with a trigger, tenant_id is often set automatically.
+src\components\crm\call-console\PostCallAutomation.jsx:33:        // Given the constraints and typical setup, we'll let RLS/Triggers handle tenant_id 
+src\components\crm\call-console\PostCallAutomation.jsx:35:        // For now, I will omit explicit tenant_id fetch to avoid extra DB calls, 
+src\components\crm\call-console\PostCallAutomation.jsx:39:        // UPDATE: The user explicitly asked to "Ensure all marketing action inserts include tenant_id".
+src\components\crm\call-console\PostCallAutomation.jsx:40:        // I will fetch the current user's tenant_id from their profile first.
+src\components\crm\call-console\PostCallAutomation.jsx:47:            .select('tenant_id')
+src\components\crm\call-console\PostCallAutomation.jsx:61:            tenant_id: profile?.tenant_id // Explicitly include tenant_id
+src\components\crm\EnterpriseSidebar.jsx:17:  const TENANT_ID = DEFAULT_TENANT_ID;
+src\components\crm\EnterpriseSidebar.jsx:20:  const tenantConfig = brandConfig.tenants[TENANT_ID] || brandConfig.tenants.default;
+src\components\crm\kanban\KanbanCard.jsx:65:    const resolvedTenantId = card?.tenant_id;
+supabase/functions\kanban-move\index.ts:11:  tenant_id?: string;
+supabase/functions\kanban-move\index.ts:118:    .eq('tenant_id', tenantId)
+supabase/functions\kanban-move\index.ts:144:    .select('id, status, lead_id, quote_number, public_token, tenant_id')
+supabase/functions\kanban-move\index.ts:145:    .eq('tenant_id', lead.tenant_id)
+supabase/functions\kanban-move\index.ts:159:      tenant_id: lead.tenant_id,
+supabase/functions\kanban-move\index.ts:170:    .select('id, status, lead_id, quote_number, public_token, tenant_id')
+supabase/functions\kanban-move\index.ts:180:    .select('id, status, quote_id, tenant_id')
+supabase/functions\kanban-move\index.ts:181:    .eq('tenant_id', quote.tenant_id)
+supabase/functions\kanban-move\index.ts:188:  const workOrderNumber = await allocateWorkOrderNumber(String(quote.tenant_id ?? ''), quote.quote_number, nowIso);
+supabase/functions\kanban-move\index.ts:189:  const serviceAddress = await resolveLeadServiceAddress(String(quote.tenant_id ?? ''), asString(quote.lead_id));
+supabase/functions\kanban-move\index.ts:193:    tenant_id: quote.tenant_id,
+supabase/functions\kanban-move\index.ts:208:    .select('id, status, quote_id, tenant_id')
+supabase/functions\kanban-move\index.ts:217:        tenant_id: quote.tenant_id,
+supabase/functions\kanban-move\index.ts:223:      .select('id, status, quote_id, tenant_id')
+supabase/functions\kanban-move\index.ts:237:    .select('id, status, job_id, tenant_id')
+supabase/functions\kanban-move\index.ts:238:    .eq('tenant_id', job.tenant_id)
+supabase/functions\kanban-move\index.ts:256:      tenant_id: job.tenant_id,
+supabase/functions\kanban-move\index.ts:267:    .select('id, status, job_id, tenant_id')
+supabase/functions\kanban-move\index.ts:297:  const bodyTenantId = body?.tenant_id ?? null;
+supabase/functions\kanban-move\index.ts:317:      .select('id, status, tenant_id, first_name, last_name, company, email, phone')
+supabase/functions\kanban-move\index.ts:318:      .eq('tenant_id', jwtTenantId)
+supabase/functions\kanban-move\index.ts:355:        .eq('tenant_id', jwtTenantId);
+supabase/functions\kanban-move\index.ts:364:        .eq('tenant_id', jwtTenantId);
+supabase/functions\kanban-move\index.ts:374:        .eq('tenant_id', jwtTenantId);
+supabase/functions\kanban-move\index.ts:419:        'id, status, tenant_id, lead_id, quote_number, public_token, total_amount, sent_at, updated_at, leads(first_name, last_name, email)'
+supabase/functions\kanban-move\index.ts:421:      .eq('tenant_id', jwtTenantId)
+supabase/functions\kanban-move\index.ts:458:        .eq('tenant_id', jwtTenantId);
+supabase/functions\kanban-move\index.ts:470:          .eq('tenant_id', jwtTenantId);
+supabase/functions\kanban-move\index.ts:484:          .eq('tenant_id', jwtTenantId);
+supabase/functions\kanban-move\index.ts:507:          .eq('tenant_id', jwtTenantId);
+supabase/functions\kanban-move\index.ts:516:          .eq('tenant_id', jwtTenantId);
+supabase/functions\kanban-move\index.ts:532:        .eq('tenant_id', jwtTenantId);
+supabase/functions\kanban-move\index.ts:541:        .eq('tenant_id', jwtTenantId);
+supabase/functions\kanban-move\index.ts:547:        tenantId: quote.tenant_id,
+supabase/functions\kanban-move\index.ts:557:        .eq('tenant_id', jwtTenantId);
+supabase/functions\kanban-move\index.ts:601:      .select('id, status, tenant_id, lead_id, quote_id, total_amount')
+supabase/functions\kanban-move\index.ts:602:      .eq('tenant_id', jwtTenantId)
+supabase/functions\kanban-move\index.ts:639:        .eq('tenant_id', jwtTenantId);
+supabase/functions\kanban-move\index.ts:649:        .eq('tenant_id', jwtTenantId);
+supabase/functions\kanban-move\index.ts:693:      .select('id, status, tenant_id')
+supabase/functions\kanban-move\index.ts:694:      .eq('tenant_id', jwtTenantId)
+src\components\crm\estimates\EstimateEditorModal.jsx:57:          .eq('tenant_id', tenantId);
+src\components\crm\estimates\EstimateEditorModal.jsx:88:        .eq('tenant_id', tenantId)
+src\components\crm\estimates\EstimateEditorModal.jsx:119:        tenant_id: tenantId,
+src\components\crm\estimates\EstimateEditorModal.jsx:258:        tenant_id: tenantId,
+supabase/functions\kanban-list\index.ts:6:  tenant_id: string;
+supabase/functions\kanban-list\index.ts:132:  const bodyTenantId = body?.tenant_id ?? null;
+supabase/functions\kanban-list\index.ts:146:      .select('id, tenant_id, status, pipeline_stage, first_name, last_name, company, email, phone, created_at')
+supabase/functions\kanban-list\index.ts:147:      .eq('tenant_id', jwtTenantId),
+supabase/functions\kanban-list\index.ts:151:        'id, tenant_id, status, lead_id, quote_number, total_amount, public_token, sent_at, updated_at, created_at, leads(first_name, last_name, company)'
+supabase/functions\kanban-list\index.ts:153:      .eq('tenant_id', jwtTenantId),
+supabase/functions\kanban-list\index.ts:157:        'id, tenant_id, status, lead_id, quote_id, job_number, total_amount, scheduled_start, updated_at, created_at, leads(first_name, last_name, company)'
+supabase/functions\kanban-list\index.ts:159:      .eq('tenant_id', jwtTenantId),
+supabase/functions\kanban-list\index.ts:163:        'id, tenant_id, status, lead_id, quote_id, job_id, invoice_number, total_amount, paid_at, sent_at, updated_at, created_at, leads(first_name, last_name, company)'
+supabase/functions\kanban-list\index.ts:165:      .eq('tenant_id', jwtTenantId),
+supabase/functions\kanban-list\index.ts:188:      tenant_id: lead.tenant_id,
+supabase/functions\kanban-list\index.ts:213:      tenant_id: quote.tenant_id,
+supabase/functions\kanban-list\index.ts:238:      tenant_id: job.tenant_id,
+supabase/functions\kanban-list\index.ts:263:      tenant_id: invoice.tenant_id,
+supabase/functions\invoices-list\index.ts:41:  const bodyTenantId = typeof body?.tenant_id === 'string' && body.tenant_id.trim() ? body.tenant_id : null;
+supabase/functions\invoices-list\index.ts:62:        'tenant_id',
+supabase/functions\invoices-list\index.ts:81:    .eq('tenant_id', effectiveTenantId)
+src\pages\crm\CallConsole.jsx:336:        // Rely on RLS for tenant isolation instead of explicit tenant_id filtering
+supabase/functions\invoice-update-status\index.ts:40:  // Prefer tenant-scoped role lookup when tenant_id exists; fall back to global if not present (older schemas).
+supabase/functions\invoice-update-status\index.ts:45:    .eq('tenant_id', tenantId);
+supabase/functions\invoice-update-status\index.ts:49:    if (retriableColumn === 'tenant_id') {
+supabase/functions\invoice-update-status\index.ts:132:      .eq('tenant_id', tenantId)
+supabase/functions\invoice-update-status\index.ts:133:      .select('id, status, tenant_id, total_amount, amount_paid, balance_due, paid_at, sent_at')
+supabase/functions\invoice-update-status\index.ts:178:  const bodyTenantId = body?.tenant_id || null;
+supabase/functions\invoice-update-status\index.ts:202:    .select('id, status, tenant_id, total_amount, amount_paid, paid_at, sent_at, balance_due, payment_method, job_id, quote_id, lead_id')
+supabase/functions\invoice-update-status\index.ts:204:    .eq('tenant_id', jwtTenantId)
+supabase/functions\invoice-update-status\index.ts:277:      .select('id, status, tenant_id, total_amount, amount_paid, balance_due, paid_at, sent_at, payment_method, job_id, quote_id, lead_id, settlement_status, last_payment_at')
+supabase/functions\invoice-update-status\index.ts:279:      .eq('tenant_id', jwtTenantId)
+supabase/functions\invoice-update-status\index.ts:296:        .eq('tenant_id', jwtTenantId)
+supabase/functions\invoice-update-status\index.ts:331:        tenantId: invoice.tenant_id || jwtTenantId,
+src\pages\crm\AnalyticsDashboard.jsx:105:                .eq('tenant_id', tenantId)
+src\pages\crm\AnalyticsDashboard.jsx:113:                .eq('tenant_id', tenantId)
+src\pages\crm\AnalyticsDashboard.jsx:121:                .eq('tenant_id', tenantId)
+src\pages\crm\CRMHub.jsx:77:            .eq('tenant_id', tenantId)
+src\pages\crm\CRMHub.jsx:82:            .eq('tenant_id', tenantId)
+src\pages\crm\CRMHub.jsx:87:            .eq('tenant_id', tenantId)
+src\pages\crm\CRMHub.jsx:92:            .eq('tenant_id', tenantId)
+src\pages\crm\CRMHub.jsx:97:            .eq('tenant_id', tenantId)
+src\pages\crm\CRMHub.jsx:112:            .eq('tenant_id', tenantId),
+src\pages\crm\CRMHub.jsx:117:            .eq('tenant_id', tenantId)
+supabase/functions\invoice-save\index.ts:7:  tenant_id,
+supabase/functions\invoice-save\index.ts:113:    tenant_id: tenantId,
+supabase/functions\invoice-save\index.ts:166:      ? supabaseAdmin.from('invoices').update(nextPatch).eq('id', invoiceId).eq('tenant_id', patch.tenant_id).select(INVOICE_SELECT).maybeSingle()
+supabase/functions\invoice-save\index.ts:202:    const requestedTenantId = asNullableString(body?.tenant_id);
+supabase/functions\invoice-save\index.ts:207:      return json({ error: 'Missing tenant_id' }, 400);
+supabase/functions\invoice-save\index.ts:242:      .eq('tenant_id', jwtTenantId)
+src\pages\crm\ContactsPage.jsx:42:        .eq('tenant_id', tenantId) // TENANT FILTER
+src\pages\crm\Invoices.jsx:78:          tenant_id,
+src\pages\crm\Invoices.jsx:96:        .eq('tenant_id', tenantId)
+src\pages\crm\Invoices.jsx:150:              tenant_id: tenantId,
+src\pages\crm\InvoiceBuilder.jsx.bak.20260403:83:      .eq('tenant_id', tenantId)
+src\pages\crm\InvoiceBuilder.jsx.bak.20260403:109:      .eq('tenant_id', tenantId)
+src\pages\crm\InvoiceBuilder.jsx.bak.20260403:128:      tenant_id: getTenantId(),
+src\pages\crm\InvoiceBuilder.jsx.bak.20260403:233:      .eq('tenant_id', tenantId)
+src\pages\crm\InvoiceBuilder.jsx.bak.20260403:248:        .eq('tenant_id', tenantId)
+src\pages\crm\InvoiceBuilder.jsx.bak.20260403:342:            .eq('tenant_id', tenantId)
+src\pages\crm\InvoiceBuilder.jsx.bak.20260403:345:          supabase.from('price_book').select('*').eq('active', true).in('tenant_id', [tenantId || 'default', 'default']).order('name')
+src\pages\crm\InvoiceBuilder.jsx.bak.20260403:352:          const aRank = a.tenant_id === tenantId ? 0 : 1;
+src\pages\crm\InvoiceBuilder.jsx.bak.20260403:353:          const bRank = b.tenant_id === tenantId ? 0 : 1;
+src\pages\crm\InvoiceBuilder.jsx.bak.20260403:374:              .eq('tenant_id', tenantId) // TENANT FILTER
+src\pages\crm\InvoiceBuilder.jsx.bak.20260403:393:              .eq('tenant_id', tenantId)
+src\pages\crm\InvoiceBuilder.jsx.bak.20260403:496:        .eq('tenant_id', tenantId)
+src\pages\crm\InvoiceBuilder.jsx.bak.20260403:502:        .eq('tenant_id', tenantId)
+src\pages\crm\InvoiceBuilder.jsx.bak.20260403:690:        tenant_id: tenantId, // Explicit insert
+src\pages\crm\InvoiceBuilder.jsx:84:      .eq('tenant_id', tenantId)
+src\pages\crm\InvoiceBuilder.jsx:110:      .eq('tenant_id', tenantId)
+src\pages\crm\InvoiceBuilder.jsx:129:      tenant_id: getTenantId(),
+src\pages\crm\InvoiceBuilder.jsx:238:      .eq('tenant_id', tenantId)
+src\pages\crm\InvoiceBuilder.jsx:253:        .eq('tenant_id', tenantId)
+src\pages\crm\InvoiceBuilder.jsx:347:            .eq('tenant_id', tenantId)
+src\pages\crm\InvoiceBuilder.jsx:350:          supabase.from('price_book').select('*').eq('active', true).in('tenant_id', [tenantId || 'default', 'default']).order('name')
+src\pages\crm\InvoiceBuilder.jsx:357:          const aRank = a.tenant_id === tenantId ? 0 : 1;
+src\pages\crm\InvoiceBuilder.jsx:358:          const bRank = b.tenant_id === tenantId ? 0 : 1;
+src\pages\crm\InvoiceBuilder.jsx:379:              .eq('tenant_id', tenantId) // TENANT FILTER
+src\pages\crm\InvoiceBuilder.jsx:410:              .eq('tenant_id', tenantId)
+src\pages\crm\InvoiceBuilder.jsx:511:        .eq('tenant_id', tenantId)
+src\pages\crm\InvoiceBuilder.jsx:517:        .eq('tenant_id', tenantId)
+src\pages\crm\InvoiceBuilder.jsx:707:          tenant_id: tenantId,
+src\pages\crm\InvoiceBuilder.jsx:883:        tenant_id: tenantId, // Explicit insert
+src\pages\crm\FlowConsole.jsx:107:        .eq('tenant_id', tenantId)
+src\pages\crm\FlowConsole.jsx:136:        .eq('tenant_id', tenantId)
+src\pages\crm\FlowConsole.jsx:154:        .eq('tenant_id', tenantId)
+src\pages\crm\FlowConsole.jsx:173:        .eq('tenant_id', tenantId)
+src\pages\crm\FlowConsole.jsx:192:        .eq('tenant_id', tenantId)
+src\pages\crm\FlowConsole.jsx:220:        .eq('tenant_id', tenantId)
+src\pages\public\QuoteConfirmation.jsx:12:  const tenantId = params.get('tenant_id') || '';
+src\pages\public\QuoteConfirmation.jsx:26:    ? `/quotes/${token}${tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}${quoteId ? `&quote_id=${encodeURIComponent(quoteId)}` : ''}` : quoteId ? `?quote_id=${encodeURIComponent(quoteId)}` : ''}`
+src\pages\public\QuoteConfirmation.jsx:66:              to={`/invoices/${invoiceToken}${tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : ''}`}
+src\pages\crm\Estimates.jsx:37:        .eq('tenant_id', tenantId) // TENANT FILTER
+src\pages\crm\Leads.jsx:207:        .eq('tenant_id', tenantId) // TENANT FILTER
+src\pages\crm\Leads.jsx:267:        .eq('tenant_id', tenantId) // TENANT FILTER
+src\pages\crm\Leads.jsx:278:          .eq('tenant_id', tenantId);
+src\pages\crm\Leads.jsx:521:      tenant_id: tenantId,
+src\pages\crm\Leads.jsx:537:    if (error && isMissingColumnError(error) && getMissingColumnName(error) === 'tenant_id') {
+src\pages\crm\Leads.jsx:539:      delete fallbackPayload.tenant_id;
+src\pages\crm\Leads.jsx:804:             tenant_id: tenantId // Explicitly setting tenant_id
+src\pages\crm\Leads.jsx:818:           if (missingColumn === 'tenant_id') {
+src\pages\crm\Leads.jsx:819:             delete payload.tenant_id;
+src\pages\crm\Marketing.jsx:41:        .eq('tenant_id', tenantId) // TENANT FILTER
+src\pages\crm\MarketingConsole.jsx:42:      // RLS will automatically filter by tenant_id
+src\pages\crm\Partners.jsx:71:                .eq('tenant_id', tenantId) // TENANT FILTER
+src\pages\crm\Partners.jsx:83:                    .eq('tenant_id', tenantId) // TENANT FILTER
+src\pages\crm\MyMoney.legacy.jsx:103:        .eq('tenant_id', tenantId)
+src\pages\crm\MyMoney.legacy.jsx:123:        .eq('tenant_id', tenantId)
+src\pages\crm\MyMoney.legacy.jsx:159:        tenant_id: tenantId,
+src\pages\crm\MyMoney.legacy.jsx:207:        tenant_id: tenantId,
+src\pages\crm\MyMoney.legacy.jsx:263:        tenant_id: tenantId,
+src\pages\crm\PricebookManager.jsx:42:      .eq('tenant_id', tenantId) // TENANT FILTER
+src\pages\crm\PricebookManager.jsx:62:            tenant_id: tenantId // Explicit insert
+src\pages\crm\PricebookManager.jsx:71:            ({ error } = await supabase.from('price_book').update(payload).eq('id', editingItem.id).eq('tenant_id', tenantId));
+src\pages\crm\PricebookManager.jsx:88:      const { error } = await supabase.from('price_book').delete().eq('id', id).eq('tenant_id', tenantId);
+src\pages\crm\MyMoney.jsx:102:        .eq('tenant_id', tenantId)
+src\pages\crm\MyMoney.jsx:122:        .eq('tenant_id', tenantId)
+src\pages\crm\MyMoney.jsx:158:        tenant_id: tenantId,
+src\pages\crm\MyMoney.jsx:206:        tenant_id: tenantId,
+src\pages\crm\MyMoney.jsx:262:        tenant_id: tenantId,
+src\lib\documentSystem\fixtures.js:34:  tenant_id: 'tvg',
+src\pages\crm\proposals\ProposalList.jsx:81:          tenant_id: tenantId,
+src\pages\crm\proposals\ProposalList.jsx:180:          tenant_id: tenantForUpdate,
+src\pages\crm\proposals\ProposalBuilder.jsx:220:      .eq('tenant_id', tenantId)
+src\pages\crm\proposals\ProposalBuilder.jsx:447:          .eq('tenant_id', activeTenantId)
+src\pages\crm\proposals\ProposalBuilder.jsx:478:            .in('tenant_id', [activeTenantId || 'default', 'default'])
+src\pages\crm\proposals\ProposalBuilder.jsx:488:          const aRank = a.tenant_id === activeTenantId ? 0 : 1;
+src\pages\crm\proposals\ProposalBuilder.jsx:489:          const bRank = b.tenant_id === activeTenantId ? 0 : 1;
+src\pages\crm\proposals\ProposalBuilder.jsx:511:              .eq('tenant_id', activeTenantId) // Added tenant filter
+src\pages\crm\proposals\ProposalBuilder.jsx:901:              tenant_id: activeTenantId // Ensuring insert has tenant_id
+src\pages\crm\proposals\ProposalBuilder.jsx:1189:    // 4. Include tenant_id: activeTenantId in payload
+src\pages\crm\proposals\ProposalBuilder.jsx:1190:    const quoteDataWithTenant = { ...baseQuoteData, tenant_id: activeTenantId };
+src\pages\crm\proposals\ProposalBuilder.jsx:1203:              statusQuery = statusQuery.eq('tenant_id', activeTenantId);
+src\pages\crm\proposals\ProposalBuilder.jsx:1227:              .select('id,status,updated_at,tenant_id,quote_number')
+src\pages\crm\proposals\ProposalBuilder.jsx:1231:            if (activeTenantId) quotesQuery.eq('tenant_id', activeTenantId);
+src\pages\crm\proposals\ProposalBuilder.jsx:1251:              updateQuery = updateQuery.eq('tenant_id', activeTenantId);
+src\pages\crm\proposals\ProposalBuilder.jsx:1273:              .select('id,status,updated_at,tenant_id')
+src\pages\crm\proposals\ProposalBuilder.jsx:1277:            if (activeTenantId) quotesQuery.eq('tenant_id', activeTenantId);
+src\pages\crm\proposals\ProposalBuilder.jsx:1292:        // Helper to execute DB operation with fallback for tenant_id column missing
+src\pages\crm\proposals\ProposalBuilder.jsx:1301:                        .eq('tenant_id', activeTenantId); // Added safety filter
+src\pages\crm\proposals\ProposalBuilder.jsx:1307:                         console.warn("quotes table missing tenant_id; skipping tenant_id in payload");
+src\pages\crm\proposals\ProposalBuilder.jsx:1347:                         console.warn("quotes table missing tenant_id; skipping tenant_id in payload");
+src\pages\crm\proposals\ProposalBuilder.jsx:1395:            // Note: quote_items does not have a tenant_id directly. RLS on quote_items ensures proper access.
+src\pages\crm\proposals\ProposalBuilder.jsx:1415:            // Note: quote_items does not have a tenant_id directly. RLS on quote_items ensures proper access.
+src\pages\crm\proposals\ProposalBuilder.jsx:1446:                    tenant_id: activeTenantId
+src\pages\crm\proposals\ProposalBuilder.jsx:1542:          .eq('tenant_id', tenantId)
+src\lib\documentSystem\config.js:28:    'tenant_id',
+src\pages\crm\Schedule.jsx:1065:          .eq('tenant_id', tenantId);
+src\pages\crm\QuoteBuilder.jsx:79:                const { data: leadsData } = await supabase.from('leads').select('id, first_name, last_name, email').eq('tenant_id', tenantId).order('created_at', { ascending: false });
+src\pages\crm\QuoteBuilder.jsx:87:                    .in('tenant_id', [tenantId || 'default', 'default']);
+src\pages\crm\QuoteBuilder.jsx:91:                        const aRank = a.tenant_id === tenantId ? 0 : 1;
+src\pages\crm\QuoteBuilder.jsx:92:                        const bRank = b.tenant_id === tenantId ? 0 : 1;
+src\pages\crm\QuoteBuilder.jsx:116:                        .eq('tenant_id', tenantId)
+src\pages\crm\QuoteBuilder.jsx:301:                tenant_id: tenantId // Explicit insert
+src\lib\tenantUtils.js:26:    const tenantId = decoded.app_metadata?.tenant_id;
+src\lib\tenantUtils.js:55:    const claimTenantId = decoded.app_metadata?.tenant_id;
+src\pages\crm\SmsInbox.jsx:42:      .eq('tenant_id', tenantId) // TENANT FILTER
+src\pages\crm\SmsInbox.jsx:55:      .eq('tenant_id', tenantId) // TENANT FILTER (Technically redundant if lead is filtered, but safe)
+src\pages\crm\SmsInbox.jsx:78:          tenant_id: tenantId // Explicit insert
+src\pages\crm\settings\OpsDashboard.jsx:45:        query = query.eq('tenant_id', currentTenantId);
+src\pages\crm\settings\OpsDashboard.jsx:206:                              <TableCell className="font-mono text-xs text-slate-500">{item.tenant_id}</TableCell>

@@ -1,0 +1,12 @@
+Account,SystemOrVendor,LoginEmailOrUsername,AuthMethod(MFA?),RecoveryCodesLocation,Notes
+Primary email,Gmail,,,, 
+Cloud storage,Google Drive,,,, 
+Creative,Adobe,,,, 
+Design,Canva,,,, 
+AI,ChatGPT/OpenAI,,,, 
+Banking,Bank,,,, 
+Domains,Registrar,,,, 
+Hosting,Host,,,, 
+Social,Facebook/Instagram,,,, 
+CRM,HouseCall Pro / Other,,,, 
+

@@ -61,6 +61,20 @@ const updateWorkOrderLocally = async (jobId, nextPatch, tenantId) => {
     if (!mergedPatch.scheduled_start) {
       throw new Error('Scheduled start is required before dispatching this work order.');
     }
+    if (!mergedPatch.scheduled_end) {
+      throw new Error(
+        String(mergedPatch.status || '').toLowerCase() === 'scheduled'
+          ? 'Scheduled end is required before scheduling this work order.'
+          : 'Scheduled end is required before dispatching this work order.',
+      );
+    }
+    if (!mergedPatch.technician_id) {
+      throw new Error(
+        String(mergedPatch.status || '').toLowerCase() === 'scheduled'
+          ? 'Technician assignment is required before scheduling this work order.'
+          : 'Technician assignment is required before dispatching this work order.',
+      );
+    }
     const addressValidation = getDispatchAddressValidation(mergedPatch.service_address);
     if (!addressValidation.hasDispatchableAddress) {
       throw new Error('Service address must include street, city, and state before dispatching this work order.');

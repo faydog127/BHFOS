@@ -1,0 +1,618 @@
+[
+  {
+    "name": "TIS Pilot Intake (Webhook → Validate → Drive → Respond)",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "tis-pilot-intake",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "tis-webhook",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [
+          -900,
+          0
+        ],
+        "webhookId": "tis-pilot-intake"
+      },
+      {
+        "parameters": {
+          "jsCode": "const headers = ($json && typeof $json === 'object' && $json.headers && typeof $json.headers === 'object') ? $json.headers : {};\nconst body = ($json && typeof $json === 'object') ? ($json.body ?? $json) : {};\n\nconst getHeader = (name) => {\n  const target = String(name).toLowerCase();\n  for (const [k, v] of Object.entries(headers)) {\n    if (String(k).toLowerCase() === target) return v;\n  }\n  return undefined;\n};\n\nconst expectedSecret = $env.TIS_PILOT_SECRET;\nif (!expectedSecret || String(expectedSecret).trim() === '') {\n  return [{ json: { status:'error', error_type:'config_missing', message:'Missing env var TIS_PILOT_SECRET', details:'', error_http_code:500 } }];\n}\n\nconst incomingSecret = getHeader('X-TIS-Secret');\nif (!incomingSecret || String(incomingSecret).trim() === '' || String(incomingSecret) !== String(expectedSecret)) {\n  return [{ json: { status:'error', error_type:'auth_failed', message:'Missing or invalid X-TIS-Secret', details:'', error_http_code:401 } }];\n}\n\nif (!body || typeof body !== 'object' || Array.isArray(body)) {\n  return [{ json: { status:'error', error_type:'validation_failed', message:'Payload must be a JSON object', details:'Invalid payload shape', error_http_code:400 } }];\n}\n\nconst asString = (v) => (typeof v === 'string' ? v.trim() : (v === null || v === undefined ? '' : String(v).trim()));\n\nconst asUrl = (v) => {\n  const s = asString(v);\n  if (!s) return '';\n  if (s.startsWith('http://') || s.startsWith('https://')) return s;\n  return '';\n};\n\nconst normalizeMediaList = (value, fieldName) => {\n  if (value === null || value === undefined) return [];\n  if (!Array.isArray(value)) return null;\n\n  const list = [];\n  for (const item of value.slice(0, 50)) {\n    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;\n    const url = asUrl(item.url);\n    if (!url) return null;\n    const label = asString(item.label);\n    const captured_at = asString(item.captured_at);\n    list.push({ url, label: label || undefined, captured_at: captured_at || undefined });\n  }\n\n  if (fieldName === 'before_photos' && list.length < 1) return null;\n  return list;\n};\n\nconst warnings = [];\n\nconst mode = asString(body.mode);\nif (mode !== 'pilot_non_production') {\n  return [{ json: { status:'error', error_type:'validation_failed', message:'mode must be pilot_non_production', details:'', error_http_code:400 } }];\n}\n\nconst propertyAddress = asString(body.property_address);\nconst serviceDate = asString(body.service_date);\nconst notes = asString(body.notes);\n\nconst beforePhotos = normalizeMediaList(body.before_photos, 'before_photos');\nconst afterPhotos = normalizeMediaList(body.after_photos, 'after_photos');\nconst documents = normalizeMediaList(body.documents, 'documents');\n\nconst missing = [];\nif (!propertyAddress) missing.push('property_address');\nif (!serviceDate) missing.push('service_date');\nif (!notes) missing.push('notes');\nif (beforePhotos === null) missing.push('before_photos');\n\nif (missing.length) {\n  return [{ json: { status:'error', error_type:'validation_failed', message:'Missing/invalid required fields', details: JSON.stringify({ missing_fields: missing }), error_http_code:400 } }];\n}\n\nif (notes.length < 3) warnings.push('notes is very short');\n\nconst placeholderPatterns = [\n  /\\b(tbd|todo)\\b/i,\n  /\\bfill\\s+in\\b/i,\n  /lorem\\s+ipsum/i,\n  /\\bplaceholder\\b/i,\n];\nfor (const pat of placeholderPatterns) {\n  if (pat.test(propertyAddress)) {\n    return [{ json: { status:'error', error_type:'validation_failed', message:'property_address appears to contain placeholder text', details:'', error_http_code:400 } }];\n  }\n}\n\nconst ingestedAt = new Date().toISOString();\nconst intakeId = `tis-pilot-${Date.now()}`;\n\nconst payload = {\n  mode,\n  job_id: asString(body.job_id) || intakeId,\n  customer_name: asString(body.customer_name) || undefined,\n  property_address: propertyAddress,\n  service_date: serviceDate,\n  notes,\n  before_photos: beforePhotos,\n  after_photos: afterPhotos || [],\n  documents: documents || [],\n};\n\nconst response = {\n  status: 'accepted',\n  mode,\n  message: 'Pilot intake validated',\n  intake_id: intakeId,\n  job_id: payload.job_id,\n  next_step: 'ready_for_report_generation',\n  warnings,\n  payload,\n};\n\nconsole.log('tis-pilot:intake_ok', { intake_id: intakeId, job_id: payload.job_id });\nreturn [{ json: { status:'pass', intake_id: intakeId, ingested_at: ingestedAt, warnings, payload, response } }];\n"
+        },
+        "id": "tis-validate",
+        "name": "Validate Intake",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -660,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.status }}",
+                "operation": "equal",
+                "value2": "pass"
+              }
+            ]
+          }
+        },
+        "id": "tis-pass?",
+        "name": "Passed Validation?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          -420,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const validated = $json;\n\nif (!validated || typeof validated !== 'object') {\n  return [{ json: { status:'error', error_type:'validation_failed', message:'Invalid internal state', details:'', error_http_code:500 } }];\n}\n\nconst rootFolderId = $env.TVG_SYSTEM_ROOT_FOLDER_ID;\nif (!rootFolderId || String(rootFolderId).trim() === '') {\n  return [{ json: { status:'error', error_type:'config_missing', message:'Missing env var TVG_SYSTEM_ROOT_FOLDER_ID', details:'', error_http_code:500 } }];\n}\n\nconst payload = (validated.payload && typeof validated.payload === 'object') ? validated.payload : {};\nconst asString = (v) => (typeof v === 'string' ? v.trim() : (v === null || v === undefined ? '' : String(v).trim()));\nconst safe = (s) => asString(s)\n  .replace(/[\\\\/]/g, '-')\n  .replace(/[:*?\"<>|]/g, '-')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .slice(0, 80);\n\nconst jobId = asString(payload.job_id);\nconst customerName = asString(payload.customer_name);\nconst serviceDate = asString(payload.service_date);\nconst isoDate = /^\\d{4}-\\d{2}-\\d{2}$/;\nconst datePart = isoDate.test(serviceDate) ? serviceDate : new Date().toISOString().slice(0, 10);\nconst fallbackFolderName = `${datePart}__${safe(customerName || 'unknown-customer')}`;\nconst jobFolderName = safe(jobId) || safe(fallbackFolderName);\n\nconst intake = {\n  job_id: jobId || jobFolderName,\n  intake_id: asString(validated.intake_id),\n  accepted_at: asString(validated.ingested_at) || new Date().toISOString(),\n  customer_name: customerName || null,\n  site_address: asString(payload.property_address) || null,\n  service_date: asString(payload.service_date) || null,\n  status: 'accepted',\n  notes: asString(payload.notes) || '',\n  before_photos: Array.isArray(payload.before_photos) ? payload.before_photos : [],\n  after_photos: Array.isArray(payload.after_photos) ? payload.after_photos : [],\n  documents: Array.isArray(payload.documents) ? payload.documents : [],\n  source: 'n8n tis-pilot-intake',\n};\n\nreturn [{\n  json: {\n    status: 'pass',\n    drive_root_folder_id: String(rootFolderId).trim(),\n    command_center_folder_name: 'Command-Center',\n    accepted_intake_folder_name: 'Accepted-Intake',\n    job_folder_name: jobFolderName,\n    intake_file_name: 'intake.json',\n    intake_file_content: JSON.stringify(intake, null, 2) + \"\\n\",\n    original_response: validated.response,\n  }\n}];\n"
+        },
+        "id": "tis-drive-context",
+        "name": "Build Drive Context",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -180,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.status }}",
+                "operation": "equal",
+                "value2": "pass"
+              }
+            ]
+          }
+        },
+        "id": "ctx-ok?",
+        "name": "Drive Context OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          60,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "resource": "fileFolder",
+          "operation": "search",
+          "searchMethod": "query",
+          "queryString": "={{ \"name = '\" + $json.command_center_folder_name + \"' and trashed = false\" }}",
+          "returnAll": false,
+          "limit": 10,
+          "filter": {
+            "folderId": {
+              "mode": "id",
+              "value": "={{ $json.drive_root_folder_id }}"
+            },
+            "whatToSearch": "folders",
+            "includeTrashed": false
+          }
+        },
+        "id": "search-cc",
+        "name": "Drive Search Command-Center",
+        "type": "n8n-nodes-base.googleDrive",
+        "typeVersion": 3,
+        "position": [
+          300,
+          -160
+        ],
+        "settings": {
+          "alwaysOutputData": true
+        },
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const ctx=$items('Build Drive Context')[0]?.json; const items=$input.all().map(i=>i.json); const err=items.find(j=>j&&j.error); if(err) return [{json:{status:'error',error_type:'drive_failed',message:'Drive Command-Center search failed',details:JSON.stringify(err),error_http_code:502}}]; const found=items.filter(j=>j&&typeof j.id==='string'&&j.id&&j.name===ctx.command_center_folder_name); if(found.length!==1) return [{json:{status:'error',error_type:'drive_failed',message:'Command-Center folder missing or duplicated',details:JSON.stringify({count:found.length,ids:found.map(f=>f.id)}),error_http_code:502}}]; return [{json:{status:'pass',command_center_folder_id:found[0].id}}];"
+        },
+        "id": "pick-cc",
+        "name": "Pick Command-Center",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          540,
+          -160
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.status }}",
+                "operation": "equal",
+                "value2": "pass"
+              }
+            ]
+          }
+        },
+        "id": "cc-ok?",
+        "name": "Command-Center OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          780,
+          -160
+        ]
+      },
+      {
+        "parameters": {
+          "resource": "fileFolder",
+          "operation": "search",
+          "searchMethod": "query",
+          "queryString": "={{ \"name = '\" + $items('Build Drive Context')[0].json.accepted_intake_folder_name + \"' and trashed = false\" }}",
+          "returnAll": false,
+          "limit": 10,
+          "filter": {
+            "folderId": {
+              "mode": "id",
+              "value": "={{ $json.command_center_folder_id }}"
+            },
+            "whatToSearch": "folders",
+            "includeTrashed": false
+          }
+        },
+        "id": "search-ai",
+        "name": "Drive Search Accepted-Intake",
+        "type": "n8n-nodes-base.googleDrive",
+        "typeVersion": 3,
+        "position": [
+          1020,
+          -160
+        ],
+        "settings": {
+          "alwaysOutputData": true
+        },
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const ctx=$items('Build Drive Context')[0]?.json; const items=$input.all().map(i=>i.json); const err=items.find(j=>j&&j.error); if(err) return [{json:{status:'error',error_type:'drive_failed',message:'Drive Accepted-Intake search failed',details:JSON.stringify(err),error_http_code:502}}]; const found=items.filter(j=>j&&typeof j.id==='string'&&j.id&&j.name===ctx.accepted_intake_folder_name); if(found.length!==1) return [{json:{status:'error',error_type:'drive_failed',message:'Accepted-Intake folder missing or duplicated',details:JSON.stringify({count:found.length,ids:found.map(f=>f.id)}),error_http_code:502}}]; return [{json:{status:'pass',accepted_intake_folder_id:found[0].id}}];"
+        },
+        "id": "pick-ai",
+        "name": "Pick Accepted-Intake",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1260,
+          -160
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.status }}",
+                "operation": "equal",
+                "value2": "pass"
+              }
+            ]
+          }
+        },
+        "id": "ai-ok?",
+        "name": "Accepted-Intake OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          1500,
+          -160
+        ]
+      },
+      {
+        "parameters": {
+          "resource": "folder",
+          "operation": "create",
+          "name": "={{ $items('Build Drive Context')[0].json.job_folder_name }}",
+          "folderId": {
+            "mode": "id",
+            "value": "={{ $items('Pick Accepted-Intake')[0].json.accepted_intake_folder_id }}"
+          },
+          "options": {}
+        },
+        "id": "create-job",
+        "name": "Drive Create Job Folder",
+        "type": "n8n-nodes-base.googleDrive",
+        "typeVersion": 3,
+        "position": [
+          1740,
+          -160
+        ],
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const created=$json; if(created&&created.error) return [{json:{status:'error',error_type:'drive_failed',message:'Failed to create job folder',details:JSON.stringify({message:created.error.message,name:created.error.name}),error_http_code:502}}]; if(!created||typeof created.id!=='string'||!created.id) return [{json:{status:'error',error_type:'drive_failed',message:'Drive did not return job folder id',details:'',error_http_code:502}}]; return [{json:{status:'pass',job_folder_id:created.id}}];"
+        },
+        "id": "job-result",
+        "name": "Job Folder Result",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1980,
+          -160
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.status }}",
+                "operation": "equal",
+                "value2": "pass"
+              }
+            ]
+          }
+        },
+        "id": "job-ok?",
+        "name": "Job Folder OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          2220,
+          -160
+        ]
+      },
+      {
+        "parameters": {
+          "resource": "file",
+          "operation": "createFromText",
+          "content": "={{ $items('Build Drive Context')[0].json.intake_file_content }}",
+          "name": "={{ $items('Build Drive Context')[0].json.intake_file_name }}",
+          "folderId": {
+            "mode": "id",
+            "value": "={{ $json.job_folder_id }}"
+          },
+          "options": {}
+        },
+        "id": "create-file",
+        "name": "Drive Create intake.json",
+        "type": "n8n-nodes-base.googleDrive",
+        "typeVersion": 3,
+        "position": [
+          2460,
+          -160
+        ],
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const created=$json; if(created&&created.error) return [{json:{status:'error',error_type:'drive_failed',message:'Drive intake.json write failed',details:JSON.stringify({message:created.error.message,name:created.error.name}),error_http_code:502}}]; if(!created||typeof created.id!=='string'||!created.id) return [{json:{status:'error',error_type:'drive_failed',message:'Drive did not return intake file id',details:'',error_http_code:502}}]; return [{json:{status:'pass',intake_file_id:created.id}}];"
+        },
+        "id": "file-result",
+        "name": "Drive Write Result",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2700,
+          -160
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.status }}",
+                "operation": "equal",
+                "value2": "pass"
+              }
+            ]
+          }
+        },
+        "id": "file-ok?",
+        "name": "Drive Write OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          2940,
+          -160
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ { status: 'error', error_type: $json.error_type || 'unknown_error', message: $json.message || 'An error occurred', details: $json.details || '' } }}",
+          "options": {
+            "responseCode": "={{ $json.error_http_code || 500 }}",
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "id": "tis-respond-error",
+        "name": "Respond Error",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          3180,
+          40
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ (() => { const base = $items('Validate Intake')[0].json.response || { status: 'accepted', message: 'Pilot intake validated' }; return { ...base, drive: { job_folder_id: $items('Job Folder Result')[0].json.job_folder_id, intake_file_id: $json.intake_file_id } }; })() }}",
+          "options": {
+            "responseCode": 200,
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "id": "respond-ok",
+        "name": "Respond Success",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          3180,
+          -200
+        ]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Validate Intake",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate Intake": {
+        "main": [
+          [
+            {
+              "node": "Passed Validation?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Passed Validation?": {
+        "main": [
+          [
+            {
+              "node": "Build Drive Context",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Drive Context": {
+        "main": [
+          [
+            {
+              "node": "Drive Context OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Drive Context OK?": {
+        "main": [
+          [
+            {
+              "node": "Drive Search Command-Center",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Drive Search Command-Center": {
+        "main": [
+          [
+            {
+              "node": "Pick Command-Center",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Pick Command-Center": {
+        "main": [
+          [
+            {
+              "node": "Command-Center OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Command-Center OK?": {
+        "main": [
+          [
+            {
+              "node": "Drive Search Accepted-Intake",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Drive Search Accepted-Intake": {
+        "main": [
+          [
+            {
+              "node": "Pick Accepted-Intake",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Pick Accepted-Intake": {
+        "main": [
+          [
+            {
+              "node": "Accepted-Intake OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Accepted-Intake OK?": {
+        "main": [
+          [
+            {
+              "node": "Drive Create Job Folder",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Drive Create Job Folder": {
+        "main": [
+          [
+            {
+              "node": "Job Folder Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Job Folder Result": {
+        "main": [
+          [
+            {
+              "node": "Job Folder OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Job Folder OK?": {
+        "main": [
+          [
+            {
+              "node": "Drive Create intake.json",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Drive Create intake.json": {
+        "main": [
+          [
+            {
+              "node": "Drive Write Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Drive Write Result": {
+        "main": [
+          [
+            {
+              "node": "Drive Write OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Drive Write OK?": {
+        "main": [
+          [
+            {
+              "node": "Respond Success",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {},
+    "staticData": null,
+    "meta": {
+      "notes": "Writes accepted intake to Drive under /TVG-System/Command-Center/Accepted-Intake/<job-id>/intake.json"
+    }
+  }
+]

@@ -130,3 +130,6 @@ port = 25434
 
 [functions.money-loop-delete]
   verify_jwt = false
+
+[functions.inspection-report-pdf]
+  verify_jwt = false

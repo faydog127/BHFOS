@@ -42,6 +42,9 @@ const ReportingPage = React.lazy(() => import('@/pages/crm/Reporting'));
 const PartnersPage = React.lazy(() => import('@/pages/crm/Partners'));
 const SettingsPage = React.lazy(() => import('@/pages/crm/Settings'));
 const FlowConsolePage = React.lazy(() => import('@/pages/crm/FlowConsole'));
+const InspectionsPage = React.lazy(() => import('@/pages/crm/Inspections'));
+const InspectionEditorPage = React.lazy(() => import('@/pages/crm/inspections/InspectionEditor'));
+const TechRoutesPage = React.lazy(() => import('@/pages/tech/TechRoutes'));
 
 // Sub-module Lazy Loads
 const InvoiceBuilder = React.lazy(() => import('@/pages/crm/InvoiceBuilder'));
@@ -263,6 +266,9 @@ const CRMRoutes = () => (
       <Route path="schedule" element={<Navigate to="../dispatch" replace />} />
       <Route path="calendar" element={<FeatureGuard flag="enableSchedule"><AppointmentSchedulerPage /></FeatureGuard>} />
       <Route path="appointments" element={<Navigate to="../calendar" replace />} />
+      <Route path="inspections" element={<FeatureGuard flag="enableInspections"><InspectionsPage /></FeatureGuard>} />
+      <Route path="inspections/new" element={<FeatureGuard flag="enableInspections"><InspectionEditorPage forceNew /></FeatureGuard>} />
+      <Route path="inspections/:id" element={<FeatureGuard flag="enableInspections"><InspectionEditorPage /></FeatureGuard>} />
       <Route path="estimates" element={<FeatureGuard flag="enableEstimates"><ProposalList /></FeatureGuard>} />
       <Route path="estimates/new" element={<FeatureGuard flag="enableEstimates"><ProposalBuilder /></FeatureGuard>} />
       <Route path="estimates/:id" element={<FeatureGuard flag="enableEstimates"><ProposalBuilder /></FeatureGuard>} />
@@ -315,6 +321,20 @@ function App() {
               <RouteErrorBoundary>
                 <Suspense fallback={<LoadingFallback />}>
                   <CRMRoutes />
+                </Suspense>
+              </RouteErrorBoundary>
+            </TenantGuard>
+          }
+        />
+        <Route
+          path="/:tenantId/tech/*"
+          element={
+            <TenantGuard>
+              <RouteErrorBoundary>
+                <Suspense fallback={<LoadingFallback />}>
+                  <FeatureGuard flag="enableTechPwa">
+                    <TechRoutesPage />
+                  </FeatureGuard>
                 </Suspense>
               </RouteErrorBoundary>
             </TenantGuard>

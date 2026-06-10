@@ -1,0 +1,82 @@
+{
+  "generated_at": "2026-04-18T15:27:15.9440864+00:00",
+  "run_id": "2026-04-18T15:27:15.9440864+00:00",
+  "items": [
+    {
+      "path": "meta.json",
+      "sha256": "2ee0fe80cd5a4089f3bdce8562d3aa960a9970e1c45de836b736c814bf08f638"
+    },
+    {
+      "path": "result.json",
+      "sha256": "ce1affe9799d4533928a22b3b98dabc61a2a6702abd243c371efe836f13407f6"
+    },
+    {
+      "path": "stdout.log",
+      "sha256": "19874236843cd3d7b29ec60ae8e2583b9438c06879e87050a4c81eb254617275"
+    },
+    {
+      "path": "stderr.log",
+      "sha256": "4b16c21f9c29c23a9df7dbc47250874e1c5bf9a9275604bb51e8322d9ad45616"
+    },
+    {
+      "path": "logs/command_log.txt",
+      "sha256": "90b4325212c03bb1eefbae7cf4775bc586ab4fa9e62024282c9bb5e4eeab2794"
+    },
+    {
+      "path": "logs/h1a_verification_stdout.log",
+      "sha256": "973be07d29818ee07f63c83545b675b81c9b5c2cadb9c54a3dd6eda5918233cb"
+    },
+    {
+      "path": "logs/h1a_verification_stderr.log",
+      "sha256": "6594a98757401475e92280192940d496dcad9b8cfd4c5c99a18d678fdd967199"
+    },
+    {
+      "path": "logs/review_gate_stdout.log",
+      "sha256": "dbd2ec5714c0b184c565d0e1eb2bfc4a76d116711ce01edd64fbeb65d1cf00bd"
+    },
+    {
+      "path": "logs/review_gate_stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "evidence/db_appointments_rls_status.txt",
+      "sha256": "896a13d68014deb5be70afc53195439ef97f78b6079ba1f97a48b5fb9b7c183f"
+    },
+    {
+      "path": "evidence/db_appointments_policies.txt",
+      "sha256": "8965c47282cc7f4d5256b78dbbdb9eeaf6d244552abf9285eb3ec397b6e3ae81"
+    },
+    {
+      "path": "evidence/db_appointments_schema.sql",
+      "sha256": "7f1013188d2931c18ef74e20ef3661d519129c1a35443e9478b1abee477d7118"
+    },
+    {
+      "path": "evidence/appointments_rls_extract.diff.txt",
+      "sha256": "6d31ac9050ff20329ec19c033857ec6db4375a0ee53212b9baf431d298e0c604"
+    },
+    {
+      "path": "outputs/h1a_verification_result.json",
+      "sha256": "c0ce045bc2def1d0a5ddbbb8a933df8c8d856f6b6a12c7d1f71510d2741249a3"
+    },
+    {
+      "path": "outputs/edge_function_audit.json",
+      "sha256": "193762168a3e82548f791aa0375706607c3bd76e92641a70b6f5eab55634d019"
+    },
+    {
+      "path": "analysis/rg_appointments.txt",
+      "sha256": "94e36824b5e507f51c3b3ef2bcaa8f35ff7fd43ec56b22c7fe5fd117cff22043"
+    },
+    {
+      "path": "analysis/rg_tenant_id.txt",
+      "sha256": "46e8709de21b3c3060d5c3c4f999906664f19ac3275ef9c8eb46594334243492"
+    },
+    {
+      "path": "analysis/rg_service_role.txt",
+      "sha256": "0c5e2f4338dde421e07c94416d5be29ecc38f62a74a419d7cc546626418945a1"
+    },
+    {
+      "path": "review-input.json",
+      "sha256": "557e58c56bbab955fe6b8ac0ccec1d5ae14d85f5ea81e9b484f519cad6f22bb3"
+    }
+  ]
+}

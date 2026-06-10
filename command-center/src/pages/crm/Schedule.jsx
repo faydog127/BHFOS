@@ -41,6 +41,7 @@ import { cn } from '@/lib/utils';
 import {
   formatOperationalStageLabel,
 } from '@/lib/workOrderOperational';
+import { getWorkOrderDisplayId } from '@/lib/workOrderIdentity';
 import { getTenantId } from '@/lib/tenantUtils';
 import { jobService } from '@/services/jobService';
 import { workOrderBoardService } from '@/services/workOrderBoardService';
@@ -93,13 +94,7 @@ const getMapUrl = (address) => {
 };
 
 const getWorkOrderLabel = (job) => {
-  const workOrder = asTracking(job?.work_order_number);
-  if (workOrder) return workOrder;
-
-  const legacy = asTracking(job?.job_number);
-  if (legacy) return legacy;
-
-  return `WO-${String(job?.id || '').slice(0, 8).toUpperCase()}`;
+  return getWorkOrderDisplayId(job);
 };
 
 const getCustomerName = (job) => {
@@ -214,18 +209,14 @@ const statusLabel = (value) =>
 
 const getTechnicianDisplayName = (technicians, technicianId) => {
   if (!technicianId) return 'Unassigned';
-  const technician = technicians.find((entry) =>
-    [entry.dispatch_id, entry.user_id, entry.id].filter(Boolean).includes(technicianId),
-  );
+  const technician = technicians.find((entry) => entry.user_id === technicianId || entry.id === technicianId);
   return technician?.full_name || 'Unassigned';
 };
 
 const resolveTechnicianSelection = (technicians, technicianId) => {
   if (!technicianId) return 'unassigned';
-  const technician = technicians.find((entry) =>
-    [entry.dispatch_id, entry.user_id, entry.id].filter(Boolean).includes(technicianId),
-  );
-  return technician?.dispatch_id || 'unassigned';
+  const technician = technicians.find((entry) => entry.user_id === technicianId || entry.id === technicianId);
+  return technician?.id || 'unassigned';
 };
 
 const MetricCard = ({ icon: Icon, label, value, tone = 'slate', detail }) => (
@@ -707,10 +698,7 @@ export default function Schedule() {
 
       const technicianRows = ((techniciansError ? [] : techniciansData) || [])
         .filter((tech) => tech?.is_active !== false)
-        .map((tech) => ({
-          ...tech,
-          dispatch_id: tech.user_id || tech.id,
-        }));
+        .map((tech) => ({ ...tech }));
 
       setTechnicians(technicianRows);
       setWorkOrders(
@@ -792,6 +780,17 @@ export default function Schedule() {
 
   const selectedJob = dispatchBoard.visibleJobs.find((job) => job.id === selectedJobId) || null;
   const selectedPrimaryAction = selectedJob?.dispatch_primary_action || (selectedJob ? getDispatchPrimaryAction(selectedJob) : null);
+  const startActionMissing = (() => {
+    if (!selectedJob) return [];
+    const missing = [];
+    const addressValidation = getDispatchAddressValidation(selectedJob.service_address);
+    if (!addressValidation.hasDispatchableAddress) missing.push('service address');
+    if (!selectedJob.scheduled_start) missing.push('scheduled start');
+    if (!selectedJob.scheduled_end) missing.push('scheduled end');
+    if (!selectedJob.technician_id) missing.push('technician');
+    return missing;
+  })();
+  const isStartActionBlocked = selectedPrimaryAction?.key === 'start' && startActionMissing.length > 0;
   const upcomingGroups = dispatchBoard.upcoming.reduce((groups, job) => {
     const label = getUpcomingDayLabel(job.scheduled_start);
     const existing = groups.find((group) => group.label === label);
@@ -937,8 +936,16 @@ export default function Schedule() {
     const trimmedAddress = dispatchAddress.trim();
     const trimmedService = dispatchService.trim();
     const nextStatus = normalizeStatus(dispatchStatus || selectedJob.status);
+    const willPromoteToScheduled =
+      Boolean(dispatchStart) &&
+      ['unscheduled', 'pending_schedule'].includes(selectedJob.dispatch_status) &&
+      ['unscheduled', 'pending_schedule'].includes(nextStatus);
+    const finalStatus = willPromoteToScheduled ? 'scheduled' : nextStatus;
+    const requiresDispatchable = ['scheduled', 'en_route', 'in_progress'].includes(finalStatus);
     const mustHaveStart =
-      ['unscheduled', 'pending_schedule'].includes(selectedJob.dispatch_status) || Boolean(dispatchStart);
+      ['unscheduled', 'pending_schedule'].includes(selectedJob.dispatch_status) ||
+      requiresDispatchable ||
+      Boolean(dispatchStart);
     const addressValidation = getDispatchAddressValidation(trimmedAddress);
     const nextErrors = {};
 
@@ -952,11 +959,12 @@ export default function Schedule() {
       nextErrors.service = 'Set the service or scope before saving dispatch.';
     }
 
-    if (selectedPrimaryAction?.key === 'assign_technician' && dispatchTechnicianId === 'unassigned') {
+    const requiresTechnician = requiresDispatchable || selectedPrimaryAction?.key === 'assign_technician';
+    if (requiresTechnician && dispatchTechnicianId === 'unassigned') {
       nextErrors.technician = technicians.length
-        ? 'Choose a technician before assigning this work order.'
+        ? 'Technician assignment is required before dispatching this work order.'
         : 'No active technicians are available to assign.';
-    } else if (selectedPrimaryAction?.key === 'assign_technician' && technicians.length === 0) {
+    } else if (requiresTechnician && technicians.length === 0) {
       nextErrors.technician = 'No active technicians are available to assign.';
     }
 
@@ -1019,7 +1027,7 @@ export default function Schedule() {
     const payload = {
       service_address: trimmedAddress,
       technician_id: dispatchTechnicianId === 'unassigned' ? null : dispatchTechnicianId,
-      status: nextStatus,
+      status: finalStatus,
       updated_at: new Date().toISOString(),
     };
 
@@ -1037,13 +1045,6 @@ export default function Schedule() {
       const end = new Date(start.getTime() + duration * 60000);
       payload.scheduled_start = start.toISOString();
       payload.scheduled_end = end.toISOString();
-
-      if (
-        ['unscheduled', 'pending_schedule'].includes(selectedJob.dispatch_status) &&
-        ['unscheduled', 'pending_schedule'].includes(nextStatus)
-      ) {
-        payload.status = 'scheduled';
-      }
     }
 
     setProcessingId(selectedJob.id);
@@ -1430,8 +1431,10 @@ export default function Schedule() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="unassigned">Unassigned</SelectItem>
-                                {technicians.map((technician) => (
-                                  <SelectItem key={technician.id} value={technician.dispatch_id}>
+                                {technicians
+                                  .filter((technician) => technician && technician.is_active !== false)
+                                  .map((technician) => (
+                                  <SelectItem key={technician.id} value={technician.id}>
                                     {technician.full_name}
                                   </SelectItem>
                                 ))}
@@ -1490,6 +1493,12 @@ export default function Schedule() {
                     )}
 
                     <div className="grid gap-3">
+                      {isStartActionBlocked ? (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                          <div className="font-semibold">Start blocked</div>
+                          <div>To start this job, set: {startActionMissing.join(', ')}.</div>
+                        </div>
+                      ) : null}
                       {selectedPrimaryActionHref ? (
                         <Button asChild className={cn('h-14 text-xl font-semibold', getPrimaryActionClassName(selectedPrimaryAction?.key))}>
                           <Link to={selectedPrimaryActionHref}>
@@ -1502,7 +1511,7 @@ export default function Schedule() {
                       ) : (
                         <Button
                           onClick={handlePrimaryAction}
-                          disabled={processingId === selectedJob.id}
+                          disabled={processingId === selectedJob.id || isStartActionBlocked}
                           className={cn('h-14 text-xl font-semibold', getPrimaryActionClassName(selectedPrimaryAction?.key))}
                         >
                           {processingId === selectedJob.id ? (

@@ -1,0 +1,4 @@
+run_id=h1a_appointments_rls_20260418_101415
+api_url=http://127.0.0.1:25431
+tenant_a=tvg jwt_a=eyJh...LTlQ
+tenant_b=other-tenant jwt_b=eyJh...HmBw

@@ -1,0 +1,264 @@
+[
+  {
+    "name": "Review Board Processor (Webhook → OpenAI → Drive)",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "review-board-processor",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "rbp-webhook",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [-900, 0],
+        "webhookId": "review-board-processor"
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = ($json && typeof $json === 'object') ? ($json.body ?? $json) : {};\n\nconst REQUIRED = ['artifact_name', 'current_stage', 'artifact_text'];\nconst ALL = ['artifact_name','source','current_stage','decision_needed','risk_level','main_concern','artifact_text'];\nconst ALLOWED_STAGES = [\n  'Concept',\n  'Draft Workflow',\n  'Operational Prototype',\n  'Pre-Production Spec',\n  'Production Candidate',\n];\n\nconst normalized = {};\nfor (const key of ALL) {\n  const v = body?.[key];\n  if (typeof v === 'string') normalized[key] = v.trim();\n  else if (v === null || v === undefined) normalized[key] = '';\n  else normalized[key] = String(v).trim();\n}\n\nconst missing_fields = [];\nfor (const key of REQUIRED) {\n  if (!normalized[key]) missing_fields.push(key);\n}\n\nconst invalid_fields = [];\nif (normalized.current_stage && !ALLOWED_STAGES.includes(normalized.current_stage)) invalid_fields.push('current_stage');\n\nconst limit = 25000;\nif (normalized.artifact_text && normalized.artifact_text.length > limit) invalid_fields.push('artifact_text');\n\nif (missing_fields.length || invalid_fields.length) {\n  const tooLarge = invalid_fields.includes('artifact_text') && (normalized.artifact_text.length > limit);\n  return [{\n    json: {\n      status: 'error',\n      message: tooLarge ? 'Payload too large' : 'Invalid input',\n      missing_fields,\n      invalid_fields,\n      http_code: 400,\n    },\n  }];\n}\n\nreturn [{ json: { status: 'pass', ...normalized } }];\n"
+        },
+        "id": "rbp-validate",
+        "name": "Validate Input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [-660, 0]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.status }}",
+                "operation": "equal",
+                "value2": "pass"
+              }
+            ]
+          }
+        },
+        "id": "rbp-pass?",
+        "name": "Passed Validation?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [-420, 0]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $env.OPENAI_API_KEY }}",
+                "operation": "isNotEmpty"
+              }
+            ]
+          }
+        },
+        "id": "rbp-has-openai-key?",
+        "name": "Has OpenAI Key?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [-200, -120]
+      },
+      {
+        "parameters": {
+          "jsCode": "return [{ json: { status:'error', message:'Missing OPENAI_API_KEY', missing_fields: [], invalid_fields: ['openai_api_key'], http_code: 500 } }];"
+        },
+        "id": "rbp-openai-key-missing",
+        "name": "OpenAI Key Missing",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [40, -24]
+      },
+      {
+        "parameters": {
+          "jsCode": "const requiredKeys = [\n  'artifact_classification',\n  'board_route_chosen',\n  'what_holds_up',\n  'what_breaks',\n  'what_is_still_underspecified',\n  'minimum_required_changes',\n  'revised_prompt_or_next_step_prompt',\n  'revised_readiness_level',\n  'revised_decision',\n  'what_to_do_next',\n];\n\nconst schema = {\n  artifact_classification: '',\n  board_route_chosen: '',\n  what_holds_up: [],\n  what_breaks: [],\n  what_is_still_underspecified: [],\n  minimum_required_changes: [],\n  revised_prompt_or_next_step_prompt: '',\n  revised_readiness_level: '',\n  revised_decision: '',\n  what_to_do_next: [],\n};\n\nconst system = [\n  'You are the Review Board.',\n  '',\n  'Review the artifact and return ONLY valid JSON.',\n  'Do not return markdown.',\n  'Do not return code fences.',\n  'Do not return any commentary before or after the JSON.',\n  '',\n  'Every key must be present and match the required types.',\n  `Required keys: ${requiredKeys.join(', ')}`,\n  '',\n  'Required JSON structure:',\n  JSON.stringify(schema, null, 2),\n].join('\\n');\n\nconst user = [\n  'Artifact Metadata:',\n  `- Artifact Name: ${$json.artifact_name}`,\n  `- Source: ${$json.source}`,\n  `- Current Stage: ${$json.current_stage}`,\n  `- Decision Needed: ${$json.decision_needed}`,\n  `- Risk Level: ${$json.risk_level}`,\n  `- Main Concern: ${$json.main_concern}`,\n  '',\n  'Artifact:',\n  String($json.artifact_text || ''),\n].join('\\n');\n\nconst model = String($env.REVIEW_PROCESSOR_OPENAI_MODEL || 'gpt-4o-mini').trim();\n\nconst openaiBody = {\n  model,\n  messages: [\n    { role: 'system', content: system },\n    { role: 'user', content: user },\n  ],\n  temperature: 0.2,\n  response_format: { type: 'json_object' },\n};\n\nreturn [{ json: { status:'pass', requiredKeys, openai_body: openaiBody, artifact_name: $json.artifact_name } }];\n"
+        },
+        "id": "rbp-build-openai",
+        "name": "Build OpenAI Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [40, -240]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/chat/completions",
+          "authentication": "none",
+          "sendHeaders": true,
+          "specifyHeaders": "keypair",
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "={{ 'Bearer ' + $env.OPENAI_API_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ $json.openai_body }}",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "json",
+                "fullResponse": true
+              }
+            }
+          }
+        },
+        "id": "rbp-openai-http",
+        "name": "OpenAI Review (HTTP)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4,
+        "position": [300, -240],
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const res = $json;\nconst requiredKeys = ($items('Build OpenAI Request')[0]?.json?.requiredKeys) || [];\n\nconst sanitizeError = (err) => {\n  if (!err || typeof err !== 'object') return err;\n  return { name: err.name, code: err.code, status: err.status, message: err.message };\n};\n\nif (res && typeof res === 'object' && res.error) {\n  return [{ json: { status:'error', message:'OpenAI request failed', missing_fields: [], invalid_fields: ['openai_request'], details: sanitizeError(res.error), http_code: 502 } }];\n}\n\nconst statusCode = typeof res.statusCode === 'number' ? res.statusCode : null;\nconst body = res.body ?? res;\n\nif (statusCode && statusCode >= 400) {\n  return [{ json: { status:'error', message:'OpenAI request failed', missing_fields: [], invalid_fields: ['openai_request'], details: body, http_code: 502 } }];\n}\n\nconst reply = body?.choices?.[0]?.message?.content;\nif (typeof reply !== 'string' || !reply.trim()) {\n  return [{ json: { status:'error', message:'No assistant reply found in OpenAI response', missing_fields: [], invalid_fields: ['openai_output'], details: body, http_code: 502 } }];\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(reply);\n} catch (e) {\n  return [{ json: { status:'error', message:'Invalid AI output', missing_fields: [], invalid_fields: ['openai_output'], details: { parse_error: String(e?.message || e), raw: reply.slice(0, 5000) }, http_code: 502 } }];\n}\n\nconst missing = [];\nfor (const k of requiredKeys) {\n  if (!Object.prototype.hasOwnProperty.call(parsed, k)) missing.push(k);\n}\n\nif (missing.length) {\n  return [{ json: { status:'error', message:'Invalid AI output', missing_fields: missing, invalid_fields: ['openai_output'], details: { missing_keys: missing }, http_code: 502 } }];\n}\n\n// Prepare save payload\nconst now = new Date();\nconst pad = (n) => String(n).padStart(2, '0');\nconst ts = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}${pad(now.getMinutes())}`;\n\nconst artifactName = String($items('Build OpenAI Request')[0]?.json?.artifact_name || 'Artifact').trim() || 'Artifact';\nconst safeName = artifactName.replace(/[\\\\/:*?\"<>|]+/g, '-').replace(/\\s+/g, ' ').trim();\n\nreturn [{\n  json: {\n    status: 'pass',\n    artifact_name: artifactName,\n    reviewed_at: now.toISOString(),\n    file_name: `${safeName} - Review - ${ts}.json`,\n    file_content: JSON.stringify(parsed, null, 2),\n  },\n}];\n"
+        },
+        "id": "rbp-extract",
+        "name": "Extract + Validate AI JSON",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [540, -240]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.status }}",
+                "operation": "equal",
+                "value2": "pass"
+              }
+            ]
+          }
+        },
+        "id": "rbp-ai-ok?",
+        "name": "AI OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [780, -240]
+      },
+      {
+        "parameters": {
+          "operation": "createFromText",
+          "content": "={{ $json.file_content }}",
+          "name": "={{ $json.file_name }}",
+          "driveId": {
+            "__rl": true,
+            "mode": "list",
+            "value": "My Drive"
+          },
+          "folderId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ ($env.REVIEW_BOARD_UNDER_REVIEW_FOLDER_ID || '176FhRjNgJqNwsGV4wes5NMMLa5AGLjID') }}"
+          },
+          "options": {}
+        },
+        "id": "rbp-drive-save",
+        "name": "Save Review to Drive (01 Under Review)",
+        "type": "n8n-nodes-base.googleDrive",
+        "typeVersion": 3,
+        "position": [1020, -240],
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const drive = $json;\nconst ctx = $items('Extract + Validate AI JSON')[0]?.json;\n\nif (!ctx || ctx.status !== 'pass') {\n  return [{ json: { status:'error', message:'Internal error (missing AI context)', missing_fields: [], invalid_fields: ['internal'], http_code: 500 } }];\n}\n\nif (drive && typeof drive === 'object' && drive.error) {\n  return [{ json: { status:'error', message:'Drive save failed', missing_fields: [], invalid_fields: ['drive'], details: drive.error, http_code: 502 } }];\n}\n\nif (!drive || typeof drive !== 'object' || typeof drive.id !== 'string') {\n  return [{ json: { status:'error', message:'Drive save failed', missing_fields: [], invalid_fields: ['drive'], details: drive ?? null, http_code: 502 } }];\n}\n\nreturn [{\n  json: {\n    status: 'success',\n    artifact_name: ctx.artifact_name,\n    review_file_name: ctx.file_name,\n    drive_file_id: drive.id,\n    reviewed_at: ctx.reviewed_at,\n    http_code: 200,\n  },\n}];\n"
+        },
+        "id": "rbp-prepare-response",
+        "name": "Prepare Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1260, -240]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ $json }}",
+          "options": {
+            "responseCode": "={{ $json.http_code || ($json.status === 'error' ? 400 : 200) }}",
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "id": "rbp-respond",
+        "name": "Respond",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [1500, -120]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [[{ "node": "Validate Input", "type": "main", "index": 0 }]]
+      },
+      "Validate Input": {
+        "main": [[{ "node": "Passed Validation?", "type": "main", "index": 0 }]]
+      },
+      "Passed Validation?": {
+        "main": [
+          [{ "node": "Has OpenAI Key?", "type": "main", "index": 0 }],
+          [{ "node": "Respond", "type": "main", "index": 0 }]
+        ]
+      },
+      "Has OpenAI Key?": {
+        "main": [
+          [{ "node": "Build OpenAI Request", "type": "main", "index": 0 }],
+          [{ "node": "OpenAI Key Missing", "type": "main", "index": 0 }]
+        ]
+      },
+      "OpenAI Key Missing": {
+        "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+      },
+      "Build OpenAI Request": {
+        "main": [[{ "node": "OpenAI Review (HTTP)", "type": "main", "index": 0 }]]
+      },
+      "OpenAI Review (HTTP)": {
+        "main": [[{ "node": "Extract + Validate AI JSON", "type": "main", "index": 0 }]]
+      },
+      "Extract + Validate AI JSON": {
+        "main": [[{ "node": "AI OK?", "type": "main", "index": 0 }]]
+      },
+      "AI OK?": {
+        "main": [
+          [{ "node": "Save Review to Drive (01 Under Review)", "type": "main", "index": 0 }],
+          [{ "node": "Respond", "type": "main", "index": 0 }]
+        ]
+      },
+      "Save Review to Drive (01 Under Review)": {
+        "main": [[{ "node": "Prepare Response", "type": "main", "index": 0 }]]
+      },
+      "Prepare Response": {
+        "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": null,
+    "meta": null,
+    "pinData": {},
+    "versionId": "review-board-processor-v1",
+    "triggerCount": 0,
+    "tags": []
+  }
+]
+

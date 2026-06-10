@@ -1,0 +1,3 @@
+account_or_platform,purpose,login_email,mfa_enabled,recovery_codes_saved,new_pc_login_confirmed,owner,date_verified,notes
+Gmail / Google Workspace,Email and Drive,,Yes/No,Yes/No,No,Erron,,Do not store passwords here
+Canva,Design assets,,Yes/No,Yes/No,No,Erron,,

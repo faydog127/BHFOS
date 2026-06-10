@@ -1,0 +1,8 @@
+run_id: 2026-04-18T15:25:07.3918309+00:00
+
+cmd: rg -n --hidden -S "\\bappointments\\b" supabase src scripts
+cmd: rg -n --hidden -S "\\btenant_id\\b" supabase/functions src
+cmd: rg -n --hidden -S "service_role|SUPABASE_SERVICE_ROLE_KEY|supabaseAdmin" supabase/functions
+cmd: docker exec supabase_db_tvg-web-app psql ... relrowsecurity
+cmd: docker exec supabase_db_tvg-web-app psql ... pg_policies for appointments
+cmd: docker exec supabase_db_tvg-web-app pg_dump --table public.appointments

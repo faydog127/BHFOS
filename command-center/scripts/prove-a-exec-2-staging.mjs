@@ -2,6 +2,7 @@
 /* eslint-disable no-console */
 import { spawn, spawnSync } from "node:child_process";
 import { createHmac } from "node:crypto";
+import fs from "node:fs";
 
 const PROJECT_REF = process.env.PROJECT_REF ?? "wwyxohjnyqnegzbxtuxs";
 const SUPABASE_URL = process.env.SUPABASE_URL ?? `https://${PROJECT_REF}.supabase.co`;
@@ -85,8 +86,30 @@ function getSupabaseKeys() {
   return { anon, service };
 }
 
+function readEnvFromFile(path, key) {
+  try {
+    const content = fs.readFileSync(path, "utf8");
+    for (const rawLine of content.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) continue;
+      const idx = line.indexOf("=");
+      if (idx === -1) continue;
+      if (line.slice(0, idx) === key) return line.slice(idx + 1).trim();
+    }
+  } catch {
+    return "";
+  }
+  return "";
+}
+
 function getWebhookSecret() {
   if (process.env.STRIPE_WEBHOOK_SECRET) return process.env.STRIPE_WEBHOOK_SECRET;
+  const repoEnv = readEnvFromFile(".env", "STRIPE_WEBHOOK_SECRET");
+  if (repoEnv) return repoEnv;
+  const supabaseEnv = readEnvFromFile("supabase/.env", "STRIPE_WEBHOOK_SECRET");
+  if (supabaseEnv) return supabaseEnv;
+  const functionsEnv = readEnvFromFile("supabase/functions/.env", "STRIPE_WEBHOOK_SECRET");
+  if (functionsEnv) return functionsEnv;
   throw new Error("Missing STRIPE_WEBHOOK_SECRET in environment.");
 }
 
@@ -247,6 +270,7 @@ async function createFixture(serviceKey) {
       tenant_id: "tvg",
       lead_id: leadId,
       status: "unscheduled",
+      payment_status: "unpaid",
       total_amount: 1000,
     },
     serviceKey,
@@ -263,6 +287,7 @@ async function createFixture(serviceKey) {
       tenant_id: "tvg",
       lead_id: leadId,
       status: "unscheduled",
+      payment_status: "unpaid",
       total_amount: 900,
     },
     serviceKey,

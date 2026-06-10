@@ -7,8 +7,9 @@ export const BUSINESS_PHONE_DISPLAY = "(321) 360-9704";
 export const BUSINESS_PHONE_TEL = "+13213609704"; // E.164 for tel links
 export const BUSINESS_EMAIL = "admin@vent-guys.com";
 export const BUSINESS_WEBSITE = "https://vent-guys.com";
-export const PRIVACY_URL = "https://vent-guys.com/privacy";
-export const TERMS_URL = "https://vent-guys.com/terms"; // create if missing
+export const PRIVACY_URL = (Deno.env.get("PRIVACY_URL") ?? "https://vent-guys.com/privacy").trim();
+// Default to blank unless explicitly configured. Broken legal links erode customer trust fast.
+export const TERMS_URL = (Deno.env.get("TERMS_URL") ?? "").trim();
 export const BUSINESS_ADDRESS_LINE1 = "2987 Finsterwald Dr";
 export const BUSINESS_ADDRESS_LINE2 = "Titusville, FL 32780";
 
@@ -73,6 +74,14 @@ export function renderEmailLayout(opts: {
   const preheader = escapeHtml(opts.preheader ?? "");
   const title = escapeHtml(opts.title ?? "");
   const badges = (opts.badges ?? []).filter((b) => !!b.url).slice(0, 3);
+
+  const legalLinks = [
+    PRIVACY_URL ? `<a href="${PRIVACY_URL}" style="color:#666; text-decoration:underline;">Privacy</a>` : "",
+    TERMS_URL ? `<a href="${TERMS_URL}" style="color:#666; text-decoration:underline;">Terms</a>` : "",
+  ].filter(Boolean).join(" | ");
+  const legalLinksHtml = legalLinks
+    ? `<div style="margin-bottom:10px;">${legalLinks}</div>`
+    : "";
 
   const badgeRow = badges.length
     ? `
@@ -158,14 +167,11 @@ export function renderEmailLayout(opts: {
               <div style="margin-bottom:10px;">
                 <strong style="color:${COLOR_NAVY_DARK};">The Vent Guys</strong><br/>
                 <span>${BUSINESS_ADDRESS_LINE1}<br/>${BUSINESS_ADDRESS_LINE2}</span><br/>
-                <a href="mailto:${BUSINESS_EMAIL}" style="color:${COLOR_NAVY}; text-decoration:none;">${BUSINESS_EMAIL}</a> •
+                <a href="mailto:${BUSINESS_EMAIL}" style="color:${COLOR_NAVY}; text-decoration:none;">${BUSINESS_EMAIL}</a> |
                 <a href="tel:${BUSINESS_PHONE_TEL}" style="color:${COLOR_NAVY}; text-decoration:none;">${BUSINESS_PHONE_DISPLAY}</a>
               </div>
 
-              <div style="margin-bottom:10px;">
-                <a href="${PRIVACY_URL}" style="color:#666; text-decoration:underline;">Privacy</a> •
-                <a href="${TERMS_URL}" style="color:#666; text-decoration:underline;">Terms</a>
-              </div>
+              ${legalLinksHtml}
 
               <div style="color:#888; font-size:11px;">Honest. Protective. Professional.</div>
             </td>

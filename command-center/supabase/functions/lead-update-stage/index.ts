@@ -21,6 +21,14 @@ const stageMap: Record<string, string> = {
   col_lost: 'lost',
 };
 
+const leadStatusByColumn: Record<string, string> = {
+  col_new: 'new',
+  col_contacted: 'contacted',
+  col_ready_to_book: 'qualified',
+  col_visit_scheduled: 'converted',
+  col_lost: 'lost',
+};
+
 Deno.serve(async (req) => {
   const origin = req.headers.get('origin');
   const cors = buildCorsHeaders(origin);
@@ -67,8 +75,9 @@ Deno.serve(async (req) => {
     last_touch_at: new Date().toISOString(),
   };
 
-  if (targetStage === 'col_dormant' || targetStage === 'col_lost') {
-    updateData.status = 'archived';
+  const nextStatus = leadStatusByColumn[targetStage];
+  if (nextStatus) {
+    updateData.status = nextStatus;
   }
 
   const { data: lead, error } = await supabaseAdmin

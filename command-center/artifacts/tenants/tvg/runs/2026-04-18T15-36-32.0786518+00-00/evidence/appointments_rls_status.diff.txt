@@ -1,0 +1,13 @@
+diff --git a/C:/BHFOS/command-center/artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/evidence/db_pre_appointments_rls_status.txt b/C:/BHFOS/command-center/artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/evidence/db_appointments_rls_status.txt
+index fe5246f..bc61b80 100644
+--- a/C:/BHFOS/command-center/artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/evidence/db_pre_appointments_rls_status.txt
++++ b/C:/BHFOS/command-center/artifacts/tenants/tvg/runs/2026-04-18T15-36-32.0786518+00-00/evidence/db_appointments_rls_status.txt
+@@ -1,5 +1,7 @@
++run_id: 2026-04-18T15:36:32.0786518+00:00
+  schema |    table     | rls_enabled | rls_forced 
+ --------+--------------+-------------+------------
+- public | appointments | f           | f
++ public | appointments | t           | f
+ (1 row)
+ 
++

@@ -4,8 +4,10 @@ const JOB_STATUS_ALIAS_MAP = {
   complete: 'completed',
   done: 'completed',
   pending: 'unscheduled',
-  pendingschedule: 'pending_schedule',
-  'pending-schedule': 'pending_schedule',
+  pending_schedule: 'unscheduled',
+  'pending schedule': 'unscheduled',
+  pendingschedule: 'unscheduled',
+  'pending-schedule': 'unscheduled',
 };
 
 const PAYMENT_STATUS_ALIAS_MAP = {

@@ -125,6 +125,84 @@ const ensureTechnician = async ({ userId, fullName, email, phone, colorCode, isP
   return { id: data.id, action: 'created' };
 };
 
+const isMissingColumnError = (error, columnName) => {
+  const msg = String(error?.message || '');
+  const details = String(error?.details || '');
+  const needle = columnName ? `column "${columnName}"` : 'column "';
+  return msg.includes(needle) || details.includes(needle) || msg.includes(`Could not find the '${columnName}' column`);
+};
+
+const ensureAppUserRole = async ({ userId, role, tenantId = 'tvg' }) => {
+  const normalizedRole = String(role || '').trim();
+  if (!normalizedRole) throw new Error('Role is required for app_user_roles bootstrap.');
+
+  let existing;
+  let existingError;
+
+  ({ data: existing, error: existingError } = await admin
+    .from('app_user_roles')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('role', normalizedRole)
+    .eq('tenant_id', tenantId)
+    .maybeSingle());
+
+  if (existingError && isMissingColumnError(existingError, 'tenant_id')) {
+    ({ data: existing, error: existingError } = await admin
+      .from('app_user_roles')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('role', normalizedRole)
+      .maybeSingle());
+  }
+
+  if (existingError) throw existingError;
+  if (existing?.id) return { id: existing.id, action: 'exists' };
+
+  let data;
+  let error;
+
+  ({ data, error } = await admin
+    .from('app_user_roles')
+    .insert({ user_id: userId, role: normalizedRole, tenant_id: tenantId })
+    .select('id')
+    .single());
+
+  if (error && isMissingColumnError(error, 'tenant_id')) {
+    ({ data, error } = await admin
+      .from('app_user_roles')
+      .insert({ user_id: userId, role: normalizedRole })
+      .select('id')
+      .single());
+  }
+
+  if (error) throw error;
+  return { id: data.id, action: 'created' };
+};
+
+const ensureSuperuser = async ({ email }) => {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (!normalizedEmail) throw new Error('Email is required for superusers bootstrap.');
+
+  const { data: existing, error: existingError } = await admin
+    .from('superusers')
+    .select('id, email')
+    .eq('email', normalizedEmail)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+  if (existing?.id) return { id: existing.id, action: 'exists' };
+
+  const { data, error } = await admin
+    .from('superusers')
+    .insert({ email: normalizedEmail, is_active: true })
+    .select('id')
+    .single();
+
+  if (error) throw error;
+  return { id: data.id, action: 'created' };
+};
+
 const main = async () => {
   const localAdmin = await ensureAuthUser({
     email: process.env.VITE_LOCAL_DEV_AUTH_EMAIL || 'local.admin@tvg.local',
@@ -140,6 +218,10 @@ const main = async () => {
     userMetadata: { role: 'technician' },
   });
 
+  const localAdminRole = await ensureAppUserRole({ userId: localAdmin.id, role: 'admin' });
+  const dispatchTechRole = await ensureAppUserRole({ userId: dispatchTech.id, role: 'technician' });
+  const superuser = await ensureSuperuser({ email: localAdmin.email });
+
   const technician = await ensureTechnician({
     userId: dispatchTech.id,
     fullName: 'Dispatch Tech Local',
@@ -153,7 +235,10 @@ const main = async () => {
     JSON.stringify(
       {
         localAdmin,
+        localAdminRole,
+        superuser,
         dispatchTech,
+        dispatchTechRole,
         technician,
       },
       null,

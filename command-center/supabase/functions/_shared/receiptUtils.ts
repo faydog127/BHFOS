@@ -105,10 +105,10 @@ const buildReceiptEmailHtml = (params: {
     preheader: `Payment received for ${invoiceLabel}.`,
     bodyHtml: `
       <p>Hi ${escapeHtml(params.customerName)},</p>
-      <p>Thanks — we’ve received your payment for ${invoiceLabel}.</p>
+      <p>Thanks - we've received your payment for ${invoiceLabel}.</p>
       ${amountLine}
       ${paidAtLine}
-      <p>If everything feels good, we’d appreciate a quick review.</p>
+      <p>If everything feels good, we'd appreciate a quick review.</p>
       <p>
         <a
           href="${reviewUrl}"

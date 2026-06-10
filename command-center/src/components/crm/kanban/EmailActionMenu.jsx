@@ -191,12 +191,14 @@ const EmailActionMenu = ({ card, type, onEmailSent }) => {
           estimateId: resolvedId,
           lead,
           deliveryChannel: requestedChannel,
+          attachPdf: false,
         });
       } else if (docType === 'quote') {
         result = await sendQuoteDocument({
           quoteId: resolvedId,
           lead,
           deliveryChannel: requestedChannel,
+          attachPdf: false,
         });
       } else if (docType === 'invoice') {
         result = await sendInvoiceDocument({

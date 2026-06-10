@@ -1,0 +1,281 @@
+**********************
+PowerShell transcript start
+Start time: 20260418102819
+Username: DESKTOP-85O8NJT\ol_mann
+RunAs User: DESKTOP-85O8NJT\ol_mann
+Configuration Name: 
+Machine: DESKTOP-85O8NJT (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -File scripts\runtime\h1a-appointments-tenant-isolation.ps1 -RunId h1a_appointments_rls_20260418_101415 -RunRoot artifacts\tenants\tvg\runs\h1a_appointments_rls_20260418_101415
+Process ID: 33392
+PSVersion: 7.5.5
+PSEdition: Core
+GitCommitId: 7.5.5
+OS: Microsoft Windows 10.0.26200
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+**********************
+PowerShell transcript end
+End time: 20260418102819
+**********************
+**********************
+PowerShell transcript start
+Start time: 20260418103110
+Username: DESKTOP-85O8NJT\ol_mann
+RunAs User: DESKTOP-85O8NJT\ol_mann
+Configuration Name: 
+Machine: DESKTOP-85O8NJT (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -File scripts\runtime\h1a-appointments-tenant-isolation.ps1 -RunId h1a_appointments_rls_20260418_101415 -RunRoot artifacts\tenants\tvg\runs\h1a_appointments_rls_20260418_101415
+Process ID: 29868
+PSVersion: 7.5.5
+PSEdition: Core
+GitCommitId: 7.5.5
+OS: Microsoft Windows 10.0.26200
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "code": 400,
+  "error_code": "invalid_credentials",
+  "msg": "Invalid login credentials"
+}"
+**********************
+PowerShell transcript end
+End time: 20260418103111
+**********************
+**********************
+PowerShell transcript start
+Start time: 20260418103159
+Username: DESKTOP-85O8NJT\ol_mann
+RunAs User: DESKTOP-85O8NJT\ol_mann
+Configuration Name: 
+Machine: DESKTOP-85O8NJT (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -File scripts\runtime\h1a-appointments-tenant-isolation.ps1 -RunId h1a_appointments_rls_20260418_101415 -RunRoot artifacts\tenants\tvg\runs\h1a_appointments_rls_20260418_101415
+Process ID: 16540
+PSVersion: 7.5.5
+PSEdition: Core
+GitCommitId: 7.5.5
+OS: Microsoft Windows 10.0.26200
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+run_id=h1a_appointments_rls_20260418_101415
+api_url=http://127.0.0.1:25431
+tenant_a=tvg jwt_a=eyJh...lKCg
+tenant_b=other-tenant jwt_b=eyJh...SR1Q
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "code": "42501",
+  "details": null,
+  "hint": null,
+  "message": "new row violates row-level security policy for table \u0022appointments\u0022"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Tenant mismatch"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "lead_id is invalid"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Unauthorized"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Tenant mismatch"
+}"
+**********************
+PowerShell transcript end
+End time: 20260418103202
+**********************
+**********************
+PowerShell transcript start
+Start time: 20260418103230
+Username: DESKTOP-85O8NJT\ol_mann
+RunAs User: DESKTOP-85O8NJT\ol_mann
+Configuration Name: 
+Machine: DESKTOP-85O8NJT (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -File scripts\runtime\h1a-appointments-tenant-isolation.ps1 -RunId h1a_appointments_rls_20260418_101415 -RunRoot artifacts\tenants\tvg\runs\h1a_appointments_rls_20260418_101415
+Process ID: 33588
+PSVersion: 7.5.5
+PSEdition: Core
+GitCommitId: 7.5.5
+OS: Microsoft Windows 10.0.26200
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "code": 422,
+  "error_code": "email_exists",
+  "msg": "A user with this email address has already been registered"
+}"
+**********************
+PowerShell transcript end
+End time: 20260418103230
+**********************
+**********************
+PowerShell transcript start
+Start time: 20260418103302
+Username: DESKTOP-85O8NJT\ol_mann
+RunAs User: DESKTOP-85O8NJT\ol_mann
+Configuration Name: 
+Machine: DESKTOP-85O8NJT (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -File scripts\runtime\h1a-appointments-tenant-isolation.ps1 -RunId h1a_appointments_rls_20260418_101415 -RunRoot artifacts\tenants\tvg\runs\h1a_appointments_rls_20260418_101415
+Process ID: 4036
+PSVersion: 7.5.5
+PSEdition: Core
+GitCommitId: 7.5.5
+OS: Microsoft Windows 10.0.26200
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+run_id=h1a_appointments_rls_20260418_101415
+api_url=http://127.0.0.1:25431
+tenant_a=tvg jwt_a=eyJh...Sc0A
+tenant_b=other-tenant jwt_b=eyJh...KAOw
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "code": "42501",
+  "details": null,
+  "hint": null,
+  "message": "new row violates row-level security policy for table \u0022appointments\u0022"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Tenant mismatch"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "lead_id is invalid"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Unauthorized"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Tenant mismatch"
+}"
+**********************
+PowerShell transcript end
+End time: 20260418103304
+**********************
+**********************
+PowerShell transcript start
+Start time: 20260418103356
+Username: DESKTOP-85O8NJT\ol_mann
+RunAs User: DESKTOP-85O8NJT\ol_mann
+Configuration Name: 
+Machine: DESKTOP-85O8NJT (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -File scripts\runtime\h1a-appointments-tenant-isolation.ps1 -RunId h1a_appointments_rls_20260418_101415 -RunRoot artifacts\tenants\tvg\runs\h1a_appointments_rls_20260418_101415
+Process ID: 4072
+PSVersion: 7.5.5
+PSEdition: Core
+GitCommitId: 7.5.5
+OS: Microsoft Windows 10.0.26200
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+run_id=h1a_appointments_rls_20260418_101415
+api_url=http://127.0.0.1:25431
+tenant_a=tvg jwt_a=eyJh...LzvQ
+tenant_b=other-tenant jwt_b=eyJh...IvXw
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "code": "42501",
+  "details": null,
+  "hint": null,
+  "message": "new row violates row-level security policy for table \u0022appointments\u0022"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Tenant mismatch"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Unauthorized"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Appointment not found"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Tenant mismatch"
+}"
+**********************
+PowerShell transcript end
+End time: 20260418103358
+**********************
+**********************
+PowerShell transcript start
+Start time: 20260418103543
+Username: DESKTOP-85O8NJT\ol_mann
+RunAs User: DESKTOP-85O8NJT\ol_mann
+Configuration Name: 
+Machine: DESKTOP-85O8NJT (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -File scripts\runtime\h1a-appointments-tenant-isolation.ps1 -RunId h1a_appointments_rls_20260418_101415 -RunRoot artifacts\tenants\tvg\runs\h1a_appointments_rls_20260418_101415
+Process ID: 30736
+PSVersion: 7.5.5
+PSEdition: Core
+GitCommitId: 7.5.5
+OS: Microsoft Windows 10.0.26200
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+run_id=h1a_appointments_rls_20260418_101415
+api_url=http://127.0.0.1:25431
+tenant_a=tvg jwt_a=eyJh...LTlQ
+tenant_b=other-tenant jwt_b=eyJh...HmBw
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "code": "42501",
+  "details": null,
+  "hint": null,
+  "message": "new row violates row-level security policy for table \u0022appointments\u0022"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Tenant mismatch"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Unauthorized"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Appointment not found"
+}"
+PS>TerminatingError(Invoke-WebRequest): "
+{
+  "error": "Tenant mismatch"
+}"
+**********************
+PowerShell transcript end
+End time: 20260418103545
+**********************

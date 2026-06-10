@@ -32,6 +32,12 @@ const getMissingColumnName = (error) => {
   const message = error?.message || '';
   const postgresMatch = message.match(/column "([^"]+)"/i);
   if (postgresMatch) return postgresMatch[1];
+  const postgresBareMatch = message.match(/column\s+([a-z0-9_.]+)\s+does not exist/i);
+  if (postgresBareMatch) {
+    const token = postgresBareMatch[1];
+    const parts = token.split('.');
+    return parts[parts.length - 1] || token;
+  }
   const cacheMatch = message.match(/could not find the '([^']+)' column/i);
   return cacheMatch ? cacheMatch[1] : null;
 };
@@ -89,31 +95,63 @@ export const appointmentService = {
   },
 
   async fetchCustomers(tenantId) {
-    const baseQuery = supabase
-      .from('leads')
-      .select('id, first_name, last_name, email, phone, company, created_at, updated_at, is_test_data')
-      .eq('tenant_id', tenantId)
-      .order('updated_at', { ascending: false, nullsFirst: false })
-      .order('created_at', { ascending: false })
-      .limit(250);
+    const buildQuery = ({ includeUpdatedAt, includeTestData }) => {
+      const columns = ['id', 'first_name', 'last_name', 'email', 'phone', 'company', 'created_at'];
+      if (includeUpdatedAt) columns.push('updated_at');
+      if (includeTestData) columns.push('is_test_data');
 
-    let { data, error } = await baseQuery.or('is_test_data.eq.false,is_test_data.is.null');
-
-    if (error && isMissingColumnError(error)) {
-      const fallback = await supabase
+      let query = supabase
         .from('leads')
-        .select('id, first_name, last_name, email, phone, company, created_at, updated_at')
-        .eq('tenant_id', tenantId)
-        .order('updated_at', { ascending: false, nullsFirst: false })
-        .order('created_at', { ascending: false })
-        .limit(250);
+        .select(columns.join(', '))
+        .eq('tenant_id', tenantId);
 
-      data = fallback.data;
-      error = fallback.error;
+      if (includeUpdatedAt) {
+        query = query.order('updated_at', { ascending: false, nullsFirst: false });
+      }
+
+      query = query.order('created_at', { ascending: false }).limit(250);
+
+      if (includeTestData) {
+        query = query.or('is_test_data.eq.false,is_test_data.is.null');
+      }
+
+      return query;
+    };
+
+    let includeUpdatedAt = true;
+    let includeTestData = true;
+    let lastError = null;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const { data, error } = await buildQuery({ includeUpdatedAt, includeTestData });
+
+      if (!error) {
+        return data || [];
+      }
+
+      lastError = error;
+
+      if (!isMissingColumnError(error)) {
+        throw error;
+      }
+
+      const missing = getMissingColumnName(error);
+      if (missing === 'updated_at') {
+        includeUpdatedAt = false;
+        continue;
+      }
+
+      if (missing === 'is_test_data') {
+        includeTestData = false;
+        continue;
+      }
+
+      includeUpdatedAt = false;
+      includeTestData = false;
     }
 
-    if (error) throw error;
-    return data || [];
+    if (lastError) throw lastError;
+    return [];
   },
 
   async fetchServices(tenantId) {

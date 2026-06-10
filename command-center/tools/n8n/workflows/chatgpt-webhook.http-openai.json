@@ -1,0 +1,362 @@
+[
+  {
+    "name": "ChatGPT Webhook (HTTP OpenAI v3)",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "chat-http",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "7b5ed390-ff37-41d0-a33e-30c99524d2f1",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [
+          -640,
+          0
+        ],
+        "webhookId": "chatgpt-webhook-http-v3"
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = ($json && typeof $json === 'object') ? ($json.body ?? $json) : {};\nconst prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';\n\nif (!prompt) {\n  return [{ json: { status: 'error', error_type: 'validation_failed', message: 'Missing required field: prompt' } }];\n}\n\nreturn [{ json: { status: 'pass', prompt } }];\n"
+        },
+        "id": "8a232bae-1273-46f0-9aa6-0e9b345d13ee",
+        "name": "Validate Prompt",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -416,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.status }}",
+                "operation": "equal",
+                "value2": "pass"
+              }
+            ]
+          }
+        },
+        "id": "bb4a83d0-5149-4ad3-bc8b-f4c43cdf3c57",
+        "name": "Prompt OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          -192,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $env.OPENAI_API_KEY }}",
+                "operation": "isNotEmpty"
+              }
+            ]
+          }
+        },
+        "id": "2d563c5a-1ef8-4abf-9ea7-7e0b50a069c9",
+        "name": "Has OpenAI Key?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          -32,
+          -128
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/chat/completions",
+          "authentication": "none",
+          "sendHeaders": true,
+          "specifyHeaders": "keypair",
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "={{ 'Bearer ' + $env.OPENAI_API_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ ({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: $json.prompt }], temperature: 0.2 }) }}",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "json",
+                "fullResponse": true
+              }
+            }
+          }
+        },
+        "id": "f826c14b-bd10-4f0f-9ea4-3e4543db1d86",
+        "name": "OpenAI (HTTP)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4,
+        "position": [
+          64,
+          -128
+        ],
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const res = $json;\n\nconst sanitizeError = (err) => {\n  if (!err || typeof err !== 'object') return err;\n  return {\n    name: err.name,\n    code: err.code,\n    status: err.status,\n    message: err.message,\n  };\n};\n\n// When `continueOnFail` is enabled, errors may come through as `json.error`\nif (res && typeof res === 'object' && res.error) {\n  return [{ json: { ok: false, error_type: 'openai_failed', message: 'OpenAI request failed', details: sanitizeError(res.error), httpStatus: 502 } }];\n}\n\n// With fullResponse=true, the HTTP Request node returns { statusCode, headers, body, ... }\nconst statusCode = typeof res.statusCode === 'number' ? res.statusCode : null;\nconst body = res.body ?? res;\n\nif (statusCode && statusCode >= 400) {\n  return [{ json: { ok: false, error_type: 'openai_failed', message: 'OpenAI request failed', details: body, httpStatus: 502 } }];\n}\n\nconst reply = body?.choices?.[0]?.message?.content;\n\nif (typeof reply !== 'string' || !reply.trim()) {\n  return [{ json: { ok: false, error_type: 'openai_failed', message: 'No assistant reply found in OpenAI response', details: body, httpStatus: 502 } }];\n}\n\nreturn [{ json: { ok: true, reply: reply.trim(), httpStatus: 200 } }];\n"
+        },
+        "id": "f2c7f451-2b0c-4c4e-9c7d-6d4976c4ac34",
+        "name": "Extract Reply",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          288,
+          -128
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{ $json.ok }}",
+                "operation": "equal",
+                "value2": true
+              }
+            ]
+          }
+        },
+        "id": "f76f949f-32a4-4f4b-9cae-15b597e32605",
+        "name": "Reply OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          512,
+          -128
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ { reply: $json.reply } }}",
+          "options": {
+            "responseCode": 200,
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "id": "b3d7c049-5a99-41e1-bfb5-63a44d3133d7",
+        "name": "Respond Success",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          736,
+          -224
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ { status: 'error', error_type: $json.error_type || 'openai_failed', message: $json.message || 'OpenAI error', details: $json.details || null } }}",
+          "options": {
+            "responseCode": "={{ $json.httpStatus || 502 }}",
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "id": "b6d40c0f-3ee6-4d32-a9b9-d0e3b2f3f30e",
+        "name": "Respond OpenAI Error",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          736,
+          -32
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ { status: 'error', error_type: $json.error_type || 'validation_failed', message: $json.message || 'Validation failed' } }}",
+          "options": {
+            "responseCode": 400,
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "id": "ef2b09bc-4c70-4686-aead-9f3d67b90d0b",
+        "name": "Respond Validation Error",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          64,
+          192
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ { status: 'error', error_type: 'config_missing', message: 'Missing OPENAI_API_KEY. Set it in .env.n8n and restart n8n.' } }}",
+          "options": {
+            "responseCode": 500,
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "id": "c1fe2655-eab7-438e-b3c7-7bcf85183d63",
+        "name": "Respond Config Error",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          224,
+          64
+        ]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Validate Prompt",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate Prompt": {
+        "main": [
+          [
+            {
+              "node": "Prompt OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prompt OK?": {
+        "main": [
+          [
+            {
+              "node": "Has OpenAI Key?",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond Validation Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has OpenAI Key?": {
+        "main": [
+          [
+            {
+              "node": "OpenAI (HTTP)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond Config Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "OpenAI (HTTP)": {
+        "main": [
+          [
+            {
+              "node": "Extract Reply",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Reply": {
+        "main": [
+          [
+            {
+              "node": "Reply OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Reply OK?": {
+        "main": [
+          [
+            {
+              "node": "Respond Success",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond OpenAI Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": null,
+    "meta": null,
+    "pinData": {},
+    "tags": []
+  }
+]
