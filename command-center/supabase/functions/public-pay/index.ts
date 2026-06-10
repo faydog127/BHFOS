@@ -274,42 +274,6 @@ Deno.serve(async (req) => {
 
   if (paymentsMode && paymentsMode.startsWith('stripe')) {
     try {
-      const stripeSecretKey = (Deno.env.get('STRIPE_SECRET_KEY') ?? '').trim();
-      if (!stripeSecretKey) {
-        const message = 'Payment processing is not configured.';
-
-        await logPublicEvent({
-          kind: 'public_pay',
-          tenantId,
-          invoiceId: invoice.id,
-          token,
-          status: 'blocked',
-          ip,
-          userAgent,
-          metadata: { run_id: runId, error: 'missing_stripe_secret_key', payments_mode: paymentsMode },
-        });
-
-        await logMoneyLoopEvent({
-          tenantId,
-          entityType: 'invoice',
-          entityId: invoice.id,
-          eventType: 'PaymentFailed',
-          actorType: 'public',
-          payload: { amount: amountToCharge, method, run_id: runId, error: 'missing_stripe_secret_key' },
-        });
-
-        await createMoneyLoopTask({
-          tenantId,
-          sourceType: 'invoice',
-          sourceId: invoice.id,
-          title: 'Payment Failed – Follow Up',
-          leadId: invoice.lead_id ?? null,
-          metadata: { run_id: runId, error: 'missing_stripe_secret_key' },
-        });
-
-        return respondJson({ error: message, blocked: true }, 501, cors.headers);
-      }
-
       if (method !== 'card') {
         const message = 'ACH checkout is not configured on this payment page yet.';
 
@@ -327,7 +291,6 @@ Deno.serve(async (req) => {
         return respondJson({ error: message, blocked: true }, 501, cors.headers);
       }
 
-      const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
       const invoiceId = invoice.id as string;
 
       const amountCents = Math.round(amountToCharge * 100);
@@ -405,13 +368,51 @@ Deno.serve(async (req) => {
         isLocalRequest(req) &&
         (await isExplicitTestModeEnabled());
 
+      const stripeSecretKey = (Deno.env.get('STRIPE_SECRET_KEY') ?? '').trim();
+      if (!stripeSecretKey && !isLocalBypass) {
+        const message = 'Payment processing is not configured.';
+
+        await logPublicEvent({
+          kind: 'public_pay',
+          tenantId,
+          invoiceId: invoice.id,
+          token,
+          status: 'blocked',
+          ip,
+          userAgent,
+          metadata: { run_id: runId, error: 'missing_stripe_secret_key', payments_mode: paymentsMode },
+        });
+
+        await logMoneyLoopEvent({
+          tenantId,
+          entityType: 'invoice',
+          entityId: invoice.id,
+          eventType: 'PaymentFailed',
+          actorType: 'public',
+          payload: { amount: amountToCharge, method, run_id: runId, error: 'missing_stripe_secret_key' },
+        });
+
+        await createMoneyLoopTask({
+          tenantId,
+          sourceType: 'invoice',
+          sourceId: invoice.id,
+          title: 'Payment Failed - Follow Up',
+          leadId: invoice.lead_id ?? null,
+          metadata: { run_id: runId, error: 'missing_stripe_secret_key' },
+        });
+
+        return respondJson({ error: message, blocked: true }, 501, cors.headers);
+      }
+
+      const stripe = isLocalBypass ? null : new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
+
       const session = isLocalBypass
         ? ({
             id: `cs_test_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`,
             url: `${returnBaseUrl}?checkout=success`,
             payment_intent: { id: `pi_test_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}` },
           } as unknown as Stripe.Checkout.Session)
-        : await stripe.checkout.sessions.create(
+        : await stripe!.checkout.sessions.create(
             {
               mode: 'payment',
               success_url: `${returnBaseUrl}?checkout=success`,
@@ -475,10 +476,15 @@ Deno.serve(async (req) => {
         }
       }
 
-      if (!paymentIntentId) {
-        throw new Error('Missing provider_payment_id');
-      }
       const checkoutUrl = session?.url ?? null;
+      if (!checkoutUrl) {
+        throw new Error('Missing checkout_url');
+      }
+
+      // Stripe Checkout may not expose a PaymentIntent id at session-creation time.
+      // Persist the initiation by checkout_session_id and let webhook settlement backfill
+      // the canonical provider_payment_id when Stripe emits the final payment event.
+      const providerPaymentId = paymentIntentId ?? null;
 
       // Record initiation attempt (DB-backed idempotency + linkage to webhook provider_payment_id).
       await supabaseAdmin.from('public_payment_attempts').upsert(
@@ -493,11 +499,15 @@ Deno.serve(async (req) => {
           idempotency_key: idempotencyKey,
           checkout_session_id: session.id,
           checkout_url: checkoutUrl,
-          provider_payment_id: paymentIntentId,
+          provider_payment_id: providerPaymentId,
           attempt_status: 'initiated',
           run_id: runId,
           client_ip: ip,
           user_agent: userAgent,
+          metadata: {
+            payment_intent_pending: !providerPaymentId,
+            payments_mode: paymentsMode,
+          },
           last_seen_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
@@ -507,7 +517,7 @@ Deno.serve(async (req) => {
       await supabaseAdmin
         .from('invoices')
         .update({
-          provider_payment_id: paymentIntentId ? (invoice.provider_payment_id ?? paymentIntentId) : invoice.provider_payment_id ?? null,
+          provider_payment_id: providerPaymentId ? (invoice.provider_payment_id ?? providerPaymentId) : invoice.provider_payment_id ?? null,
           provider_payment_status: 'initiated',
           updated_at: new Date().toISOString(),
         })
@@ -525,7 +535,8 @@ Deno.serve(async (req) => {
         metadata: {
           run_id: runId,
           checkout_session_id: session.id,
-          provider_payment_id: paymentIntentId,
+          provider_payment_id: providerPaymentId,
+          payment_intent_pending: !providerPaymentId,
           payments_mode: paymentsMode,
         },
       });
@@ -594,9 +605,9 @@ Deno.serve(async (req) => {
           success: true,
           mode: 'stripe_checkout',
           payment_status: 'pending_confirmation',
-          checkout_url: session.url,
+          checkout_url: checkoutUrl,
           session_id: session.id,
-          provider_payment_id: paymentIntentId,
+          provider_payment_id: providerPaymentId,
         },
         200,
         cors.headers
@@ -628,7 +639,7 @@ Deno.serve(async (req) => {
         tenantId,
         sourceType: 'invoice',
         sourceId: invoice.id,
-        title: 'Payment Failed – Follow Up',
+        title: 'Payment Failed - Follow Up',
         leadId: invoice.lead_id ?? null,
         metadata: { run_id: runId, error: message },
       });

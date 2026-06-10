@@ -28,7 +28,7 @@
     { "id": "pipeline", "label": "Pipeline", "path": "/bhf/crm/pipeline", "flag": "enablePipeline", "icon": "BarChart3", "description": "Visual deal tracking and stage management" },
     { "id": "jobs", "label": "Work Orders", "path": "/bhf/crm/jobs", "flag": "enableJobs", "icon": "HardHat", "description": "Work order management and field execution tracking" },
     { "id": "schedule", "label": "Schedule", "path": "/bhf/crm/schedule", "flag": "enableSchedule", "icon": "Calendar", "description": "Dispatch and appointment calendar" },
-    { "id": "estimates", "label": "Estimates", "path": "/bhf/crm/estimates", "flag": "enableEstimates", "icon": "FileText", "description": "Create and send cost estimates" },
+    { "id": "estimates", "label": "Quotes", "path": "/bhf/crm/estimates", "flag": "enableEstimates", "icon": "FileText", "description": "Create and send quotes/proposals (legacy route name: /estimates)" },
     { "id": "invoices", "label": "Invoices", "path": "/bhf/crm/invoices", "flag": "enableInvoicing", "icon": "Wallet", "description": "Billing and payment collection" },
     { "id": "contacts", "label": "Contacts", "path": "/bhf/crm/contacts", "flag": "enableContacts", "icon": "Briefcase", "description": "Customer database and history" },
     { "id": "call-console", "label": "Call Console", "path": "/bhf/crm/call-console", "flag": "enableCallConsole", "icon": "Phone", "description": "Power dialer and call logging" },

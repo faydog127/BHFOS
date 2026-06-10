@@ -119,7 +119,7 @@ const createLead = async (suffix) => {
 const createTech = async () => {
   const existing = await admin
     .from('technicians')
-    .select('id, full_name')
+    .select('id, user_id, full_name')
     .eq('is_active', true)
     .order('created_at', { ascending: true })
     .limit(1)
@@ -234,7 +234,7 @@ try {
     body: {
       tenant_id: TENANT_ID,
       lead_id: confirmedLead.id,
-      technician_id: tech.id,
+      technician_id: tech.user_id,
       price_book_id: service.id,
       scheduled_start: '2026-03-20T19:00:00.000Z',
       duration_minutes: 120,
@@ -286,7 +286,7 @@ try {
     body: {
       tenant_id: TENANT_ID,
       lead_id: pendingLead.id,
-      technician_id: tech.id,
+      technician_id: tech.user_id,
       price_book_id: service.id,
       scheduled_start: '2026-03-24T19:00:00.000Z',
       duration_minutes: 90,
@@ -324,7 +324,7 @@ try {
     body: {
       tenant_id: TENANT_ID,
       lead_id: cancelLead.id,
-      technician_id: tech.id,
+      technician_id: tech.user_id,
       price_book_id: service.id,
       scheduled_start: '2026-03-24T21:00:00.000Z',
       duration_minutes: 60,
@@ -377,7 +377,7 @@ try {
     body: {
       tenant_id: TENANT_ID,
       lead_id: afterHoursLead.id,
-      technician_id: tech.id,
+      technician_id: tech.user_id,
       price_book_id: service.id,
       scheduled_start: '2026-03-20T19:00:00.000Z',
       duration_minutes: 120,

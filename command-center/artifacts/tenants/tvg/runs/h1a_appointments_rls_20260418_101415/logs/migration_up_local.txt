@@ -1,0 +1,10 @@
+Connecting to local database...
+Applying migration 20260417120000_h1a_appointments_rls_policies.sql...
+NOTICE (00000): policy "Appointments are readable by tenant" for relation "public.appointments" does not exist, skipping
+NOTICE (00000): policy "Appointments are insertable by tenant" for relation "public.appointments" does not exist, skipping
+NOTICE (00000): policy "Appointments are updatable by tenant" for relation "public.appointments" does not exist, skipping
+NOTICE (00000): policy "Appointments are deletable by tenant" for relation "public.appointments" does not exist, skipping
+NOTICE (00000): policy "Appointments service role full access" for relation "public.appointments" does not exist, skipping
+Local database is up to date.
+A new version of Supabase CLI is available: v2.90.0 (currently installed v2.65.5)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

@@ -172,11 +172,12 @@ test.describe.serial('Legacy TVG Phase 1-3 smoke', () => {
 
         const { data, error } = await selectSingle(admin, 'quotes', { id: state.ids.quoteId });
         if (error) throw error;
-        const approved = data?.status === 'approved';
+        // Canonical "won" status is accepted. DB normalizes approved -> accepted.
+        const approved = data?.status === 'accepted';
         const acceptedAt = data?.accepted_at || data?.acceptedAt;
 
         if (!approved || !acceptedAt) {
-          throw new Error('Quote status did not update to approved.');
+          throw new Error('Quote status did not update to accepted.');
         }
 
         const { data: workOrderData, error: workOrderError } = await admin
@@ -265,7 +266,7 @@ test.describe.serial('Legacy TVG Phase 1-3 smoke', () => {
           throw new Error(`public-invoice failed with status ${invoiceStatus}: ${invoiceBody}`);
         }
 
-        await expect(page.getByText(/secure checkout/i)).toBeVisible();
+        await expect(page.getByText(/total due/i)).toBeVisible();
 
         const anonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
         if (!anonKey) {
@@ -327,6 +328,9 @@ test.describe.serial('Legacy TVG Phase 1-3 smoke', () => {
     }
 
     phase.status = phaseFailed ? 'failed' : 'passed';
-    expect(phaseFailed, 'Phase 3 failures detected').toBeFalsy();
+    expect(
+      phaseFailed,
+      `Phase 3 failures detected: ${JSON.stringify(phase.steps, null, 2)}`,
+    ).toBeFalsy();
   });
 });

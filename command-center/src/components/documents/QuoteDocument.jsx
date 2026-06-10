@@ -235,7 +235,7 @@ function FirstHeader({ model }) {
           <div className="space-y-1">
             <CredentialRow compact />
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
-              NADCA Certified • SDVOSB • We Clear What Others Miss
+              NADCA Certified - SDVOSB - We Clear What Others Miss
             </div>
           </div>
         </div>
@@ -540,7 +540,7 @@ function Footer({ pageNumber, pageCount, compact = false }) {
             <>
               <div>2987 Finsterwald Dr | Titusville, FL 32780</div>
               <div className="font-semibold uppercase tracking-[0.14em] text-slate-600">
-                NADCA Certified • SDVOSB • IAQ Focused
+                NADCA Certified - SDVOSB - IAQ Focused
               </div>
             </>
           )}

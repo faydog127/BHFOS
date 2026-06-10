@@ -1,0 +1,207 @@
+supabase/functions\invoices-list\index.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\invoices-list\index.ts:57:  let query = supabaseAdmin
+supabase/functions\create-appointment\index.ts:66:    // Use the caller JWT + anon key so PostgREST enforces RLS (service_role would bypass it).
+supabase/functions\github-issues-board\index.ts:214:    role === 'service_role' ||
+supabase/functions\kanban-list\index.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\kanban-list\index.ts:144:    supabaseAdmin
+supabase/functions\kanban-list\index.ts:148:    supabaseAdmin
+supabase/functions\kanban-list\index.ts:154:    supabaseAdmin
+supabase/functions\kanban-list\index.ts:160:    supabaseAdmin
+supabase/functions\calls\index.ts:104:      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+supabase/functions\invoice-save\index.ts:2:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\invoice-save\index.ts:166:      ? supabaseAdmin.from('invoices').update(nextPatch).eq('id', invoiceId).eq('tenant_id', patch.tenant_id).select(INVOICE_SELECT).maybeSingle()
+supabase/functions\invoice-save\index.ts:167:      : supabaseAdmin.from('invoices').insert(nextPatch).select(INVOICE_SELECT).single();
+supabase/functions\invoice-save\index.ts:220:    await supabaseAdmin.from('invoice_items').delete().eq('invoice_id', savedInvoice.id);
+supabase/functions\invoice-save\index.ts:231:      const { error: itemsError } = await supabaseAdmin.from('invoice_items').insert(insertRows);
+supabase/functions\invoice-save\index.ts:238:    const { data: hydratedInvoice, error: hydrateError } = await supabaseAdmin
+supabase/functions\execute-sql\index.ts:2:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\execute-sql\index.ts:50:    const { error } = await supabaseAdmin.rpc('execute_sql', { sql_query: sql });
+supabase/functions\invoice-update-status\index.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\invoice-update-status\index.ts:41:  let { data, error } = await supabaseAdmin
+supabase/functions\invoice-update-status\index.ts:50:      ({ data, error } = await supabaseAdmin
+supabase/functions\invoice-update-status\index.ts:128:    const { data, error } = await supabaseAdmin
+supabase/functions\invoice-update-status\index.ts:200:  const { data: existingInvoice, error: invoiceError } = await supabaseAdmin
+supabase/functions\invoice-update-status\index.ts:252:    const rpcResult = await supabaseAdmin.rpc('record_offline_manual_payment', {
+supabase/functions\invoice-update-status\index.ts:275:    const { data: invoice, error: refreshError } = await supabaseAdmin
+supabase/functions\invoice-update-status\index.ts:293:      const { error: jobError } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\kanban-move\index.ts:87:  const { data, error } = await supabaseAdmin.rpc('next_work_order_number', {
+supabase/functions\kanban-move\index.ts:115:  const { data: lead, error } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:142:  const { data: existing } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:155:  const { data, error } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:178:  const { data: existing } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:205:  let { data, error } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:212:    const fallbackInsert = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:235:  const { data: existing } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:250:  const { data, error } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:315:    const { data: lead, error } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:351:      const { error: leadUpdateError } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:360:      const { error: leadUpdateError } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:370:      const { error: leadUpdateError } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:379:      await supabaseAdmin.from('kanban_status_events').insert({
+supabase/functions\kanban-move\index.ts:403:    await supabaseAdmin.from('kanban_status_events').insert({
+supabase/functions\kanban-move\index.ts:416:    const { data: quote, error } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:454:      const { error: sendingError } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:466:        const { error: failError } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:480:        const { error: tokenError } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:503:        const { error: sentError } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:512:        const { error: failError } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:528:      const { error: viewedError } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:537:      const { error: acceptedError } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:553:      const { error: quoteUpdateError } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:562:      await supabaseAdmin.from('kanban_status_events').insert({
+supabase/functions\kanban-move\index.ts:586:    await supabaseAdmin.from('kanban_status_events').insert({
+supabase/functions\kanban-move\index.ts:599:    const { data: job, error } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:635:      const { error: jobUpdateError } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:645:      const { error: jobUpdateError } = await supabaseAdmin
+supabase/functions\kanban-move\index.ts:654:      await supabaseAdmin.from('kanban_status_events').insert({
+supabase/functions\kanban-move\index.ts:678:    await supabaseAdmin.from('kanban_status_events').insert({
+supabase/functions\kanban-move\index.ts:691:    const { data: invoice, error } = await supabaseAdmin
+supabase/functions\lead-update-stage\index.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\lead-update-stage\index.ts:74:  const { data: lead, error } = await supabaseAdmin
+supabase/functions\lead-update-stage\index.ts:86:  await supabaseAdmin.from('kanban_status_events').insert({
+supabase/functions\klaire-chat\index.ts:2:import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
+supabase/functions\klaire-chat\index.ts:10:  const { data, error } = await supabaseAdmin.from('brand_profile').select('key, value');
+supabase/functions\klaire-chat\index.ts:71:        const { error: logError } = await supabaseAdmin.from('klaire_chat_logs').insert({
+supabase/functions\public-quote\index.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\public-quote\index.ts:271:  let query = supabaseAdmin
+supabase/functions\public-quote\index.ts:447:    await supabaseAdmin
+supabase/functions\public-invoice\index.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\public-invoice\index.ts:272:  const { data, error } = await supabaseAdmin
+supabase/functions\public-invoice\index.ts:556:    await supabaseAdmin
+supabase/functions\money-loop-delete\index.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\money-loop-delete\index.ts:24:  const { data, error } = await supabaseAdmin.from('app_user_roles').select('role').eq('user_id', userId);
+supabase/functions\money-loop-delete\index.ts:31:  const { error } = await apply(supabaseAdmin.from(table).delete());
+supabase/functions\money-loop-delete\index.ts:40:  const { error } = await apply(supabaseAdmin.from(table).update(patch));
+supabase/functions\money-loop-delete\index.ts:45:  const { data, error } = await supabaseAdmin
+supabase/functions\money-loop-delete\index.ts:56:  const { data, error } = await supabaseAdmin
+supabase/functions\money-loop-delete\index.ts:181:    const { data: deletedRows, error: deleteError } = await supabaseAdmin
+supabase/functions\manual-convert-customer\index.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\manual-convert-customer\index.ts:58:    const { data: lead, error: leadError } = await supabaseAdmin
+supabase/functions\manual-convert-customer\index.ts:75:  const { data: existingContact, error: existingContactError } = await supabaseAdmin
+supabase/functions\manual-convert-customer\index.ts:94:  const { error: contactError } = await supabaseAdmin
+supabase/functions\payment-webhook\index.ts:2:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\payment-webhook\index.ts:33:      const { data } = await supabaseAdmin
+supabase/functions\payment-webhook\index.ts:115:    await supabaseAdmin.from('stripe_webhook_events').insert({
+supabase/functions\payment-webhook\index.ts:129:    const { error: receiptError } = await supabaseAdmin.from('stripe_webhook_events').insert({
+supabase/functions\payment-webhook\index.ts:159:  const rpc = await supabaseAdmin.rpc('record_stripe_webhook_payment', {
+supabase/functions\payment-webhook\index.ts:196:    const { data: invoice } = await supabaseAdmin
+supabase/functions\quotes-list\index.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\quotes-list\index.ts:59:    let query = supabaseAdmin
+supabase/functions\public-pay\index.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\public-pay\index.ts:84:    const { data } = await supabaseAdmin
+supabase/functions\public-pay\index.ts:154:  const { data, error: invoiceError } = await supabaseAdmin
+supabase/functions\public-pay\index.ts:265:    const { data: modeRow } = await supabaseAdmin
+supabase/functions\public-pay\index.ts:341:      const { data: existingAttempts } = await supabaseAdmin
+supabase/functions\public-pay\index.ts:355:        await supabaseAdmin
+supabase/functions\public-pay\index.ts:392:        const { data: leadRow } = await supabaseAdmin
+supabase/functions\public-pay\index.ts:484:      await supabaseAdmin.from('public_payment_attempts').upsert(
+supabase/functions\public-pay\index.ts:507:      await supabaseAdmin
+supabase/functions\public-pay\index.ts:586:        await supabaseAdmin
+supabase/functions\public-quote-approve\index.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\public-quote-approve\index.ts:109:  const { data, error } = await supabaseAdmin.rpc('next_work_order_number', {
+supabase/functions\public-quote-approve\index.ts:125:  const { data: lead, error } = await supabaseAdmin
+supabase/functions\public-quote-approve\index.ts:143:  const { data: quote, error } = await supabaseAdmin
+supabase/functions\public-quote-approve\index.ts:179:  const { data, error } = await supabaseAdmin
+supabase/functions\public-quote-approve\index.ts:506:  let fetchQuery = supabaseAdmin
+supabase/functions\public-quote-approve\index.ts:684:  const { data, error } = await supabaseAdmin
+supabase/functions\public-quote-approve\index.ts:806:    let { data: newJob, error: insertError } = await supabaseAdmin
+supabase/functions\public-quote-approve\index.ts:814:      const fallbackInsert = await supabaseAdmin
+supabase/functions\public-quote-approve\index.ts:827:        const { data: existingJob } = await supabaseAdmin
+supabase/functions\public-quote-approve\index.ts:854:          const existingUpdate = await supabaseAdmin
+supabase/functions\public-quote-approve\index.ts:860:            await supabaseAdmin
+supabase/functions\public-quote-approve\index.ts:876:        const metadataPatch = await supabaseAdmin
+supabase/functions\public-quote-approve\index.ts:944:        const leadUpdate = await supabaseAdmin
+supabase/functions\public-quote-approve\index.ts:974:    await supabaseAdmin
+supabase/functions\public-quote-approve\index.ts:987:    const { data: invoiceTokenRow } = await supabaseAdmin
+supabase/functions\run-quote-reminders\index.ts:3:import { supabaseAdmin } from '../_shared/supabaseAdmin.ts';
+supabase/functions\run-quote-reminders\index.ts:86:  await supabaseAdmin
+supabase/functions\run-quote-reminders\index.ts:99:  const { data } = await supabaseAdmin
+supabase/functions\run-quote-reminders\index.ts:141:    const { data: tasksRaw, error: tasksError } = await supabaseAdmin
+supabase/functions\run-quote-reminders\index.ts:179:      const { data: quoteRaw, error: quoteError } = await supabaseAdmin
+supabase/functions\run-appointment-reminders\index.ts:3:import { supabaseAdmin } from '../_shared/supabaseAdmin.ts';
+supabase/functions\run-appointment-reminders\index.ts:71:  await supabaseAdmin
+supabase/functions\run-appointment-reminders\index.ts:96:    // This function uses `supabaseAdmin` (service_role) for automation actions, so tenant isolation must be
+supabase/functions\run-appointment-reminders\index.ts:115:    const { data: tasksRaw, error: tasksError } = await supabaseAdmin
+supabase/functions\run-appointment-reminders\index.ts:171:      const { data: appointmentRaw, error: appointmentError } = await supabaseAdmin
+supabase/functions\run-invoice-reminders\index.ts:3:import { supabaseAdmin } from '../_shared/supabaseAdmin.ts';
+supabase/functions\run-invoice-reminders\index.ts:85:  await supabaseAdmin
+supabase/functions\run-invoice-reminders\index.ts:98:  const { data } = await supabaseAdmin
+supabase/functions\run-invoice-reminders\index.ts:127:    const { data: tasksRaw, error: tasksError } = await supabaseAdmin
+supabase/functions\run-invoice-reminders\index.ts:168:      const { data: invoiceRaw, error: invoiceError } = await supabaseAdmin
+supabase/functions\send-receipt\index.ts:3:import { supabaseAdmin } from '../_shared/supabaseAdmin.ts';
+supabase/functions\send-receipt\index.ts:105:    let invoiceQuery = supabaseAdmin
+supabase/functions\leads\index.ts:72:      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+supabase/functions\quote-update-status\index.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\quote-update-status\index.ts:62:  const { data: quote, error } = await supabaseAdmin
+supabase/functions\work-order-update\index.ts:2:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\work-order-update\index.ts:215:  const { data, error } = await supabaseAdmin
+supabase/functions\work-order-update\index.ts:231:  const { data, error } = await supabaseAdmin
+supabase/functions\work-order-update\index.ts:256:  const { data, error } = await supabaseAdmin
+supabase/functions\work-order-update\index.ts:274:  const { data, error } = await supabaseAdmin
+supabase/functions\work-order-update\index.ts:302:  const { data } = await supabaseAdmin
+supabase/functions\work-order-update\index.ts:313:  const { data, error } = await supabaseAdmin
+supabase/functions\work-order-update\index.ts:333:    const { data, error } = await supabaseAdmin
+supabase/functions\work-order-update\index.ts:359:    const { data, error } = await supabaseAdmin
+supabase/functions\work-order-update\index.ts:387:    const { data, error } = await supabaseAdmin
+supabase/functions\work-order-update\index.ts:463:  const { data: jobRow } = await supabaseAdmin
+supabase/functions\work-order-update\index.ts:599:    const { error: itemsError } = await supabaseAdmin.from('invoice_items').insert(lineRows);
+supabase/functions\work-order-update\index.ts:856:    const { data: existingJob, error: existingJobError } = await supabaseAdmin
+supabase/functions\submit-form\index.ts:2:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\submit-form\index.ts:20:    const { data, error } = await supabaseAdmin
+supabase/functions\send-estimate\index.ts:4:import { supabaseAdmin } from '../_shared/supabaseAdmin.ts';
+supabase/functions\send-estimate\index.ts:1031:  const { error } = await supabaseAdmin.from('events').insert({
+supabase/functions\send-estimate\index.ts:1062:  let query = supabaseAdmin
+supabase/functions\send-estimate\index.ts:1168:    let quoteResult = await supabaseAdmin
+supabase/functions\send-estimate\index.ts:1176:      const fallbackResult = await supabaseAdmin
+supabase/functions\send-estimate\index.ts:1207:      await supabaseAdmin
+supabase/functions\send-estimate\index.ts:1215:      const { error: quoteNumberError } = await supabaseAdmin
+supabase/functions\send-estimate\index.ts:1228:    const { data: lead } = await supabaseAdmin
+supabase/functions\send-estimate\index.ts:1234:    const { data: quoteItemsData } = await supabaseAdmin
+supabase/functions\send-estimate\index.ts:1244:      const { data: estimateData } = await supabaseAdmin
+supabase/functions\send-estimate\index.ts:1360:      const { data: roleRows } = await supabaseAdmin
+supabase/functions\send-estimate\index.ts:1911:    await supabaseAdmin
+supabase/functions\send-invoice\index.ts:4:import { supabaseAdmin } from '../_shared/supabaseAdmin.ts';
+supabase/functions\send-invoice\index.ts:811:    const { data: invoiceRaw, error: invoiceError } = await supabaseAdmin
+supabase/functions\send-invoice\index.ts:869:      await supabaseAdmin
+supabase/functions\send-invoice\index.ts:1255:    const { error: updateError } = await supabaseAdmin
+supabase/functions\_shared\businessHours.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\_shared\businessHours.ts:134:      const baseQuery = supabaseAdmin
+supabase/functions\_shared\businessHours.ts:148:        const { data, error } = await supabaseAdmin
+supabase/functions\_shared\appointmentUtils.ts:3:import { supabaseAdmin } from '../_shared/supabaseAdmin.ts';
+supabase/functions\_shared\appointmentUtils.ts:142:  const { data } = await supabaseAdmin
+supabase/functions\update-appointment-status\index.ts:67:    // Use the caller JWT + anon key so PostgREST enforces RLS (service_role would bypass it).
+supabase/functions\_shared\documentDelivery.ts:1:import { supabaseAdmin } from './supabaseAdmin.ts';
+supabase/functions\_shared\documentDelivery.ts:356:  let leadQuery = supabaseAdmin
+supabase/functions\_shared\documentDelivery.ts:377:    const { data: contactRow, error: contactError } = await supabaseAdmin
+supabase/functions\_shared\documentDelivery.ts:416:  let leadQuery = supabaseAdmin
+supabase/functions\_shared\documentDelivery.ts:428:  let updateLeadQuery = supabaseAdmin
+supabase/functions\_shared\documentDelivery.ts:447:  const { error: contactUpdateError } = await supabaseAdmin
+supabase/functions\_shared\moneyLoopUtils.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\_shared\moneyLoopUtils.ts:22:    const { error } = await supabaseAdmin.from('events').insert({
+supabase/functions\_shared\moneyLoopUtils.ts:52:    const { data } = await supabaseAdmin
+supabase/functions\_shared\moneyLoopUtils.ts:74:    const { data } = await supabaseAdmin
+supabase/functions\_shared\moneyLoopUtils.ts:97:    let query = supabaseAdmin
+supabase/functions\_shared\moneyLoopUtils.ts:113:      await supabaseAdmin
+supabase/functions\_shared\moneyLoopUtils.ts:120:    await supabaseAdmin.from('automation_suspensions').insert({
+supabase/functions\_shared\moneyLoopUtils.ts:140:      const { data: lead } = await supabaseAdmin
+supabase/functions\_shared\moneyLoopUtils.ts:153:    const { data: existing } = await supabaseAdmin
+supabase/functions\_shared\moneyLoopUtils.ts:169:    await supabaseAdmin
+supabase/functions\_shared\moneyLoopUtils.ts:311:    let query = supabaseAdmin
+supabase/functions\_shared\moneyLoopUtils.ts:328:      await supabaseAdmin
+supabase/functions\_shared\moneyLoopUtils.ts:336:    await supabaseAdmin.from('automation_suspensions').insert({
+supabase/functions\_shared\publicUtils.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\_shared\publicUtils.ts:113:    const { error } = await supabaseAdmin.from('public_events').insert(payload);
+supabase/functions\_lib\supabaseAdmin.ts:4:const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+supabase/functions\_lib\supabaseAdmin.ts:7:if (!supabaseServiceRoleKey) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
+supabase/functions\_lib\supabaseAdmin.ts:10:export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+supabase/functions\_shared\receiptUtils.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\_shared\receiptUtils.ts:72:  const { error } = await supabaseAdmin
+supabase/functions\_shared\receiptUtils.ts:162:  const { data: leadRow } = await supabaseAdmin
+supabase/functions\_shared\taskUtils.ts:1:import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
+supabase/functions\_shared\taskUtils.ts:28:  let query = supabaseAdmin
+supabase/functions\_shared\taskUtils.ts:67:    const { data: existing } = await supabaseAdmin
+supabase/functions\_shared\taskUtils.ts:91:        await supabaseAdmin.from('crm_tasks').update(patch).eq('id', existing.id);
+supabase/functions\_shared\taskUtils.ts:96:    const { data: newTask, error } = await supabaseAdmin.from('crm_tasks').insert({
+supabase/functions\_shared\taskUtils.ts:119:        await supabaseAdmin.from('events').insert({
+supabase/functions\_shared\supabaseAdmin.ts:1:export { supabaseAdmin } from '../_lib/supabaseAdmin.ts';

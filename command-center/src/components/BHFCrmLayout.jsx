@@ -39,14 +39,15 @@ const BHFCrmLayout = () => {
   const mobileNavItems = [
     { name: 'Hub', path: '/crm', icon: LayoutDashboard, end: true },
     { name: 'Leads', path: '/crm/leads', icon: Users },
-    { name: 'Estimates', path: '/crm/estimates', icon: FileText },
+    // NOTE: `/crm/estimates` is the active Quotes/Proposals surface today (legacy route name).
+    { name: 'Quotes', path: '/crm/estimates', icon: FileText },
     { name: 'Calendar', path: '/crm/calendar', icon: ClipboardCheck },
     { name: 'Invoices', path: '/crm/invoices', icon: CreditCard },
   ];
 
   const currentPageLabel = useMemo(() => {
     const path = location.pathname.toLowerCase();
-    if (path.includes('/crm/estimates')) return 'Estimates';
+    if (path.includes('/crm/estimates')) return 'Quotes';
     if (path.includes('/crm/invoices')) return 'Invoices';
     if (path.includes('/crm/leads')) return 'Leads';
     if (path.includes('/crm/calendar')) return 'Calendar';

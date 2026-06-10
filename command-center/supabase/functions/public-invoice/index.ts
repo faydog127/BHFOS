@@ -563,7 +563,7 @@ Deno.serve(async (req) => {
     tenantId: derivedTenantId,
     sourceType: 'invoice',
     sourceId: invoiceId,
-    title: 'Invoice Viewed – Follow Up',
+    title: 'Invoice Viewed - Follow Up',
     leadId,
     metadata: { run_id: runId },
   });

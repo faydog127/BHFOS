@@ -4,11 +4,12 @@
  * Implements Fail-Fast strategy to ensure required config is present.
  */
 
+// Fail-fast in production builds. In local dev we allow missing backend URLs so
+// the UI can boot (some features will be unavailable until configured).
 const requiredEnvVars = [
   'VITE_SUPABASE_URL',
   'VITE_SUPABASE_ANON_KEY',
-  'VITE_API_BASE_URL',
-  'VITE_WS_URL'
+  ...(import.meta.env.PROD ? ['VITE_API_BASE_URL', 'VITE_WS_URL'] : [])
 ];
 
 // Map environment variables to a clean config object
@@ -29,9 +30,7 @@ const requiredEnvValues = {
 
 // Avoid dynamic `import.meta.env[...]` lookups since that can cause Vite to inline
 // the entire env object (including any mistakenly defined secrets).
-const missingVars = Object.entries(requiredEnvValues)
-  .filter(([, val]) => !val)
-  .map(([key]) => key);
+const missingVars = requiredEnvVars.filter((key) => !requiredEnvValues[key]);
 
 if (missingVars.length > 0) {
   const errorMessage = `
@@ -43,10 +42,13 @@ if (missingVars.length > 0) {
   `;
   
   // Log to console for developer visibility
-  console.error(errorMessage);
-  
-  // Throw error to halt execution (Fail-Fast)
-  throw new Error(errorMessage);
+  if (import.meta.env.PROD) {
+    console.error(errorMessage);
+    // Throw error to halt execution (Fail-Fast)
+    throw new Error(errorMessage);
+  } else {
+    console.warn(errorMessage);
+  }
 }
 
 export default env;

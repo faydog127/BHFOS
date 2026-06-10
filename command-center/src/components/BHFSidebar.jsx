@@ -6,6 +6,7 @@ import {
   Megaphone,
   Calendar,
   ClipboardCheck,
+  ClipboardList,
   FileText,
   CreditCard,
   Settings,
@@ -28,7 +29,7 @@ const BHFSidebar = ({ onNavigate = null }) => {
   const { tenantId = 'tvg' } = useParams();
   const navigate = useNavigate();
   const [isSuperUser, setIsSuperUser] = useState(false);
-  const { signOut } = useSupabaseAuth();
+  const { signOut, user } = useSupabaseAuth();
 
   useEffect(() => {
     let mounted = true;
@@ -76,7 +77,8 @@ const BHFSidebar = ({ onNavigate = null }) => {
       title: 'Sales',
       items: [
         { name: 'Opportunities', path: '/crm/opportunities', icon: BarChart },
-        { name: 'Estimates', path: '/crm/estimates', icon: FileText },
+        // NOTE: `/crm/estimates` is the active Quotes/Proposals surface today (legacy route name).
+        { name: 'Quotes', path: '/crm/estimates', icon: FileText },
       ],
     },
     {
@@ -88,6 +90,7 @@ const BHFSidebar = ({ onNavigate = null }) => {
     {
       title: 'Operations',
       items: [
+        { name: 'Inspections', path: '/crm/inspections', icon: ClipboardList },
         { name: 'Work Orders', path: '/crm/jobs', icon: Hammer },
         { name: 'Dispatch', path: '/crm/dispatch', icon: Calendar },
       ],
@@ -170,23 +173,34 @@ const BHFSidebar = ({ onNavigate = null }) => {
             <Users className="w-4 h-4 text-slate-300" />
           </div>
           <div className="text-xs">
-            <div className="text-white font-medium">Logged In</div>
+            <div className="text-white font-medium">{user ? 'Signed In' : 'Not Signed In'}</div>
             <div className="text-slate-500">
-                {isSuperUser ? 'Superuser Mode' : `Tenant: ${tenantId}`}
+              {user?.email ? user.email : (isSuperUser ? 'Superuser Mode' : `Tenant: ${tenantId}`)}
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={async () => {
-            await signOut();
-            navigate(`/${tenantId}/login`, { replace: true });
-          }}
-          className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-md border border-slate-800 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800"
-        >
-          <LogOut className="h-3.5 w-3.5" />
-          Sign Out
-        </button>
+        {user ? (
+          <button
+            type="button"
+            onClick={async () => {
+              await signOut();
+              navigate(`/${tenantId}/login`, { replace: true });
+            }}
+            className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-md border border-slate-800 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sign Out
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => navigate(`/${tenantId}/login`, { replace: true })}
+            className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-md border border-slate-800 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sign In
+          </button>
+        )}
         <div className="mt-3 text-[11px] text-slate-500 opacity-60">
           Build: {BUILD_STAMP}
         </div>

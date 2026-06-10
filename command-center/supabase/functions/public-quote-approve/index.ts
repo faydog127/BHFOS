@@ -491,7 +491,8 @@ Deno.serve(async (req) => {
   );
 
   const patch: Record<string, unknown> = {
-    status: isDecline ? 'declined' : 'approved',
+    // Canonical "won" status is accepted. (DB also normalizes approved -> accepted.)
+    status: isDecline ? 'declined' : 'accepted',
   };
 
   let resolvedInvoiceId: string | null = null;
@@ -726,7 +727,7 @@ Deno.serve(async (req) => {
     tenantId,
     quoteId: data.id,
     token,
-    status: isDecline ? 'declined' : 'approved',
+    status: isDecline ? 'declined' : 'accepted',
     ip,
     userAgent,
     metadata: { run_id: runId },
@@ -894,93 +895,97 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (
-      jobId &&
-      jobCreated &&
-      !(await hasEvent({
-        entityType: 'job',
-        entityId: jobId,
-        eventType: 'JobCreated',
-      }))
-    ) {
-      await logMoneyLoopEvent({
-        tenantId,
-        entityType: 'job',
-        entityId: jobId,
-        eventType: 'JobCreated',
-        actorType: 'system',
-        payload: { quoteId: data.id, run_id: runId },
-      });
-    }
-
-    // Phase-1 billing lock: quote approval creates/updates work order only.
-    // Invoice issuance is now gated by work-order progression + billing controls in CRM.
-    let invoiceId: string | null = null;
-
-    if (jobId) {
-      await createMoneyLoopTask({
-        tenantId,
-        sourceType: 'job',
-        sourceId: jobId,
-        title: 'Schedule Job',
-        leadId: data.lead_id ?? null,
-        metadata: { quoteId: data.id },
-      });
-    }
-
-    // Gap 6: Lead progression on quote accept
-    if (data.lead_id) {
-      const nowIsoForLead = new Date().toISOString();
-      const leadUpdateCandidates: Array<Record<string, unknown>> = [
-        { status: 'scheduled', stage: 'scheduled', pipeline_stage: 'scheduled', updated_at: nowIsoForLead },
-        { status: 'scheduled', stage: 'scheduled', pipeline_stage: 'scheduled' },
-        { status: 'scheduled', pipeline_stage: 'scheduled' },
-        { status: 'scheduled', stage: 'scheduled' },
-        { status: 'scheduled' },
-      ];
-
-      let leadUpdated = false;
-      for (const patchCandidate of leadUpdateCandidates) {
-        const leadUpdate = await supabaseAdmin
-          .from('leads')
-          .update(patchCandidate)
-          .eq('id', data.lead_id);
-
-        if (!leadUpdate.error) {
-          leadUpdated = true;
-          break;
-        }
-
-        if (!isMissingColumnError(leadUpdate.error as { code?: string; message?: string })) {
-          console.warn('Unable to update lead status on quote approval:', leadUpdate.error.message || leadUpdate.error);
-          break;
-        }
+    // Non-critical follow-up work should not turn a successful quote accept + job ensure into a 500.
+    try {
+      if (
+        jobId &&
+        !(await hasEvent({
+          entityType: 'job',
+          entityId: jobId,
+          eventType: 'JobCreated',
+        }))
+      ) {
+        await logMoneyLoopEvent({
+          tenantId,
+          entityType: 'job',
+          entityId: jobId,
+          eventType: 'JobCreated',
+          actorType: 'system',
+          payload: { quoteId: data.id, run_id: runId },
+        });
       }
 
-      if (!leadUpdated) {
-        console.warn('Lead status update skipped due schema mismatch; quote approval continued.');
+      // Phase-1 billing lock: quote approval creates/updates work order only.
+      // Invoice issuance is now gated by work-order progression + billing controls in CRM.
+      let invoiceId: string | null = null;
+
+      if (jobId) {
+        await createMoneyLoopTask({
+          tenantId,
+          sourceType: 'job',
+          sourceId: jobId,
+          title: 'Schedule Job',
+          leadId: data.lead_id ?? null,
+          metadata: { quoteId: data.id },
+        });
       }
 
-      await logMoneyLoopEvent({
-        tenantId,
-        entityType: 'lead',
-        entityId: data.lead_id,
-        eventType: 'LeadUpdated',
-        actorType: 'system',
-        payload: { status: 'scheduled', quote_id: data.id },
-      });
+      // Gap 6: Lead progression on quote accept
+      if (data.lead_id) {
+        const nowIsoForLead = new Date().toISOString();
+        const leadUpdateCandidates: Array<Record<string, unknown>> = [
+          { status: 'converted', stage: 'scheduled', pipeline_stage: 'scheduled', updated_at: nowIsoForLead },
+          { status: 'converted', stage: 'scheduled', pipeline_stage: 'scheduled' },
+          { status: 'converted', pipeline_stage: 'scheduled' },
+          { status: 'converted', stage: 'scheduled' },
+          { status: 'converted' },
+        ];
+
+        let leadUpdated = false;
+        for (const patchCandidate of leadUpdateCandidates) {
+          const leadUpdate = await supabaseAdmin
+            .from('leads')
+            .update(patchCandidate)
+            .eq('id', data.lead_id);
+
+          if (!leadUpdate.error) {
+            leadUpdated = true;
+            break;
+          }
+
+          if (!isMissingColumnError(leadUpdate.error as { code?: string; message?: string })) {
+            console.warn('Unable to update lead status on quote approval:', leadUpdate.error.message || leadUpdate.error);
+            break;
+          }
+        }
+
+        if (!leadUpdated) {
+          console.warn('Lead status update skipped due schema mismatch; quote approval continued.');
+        }
+
+        await logMoneyLoopEvent({
+          tenantId,
+          entityType: 'lead',
+          entityId: data.lead_id,
+          eventType: 'LeadUpdated',
+          actorType: 'system',
+          payload: { status: 'converted', quote_id: data.id },
+        });
+      }
+
+      await supabaseAdmin
+        .from('crm_tasks')
+        .update({ status: 'completed', updated_at: new Date().toISOString() })
+        .eq('tenant_id', tenantId)
+        .eq('type', 'follow_up')
+        .eq('source_type', 'quote')
+        .eq('source_id', data.id)
+        .in('status', ['open', 'new', 'pending', 'PENDING', 'in-progress']);
+
+      resolvedInvoiceId = invoiceId;
+    } catch (postAcceptError) {
+      console.error('Quote approval follow-up failed after quote/job success:', postAcceptError);
     }
-
-    await supabaseAdmin
-      .from('crm_tasks')
-      .update({ status: 'completed', updated_at: new Date().toISOString() })
-      .eq('tenant_id', tenantId)
-      .eq('type', 'follow_up')
-      .eq('source_type', 'quote')
-      .eq('source_id', data.id)
-      .in('status', ['open', 'new', 'pending', 'PENDING', 'in-progress']);
-
-    resolvedInvoiceId = invoiceId;
   }
 
   if (resolvedInvoiceId) {

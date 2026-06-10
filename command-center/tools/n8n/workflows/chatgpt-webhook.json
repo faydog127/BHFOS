@@ -1,0 +1,179 @@
+[
+  {
+    "name": "ChatGPT Webhook (Repo)",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "chat",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "b0b4b9a5-1f83-4d4f-8e69-6b7bba4b97b3",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [-640, 0],
+        "webhookId": "chatgpt-webhook-repo"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.body.prompt }}",
+                "operation": "isNotEmpty"
+              }
+            ]
+          }
+        },
+        "id": "f9d2d273-9a0d-4e15-93ac-5c8a4b0b4b76",
+        "name": "Validate Prompt",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [-416, 0]
+      },
+      {
+        "parameters": {
+          "resource": "text",
+          "operation": "response",
+          "modelId": {
+            "mode": "id",
+            "value": "gpt-4o-mini"
+          },
+          "responses": {
+            "values": [
+              {
+                "type": "text",
+                "role": "user",
+                "content": "={{ $json.body.prompt }}"
+              }
+            ]
+          },
+          "simplify": true,
+          "options": {
+            "instructions": "You are a helpful assistant. Reply concisely."
+          }
+        },
+        "id": "c4c6c57e-e2d3-4db4-890a-0b0ac6e9b7d9",
+        "name": "OpenAI",
+        "type": "@n8n/n8n-nodes-langchain.openAi",
+        "typeVersion": 2,
+        "position": [-176, -128],
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $input.item.json;\n\n// When the OpenAI node is set to Continue On Fail, errors may come through here\nif (!input || !Array.isArray(input.output)) {\n  return [{ json: { ok: false, error: 'OpenAI call failed or returned no output', raw: input ?? null } }];\n}\n\nconst message = input.output.find((m) => m && m.type === 'message');\nconst content = Array.isArray(message?.content) ? message.content : [];\nconst reply = content\n  .filter((c) => c && c.type === 'output_text')\n  .map((c) => (typeof c.text === 'string' ? c.text : JSON.stringify(c.text)))\n  .join('\\n')\n  .trim();\n\nif (!reply) {\n  return [{ json: { ok: false, error: 'No output_text in OpenAI response', raw: input } }];\n}\n\nreturn [{ json: { ok: true, reply } }];\n"
+        },
+        "id": "0b0d4e73-24a9-402e-b46f-46fbf5b46d52",
+        "name": "Extract Reply",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [64, -128]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{ $json.ok }}",
+                "operation": "equal",
+                "value2": true
+              }
+            ]
+          }
+        },
+        "id": "4a5a3884-0c67-49bc-95f4-b5a82d5a9d45",
+        "name": "OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [288, -128]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ { \"reply\": $json.reply } }}",
+          "options": {
+            "responseCode": 200,
+            "responseHeaders": {
+              "entries": [{ "name": "Content-Type", "value": "application/json" }]
+            }
+          }
+        },
+        "id": "2c6d0a41-6af3-4474-9a1a-05d5e3379b21",
+        "name": "Respond Success",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [512, -224]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ { \"error\": $json.error, \"details\": $json.raw } }}",
+          "options": {
+            "responseCode": 502,
+            "responseHeaders": {
+              "entries": [{ "name": "Content-Type", "value": "application/json" }]
+            }
+          }
+        },
+        "id": "3e1be1ea-4c64-4e50-926a-df9dc1d8a58d",
+        "name": "Respond OpenAI Error",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [512, -32]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ { \"error\": \"Missing required field: prompt\" } }}",
+          "options": {
+            "responseCode": 400,
+            "responseHeaders": {
+              "entries": [{ "name": "Content-Type", "value": "application/json" }]
+            }
+          }
+        },
+        "id": "a20b82c3-41a3-4d50-90f3-df2d7cdb1d92",
+        "name": "Respond Validation Error",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [-176, 192]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [[{ "node": "Validate Prompt", "type": "main", "index": 0 }]]
+      },
+      "Validate Prompt": {
+        "main": [
+          [{ "node": "OpenAI", "type": "main", "index": 0 }],
+          [{ "node": "Respond Validation Error", "type": "main", "index": 0 }]
+        ]
+      },
+      "OpenAI": {
+        "main": [[{ "node": "Extract Reply", "type": "main", "index": 0 }]]
+      },
+      "Extract Reply": {
+        "main": [[{ "node": "OK?", "type": "main", "index": 0 }]]
+      },
+      "OK?": {
+        "main": [
+          [{ "node": "Respond Success", "type": "main", "index": 0 }],
+          [{ "node": "Respond OpenAI Error", "type": "main", "index": 0 }]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": null,
+    "meta": null,
+    "pinData": {},
+    "versionId": "9a9f40d3-4e0f-4e2a-b03b-1a1b95a9e7ed",
+    "triggerCount": 0,
+    "tags": []
+  }
+]

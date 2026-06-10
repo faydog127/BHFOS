@@ -1,0 +1,9 @@
+                polname                | polcmd |                                 using_expr                                 |                               withcheck_expr                               |      roles      
+---------------------------------------+--------+----------------------------------------------------------------------------+----------------------------------------------------------------------------+-----------------
+ Appointments are deletable by tenant  | d      | (tenant_id = ((auth.jwt() -> 'app_metadata'::text) ->> 'tenant_id'::text)) |                                                                            | {authenticated}
+ Appointments are insertable by tenant | a      |                                                                            | (tenant_id = ((auth.jwt() -> 'app_metadata'::text) ->> 'tenant_id'::text)) | {authenticated}
+ Appointments are readable by tenant   | r      | (tenant_id = ((auth.jwt() -> 'app_metadata'::text) ->> 'tenant_id'::text)) |                                                                            | {authenticated}
+ Appointments are updatable by tenant  | w      | (tenant_id = ((auth.jwt() -> 'app_metadata'::text) ->> 'tenant_id'::text)) | (tenant_id = ((auth.jwt() -> 'app_metadata'::text) ->> 'tenant_id'::text)) | {authenticated}
+ Appointments service role full access | *      | true                                                                       | true                                                                       | {service_role}
+(5 rows)
+

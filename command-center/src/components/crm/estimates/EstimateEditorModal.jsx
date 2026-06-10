@@ -54,7 +54,8 @@ const EstimateEditorModal = ({ isOpen, onClose, onEstimateCreated }) => {
           .from('price_book')
           .select('*')
           .eq('active', true)
-          .eq('tenant_id', tenantId);
+          .in('tenant_id', [tenantId, 'default'])
+          .order('name');
         
         if (error) {
           console.error('Error fetching price_book:', error);
@@ -439,16 +440,22 @@ const EstimateEditorModal = ({ isOpen, onClose, onEstimateCreated }) => {
                       <Label>Add Services</Label>
                       <ScrollArea className="h-[300px] border rounded-md">
                          <div className="p-2 space-y-1">
-                            {priceBook.map(item => (
-                               <div 
-                                 key={item.id} 
-                                 className="p-2 text-sm hover:bg-slate-100 cursor-pointer rounded flex justify-between group"
-                                 onClick={() => addItem(item)}
-                               >
-                                  <span className="font-medium truncate pr-2">{item.name}</span>
-                                  <span className="text-slate-500 group-hover:text-blue-600 font-mono">${item.base_price}</span>
-                               </div>
-                            ))}
+                            {priceBook.length === 0 ? (
+                              <div className="p-3 text-xs text-slate-500">
+                                No price book items found for this tenant or default catalog.
+                              </div>
+                            ) : (
+                              priceBook.map(item => (
+                                 <div 
+                                   key={item.id} 
+                                   className="p-2 text-sm hover:bg-slate-100 cursor-pointer rounded flex justify-between group"
+                                   onClick={() => addItem(item)}
+                                 >
+                                    <span className="font-medium truncate pr-2">{item.name}</span>
+                                    <span className="text-slate-500 group-hover:text-blue-600 font-mono">${item.base_price}</span>
+                                 </div>
+                              ))
+                            )}
                          </div>
                       </ScrollArea>
                    </div>

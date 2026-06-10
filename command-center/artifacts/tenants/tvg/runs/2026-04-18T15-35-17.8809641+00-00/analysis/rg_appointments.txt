@@ -1,0 +1,152 @@
+scripts\appointment-reminder-proof.mjs:205:    await admin.from('appointments').delete().eq('tenant_id', TENANT_ID).in('id', appointmentIds);
+src\App.jsx:31:const AppointmentSchedulerPage = React.lazy(() => import('@/pages/crm/appointments/AppointmentScheduler'));
+src\App.jsx:265:      <Route path="appointments" element={<Navigate to="../calendar" replace />} />
+scripts\runtime\h1a-appointments-tenant-isolation.ps1:305:  $respInsert = Invoke-JsonRequest -Method "POST" -Url "$ApiUrl/rest/v1/appointments" -Headers $headersA -Body $insertBody
+scripts\runtime\h1a-appointments-tenant-isolation.ps1:323:    $respReadA = Invoke-JsonRequest -Method "GET" -Url "$ApiUrl/rest/v1/appointments?id=eq.$apptId&select=id,tenant_id" -Headers $headersA
+scripts\runtime\h1a-appointments-tenant-isolation.ps1:336:    $respAnonRead = Invoke-JsonRequest -Method "GET" -Url "$ApiUrl/rest/v1/appointments?id=eq.$apptId&select=id,tenant_id" -Headers $headersAnon
+scripts\runtime\h1a-appointments-tenant-isolation.ps1:350:    $respReadB = Invoke-JsonRequest -Method "GET" -Url "$ApiUrl/rest/v1/appointments?id=eq.$apptId&select=id,tenant_id" -Headers $headersB
+scripts\runtime\h1a-appointments-tenant-isolation.ps1:364:    $respBeforeUpdate = Invoke-JsonRequest -Method "GET" -Url "$ApiUrl/rest/v1/appointments?id=eq.$apptId&select=id,service_name" -Headers $headersA
+scripts\runtime\h1a-appointments-tenant-isolation.ps1:372:    $respAnonUpdate = Invoke-JsonRequest -Method "PATCH" -Url "$ApiUrl/rest/v1/appointments?id=eq.$apptId" -Headers $headersAnon -Body @{
+scripts\runtime\h1a-appointments-tenant-isolation.ps1:376:    $respAfterUpdate = Invoke-JsonRequest -Method "GET" -Url "$ApiUrl/rest/v1/appointments?id=eq.$apptId&select=id,service_name" -Headers $headersA
+scripts\runtime\h1a-appointments-tenant-isolation.ps1:401:    $respCrossUpdate = Invoke-JsonRequest -Method "PATCH" -Url "$ApiUrl/rest/v1/appointments?id=eq.$apptId" -Headers $headersB -Body @{
+scripts\runtime\h1a-appointments-tenant-isolation.ps1:404:    $respAfterUpdate = Invoke-JsonRequest -Method "GET" -Url "$ApiUrl/rest/v1/appointments?id=eq.$apptId&select=id,service_name" -Headers $headersA
+scripts\runtime\h1a-appointments-tenant-isolation.ps1:427:  $respCrossWrite = Invoke-JsonRequest -Method "POST" -Url "$ApiUrl/rest/v1/appointments" -Headers $headersB -Body $insertBody
+scripts\runtime\h1a-appointments-tenant-isolation.ps1:587:      appointments = @{
+scripts\runtime\h1a-appointments-tenant-isolation.ps1:618:  # Delete appointments created by this harness.
+scripts\runtime\h1a-appointments-tenant-isolation.ps1:620:    Cleanup-Try -Label "appointments.rest:$apptId" -Block {
+scripts\runtime\h1a-appointments-tenant-isolation.ps1:621:      & docker exec supabase_db_tvg-web-app psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q -c "delete from public.appointments where id='$apptId'::uuid;"
+scripts\runtime\h1a-appointments-tenant-isolation.ps1:625:    Cleanup-Try -Label "appointments.edge:$edgeApptId" -Block {
+scripts\runtime\h1a-appointments-tenant-isolation.ps1:626:      & docker exec supabase_db_tvg-web-app psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q -c "delete from public.appointments where id='$edgeApptId'::uuid;"
+scripts\runtime\rvh-p1-d-job-scheduling.ps1:432:$apptAfter = docker exec $dbContainer psql -U postgres -d postgres -c "select id,job_id,tenant_id,scheduled_start,scheduled_end,technician_id,status,service_address from public.appointments where job_id='$jobId'::uuid;"
+scripts\runtime\rvh-p1-d-job-scheduling.ps1:434:$apptTech = docker exec $dbContainer psql -U postgres -d postgres -At -c "select technician_id from public.appointments where job_id='$jobId'::uuid limit 1;"
+scripts\runtime\rvh-p1-d-job-scheduling.ps1:507:  delete from public.appointments where job_id='__JOB_ID__'::uuid;
+scripts\runtime\rvh-p1-c-scheduling-chain.ps1:165:- chainC/appointments-list-1.http.txt -- appointments list (redacted)
+scripts\runtime\rvh-p1-c-scheduling-chain.ps1:166:- chainC/appointments-list-2.http.txt -- appointments list after reload (redacted)
+scripts\runtime\rvh-p1-c-scheduling-chain.ps1:215:Write-Host "RVH-P1-C Scheduling Chain (LOCAL) — Appointments"
+scripts\runtime\rvh-p1-c-scheduling-chain.ps1:299:# Runtime calls (create appointment → list appointments → reload list)
+scripts\runtime\rvh-p1-c-scheduling-chain.ps1:327:$listUrl = "$restUrl/appointments?select=$select&tenant_id=eq.$TenantId&order=scheduled_start.asc"
+scripts\runtime\rvh-p1-c-scheduling-chain.ps1:331:Set-Content -Path (Join-Path $chainDir 'appointments-list-1.http.txt') -Encoding UTF8 -Value $list1Text
+scripts\runtime\rvh-p1-c-scheduling-chain.ps1:333:  Fail "FAIL: appointments list returned non-200. See: $chainDir\\appointments-list-1.http.txt" 1
+scripts\runtime\rvh-p1-c-scheduling-chain.ps1:339:Set-Content -Path (Join-Path $chainDir 'appointments-list-2.http.txt') -Encoding UTF8 -Value $list2Text
+scripts\runtime\rvh-p1-c-scheduling-chain.ps1:341:  Fail "FAIL: appointments list (reload) returned non-200. See: $chainDir\\appointments-list-2.http.txt" 1
+scripts\runtime\rvh-p1-c-scheduling-chain.ps1:345:if (-not $appointmentsJson) { Fail "FAIL: could not parse appointments list JSON body." 1 }
+scripts\runtime\rvh-p1-c-scheduling-chain.ps1:346:$appointments = $appointmentsJson | ConvertFrom-Json
+scripts\runtime\rvh-p1-c-scheduling-chain.ps1:348:foreach ($a in $appointments) {
+scripts\runtime\rvh-p1-c-scheduling-chain.ps1:352:  Fail "FAIL: appointment not found in appointments list (calendar reload). appointment_id=$appointmentId" 1
+scripts\runtime\rvh-p1-c-scheduling-chain.ps1:358:$dbOut = docker exec $dbContainer psql -U postgres -d postgres -c "select id,tenant_id,lead_id,technician_id,service_name,scheduled_start,scheduled_end,status,service_address,created_at,updated_at from public.appointments where id='$appointmentId'::uuid;"
+scripts\runtime\rvh-p1-c-scheduling-chain.ps1:369:  delete from public.appointments where id='__APPT_ID__'::uuid;
+scripts\runtime\run-h1a-appointments-rls.ps1:66:  "scripts/runtime/h1a-appointments-tenant-isolation.ps1",
+scripts\runtime\run-h1a-appointments-rls.ps1:67:  "scripts/runtime/run-h1a-appointments-rls.ps1"
+scripts\runtime\run-h1a-appointments-rls.ps1:99:$rlsStatus = (& docker exec supabase_db_tvg-web-app psql -U postgres -d postgres -At -c "select relrowsecurity from pg_class where oid='public.appointments'::regclass;") -join "`n"
+scripts\runtime\run-h1a-appointments-rls.ps1:102:Log-Cmd "docker exec supabase_db_tvg-web-app psql ... pg_policies for appointments"
+scripts\runtime\run-h1a-appointments-rls.ps1:103:$policies = (& docker exec supabase_db_tvg-web-app psql -U postgres -d postgres -c "select policyname, roles, cmd, permissive, qual, with_check from pg_policies where schemaname='public' and tablename='appointments' order by policyname;") -join "`n"
+scripts\runtime\run-h1a-appointments-rls.ps1:106:Log-Cmd "docker exec supabase_db_tvg-web-app pg_dump --table public.appointments"
+scripts\runtime\run-h1a-appointments-rls.ps1:107:$schema = (& docker exec supabase_db_tvg-web-app pg_dump -U postgres -d postgres --schema-only --table=public.appointments) -join "`n"
+scripts\runtime\run-h1a-appointments-rls.ps1:122:    Log-Cmd "diff pre/post appointments RLS status (baseline copy)"
+scripts\runtime\run-h1a-appointments-rls.ps1:134:    Log-Cmd "diff pre/post appointments policies (baseline copy)"
+scripts\runtime\run-h1a-appointments-rls.ps1:147:$h1aScript = "scripts/runtime/h1a-appointments-tenant-isolation.ps1"
+scripts\runtime\run-h1a-appointments-rls.ps1:210:    function = "work-order-update (appointments lane)"
+scripts\runtime\run-h1a-appointments-rls.ps1:226:  change_id = "H1A-APPOINTMENTS-RLS-LOCAL"
+scripts\runtime\run-h1a-appointments-rls.ps1:228:  title = "H1a (tenant_isolation): RLS coverage + edge tenant enforcement for public.appointments"
+scripts\runtime\run-h1a-appointments-rls.ps1:235:  summary = "Enable RLS + tenant-scoped policies on public.appointments and ensure appointment-related edge functions derive tenant scope from verified JWT claims (never request body). Verified via local harness with positive and negative tenant isolation tests."
+scripts\runtime\run-h1a-appointments-rls.ps1:317:      label = "appointments RLS policies"
+scripts\runtime\run-h1a-appointments-rls.ps1:358:      title = "public.appointments lacked RLS coverage in canonical migrations"
+scripts\runtime\run-h1a-appointments-rls.ps1:392:    runtime_negative_test = "h1a-appointments-tenant-isolation.ps1 covers anon + cross-tenant + spoofed tenant_id scenarios; see outputs/h1a_verification_result.json."
+src\services\calendarService.js:30:   * Fetches scheduled items (Jobs + Appointments) for a given date range
+src\services\calendarService.js:55:      // 2. Fetch Appointments
+src\services\calendarService.js:57:        .from('appointments')
+src\services\calendarService.js:83:      // Normalize Appointments
+src\services\appointmentService.js:80:      .from('appointments')
+supabase\functions\run-appointment-reminders\index.ts:172:        .from('appointments')
+supabase\functions\work-order-update\index.ts:423:  // Packet 008 contract: appointments are the scheduling source-of-truth.
+supabase\functions\work-order-update\index.ts:424:  // Conflicts should be detected on appointments, not on mirrored job rows.
+supabase\functions\work-order-update\index.ts:425:  // IMPORTANT (H1a): use the caller JWT + anon key so RLS is enforced on appointments.
+supabase\functions\work-order-update\index.ts:427:    .from('appointments')
+supabase\functions\work-order-update\index.ts:523:  // IMPORTANT (H1a): use the caller JWT + anon key so RLS is enforced on appointments.
+supabase\functions\work-order-update\index.ts:525:    .from('appointments')
+supabase\functions\update-appointment-status\index.ts:90:      .from('appointments')
+supabase\functions\update-appointment-status\index.ts:132:      .from('appointments')
+supabase\functions\create-appointment\index.ts:169:      .from('appointments')
+src\pages\TermsOfService.jsx:29:              Appointments booked online are subject to confirmation. We reserve the right to reschedule or cancel appointments 
+supabase\migrations\20260319103000_appendix_a_appointments_and_reminders.sql:86:create table if not exists public.appointments (
+supabase\migrations\20260319103000_appendix_a_appointments_and_reminders.sql:113:alter table public.appointments
+supabase\migrations\20260319103000_appendix_a_appointments_and_reminders.sql:171:update public.appointments
+supabase\migrations\20260319103000_appendix_a_appointments_and_reminders.sql:188:  on public.appointments (tenant_id, status, scheduled_start);
+supabase\migrations\20260319103000_appendix_a_appointments_and_reminders.sql:191:  on public.appointments (lead_id);
+supabase\migrations\20260319103000_appendix_a_appointments_and_reminders.sql:194:  on public.appointments (technician_id, scheduled_start);
+src\pages\settings\BusinessSettings.jsx:403:                <p className="text-xs text-muted-foreground">Time added between appointments for travel/prep.</p>
+supabase\migrations\20260416220000_unify_technician_id_on_user_id.sql:5:-- - appointments.technician_id stores technicians.user_id (NOT technicians.id)
+supabase\migrations\20260416220000_unify_technician_id_on_user_id.sql:9:-- - switch appointments FK to reference technicians(user_id) so PostgREST joins remain valid
+supabase\migrations\20260416220000_unify_technician_id_on_user_id.sql:21:-- 2) Normalize appointments.technician_id values that currently store technicians.id.
+supabase\migrations\20260416220000_unify_technician_id_on_user_id.sql:22:update public.appointments as a
+supabase\migrations\20260416220000_unify_technician_id_on_user_id.sql:31:-- 3) Switch appointments FK to reference technicians(user_id).
+supabase\migrations\20260416220000_unify_technician_id_on_user_id.sql:32:-- (technicians.user_id is unique; nulls are allowed; unassigned appointments remain valid.)
+supabase\migrations\20260416220000_unify_technician_id_on_user_id.sql:33:alter table public.appointments
+supabase\migrations\20260416220000_unify_technician_id_on_user_id.sql:36:alter table public.appointments
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:1:-- H1a: RLS coverage for public.appointments (tenant isolation baseline)
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:2:-- Goal: lock appointments to tenant-scoped authenticated access + service_role full access.
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:6:alter table public.appointments enable row level security;
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:8:drop policy if exists "Appointments are readable by tenant" on public.appointments;
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:9:drop policy if exists "Appointments are insertable by tenant" on public.appointments;
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:10:drop policy if exists "Appointments are updatable by tenant" on public.appointments;
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:11:drop policy if exists "Appointments are deletable by tenant" on public.appointments;
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:12:drop policy if exists "Appointments service role full access" on public.appointments;
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:14:create policy "Appointments are readable by tenant"
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:15:  on public.appointments
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:22:create policy "Appointments are insertable by tenant"
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:23:  on public.appointments
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:30:create policy "Appointments are updatable by tenant"
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:31:  on public.appointments
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:41:create policy "Appointments are deletable by tenant"
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:42:  on public.appointments
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:49:create policy "Appointments service role full access"
+supabase\migrations\20260417120000_h1a_appointments_rls_policies.sql:50:  on public.appointments
+supabase\migrations\20260416231500_packet_009_dispatch_readiness_invariant.sql:11:-- Note: This keeps mirroring fields from appointments to jobs, but only promotes status to 'scheduled'
+supabase\migrations\20260416224500_packet_008_appointments_job_link_and_sync.sql:1:-- Packet 008: Scheduling source-of-truth = appointments
+supabase\migrations\20260416224500_packet_008_appointments_job_link_and_sync.sql:4:-- 1) Link appointments to jobs (optional; null means “booking-only / not yet a work order”).
+supabase\migrations\20260416224500_packet_008_appointments_job_link_and_sync.sql:5:alter table public.appointments
+supabase\migrations\20260416224500_packet_008_appointments_job_link_and_sync.sql:9:alter table public.appointments
+supabase\migrations\20260416224500_packet_008_appointments_job_link_and_sync.sql:12:alter table public.appointments
+supabase\migrations\20260416224500_packet_008_appointments_job_link_and_sync.sql:16:  on public.appointments (job_id);
+supabase\migrations\20260416224500_packet_008_appointments_job_link_and_sync.sql:61:drop trigger if exists trg_appointments_sync_job_schedule on public.appointments;
+supabase\migrations\20260416224500_packet_008_appointments_job_link_and_sync.sql:65:on public.appointments
+supabase\.temp\staging_public.sql:2008:        FROM appointments a
+supabase\.temp\staging_public.sql:2050:                'total_bookings', (SELECT COUNT(*) FROM appointments WHERE created_at BETWEEN start_date AND end_date),
+supabase\.temp\staging_public.sql:2091:        FROM appointments a
+supabase\.temp\staging_public.sql:2136:                'total_bookings', (SELECT COUNT(*) FROM appointments a JOIN leads l ON a.lead_id = l.id WHERE a.created_at BETWEEN start_date AND end_date AND (include_test_data = true OR (l.is_test_data = false OR l.is_test_data IS NULL))),
+supabase\.temp\staging_public.sql:4594:CREATE TABLE IF NOT EXISTS "public"."appointments" (
+supabase\.temp\staging_public.sql:4621:ALTER TABLE "public"."appointments" OWNER TO "postgres";
+supabase\.temp\staging_public.sql:7084:ALTER TABLE ONLY "public"."appointments"
+supabase\.temp\staging_public.sql:8257:CREATE OR REPLACE TRIGGER "on_booking_verified" AFTER UPDATE ON "public"."appointments" FOR EACH ROW EXECUTE FUNCTION "public"."handle_booking_verification"();
+supabase\.temp\staging_public.sql:8453:ALTER TABLE ONLY "public"."appointments"
+supabase\.temp\staging_public.sql:8458:ALTER TABLE ONLY "public"."appointments"
+supabase\.temp\staging_public.sql:8463:ALTER TABLE ONLY "public"."appointments"
+supabase\.temp\staging_public.sql:8468:ALTER TABLE ONLY "public"."appointments"
+supabase\.temp\staging_public.sql:8473:ALTER TABLE ONLY "public"."appointments"
+supabase\.temp\staging_public.sql:8478:ALTER TABLE ONLY "public"."appointments"
+supabase\.temp\staging_public.sql:8654:    ADD CONSTRAINT "fk_invoices_appointment" FOREIGN KEY ("appointment_id") REFERENCES "public"."appointments"("id");
+supabase\.temp\staging_public.sql:8883:    ADD CONSTRAINT "referrals_appointment_id_fkey" FOREIGN KEY ("appointment_id") REFERENCES "public"."appointments"("id");
+supabase\.temp\staging_public.sql:9017:CREATE POLICY "Auth full access appointments" ON "public"."appointments" USING (("auth"."role"() = 'authenticated'::"text"));
+supabase\.temp\staging_public.sql:9313:CREATE POLICY "Public insert appointments" ON "public"."appointments" FOR INSERT WITH CHECK (true);
+supabase\.temp\staging_public.sql:9401:ALTER TABLE "public"."appointments" ENABLE ROW LEVEL SECURITY;
+supabase\.temp\staging_public.sql:9404:CREATE POLICY "auth_can_insert_appointments" ON "public"."appointments" FOR INSERT TO "authenticated" WITH CHECK (true);
+supabase\.temp\staging_public.sql:9424:CREATE POLICY "auth_can_select_appointments" ON "public"."appointments" FOR SELECT TO "authenticated" USING (true);
+supabase\.temp\staging_public.sql:9732:CREATE POLICY "tenant_insert_appointments" ON "public"."appointments" FOR INSERT TO "authenticated" WITH CHECK (("tenant_id" = (("current_setting"('request.jwt.claims'::"text", true))::json ->> 'tenant_id'::"text")));
+supabase\.temp\staging_public.sql:9748:CREATE POLICY "tenant_select_appointments" ON "public"."appointments" FOR SELECT TO "authenticated" USING (("tenant_id" = (("current_setting"('request.jwt.claims'::"text", true))::json ->> 'tenant_id'::"text")));
+supabase\.temp\staging_public.sql:10426:GRANT SELECT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."appointments" TO "anon";
+supabase\.temp\staging_public.sql:10427:GRANT ALL ON TABLE "public"."appointments" TO "authenticated";
+supabase\.temp\staging_public.sql:10428:GRANT ALL ON TABLE "public"."appointments" TO "service_role";
+src\pages\crm\AnalyticsDashboard.jsx:101:            // 1. Fetch Appointments
+src\pages\crm\AnalyticsDashboard.jsx:102:            const { data: appointments } = await supabase
+src\pages\crm\AnalyticsDashboard.jsx:103:                .from('appointments')
+src\pages\crm\AnalyticsDashboard.jsx:125:            const completedJobs = appointments?.filter(a => a.status === 'completed') || [];
+src\pages\crm\AnalyticsDashboard.jsx:171:                    { name: 'Cancelled', value: appointments?.filter(a => a.status === 'cancelled').length || 0 },
+src\pages\crm\AnalyticsDashboard.jsx:172:                    { name: 'No Show', value: appointments?.filter(a => a.status === 'no_show').length || 0 }
+src\pages\crm\appointments\AppointmentScheduler.jsx:108:  const [appointments, setAppointments] = useState([]);
+src\pages\crm\appointments\AppointmentScheduler.jsx:146:    () => appointments.filter((appointment) => String(appointment?.status || '').toLowerCase() === 'pending'),
+src\pages\crm\appointments\AppointmentScheduler.jsx:147:    [appointments],
+src\pages\crm\appointments\AppointmentScheduler.jsx:151:      appointments.filter((appointment) =>
+src\pages\crm\appointments\AppointmentScheduler.jsx:154:    [appointments],
+src\components\crm\appointments\BookingVerification.jsx:25:        .from('appointments')
+src\pages\crm\ReferralPartners.jsx:55:            appointments ( scheduled_start, pricing_snapshot )
+src\pages\crm\ReferralPartners.jsx:301:                                        <TableCell>${r.appointments?.pricing_snapshot?.price || 0}</TableCell>

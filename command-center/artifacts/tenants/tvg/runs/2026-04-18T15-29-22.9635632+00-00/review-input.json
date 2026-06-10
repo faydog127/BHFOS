@@ -1,0 +1,226 @@
+{
+  "title": "H1a (tenant_isolation): RLS coverage + edge tenant enforcement for public.appointments",
+  "decider": {
+    "approved_at": "2026-04-18T15:29:22.9635632+00:00",
+    "role": "Human Decider",
+    "name": "Erron Fayson"
+  },
+  "scenarios": [
+    {
+      "category": "concurrency",
+      "scenario": "Concurrent appointment inserts with different tenants",
+      "verification_method": "RLS policies enforced via REST insert/read in harness.",
+      "evidence_required": [
+        "artifacts/tenants/tvg/runs/2026-04-18T15-29-22.9635632+00-00/outputs/h1a_verification_result.json",
+        "artifacts/tenants/tvg/runs/2026-04-18T15-29-22.9635632+00-00/evidence/db_appointments_policies.txt"
+      ],
+      "expected_behavior": "Each insert is isolated to caller tenant; no cross-tenant visibility."
+    },
+    {
+      "category": "replay_idempotency",
+      "scenario": "Edge create-appointment rejects spoofed tenant_id on retry",
+      "verification_method": "Harness calls create-appointment with TenantB JWT + body.tenant_id=TenantA.",
+      "evidence_required": [
+        "artifacts/tenants/tvg/runs/2026-04-18T15-29-22.9635632+00-00/outputs/h1a_verification_result.json",
+        "artifacts/tenants/tvg/runs/2026-04-18T15-29-22.9635632+00-00/logs/h1a_verification_stdout.log"
+      ],
+      "expected_behavior": "Retry with mismatched tenant_id is rejected (403) or ignored; cannot write cross-tenant."
+    },
+    {
+      "category": "bad_data",
+      "scenario": "Anon read blocked",
+      "verification_method": "Harness GET as anon returns 0 rows or error.",
+      "evidence_required": [
+        "artifacts/tenants/tvg/runs/2026-04-18T15-29-22.9635632+00-00/outputs/h1a_verification_result.json",
+        "artifacts/tenants/tvg/runs/2026-04-18T15-29-22.9635632+00-00/logs/h1a_verification_stdout.log"
+      ],
+      "expected_behavior": "Anon cannot read appointment rows."
+    },
+    {
+      "category": "dependency_failure",
+      "scenario": "Edge runtime uses caller JWT for RLS lane",
+      "verification_method": "Code inspection + harness edge calls; audit output.",
+      "evidence_required": [
+        "artifacts/tenants/tvg/runs/2026-04-18T15-29-22.9635632+00-00/outputs/edge_function_audit.json",
+        "supabase/functions/create-appointment/index.ts"
+      ],
+      "expected_behavior": "Functions that must enforce RLS construct client with anon key + caller JWT; service_role is not used for appointment writes."
+    },
+    {
+      "category": "human_error",
+      "scenario": "Operator attempts to pass tenant_id in request body",
+      "verification_method": "Harness covers mismatch; code rejects mismatch.",
+      "evidence_required": [
+        "artifacts/tenants/tvg/runs/2026-04-18T15-29-22.9635632+00-00/outputs/h1a_verification_result.json",
+        "supabase/functions/_shared/auth.ts"
+      ],
+      "expected_behavior": "Mismatch is rejected; match is optional and not trusted as authority."
+    }
+  ],
+  "pr_id": "LOCAL",
+  "run_id": "2026-04-18T15:29:22.9635632+00:00",
+  "change_id": "H1A-APPOINTMENTS-RLS-LOCAL",
+  "coverage_report": {
+    "excluded_scope": [
+      "remote/prod access",
+      "n8n",
+      "KAQI"
+    ],
+    "uncertainty_boundaries": [
+      "Other tables may still lack RLS (out of H1a scope).",
+      "service_role paths rely on explicit tenant filters; DB cannot enforce RLS under service_role."
+    ],
+    "discovery_inputs": [
+      "rg -n --hidden -S \"\\\\bappointments\\\\b\" supabase src scripts",
+      "rg -n --hidden -S \"\\\\btenant_id\\\\b\" supabase/functions src",
+      "rg -n --hidden -S \"service_role|SUPABASE_SERVICE_ROLE_KEY|supabaseAdmin\" supabase/functions"
+    ],
+    "files_analyzed": [
+      "supabase/migrations/20260417120000_h1a_appointments_rls_policies.sql",
+      "supabase/functions/_shared/auth.ts",
+      "supabase/functions/create-appointment/index.ts",
+      "supabase/functions/update-appointment-status/index.ts",
+      "supabase/functions/run-appointment-reminders/index.ts",
+      "supabase/functions/work-order-update/index.ts",
+      "scripts/runtime/h1a-appointments-tenant-isolation.ps1",
+      "scripts/runtime/run-h1a-appointments-rls.ps1"
+    ]
+  },
+  "tenant_id": "tvg",
+  "summary": "Enable RLS + tenant-scoped policies on public.appointments and ensure appointment-related edge functions derive tenant scope from verified JWT claims (never request body). Verified via local harness with positive and negative tenant isolation tests.",
+  "gate_version": "v1",
+  "trigger_evidence": {
+    "derived_domain_tags": [
+      "tenant_isolation"
+    ],
+    "derivation_inputs": [
+      "rg -n --hidden -S \"\\\\bappointments\\\\b\" supabase src scripts",
+      "git diff --name-only (manual scope list for H1a)"
+    ]
+  },
+  "verification": {
+    "runtime_negative_test": "h1a-appointments-tenant-isolation.ps1 covers anon + cross-tenant + spoofed tenant_id scenarios; see outputs/h1a_verification_result.json.",
+    "tenant_boundary_analysis": "RLS policies + edge audit recorded; see db_appointments_policies.txt and edge_function_audit.json.",
+    "rollback_plan": "Revert by dropping appointment policies and disabling RLS via a rollback migration (LOCAL only). Pre-change artifacts captured in artifacts/tenants/tvg/runs/h1a_appointments_rls_20260418_101415/."
+  },
+  "source_commit": "699707415d5a7977821fbaa6e02491249b7958e5",
+  "ops_impact": {
+    "max_open_alerts_per_entity": "n/a (local hardening run)",
+    "task_dedupe_rule": "n/a (no async dispatcher changes)",
+    "alert_dedupe_identity": "tenant_id:appointment_id"
+  },
+  "artifacts": [
+    {
+      "proof_of": "runtime_negative_test + happy_path",
+      "label": "H1a verification stdout",
+      "created_at": "2026-04-18T15:29:22.9635632+00:00",
+      "type": "log",
+      "path": "artifacts/tenants/tvg/runs/2026-04-18T15-29-22.9635632+00-00/logs/h1a_verification_stdout.log"
+    },
+    {
+      "proof_of": "tenant_boundary_analysis",
+      "label": "appointments RLS policies",
+      "created_at": "2026-04-18T15:29:22.9635632+00:00",
+      "type": "db_output",
+      "path": "artifacts/tenants/tvg/runs/2026-04-18T15-29-22.9635632+00-00/evidence/db_appointments_policies.txt"
+    },
+    {
+      "proof_of": "artifact_integrity",
+      "label": "run manifest",
+      "created_at": "2026-04-18T15:29:22.9635632+00:00",
+      "type": "manifest",
+      "path": "artifacts/tenants/tvg/runs/2026-04-18T15-29-22.9635632+00-00/manifest.json"
+    },
+    {
+      "proof_of": "runtime_negative_test",
+      "label": "H1a scenario outcomes",
+      "created_at": "2026-04-18T15:29:22.9635632+00:00",
+      "type": "test_result",
+      "path": "artifacts/tenants/tvg/runs/2026-04-18T15-29-22.9635632+00-00/outputs/h1a_verification_result.json"
+    },
+    {
+      "snippet": "IMPORTANT: Do not trust client-provided tenant_id.",
+      "created_at": "2026-04-18T15:29:22.9635632+00:00",
+      "label": "create-appointment tenant enforcement",
+      "type": "code_reference",
+      "proof_of": "service_role_bypass_audit",
+      "path": "supabase/functions/create-appointment/index.ts"
+    }
+  ],
+  "generated_at": "2026-04-18T15:29:22.9635632+00:00",
+  "findings": [
+    {
+      "rule_violated": "tenant_isolation: scheduling SSOT must be tenant-scoped at DB layer",
+      "verification_method": "Local harness executes REST and edge negative tests.",
+      "business_impact": "Potential tenant bleed via direct PostgREST access if JWT tenant claim is ignored by DB.",
+      "severity": "HIGH",
+      "recommended_action": "Enable RLS + tenant-scoped SELECT/INSERT/UPDATE/DELETE policies; verify runtime negative tests.",
+      "proof": [
+        "artifacts/tenants/tvg/runs/h1a_appointments_rls_20260418_101415/evidence/db_pre_appointments_rls_status.txt",
+        "supabase/migrations/20260417120000_h1a_appointments_rls_policies.sql"
+      ],
+      "title": "public.appointments lacked RLS coverage in canonical migrations",
+      "closure_evidence_required": [
+        "artifacts/tenants/tvg/runs/2026-04-18T15-29-22.9635632+00-00/outputs/h1a_verification_result.json",
+        "artifacts/tenants/tvg/runs/2026-04-18T15-29-22.9635632+00-00/evidence/db_appointments_policies.txt"
+      ],
+      "id": "F-H1A-0001"
+    },
+    {
+      "rule_violated": "tenant_isolation: service_role must not trust client-scoped tenant inputs",
+      "verification_method": "Harness asserts tenant mismatch returns 403 for service_role automation and edge write paths.",
+      "business_impact": "Edge functions could become cross-tenant write path if they trust body tenant_id or skip tenant filters.",
+      "severity": "HIGH",
+      "recommended_action": "Derive tenantId from verified JWT claims; reject mismatched body.tenant_id; enforce tenant filters on service_role queries.",
+      "proof": [
+        "artifacts/tenants/tvg/runs/2026-04-18T15-29-22.9635632+00-00/outputs/edge_function_audit.json",
+        "supabase/functions/_shared/auth.ts"
+      ],
+      "title": "Service-role edge functions can bypass RLS unless tenant is enforced from verified JWT",
+      "closure_evidence_required": [
+        "artifacts/tenants/tvg/runs/2026-04-18T15-29-22.9635632+00-00/outputs/h1a_verification_result.json"
+      ],
+      "id": "F-H1A-0002"
+    }
+  ],
+  "readiness": {
+    "status": "NOT_READY",
+    "labels": []
+  },
+  "files_changed": [
+    "supabase/migrations/20260417120000_h1a_appointments_rls_policies.sql",
+    "supabase/functions/_shared/auth.ts",
+    "supabase/functions/create-appointment/index.ts",
+    "supabase/functions/update-appointment-status/index.ts",
+    "supabase/functions/run-appointment-reminders/index.ts",
+    "supabase/functions/work-order-update/index.ts",
+    "scripts/runtime/h1a-appointments-tenant-isolation.ps1",
+    "scripts/runtime/run-h1a-appointments-rls.ps1"
+  ],
+  "domain_tags": [
+    "tenant_isolation"
+  ],
+  "risk_acceptances": [],
+  "scope": {
+    "excluded": [],
+    "included": [
+      "supabase/migrations/20260417120000_h1a_appointments_rls_policies.sql",
+      "supabase/functions/_shared/auth.ts",
+      "supabase/functions/create-appointment/index.ts",
+      "supabase/functions/update-appointment-status/index.ts",
+      "supabase/functions/run-appointment-reminders/index.ts",
+      "supabase/functions/work-order-update/index.ts",
+      "scripts/runtime/h1a-appointments-tenant-isolation.ps1",
+      "scripts/runtime/run-h1a-appointments-rls.ps1"
+    ]
+  },
+  "concurrency_model": {
+    "model": "dedupe_based",
+    "non_guarantees": [
+      "Does not prove multi-tenant role/RBAC separation beyond tenant_id isolation."
+    ],
+    "guarantees": [
+      "RLS prevents cross-tenant reads/writes for authenticated callers based on JWT tenant claim."
+    ]
+  }
+}

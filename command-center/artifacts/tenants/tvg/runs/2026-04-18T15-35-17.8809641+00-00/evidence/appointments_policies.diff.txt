@@ -1,0 +1,19 @@
+diff --git a/C:/BHFOS/command-center/artifacts/tenants/tvg/runs/2026-04-18T15-35-17.8809641+00-00/evidence/db_pre_appointments_policies.txt b/C:/BHFOS/command-center/artifacts/tenants/tvg/runs/2026-04-18T15-35-17.8809641+00-00/evidence/db_appointments_policies.txt
+index 5a30aed..33d666c 100644
+--- a/C:/BHFOS/command-center/artifacts/tenants/tvg/runs/2026-04-18T15-35-17.8809641+00-00/evidence/db_pre_appointments_policies.txt
++++ b/C:/BHFOS/command-center/artifacts/tenants/tvg/runs/2026-04-18T15-35-17.8809641+00-00/evidence/db_appointments_policies.txt
+@@ -1,4 +1,11 @@
+- polname | polcmd | using_expr | withcheck_expr | roles 
+----------+--------+------------+----------------+-------
+-(0 rows)
++run_id: 2026-04-18T15:35:17.8809641+00:00
++              policyname               |      roles      |  cmd   | permissive |                                    qual                                    |                                 with_check                                 
++---------------------------------------+-----------------+--------+------------+----------------------------------------------------------------------------+----------------------------------------------------------------------------
++ Appointments are deletable by tenant  | {authenticated} | DELETE | PERMISSIVE | (tenant_id = ((auth.jwt() -> 'app_metadata'::text) ->> 'tenant_id'::text)) | 
++ Appointments are insertable by tenant | {authenticated} | INSERT | PERMISSIVE |                                                                            | (tenant_id = ((auth.jwt() -> 'app_metadata'::text) ->> 'tenant_id'::text))
++ Appointments are readable by tenant   | {authenticated} | SELECT | PERMISSIVE | (tenant_id = ((auth.jwt() -> 'app_metadata'::text) ->> 'tenant_id'::text)) | 
++ Appointments are updatable by tenant  | {authenticated} | UPDATE | PERMISSIVE | (tenant_id = ((auth.jwt() -> 'app_metadata'::text) ->> 'tenant_id'::text)) | (tenant_id = ((auth.jwt() -> 'app_metadata'::text) ->> 'tenant_id'::text))
++ Appointments service role full access | {service_role}  | ALL    | PERMISSIVE | true                                                                       | true
++(5 rows)
++
+ 

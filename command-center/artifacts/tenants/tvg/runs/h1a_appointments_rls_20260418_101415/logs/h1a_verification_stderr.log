@@ -1,0 +1,21 @@
+Exception: C:\BHFOS\command-center\scripts\runtime\h1a-appointments-tenant-isolation.ps1:140
+Line |
+ 140 |  … if (!$anonKey) { throw "Missing SUPABASE_ANON_KEY in supabase/.env" }
+     |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Missing SUPABASE_ANON_KEY in supabase/.env
+
+
+Exception: C:\BHFOS\command-center\scripts\runtime\h1a-appointments-tenant-isolation.ps1:163
+Line |
+ 163 |      throw "Failed to obtain local dev access_token (status=$($authA.s …
+     |      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Failed to obtain local dev access_token (status=400).
+
+
+Exception: C:\BHFOS\command-center\scripts\runtime\h1a-appointments-tenant-isolation.ps1:168
+Line |
+ 168 |      throw "Failed to create tenantA user via admin API (status=$($cre …
+     |      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Failed to create tenantA user via admin API (status=422).
+
+

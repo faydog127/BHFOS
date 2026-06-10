@@ -1,0 +1,226 @@
+{
+  "api_url": "http://127.0.0.1:25431",
+  "scenarios": [
+    {
+      "scenario": "authorized_same_tenant_write_rest",
+      "details": {
+        "status": 201,
+        "appointment_id": "2b973c68-bad0-412a-af2b-01d04e411de4"
+      },
+      "outcome": "PASS"
+    },
+    {
+      "scenario": "authorized_same_tenant_read_rest",
+      "details": {
+        "rows": 1,
+        "status": 200,
+        "body": {
+          "id": "2b973c68-bad0-412a-af2b-01d04e411de4",
+          "tenant_id": "tvg"
+        }
+      },
+      "outcome": "PASS"
+    },
+    {
+      "scenario": "unauthorized_read_blocked_rest",
+      "details": {
+        "rows": 0,
+        "status": 200,
+        "body": null
+      },
+      "outcome": "PASS"
+    },
+    {
+      "scenario": "cross_tenant_read_blocked_rest",
+      "details": {
+        "rows": 0,
+        "status": 200,
+        "body": null
+      },
+      "outcome": "PASS"
+    },
+    {
+      "scenario": "cross_tenant_write_blocked_rest",
+      "details": {
+        "error": "Response status code does not indicate success: 403 (Forbidden).",
+        "status": 403,
+        "body": null
+      },
+      "outcome": "PASS"
+    },
+    {
+      "scenario": "spoofed_tenant_id_blocked_edge_create_appointment",
+      "details": {
+        "status": 403,
+        "body": null
+      },
+      "outcome": "PASS"
+    },
+    {
+      "scenario": "authorized_same_tenant_write_edge_create_appointment",
+      "details": {
+        "status": 200,
+        "appointment_id": "b8883688-c75e-4336-8651-417cdf7992fd"
+      },
+      "outcome": "PASS"
+    },
+    {
+      "scenario": "unauthorized_write_blocked_edge_create_appointment",
+      "details": {
+        "status": 401,
+        "body": null
+      },
+      "outcome": "PASS"
+    },
+    {
+      "scenario": "cross_tenant_update_blocked_edge_update_appointment_status",
+      "details": {
+        "status": 404,
+        "body": null
+      },
+      "outcome": "PASS"
+    },
+    {
+      "scenario": "authorized_same_tenant_update_edge_update_appointment_status",
+      "details": {
+        "error": null,
+        "status": 200,
+        "body": {
+          "success": true,
+          "appointment": {
+            "id": "b8883688-c75e-4336-8651-417cdf7992fd",
+            "tenant_id": "tvg",
+            "lead_id": "a4203dd8-dfd8-4192-b282-9fba980fad6e",
+            "technician_id": null,
+            "price_book_id": null,
+            "service_name": "H1a Edge Happy",
+            "service_category": null,
+            "pricing_snapshot": {
+              "code": null,
+              "name": "H1a Edge Happy",
+              "price": 0,
+              "category": null,
+              "price_type": null,
+              "captured_at": "2026-04-18T15:02:50.29Z",
+              "description": null
+            },
+            "scheduled_start": "2026-04-19T11:02:48.791-04:00",
+            "scheduled_end": "2026-04-19T12:02:48.791-04:00",
+            "arrival_window_start": "2026-04-19T11:02:48.791-04:00",
+            "arrival_window_end": "2026-04-19T12:02:48.791-04:00",
+            "duration_minutes": 60,
+            "status": "confirmed",
+            "service_address": null,
+            "customer_notes": null,
+            "admin_notes": null,
+            "reminders_enabled": false,
+            "confirmation_sent_at": "2026-04-18T11:02:50.424-04:00",
+            "confirmed_at": "2026-04-18T11:02:50.424-04:00",
+            "completed_at": null,
+            "cancelled_at": null,
+            "created_at": "2026-04-18T11:02:50.29-04:00",
+            "updated_at": "2026-04-18T11:02:50.424-04:00",
+            "job_id": null,
+            "technicians": null,
+            "leads": {
+              "id": "a4203dd8-dfd8-4192-b282-9fba980fad6e",
+              "email": "h1a-lead-a@example.com",
+              "phone": "555-0001",
+              "last_name": "LeadA",
+              "first_name": "H1a"
+            }
+          },
+          "reminder_result": null
+        }
+      },
+      "outcome": "PASS"
+    },
+    {
+      "scenario": "spoofed_tenant_id_blocked_edge_run_appointment_reminders",
+      "details": {
+        "status": 403,
+        "body": null
+      },
+      "outcome": "PASS"
+    },
+    {
+      "scenario": "unauthorized_blocked_edge_work_order_update",
+      "details": {
+        "status": 401,
+        "body": null
+      },
+      "outcome": "PASS"
+    },
+    {
+      "scenario": "spoofed_tenant_id_blocked_edge_work_order_update",
+      "details": {
+        "status": 403,
+        "body": null
+      },
+      "outcome": "PASS"
+    },
+    {
+      "scenario": "cross_tenant_write_blocked_edge_work_order_update",
+      "details": {
+        "status": 404,
+        "body": null
+      },
+      "outcome": "PASS"
+    },
+    {
+      "scenario": "authorized_same_tenant_write_edge_work_order_update",
+      "details": {
+        "status": 200,
+        "body": {
+          "job": {
+            "id": "435c2ded-7b77-4d94-be9d-1db0f8500890",
+            "status": "unscheduled",
+            "scheduled_start": null,
+            "scheduled_end": null,
+            "service_address": null,
+            "technician_id": null,
+            "payment_status": null,
+            "updated_at": "2026-04-18T11:02:50.543-04:00",
+            "total_amount": null,
+            "work_order_number": null,
+            "job_number": null,
+            "quote_id": null,
+            "lead_id": "df05a8a4-4fbb-4243-a174-0333cb541d77",
+            "scope_summary": null,
+            "special_conditions": null,
+            "property_notes": null,
+            "execution_checklist": [],
+            "execution_findings": [],
+            "execution_photos": [],
+            "technician_notes": null,
+            "customer_summary": null,
+            "follow_up_required": false,
+            "follow_up_notes": null,
+            "report_url": null
+          },
+          "appointment": null,
+          "invoice": null,
+          "invoice_result": null
+        }
+      },
+      "outcome": "FAIL"
+    }
+  ],
+  "run_id": "2026-04-18T15:02:47.0706713+00:00",
+  "fixtures": {
+    "appointments": {
+      "rest": "2b973c68-bad0-412a-af2b-01d04e411de4",
+      "edge": "b8883688-c75e-4336-8651-417cdf7992fd"
+    },
+    "job_id": "435c2ded-7b77-4d94-be9d-1db0f8500890",
+    "leads": [
+      "a4203dd8-dfd8-4192-b282-9fba980fad6e",
+      "f68bd6e5-d221-4c99-80d9-f2c45b0cf8e2"
+    ]
+  },
+  "tenants": {
+    "b": "other-tenant",
+    "a": "tvg"
+  },
+  "domain_tag": "tenant_isolation"
+}

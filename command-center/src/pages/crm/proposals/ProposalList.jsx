@@ -74,12 +74,10 @@ const ProposalList = () => {
     try {
       console.log(`Fetching quotes for tenant=${tenantId}`);
 
-      const statusForApi = statusFilter === 'accepted' ? 'approved' : statusFilter;
-
       const { data, error } = await supabase.functions.invoke('quotes-list', {
         body: {
           tenant_id: tenantId,
-          status: statusForApi
+          status: statusFilter
         }
       });
 

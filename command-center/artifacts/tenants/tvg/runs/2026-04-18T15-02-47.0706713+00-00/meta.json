@@ -1,0 +1,10 @@
+{
+  "tenant_id": "tvg",
+  "domain_tags_derived": [
+    "tenant_isolation"
+  ],
+  "run_id": "2026-04-18T15:02:47.0706713+00:00",
+  "timestamp": "2026-04-18T15:02:47.0706713+00:00",
+  "pr_id": "LOCAL",
+  "run_id_slug": "2026-04-18T15-02-47.0706713+00-00"
+}

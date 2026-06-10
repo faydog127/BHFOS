@@ -17,6 +17,39 @@ const safeNumber = (value, fallback = 0) => {
   return Number.isFinite(num) ? num : fallback;
 };
 
+const isMissingColumnError = (error) =>
+  error?.code === '42703' ||
+  error?.code === 'PGRST204' ||
+  /column .* does not exist/i.test(error?.message || '') ||
+  /could not find the '.*' column/i.test(error?.message || '');
+
+const getMissingColumnName = (error) => {
+  const message = error?.message || '';
+  const postgresMatch = message.match(/column "([^"]+)"/i);
+  if (postgresMatch) return postgresMatch[1];
+  const cacheMatch = message.match(/could not find the '([^']+)' column/i);
+  return cacheMatch ? cacheMatch[1] : null;
+};
+
+const insertLeadWithSchemaFallback = async (payload) => {
+  let currentPayload = { ...payload };
+
+  while (true) {
+    const result = await supabase.from('leads').insert(currentPayload).select().single();
+    if (!result.error) return result;
+
+    if (!isMissingColumnError(result.error)) return result;
+
+    const missingColumn = getMissingColumnName(result.error);
+    if (!missingColumn || !Object.prototype.hasOwnProperty.call(currentPayload, missingColumn)) {
+      return result;
+    }
+
+    const { [missingColumn]: _omitted, ...nextPayload } = currentPayload;
+    currentPayload = nextPayload;
+  }
+};
+
 const copyText = async (text) => {
   if (!text) return false;
   try {
@@ -162,14 +195,12 @@ const MyMoney = () => {
         phone: customer.phone || null,
         service: customer.service || null,
         status: 'new',
-        stage: 'new'
+        stage: 'new',
+        pipeline_stage: 'new',
+        source: 'money_loop',
       };
 
-      const { data, error } = await supabase
-        .from('leads')
-        .insert([payload])
-        .select('id, first_name, last_name, company, email, phone, service, created_at')
-        .single();
+      const { data, error } = await insertLeadWithSchemaFallback(payload);
       if (error) throw error;
 
       setLeads((prev) => [data, ...prev]);
@@ -252,62 +283,76 @@ const MyMoney = () => {
 
     setCreatingInvoice(true);
     try {
+      const selectedLead = leads.find((lead) => lead.id === invoice.lead_id) || null;
       const qty = Math.max(1, safeNumber(invoice.quantity, 1));
       const price = Math.max(0, safeNumber(invoice.unit_price, 0));
       const subtotal = qty * price;
       const issueDate = new Date().toISOString().slice(0, 10);
       const dueDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-      const invoicePayload = {
-        tenant_id: tenantId,
-        lead_id: invoice.lead_id,
-        invoice_number: String(Math.floor(100000 + Math.random() * 900000)),
-        status: 'sent',
-        issue_date: issueDate,
-        due_date: dueDate,
-        subtotal,
-        tax_rate: 0,
-        tax_amount: 0,
-        total_amount: subtotal,
-        amount_paid: 0,
-        balance_due: subtotal,
-        notes: 'Thank you for your business.',
-        terms: 'Payment is due within 14 days.',
-        sent_at: new Date().toISOString()
-      };
+      const { data: saveData, error: saveError } = await supabase.functions.invoke('invoice-save', {
+        body: {
+          tenant_id: tenantId,
+          invoice: {
+            lead_id: invoice.lead_id,
+            invoice_number: String(Math.floor(100000 + Math.random() * 900000)),
+            status: 'draft',
+            issue_date: issueDate,
+            due_date: dueDate,
+            customer_name: selectedLead?.company || `${selectedLead?.first_name || ''} ${selectedLead?.last_name || ''}`.trim() || null,
+            customer_email: selectedLead?.email || null,
+            customer_phone: selectedLead?.phone || null,
+            subtotal,
+            tax_rate: 0,
+            tax_amount: 0,
+            total_amount: subtotal,
+            amount_paid: 0,
+            notes: 'Thank you for your business.',
+            terms: 'Payment is due within 14 days.',
+          },
+          items: [
+            {
+              description: invoice.description,
+              quantity: qty,
+              unit_price: price,
+              total_price: subtotal,
+            },
+          ],
+        },
+      });
+      if (saveError) throw saveError;
+      if (saveData?.error) throw new Error(saveData.error);
 
-      let inv = null;
-      const attempt = await supabase
-        .from('invoices')
-        .insert([invoicePayload])
-        .select('id, public_token, invoice_number, status, total_amount, created_at')
-        .single();
-      if (attempt.error) {
-        const message = attempt.error?.message || '';
-        if (message.toLowerCase().includes('balance_due')) {
-          const { balance_due, ...payloadNoBalance } = invoicePayload;
-          const retry = await supabase
-            .from('invoices')
-            .insert([payloadNoBalance])
-            .select('id, public_token, invoice_number, status, total_amount, created_at')
-            .single();
-          if (retry.error) throw retry.error;
-          inv = retry.data;
-        } else {
-          throw attempt.error;
-        }
-      } else {
-        inv = attempt.data;
+      const savedInvoice = saveData?.invoice;
+      if (!savedInvoice?.id) {
+        throw new Error('Invoice save returned no invoice id.');
       }
 
-      const { error: iErr } = await supabase.from('invoice_items').insert([
-        { invoice_id: inv.id, description: invoice.description, quantity: qty, unit_price: price, total_price: subtotal }
-      ]);
-      if (iErr) throw iErr;
+      const { data: sendData, error: sendError } = await supabase.functions.invoke('send-invoice', {
+        body: {
+          invoice_id: savedInvoice.id,
+          tenant_id: tenantId,
+          email: selectedLead?.email || null,
+          to_phone: selectedLead?.phone || null,
+        },
+      });
+      if (sendError) throw sendError;
+      if (sendData?.error) throw new Error(sendData.error);
 
-      setCreatedInvoice(inv);
+      const { data: refreshedInvoice } = await supabase
+        .from('invoices')
+        .select('id, public_token, invoice_number, status, total_amount, created_at')
+        .eq('id', savedInvoice.id)
+        .maybeSingle();
+
+      setCreatedInvoice(refreshedInvoice || savedInvoice);
       setInvoice((p) => ({ ...p, description: '', quantity: 1, unit_price: 0 }));
-      toast({ title: 'Invoice created', description: 'Copy/share the payment link to send it.' });
+      toast({
+        title: 'Invoice sent',
+        description: sendData?.delivery_channel === 'sms'
+          ? 'Customer was texted a payment link.'
+          : 'Customer was emailed a payment link.',
+      });
       await loadQueue();
     } catch (error) {
       console.error('MoneyLoop: create invoice failed', error);
@@ -454,7 +499,7 @@ const MyMoney = () => {
               <Card>
                 <CardHeader>
                   <CardTitle>Create invoice</CardTitle>
-                  <CardDescription>Creates invoice + 1 item (sent).</CardDescription>
+                  <CardDescription>Creates invoice + 1 item, then sends it through the billing pipeline.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="space-y-1.5">
