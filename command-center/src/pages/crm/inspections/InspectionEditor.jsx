@@ -15,6 +15,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Loader2, ArrowLeft, Camera, Plus, Save, CheckCircle2, FileDown, Link2, Trash2 } from 'lucide-react';
+import { INSPECTION_IMAGE_ACCEPT } from '@/lib/imageCompression';
+import { mediaQueue } from '@/lib/offlineInspectionMediaQueue';
+import {
+  enqueueInspectionPhotoFiles,
+  flushInspectionPhotoQueue,
+} from '@/lib/inspectionPhotoPipeline';
 
 const BUCKET_ID = 'inspection-photos';
 
@@ -26,13 +32,6 @@ const statusLabel = (value) => {
   if (s === 'in_progress') return 'draft';
   return s;
 };
-
-const sanitizeFilename = (name) =>
-  asText(name)
-    .replace(/[^\w.-]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80) || 'photo';
 
 const downloadFromBase64 = (payload, fallbackName) => {
   const raw = String(payload?.content_base64 || payload?.content || '').trim();
@@ -76,6 +75,8 @@ export default function InspectionEditor({ forceNew = false } = {}) {
   const [findings, setFindings] = useState([]);
   const [recs, setRecs] = useState([]);
   const [photos, setPhotos] = useState([]);
+  const [photoQueueItems, setPhotoQueueItems] = useState([]);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const photoUrlCacheRef = useRef(new Map());
   const createRequestIdRef = useRef(crypto.randomUUID());
 
@@ -472,72 +473,70 @@ export default function InspectionEditor({ forceNew = false } = {}) {
     }
   };
 
+  const refreshPhotoQueue = useCallback(async () => {
+    if (!inspection?.id) {
+      setPhotoQueueItems([]);
+      return [];
+    }
+    const rows = await mediaQueue.list({ tenantId, inspectionId: inspection.id });
+    setPhotoQueueItems(rows);
+    return rows;
+  }, [inspection?.id, tenantId]);
+
+  const flushPhotoUploads = useCallback(async () => {
+    if (!inspection?.id || photoUploading || !['draft', 'submitted', 'completed'].includes(statusLabel(inspection.status)) || !navigator.onLine) return;
+    setPhotoUploading(true);
+    try {
+      await flushInspectionPhotoQueue({
+        tenantId,
+        inspectionId: inspection.id,
+        revision: inspection.revision || 1,
+        technicianId: inspection.technician_id || null,
+        userId: user?.id || null,
+        onQueueChange: setPhotoQueueItems,
+        onPhotoComplete: async (updated) => {
+          const withUrls = await hydratePhotoUrls([updated]);
+          setPhotos((prev) => (
+            prev.some((photo) => photo.id === updated.id)
+              ? prev.map((photo) => (photo.id === updated.id ? withUrls[0] : photo))
+              : [...prev, withUrls[0]]
+          ));
+        },
+      });
+    } finally {
+      await refreshPhotoQueue();
+      setPhotoUploading(false);
+    }
+  }, [hydratePhotoUrls, inspection, photoUploading, refreshPhotoQueue, tenantId, user?.id]);
+
   const uploadPhotos = async (fileList) => {
     if (!inspection?.id) return;
-    const files = Array.from(fileList || []);
-    if (!files.length) return;
-    setSaving(true);
-    try {
-      const nowIso = new Date().toISOString();
-      const techId = inspection.technician_id || null;
-
-      for (const file of files) {
-        const safeName = sanitizeFilename(file.name);
-        const revision = inspection?.revision || 1;
-        const path = `${tenantId}/inspections/${inspection.id}/revision-${revision}/photos/${crypto.randomUUID()}-${safeName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from(BUCKET_ID)
-          .upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
-
-        if (uploadError) throw uploadError;
-
-        const { data: photoRow, error: insertError } = await supabase
-          .from('inspection_photos')
-          .insert({
-            tenant_id: tenantId,
-            inspection_id: inspection.id,
-            finding_id: null,
-            recommendation_id: null,
-            technician_id: techId,
-            created_by_user_id: user?.id || null,
-            bucket_id: BUCKET_ID,
-            object_path: path,
-            file_name: file.name,
-            content_type: file.type || null,
-            byte_size: file.size || null,
-            upload_state: 'complete',
-            storage_error: null,
-            storage_uploaded_at: nowIso,
-            caption: null,
-            category: null,
-            is_before: null,
-            taken_at: null,
-            uploaded_at: nowIso,
-            created_at: nowIso,
-            updated_at: nowIso,
-          })
-          .select('*')
-          .single();
-
-        if (insertError) {
-          // Do not leave an untracked private object behind if metadata persistence fails.
-          await supabase.storage.from(BUCKET_ID).remove([path]).catch(() => null);
-          throw insertError;
-        }
-
-        const withUrls = await hydratePhotoUrls([photoRow]);
-        setPhotos((prev) => [...prev, ...(withUrls || [])]);
-      }
-
-      toast({ title: 'Photos uploaded' });
-    } catch (err) {
-      console.error(err);
-      toast({ variant: 'destructive', title: 'Upload failed', description: err?.message || 'Could not upload photo.' });
-    } finally {
-      setSaving(false);
+    const { accepted, rejected } = await enqueueInspectionPhotoFiles({
+      files: fileList,
+      tenantId,
+      inspectionId: inspection.id,
+      revision: inspection.revision || 1,
+    });
+    await refreshPhotoQueue();
+    if (rejected.length) {
+      toast({
+        variant: 'destructive',
+        title: rejected.length === 1 ? 'Photo rejected' : 'Some photos were rejected',
+        description: rejected.map((item) => `${item.fileName}: ${item.error}`).join(' '),
+      });
     }
+    if (accepted.length) await flushPhotoUploads();
   };
+
+  useEffect(() => {
+    refreshPhotoQueue().catch(() => null);
+  }, [refreshPhotoQueue]);
+
+  useEffect(() => {
+    const onOnline = () => flushPhotoUploads().catch(() => null);
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [flushPhotoUploads]);
 
   const updatePhoto = async (photoId, patch) => {
     if (!inspection?.id) return;
@@ -1177,14 +1176,54 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                       <Input
                         type="file"
                         multiple
-                        accept="image/*"
-                        onChange={(e) => uploadPhotos(e.target.files)}
-                        disabled={saving}
+                        accept={INSPECTION_IMAGE_ACCEPT}
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []);
+                          e.target.value = '';
+                          uploadPhotos(files).catch(() => null);
+                        }}
+                        disabled={saving || photoUploading || statusLabel(inspection?.status) !== 'draft'}
                       />
                     </div>
                     <div className="mt-2 text-xs text-slate-500">
-                      Required: real uploads. No blob URLs.
+                      JPEG, PNG, WebP, HEIC, and HEIF are normalized to a private report-ready JPEG.
                     </div>
+                    {photoQueueItems.length ? (
+                      <div className="mt-3 space-y-2">
+                        {photoQueueItems.map((item) => (
+                          <div key={item.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                            <div className="flex items-center justify-between gap-3 text-xs">
+                              <span className="truncate font-medium text-slate-700">{item.file_name || 'Photo'}</span>
+                              <span className="capitalize text-slate-500">{item.stage || item.status}</span>
+                            </div>
+                            <div
+                              className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"
+                              role="progressbar"
+                              aria-label={`Upload progress for ${item.file_name || 'photo'}`}
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                              aria-valuenow={Number(item.progress || 0)}
+                            >
+                              <div
+                                className="h-full rounded-full bg-blue-600 transition-all"
+                                style={{ width: `${Math.max(0, Math.min(100, Number(item.progress || 0)))}%` }}
+                              />
+                            </div>
+                            {item.error ? <div className="mt-2 text-xs text-red-600">{item.error}</div> : null}
+                          </div>
+                        ))}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => flushPhotoUploads()}
+                          disabled={photoUploading || !navigator.onLine}
+                        >
+                          {photoUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                          Retry pending uploads
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>

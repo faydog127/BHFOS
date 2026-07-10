@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Camera, CheckCircle2, Loader2, RefreshCw, UploadCloud } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
 
 import { supabase } from '@/lib/customSupabaseClient';
 import { getTenantId } from '@/lib/tenantUtils';
@@ -13,8 +12,12 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { compressImageFile } from '@/lib/imageCompression';
+import { INSPECTION_IMAGE_ACCEPT } from '@/lib/imageCompression';
 import { mediaQueue } from '@/lib/offlineInspectionMediaQueue';
+import {
+  enqueueInspectionPhotoFiles,
+  flushInspectionPhotoQueue,
+} from '@/lib/inspectionPhotoPipeline';
 import { normalizeInspectionStatus } from '@/lib/inspectionStatus';
 
 const PHOTO_BUCKET = 'inspection-photos';
@@ -30,7 +33,6 @@ const getCustomerName = (lead) =>
 export default function TechInspectionSession() {
   const tenantId = getTenantId();
   const { inspectionId } = useParams();
-  const navigate = useNavigate();
   const { user } = useSupabaseAuth();
   const { toast } = useToast();
 
@@ -46,33 +48,12 @@ export default function TechInspectionSession() {
   const revision = inspection?.revision || 1;
   const normalizedStatus = normalizeInspectionStatus(inspection?.status);
   const locked = normalizedStatus !== 'draft';
-  const canFulfillUploads =
-    normalizedStatus === 'draft' || normalizedStatus === 'submitted' || normalizedStatus === 'completed';
-
+  const canFulfillUploads = ['draft', 'submitted', 'completed'].includes(normalizedStatus);
   const syncState = useMemo(() => {
     const unresolved = (queueItems || []).filter((q) => ['queued', 'uploading', 'failed'].includes(q.status)).length;
     const failed = (queueItems || []).filter((q) => q.status === 'failed').length;
     return { unresolved, failed, syncing: unresolved > 0 };
   }, [queueItems]);
-
-  const uploadIntegrity = useMemo(() => {
-    const relevant = (photos || []).filter((p) => p && p.is_voided !== true);
-    const serverBlocking = relevant.filter((p) => {
-      const state = asText(p.upload_state).toLowerCase() || 'complete';
-      return state !== 'complete';
-    }).length;
-    const serverPending = relevant.filter((p) => asText(p.upload_state).toLowerCase() === 'pending').length;
-    const serverFailed = relevant.filter((p) => asText(p.upload_state).toLowerCase() === 'failed').length;
-
-    return {
-      localUnresolved: syncState.unresolved,
-      localFailed: syncState.failed,
-      serverBlocking,
-      serverPending,
-      serverFailed,
-      blocksCompletion: serverBlocking > 0,
-    };
-  }, [photos, syncState.failed, syncState.unresolved]);
 
   const hydratePhotoUrls = useCallback(async (rows) => {
     const next = [];
@@ -156,10 +137,11 @@ export default function TechInspectionSession() {
     load();
   }, [load]);
 
-  const refreshQueue = async () => {
+  const refreshQueue = useCallback(async () => {
     const localQueue = await mediaQueue.list({ tenantId, inspectionId });
     setQueueItems(localQueue);
-  };
+    return localQueue;
+  }, [inspectionId, tenantId]);
 
   const enqueueFiles = async (files) => {
     if (!files?.length) return;
@@ -168,166 +150,52 @@ export default function TechInspectionSession() {
       return;
     }
 
-    const next = [];
-    for (const file of Array.from(files)) {
-      const id = uuidv4();
-      const item = await mediaQueue.add({
-        id,
-        tenant_id: tenantId,
-        inspection_id: inspectionId,
-        inspection_revision: revision,
-        status: 'queued',
-        photo_row_id: null,
-        object_path: null,
-        file,
-        file_name: file?.name || `photo-${id}.jpg`,
-        content_type: file?.type || 'image/*',
-        caption: '',
-        finding_id: null,
-        is_before: null,
-      });
-      next.push(item);
-    }
-
+    const { accepted, rejected } = await enqueueInspectionPhotoFiles({
+      files,
+      tenantId,
+      inspectionId,
+      revision,
+    });
     await refreshQueue();
+    if (rejected.length) {
+      toast({
+        variant: 'destructive',
+        title: rejected.length === 1 ? 'Photo rejected' : 'Some photos were rejected',
+        description: rejected.map((item) => `${item.fileName}: ${item.error}`).join(' '),
+      });
+    }
     // Best-effort auto-upload if online.
-    flushUploads().catch(() => null);
+    if (accepted.length) flushUploads().catch(() => null);
   };
 
   const flushUploads = useCallback(async () => {
     if (uploading) return;
     if (!navigator.onLine) return;
-    if (locked) return;
+    if (!canFulfillUploads) return;
 
     setUploading(true);
     try {
-      let local = await mediaQueue.list({ tenantId, inspectionId });
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const next = local.find((q) => q.status === 'queued' || q.status === 'failed');
-        if (!next) break;
-
-        // Mark uploading
-        await mediaQueue.patch(next.id, { status: 'uploading', error: null });
-        await refreshQueue();
-
-        try {
-          const rawFile = next.file;
-          if (!rawFile) throw new Error('Missing file payload.');
-
-          // Ensure there is a persisted DB evidence row BEFORE uploading media.
-          // This allows submission while uploads are still resolving.
-          let photoRowId = next.photo_row_id;
-          let objectPath = next.object_path;
-
-          if (!photoRowId || !objectPath) {
-            photoRowId = uuidv4();
-            objectPath = `${tenantId}/inspections/${inspectionId}/revision-${revision}/photos/${photoRowId}.jpg`;
-
-            const nowIso = new Date().toISOString();
-            const { error: insertError } = await supabase
-              .from('inspection_photos')
-              .insert({
-                id: photoRowId,
-                tenant_id: tenantId,
-                inspection_id: inspectionId,
-                finding_id: next.finding_id || null,
-                technician_id: inspection?.technician_id || null,
-                created_by_user_id: user?.id || null,
-                bucket_id: PHOTO_BUCKET,
-                object_path: objectPath,
-                file_name: next.file_name || null,
-                content_type: 'image/jpeg',
-                byte_size: null,
-                caption: asText(next.caption) || null,
-                category: asText(next.category) || null,
-                is_before: typeof next.is_before === 'boolean' ? next.is_before : null,
-                taken_at: next.taken_at || null,
-                upload_state: 'pending',
-                storage_error: null,
-                storage_uploaded_at: null,
-                uploaded_at: nowIso,
-                created_at: nowIso,
-                updated_at: nowIso,
-              });
-
-            if (insertError) throw insertError;
-
-            await mediaQueue.patch(next.id, { photo_row_id: photoRowId, object_path: objectPath });
-            await refreshQueue();
-          }
-
-          // Compression is locked early (Phase 1.5 rule).
-          // eslint-disable-next-line no-await-in-loop
-          const compressed = await compressImageFile(rawFile, {
-            maxDimension: 1600,
-            targetMaxBytes: 500_000,
-            startQuality: 0.82,
-            minQuality: 0.55,
-          });
-
-          // eslint-disable-next-line no-await-in-loop
-          const upload = await supabase.storage.from(PHOTO_BUCKET).upload(objectPath, compressed.blob, {
-            contentType: 'image/jpeg',
-            upsert: false,
-          });
-          if (upload.error) throw upload.error;
-
-          const { data: updated, error: updateError } = await supabase
-            .from('inspection_photos')
-            .update({
-              content_type: 'image/jpeg',
-              byte_size: compressed.compressedBytes,
-              upload_state: 'complete',
-              storage_error: null,
-              storage_uploaded_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq('tenant_id', tenantId)
-            .eq('inspection_id', inspectionId)
-            .eq('id', photoRowId)
-            .select('*')
-            .single();
-
-          if (updateError) throw updateError;
-
-          // Remove from queue once persisted.
-          await mediaQueue.remove(next.id);
-
-          // Refresh server photos list (append for speed).
+      await flushInspectionPhotoQueue({
+        tenantId,
+        inspectionId,
+        revision,
+        technicianId: inspection?.technician_id || null,
+        userId: user?.id || null,
+        onQueueChange: setQueueItems,
+        onPhotoComplete: async (updated) => {
           const withUrl = await hydratePhotoUrls([updated]);
-          setPhotos((prev) => [...prev, withUrl[0]]);
-        } catch (err) {
-          // Best-effort: mark DB evidence row as failed too (if it exists).
-          // (We re-read the queue item because photo_row_id may have been created earlier in this iteration.)
-          const currentQueue = await mediaQueue.list({ tenantId, inspectionId });
-          const current = currentQueue.find((q) => q.id === next.id) || next;
-
-          if (current.photo_row_id) {
-            await supabase
-              .from('inspection_photos')
-              .update({
-                upload_state: 'failed',
-                storage_error: err?.message || 'upload_failed',
-                updated_at: new Date().toISOString(),
-              })
-              .eq('tenant_id', tenantId)
-              .eq('inspection_id', inspectionId)
-              .eq('id', current.photo_row_id)
-              .then(() => null)
-              .catch(() => null);
-          }
-
-          await mediaQueue.patch(next.id, { status: 'failed', error: err?.message || 'upload_failed' });
-        }
-
-        local = await mediaQueue.list({ tenantId, inspectionId });
-      }
+          setPhotos((prev) => (
+            prev.some((photo) => photo.id === updated.id)
+              ? prev.map((photo) => (photo.id === updated.id ? withUrl[0] : photo))
+              : [...prev, withUrl[0]]
+          ));
+        },
+      });
     } finally {
       await refreshQueue();
       setUploading(false);
     }
-  }, [hydratePhotoUrls, inspection?.technician_id, inspectionId, locked, revision, tenantId, uploading, user?.id]);
+  }, [canFulfillUploads, hydratePhotoUrls, inspection?.technician_id, inspectionId, refreshQueue, revision, tenantId, uploading, user?.id]);
 
   useEffect(() => {
     const onOnline = () => flushUploads().catch(() => null);
@@ -418,7 +286,7 @@ export default function TechInspectionSession() {
   }
 
   const customer = getCustomerName(inspection?.lead || null);
-  const status = statusText(inspection?.status);
+  const status = normalizedStatus;
 
   return (
     <div className="space-y-4">
@@ -447,7 +315,7 @@ export default function TechInspectionSession() {
                 {syncState.failed ? ` • ${syncState.failed} failed` : ''}
               </div>
             </div>
-            <Button variant="outline" className="gap-2" onClick={() => flushUploads()} disabled={uploading || locked || !navigator.onLine}>
+            <Button variant="outline" className="gap-2" onClick={() => flushUploads()} disabled={uploading || !canFulfillUploads || !navigator.onLine}>
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
               Retry
             </Button>
@@ -493,12 +361,12 @@ export default function TechInspectionSession() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept={INSPECTION_IMAGE_ACCEPT}
             capture="environment"
             multiple
             className="hidden"
             onChange={(e) => {
-              const files = e.target.files;
+              const files = Array.from(e.target.files || []);
               e.target.value = '';
               enqueueFiles(files).catch(() => null);
             }}
@@ -522,11 +390,24 @@ export default function TechInspectionSession() {
                   <div className="min-w-0">
                     <div className="text-sm font-semibold truncate">{q.file_name || 'Photo'}</div>
                     <div className="text-xs text-slate-500">
-                      {q.status}
+                      {q.stage || q.status}
                       {q.error ? ` • ${q.error}` : ''}
                     </div>
                   </div>
                   <Badge variant="outline">{q.status}</Badge>
+                </div>
+                <div
+                  className="h-2 overflow-hidden rounded-full bg-slate-100"
+                  role="progressbar"
+                  aria-label={`Upload progress for ${q.file_name || 'photo'}`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Number(q.progress || 0)}
+                >
+                  <div
+                    className="h-full rounded-full bg-blue-600 transition-all"
+                    style={{ width: `${Math.max(0, Math.min(100, Number(q.progress || 0)))}%` }}
+                  />
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="space-y-1">
