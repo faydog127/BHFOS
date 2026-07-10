@@ -36,25 +36,9 @@ begin
 
   -- Resolve service address for job creation/backfill.
   v_service_address := nullif(btrim(coalesce(new.service_address, '')), '');
-  if v_service_address is null and new.lead_id is not null then
-    select nullif(
-      btrim(
-        concat_ws(
-          ', ',
-          nullif(btrim(concat_ws(' ', nullif(p.address1, ''), nullif(p.address2, ''))), ''),
-          nullif(btrim(p.city), ''),
-          nullif(btrim(p.state), ''),
-          nullif(btrim(p.zip), '')
-        )
-      ),
-      ''
-    )
-    into v_service_address
-    from public.leads l
-    left join public.properties p on p.id = l.property_id
-    where l.id = new.lead_id
-    limit 1;
-  end if;
+  -- Hosted leads.property_id is UUID while hosted properties.id is bigint.
+  -- There is no safe direct property join, so preserve the quote address when
+  -- present and otherwise leave the job address unset for operator completion.
 
   -- Quote accepted: ensure exactly one job per quote (idempotent).
   if v_new_status = 'accepted' and v_old_status <> 'accepted' then
@@ -254,4 +238,3 @@ end;
 $$;
 
 commit;
-

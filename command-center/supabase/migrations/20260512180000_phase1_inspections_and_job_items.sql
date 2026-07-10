@@ -219,7 +219,9 @@ create table if not exists public.inspections (
   tenant_id text not null,
   lead_id uuid references public.leads(id) on delete set null,
   contact_id uuid references public.contacts(id) on delete set null,
-  property_id uuid references public.properties(id) on delete set null,
+  -- Hosted leads.property_id is UUID while hosted properties.id is bigint.
+  -- Preserve the lead-compatible pointer without asserting an invalid FK.
+  property_id uuid,
   quote_id uuid references public.quotes(id) on delete set null,
   job_id uuid references public.jobs(id) on delete set null,
   invoice_id uuid references public.invoices(id) on delete set null,
@@ -658,4 +660,3 @@ create policy "Inspection photos service role full access"
   with check (true);
 
 commit;
-

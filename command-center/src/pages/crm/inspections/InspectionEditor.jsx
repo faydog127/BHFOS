@@ -77,6 +77,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
   const [recs, setRecs] = useState([]);
   const [photos, setPhotos] = useState([]);
   const photoUrlCacheRef = useRef(new Map());
+  const createRequestIdRef = useRef(crypto.randomUUID());
 
   // Draft inputs (new inspection)
   const [draftLeadId, setDraftLeadId] = useState('');
@@ -299,25 +300,41 @@ export default function InspectionEditor({ forceNew = false } = {}) {
       const techId = draftTechnicianId && draftTechnicianId !== 'unassigned' ? draftTechnicianId : null;
       const nowIso = new Date().toISOString();
 
-      const { data, error } = await supabase
+      const createPayload = {
+        tenant_id: tenantId,
+        lead_id: draftLeadId,
+        contact_id: lead?.contact_id || null,
+        property_id: lead?.property_id || null,
+        job_id: jobId,
+        technician_id: techId,
+        created_by_user_id: user?.id || null,
+        client_request_id: createRequestIdRef.current,
+        status: 'draft',
+        title: asText(draftTitle) || null,
+        started_at: nowIso,
+        created_at: nowIso,
+        updated_at: nowIso,
+        disclaimer_text: disclaimer,
+      };
+
+      let { data, error } = await supabase
         .from('inspections')
-        .insert({
-          tenant_id: tenantId,
-          lead_id: draftLeadId,
-          contact_id: lead?.contact_id || null,
-          property_id: lead?.property_id || null,
-          job_id: jobId,
-          technician_id: techId,
-          created_by_user_id: user?.id || null,
-          status: 'draft',
-          title: asText(draftTitle) || null,
-          started_at: nowIso,
-          created_at: nowIso,
-          updated_at: nowIso,
-          disclaimer_text: disclaimer,
-        })
+        .insert(createPayload)
         .select('id')
         .single();
+
+      // A timed-out request may have committed successfully. Reuse that row instead of
+      // creating a duplicate when the operator retries the same create action.
+      if (error?.code === '23505') {
+        const existing = await supabase
+          .from('inspections')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .eq('client_request_id', createRequestIdRef.current)
+          .maybeSingle();
+        data = existing.data;
+        error = existing.error;
+      }
 
       if (error) throw error;
       if (!data?.id) throw new Error('Inspection create failed.');
@@ -332,9 +349,9 @@ export default function InspectionEditor({ forceNew = false } = {}) {
     }
   };
 
-  const saveInspectionMeta = async () => {
+  const saveInspectionMeta = async ({ manageSaving = true, throwOnError = false } = {}) => {
     if (!inspection?.id) return;
-    setSaving(true);
+    if (manageSaving) setSaving(true);
     try {
       const nowIso = new Date().toISOString();
       const { error } = await supabase
@@ -351,8 +368,9 @@ export default function InspectionEditor({ forceNew = false } = {}) {
       toast({ title: 'Saved', description: 'Inspection updated.' });
     } catch (err) {
       toast({ variant: 'destructive', title: 'Save failed', description: err?.message || 'Could not save inspection.' });
+      if (throwOnError) throw err;
     } finally {
-      setSaving(false);
+      if (manageSaving) setSaving(false);
     }
   };
 
@@ -488,6 +506,9 @@ export default function InspectionEditor({ forceNew = false } = {}) {
             file_name: file.name,
             content_type: file.type || null,
             byte_size: file.size || null,
+            upload_state: 'complete',
+            storage_error: null,
+            storage_uploaded_at: nowIso,
             caption: null,
             category: null,
             is_before: null,
@@ -499,7 +520,11 @@ export default function InspectionEditor({ forceNew = false } = {}) {
           .select('*')
           .single();
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          // Do not leave an untracked private object behind if metadata persistence fails.
+          await supabase.storage.from(BUCKET_ID).remove([path]).catch(() => null);
+          throw insertError;
+        }
 
         const withUrls = await hydratePhotoUrls([photoRow]);
         setPhotos((prev) => [...prev, ...(withUrls || [])]);
@@ -620,7 +645,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
     if (!inspection?.id) return;
     setSaving(true);
     try {
-      await saveInspectionMeta();
+      await saveInspectionMeta({ manageSaving: false, throwOnError: true });
 
       const qaSnapshot = {
         findings_count: findings.length,

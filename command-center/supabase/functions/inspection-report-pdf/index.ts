@@ -29,6 +29,13 @@ const asNullableString = (value: unknown) => {
 
 const normalize = (value: unknown) => asString(value).toLowerCase();
 
+const leadAddress = (lead: Record<string, unknown>) => {
+  const direct = asString(lead.address) || asString(lead.service_address);
+  if (direct) return direct;
+  const cityLine = [asString(lead.city), asString(lead.state), asString(lead.zip)].filter(Boolean).join(' ');
+  return [asString(lead.address1), asString(lead.address2), cityLine].filter(Boolean).join(', ');
+};
+
 const formatDate = (value: unknown) => {
   const raw = asNullableString(value);
   if (!raw) return '';
@@ -88,7 +95,7 @@ const buildInspectionHtml = async (params: {
     'Customer';
 
   const workOrder = asString(job.work_order_number) || asString(job.job_number) || '';
-  const serviceAddress = asString(job.service_address) || asString((inspection as any).service_address) || '';
+  const serviceAddress = asString((inspection as any).service_address) || asString(job.service_address) || leadAddress(lead);
   const inspectedOn = formatDate(inspection.completed_at || inspection.started_at || inspection.created_at);
   const techName = asString(technician.full_name) || 'The Vent Guys Technician';
   const quoteNumber = asString(quote.quote_number) || '';

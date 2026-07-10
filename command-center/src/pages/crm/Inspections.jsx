@@ -28,6 +28,8 @@ export default function Inspections() {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
   const [query, setQuery] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
 
   const filtered = useMemo(() => {
     const q = String(query || '').trim().toLowerCase();
@@ -56,6 +58,7 @@ export default function Inspections() {
 
     const fetchInspections = async () => {
       setLoading(true);
+      setLoadError('');
       try {
         const { data, error } = await supabase
           .from('inspections')
@@ -87,6 +90,7 @@ export default function Inspections() {
         })));
       } catch (err) {
         console.error('Failed to load inspections:', err);
+        setLoadError(err?.message || 'The inspection list could not be loaded.');
         toast({
           variant: 'destructive',
           title: 'Failed to load inspections',
@@ -102,7 +106,7 @@ export default function Inspections() {
     return () => {
       mounted = false;
     };
-  }, [tenantId, toast]);
+  }, [reloadToken, tenantId, toast]);
 
   return (
     <div className="space-y-6">
@@ -155,6 +159,14 @@ export default function Inspections() {
             <div className="flex items-center justify-center py-10 text-slate-500">
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
               Loading inspections...
+            </div>
+          ) : loadError ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-6 py-8 text-center">
+              <div className="font-medium text-red-900">Inspections could not be loaded</div>
+              <div className="mt-1 text-sm text-red-700">{loadError}</div>
+              <Button variant="outline" className="mt-4" onClick={() => setReloadToken((value) => value + 1)}>
+                Try again
+              </Button>
             </div>
           ) : filtered.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center text-slate-600">

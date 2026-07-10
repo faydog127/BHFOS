@@ -44,6 +44,7 @@ const SettingsPage = React.lazy(() => import('@/pages/crm/Settings'));
 const FlowConsolePage = React.lazy(() => import('@/pages/crm/FlowConsole'));
 const InspectionsPage = React.lazy(() => import('@/pages/crm/Inspections'));
 const InspectionEditorPage = React.lazy(() => import('@/pages/crm/inspections/InspectionEditor'));
+const InspectionReportPage = React.lazy(() => import('@/pages/crm/inspections/InspectionReport'));
 const TechRoutesPage = React.lazy(() => import('@/pages/tech/TechRoutes'));
 
 // Sub-module Lazy Loads
@@ -268,6 +269,7 @@ const CRMRoutes = () => (
       <Route path="appointments" element={<Navigate to="../calendar" replace />} />
       <Route path="inspections" element={<FeatureGuard flag="enableInspections"><InspectionsPage /></FeatureGuard>} />
       <Route path="inspections/new" element={<FeatureGuard flag="enableInspections"><InspectionEditorPage forceNew /></FeatureGuard>} />
+      <Route path="inspections/:id/report" element={<FeatureGuard flag="enableInspections"><InspectionReportPage /></FeatureGuard>} />
       <Route path="inspections/:id" element={<FeatureGuard flag="enableInspections"><InspectionEditorPage /></FeatureGuard>} />
       <Route path="estimates" element={<FeatureGuard flag="enableEstimates"><ProposalList /></FeatureGuard>} />
       <Route path="estimates/new" element={<FeatureGuard flag="enableEstimates"><ProposalBuilder /></FeatureGuard>} />
