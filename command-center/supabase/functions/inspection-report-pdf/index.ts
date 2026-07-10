@@ -312,9 +312,12 @@ const buildInspectionHtml = async (params: {
   </html>`;
 };
 
-// Text-only PDF fallback (no images). This is used when PDFShift is not configured.
+// Local PDF fallback. This is used when PDFShift is not configured or unavailable.
 type PdfFontKey = 'F1' | 'F2';
 type PdfTextLine = { text: string; x: number; y: number; size: number; font: PdfFontKey };
+type PdfImage = { bytes: Uint8Array; width: number; height: number; caption: string };
+type PdfImagePlacement = PdfImage & { x: number; y: number; boxWidth: number; boxHeight: number };
+type PdfPage = { lines: PdfTextLine[]; images: PdfImagePlacement[] };
 
 const escapePdfText = (text: string) =>
   text
@@ -343,9 +346,76 @@ const wrapText = (text: string, maxChars: number) => {
   return lines;
 };
 
-const buildPdfDocument = (pages: PdfTextLine[][]): Uint8Array => {
+const concatBytes = (chunks: Uint8Array[]) => {
+  const length = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const result = new Uint8Array(length);
+  let offset = 0;
+  chunks.forEach((chunk) => {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  });
+  return result;
+};
+
+const jpegDimensions = (bytes: Uint8Array) => {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+  const startOfFrameMarkers = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
+  let offset = 2;
+  while (offset + 8 < bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = bytes[offset + 1];
+    offset += 2;
+    if (marker === 0xd8 || marker === 0xd9) continue;
+    if (offset + 1 >= bytes.length) break;
+    const segmentLength = (bytes[offset] << 8) | bytes[offset + 1];
+    if (segmentLength < 2 || offset + segmentLength > bytes.length) break;
+    if (startOfFrameMarkers.has(marker) && segmentLength >= 7) {
+      const height = (bytes[offset + 3] << 8) | bytes[offset + 4];
+      const width = (bytes[offset + 5] << 8) | bytes[offset + 6];
+      return width > 0 && height > 0 ? { width, height } : null;
+    }
+    offset += segmentLength;
+  }
+  return null;
+};
+
+const loadFallbackPdfImages = async (photos: Array<Record<string, unknown>>): Promise<PdfImage[]> => {
+  const eligible = photos.filter((row) => {
+    if ((row as any)?.is_voided === true) return false;
+    const uploadState = normalize((row as any)?.upload_state);
+    return !uploadState || uploadState === 'complete';
+  }).slice(0, 24);
+
+  const images: PdfImage[] = [];
+  for (const photo of eligible) {
+    const bucketId = asString(photo.bucket_id) || 'inspection-photos';
+    const objectPath = asString(photo.object_path);
+    if (!objectPath) continue;
+    try {
+      const { data, error } = await supabaseAdmin.storage.from(bucketId).download(objectPath);
+      if (error || !data) continue;
+      const bytes = new Uint8Array(await data.arrayBuffer());
+      const dimensions = jpegDimensions(bytes);
+      if (!dimensions) continue;
+      images.push({
+        bytes,
+        width: dimensions.width,
+        height: dimensions.height,
+        caption: asString(photo.caption) || asString(photo.file_name) || 'Photo',
+      });
+    } catch {
+      // Keep the report usable if an individual local image cannot be downloaded or decoded.
+    }
+  }
+  return images;
+};
+
+const buildPdfDocument = (pages: PdfPage[]): Uint8Array => {
   const encoder = new TextEncoder();
-  const objects: string[] = [];
+  const objects: Array<string | Uint8Array> = [];
   const pageObjectIds: number[] = [];
   let nextObjectId = 5;
 
@@ -354,9 +424,34 @@ const buildPdfDocument = (pages: PdfTextLine[][]): Uint8Array => {
   objects[4] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>';
 
   for (const page of pages) {
-    const contentStream = page
+    const imageResources: string[] = [];
+    const imageCommands: string[] = [];
+    page.images.forEach((image, index) => {
+      const imageName = `Im${index + 1}`;
+      const imageObjectId = nextObjectId++;
+      imageResources.push(`/${imageName} ${imageObjectId} 0 R`);
+
+      const dictionary = encoder.encode(
+        `<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} ` +
+        `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${image.bytes.length} >>\nstream\n`,
+      );
+      objects[imageObjectId] = concatBytes([dictionary, image.bytes, encoder.encode('\nendstream')]);
+
+      const scale = Math.min(image.boxWidth / image.width, image.boxHeight / image.height);
+      const drawWidth = image.width * scale;
+      const drawHeight = image.height * scale;
+      const drawX = image.x + ((image.boxWidth - drawWidth) / 2);
+      const drawY = image.y + ((image.boxHeight - drawHeight) / 2);
+      imageCommands.push(
+        `0.85 G ${image.x.toFixed(2)} ${image.y.toFixed(2)} ${image.boxWidth.toFixed(2)} ${image.boxHeight.toFixed(2)} re S`,
+        `q ${drawWidth.toFixed(2)} 0 0 ${drawHeight.toFixed(2)} ${drawX.toFixed(2)} ${drawY.toFixed(2)} cm /${imageName} Do Q`,
+      );
+    });
+
+    const textCommands = page.lines
       .map((line) => `BT /${line.font} ${line.size} Tf 1 0 0 1 ${line.x} ${line.y} Tm (${escapePdfText(line.text)}) Tj ET`)
       .join('\n');
+    const contentStream = [textCommands, ...imageCommands].filter(Boolean).join('\n');
 
     const contentObjectId = nextObjectId++;
     const pageObjectId = nextObjectId++;
@@ -365,33 +460,40 @@ const buildPdfDocument = (pages: PdfTextLine[][]): Uint8Array => {
     objects[contentObjectId] = `<< /Length ${contentLength} >>\nstream\n${contentStream}\nendstream`;
     objects[pageObjectId] =
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ` +
-      `/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentObjectId} 0 R >>`;
+      `/Resources << /Font << /F1 3 0 R /F2 4 0 R >> ` +
+      `${imageResources.length ? `/XObject << ${imageResources.join(' ')} >> ` : ''}>> ` +
+      `/Contents ${contentObjectId} 0 R >>`;
 
     pageObjectIds.push(pageObjectId);
   }
 
   objects[2] = `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`;
 
-  let pdf = '%PDF-1.4\n';
+  const chunks: Uint8Array[] = [encoder.encode('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n')];
   const offsets: number[] = [0];
+  let byteLength = chunks[0].length;
 
   for (let id = 1; id < objects.length; id += 1) {
-    offsets[id] = encoder.encode(pdf).length;
-    pdf += `${id} 0 obj\n${objects[id]}\nendobj\n`;
+    offsets[id] = byteLength;
+    const body = typeof objects[id] === 'string' ? encoder.encode(objects[id] as string) : objects[id] as Uint8Array;
+    const chunk = concatBytes([encoder.encode(`${id} 0 obj\n`), body, encoder.encode('\nendobj\n')]);
+    chunks.push(chunk);
+    byteLength += chunk.length;
   }
 
-  const startXref = encoder.encode(pdf).length;
-  pdf += `xref\n0 ${objects.length}\n`;
-  pdf += '0000000000 65535 f \n';
+  const startXref = byteLength;
+  let trailer = `xref\n0 ${objects.length}\n`;
+  trailer += '0000000000 65535 f \n';
   for (let id = 1; id < objects.length; id += 1) {
-    pdf += `${String(offsets[id]).padStart(10, '0')} 00000 n \n`;
+    trailer += `${String(offsets[id]).padStart(10, '0')} 00000 n \n`;
   }
-  pdf += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${startXref}\n%%EOF`;
+  trailer += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${startXref}\n%%EOF`;
+  chunks.push(encoder.encode(trailer));
 
-  return encoder.encode(pdf);
+  return concatBytes(chunks);
 };
 
-const buildTextOnlyInspectionPdf = (params: {
+const buildLocalInspectionPdf = (params: {
   customerName: string;
   inspectedOn: string;
   technicianName: string;
@@ -400,32 +502,33 @@ const buildTextOnlyInspectionPdf = (params: {
   summary: string;
   findings: Array<Record<string, unknown>>;
   recommendations: Array<Record<string, unknown>>;
+  photos: PdfImage[];
   disclaimer: string;
 }) => {
-  const pages: PdfTextLine[][] = [];
-  let current: PdfTextLine[] = [];
+  const pages: PdfPage[] = [];
+  let current: PdfPage = { lines: [], images: [] };
   let y = 742;
 
   const startPage = (continued = false) => {
-    current = [];
+    current = { lines: [], images: [] };
     pages.push(current);
     y = 742;
 
-    current.push({ text: continued ? 'Inspection Report (continued)' : 'Inspection Report', x: 50, y, size: 18, font: 'F2' });
+    current.lines.push({ text: continued ? 'Inspection Report (continued)' : 'Inspection Report', x: 50, y, size: 18, font: 'F2' });
     y -= 24;
 
-    current.push({ text: 'The Vent Guys', x: 50, y, size: 11, font: 'F2' });
+    current.lines.push({ text: 'The Vent Guys', x: 50, y, size: 11, font: 'F2' });
     y -= 16;
-    current.push({ text: `${BUSINESS_ADDRESS_LINE1} | ${BUSINESS_ADDRESS_LINE2}`, x: 50, y, size: 9, font: 'F1' });
+    current.lines.push({ text: `${BUSINESS_ADDRESS_LINE1} | ${BUSINESS_ADDRESS_LINE2}`, x: 50, y, size: 9, font: 'F1' });
     y -= 12;
-    current.push({ text: `${BUSINESS_PHONE_DISPLAY} | ${BUSINESS_EMAIL}`, x: 50, y, size: 9, font: 'F1' });
+    current.lines.push({ text: `${BUSINESS_PHONE_DISPLAY} | ${BUSINESS_EMAIL}`, x: 50, y, size: 9, font: 'F1' });
     y -= 18;
   };
 
   const pushLine = (text: string, font: PdfFontKey = 'F1', size = 10, indent = 0) => {
     const minY = 60;
     if (y < minY) startPage(true);
-    current.push({ text, x: 50 + indent, y, size, font });
+    current.lines.push({ text, x: 50 + indent, y, size, font });
     y -= size + 4;
   };
 
@@ -479,6 +582,39 @@ const buildTextOnlyInspectionPdf = (params: {
   y -= 6;
   pushLine('Disclaimer', 'F2', 12);
   wrapText(params.disclaimer || '', 92).slice(0, 8).forEach((line) => pushLine(line, 'F1', 10));
+
+  if (params.photos.length) {
+    y -= 10;
+    const firstPagePhotos = y >= 300 ? params.photos.slice(0, 2) : [];
+    if (firstPagePhotos.length) {
+      pushLine('Photo Evidence', 'F2', 12);
+      const boxWidth = 246;
+      const boxHeight = 170;
+      const imageY = y - boxHeight;
+      firstPagePhotos.forEach((photo, index) => {
+        const x = index === 0 ? 50 : 316;
+        current.images.push({ ...photo, x, y: imageY, boxWidth, boxHeight });
+        current.lines.push({ text: photo.caption.slice(0, 40), x, y: imageY - 16, size: 9, font: 'F1' });
+      });
+    }
+
+    const remaining = params.photos.slice(firstPagePhotos.length);
+    for (let offset = 0; offset < remaining.length; offset += 6) {
+      current = { lines: [], images: [] };
+      pages.push(current);
+      current.lines.push({ text: 'Inspection Report - Photo Evidence', x: 50, y: 742, size: 18, font: 'F2' });
+      current.lines.push({ text: 'The Vent Guys', x: 50, y: 718, size: 11, font: 'F2' });
+      const pagePhotos = remaining.slice(offset, offset + 6);
+      pagePhotos.forEach((photo, index) => {
+        const column = index % 2;
+        const row = Math.floor(index / 2);
+        const x = column === 0 ? 50 : 316;
+        const imageY = 518 - (row * 220);
+        current.images.push({ ...photo, x, y: imageY, boxWidth: 246, boxHeight: 170 });
+        current.lines.push({ text: photo.caption.slice(0, 40), x, y: imageY - 16, size: 9, font: 'F1' });
+      });
+    }
+  }
 
   return buildPdfDocument(pages);
 };
@@ -560,7 +696,7 @@ Deno.serve(async (req) => {
     const recommendations = (recRes.data || []) as Array<Record<string, unknown>>;
     const photos = (photosRes.data || []) as Array<Record<string, unknown>>;
 
-    let rendererUsed: 'pdfshift' | 'text' = 'text';
+    let rendererUsed: 'pdfshift' | 'local_pdf' = 'local_pdf';
     let pdfBytes: Uint8Array;
     let rendererError: string | null = null;
 
@@ -585,21 +721,25 @@ Deno.serve(async (req) => {
       pdfBytes = pdfRes.bytes;
     } catch (err) {
       rendererError = err instanceof Error ? err.message : 'pdf_render_failed';
-      // Local/dev fallback: generate a text-only PDF without images.
+      // Local/dev fallback: generate a self-contained PDF with normalized JPEG evidence.
       const customerName =
         asString(lead?.company) ||
         [asString(lead?.first_name), asString(lead?.last_name)].filter(Boolean).join(' ') ||
         asString(lead?.email) ||
         'Customer';
       const workOrder = asString(job?.work_order_number) || asString(job?.job_number) || '';
-      const serviceAddress = asString(job?.service_address) || '';
+      const serviceAddress =
+        asString((inspection as any).service_address) ||
+        asString(job?.service_address) ||
+        leadAddress(lead || {});
       const inspectedOn = formatDate((inspection as any).completed_at || (inspection as any).started_at || (inspection as any).created_at);
       const techName = asString(technician?.full_name) || 'The Vent Guys Technician';
       const summary = asString((inspection as any).summary);
       const disclaimer = asString((inspection as any).disclaimer_text) ||
         'This report reflects visible conditions at the time of inspection. Hidden conditions may exist.';
 
-      pdfBytes = buildTextOnlyInspectionPdf({
+      const fallbackPhotos = await loadFallbackPdfImages(photos);
+      pdfBytes = buildLocalInspectionPdf({
         customerName,
         inspectedOn,
         technicianName: techName,
@@ -608,6 +748,7 @@ Deno.serve(async (req) => {
         summary,
         findings,
         recommendations,
+        photos: fallbackPhotos,
         disclaimer,
       });
     }

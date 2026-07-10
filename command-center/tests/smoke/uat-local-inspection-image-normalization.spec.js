@@ -16,6 +16,7 @@ const LANDSCAPE_HEIC = path.join(FIXTURE_DIR, 'landscape.heic');
 const ORIENTED_JPEG = path.join(FIXTURE_DIR, 'exif-landscape-6.jpg');
 const SAMPLE_DIR = path.join(process.cwd(), 'artifacts', 'inspection-phase2a');
 const SAMPLE_PDF = path.join(SAMPLE_DIR, 'inspection-iphone-heic-sample.pdf');
+const FUNCTION_PDF = path.join(SAMPLE_DIR, 'inspection-function-iphone-heic-sample.pdf');
 
 const tinyPng = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAGElEQVR42mP4z8DAwMDAxMDAwMDAwAAAHgABfL4W9QAAAABJRU5ErkJggg==',
@@ -379,8 +380,14 @@ test.describe.serial('Phase 2A inspection image normalization', () => {
       expect(functionResult.error).toBeNull();
       expect(functionResult.data?.ok).toBeTruthy();
       expect(functionResult.data?.meta?.photos_count).toBe(rows.length);
+      expect(functionResult.data?.meta?.renderer_used).toBe('local_pdf');
       const functionPdf = Buffer.from(functionResult.data.pdf.content, 'base64');
       expect(functionPdf.subarray(0, 4).toString()).toBe('%PDF');
+      const functionPdfSource = functionPdf.toString('latin1');
+      expect(functionPdfSource).toContain('/Count 2');
+      expect(functionPdfSource.match(/\/Subtype \/Image/g)).toHaveLength(rows.length);
+      fs.writeFileSync(FUNCTION_PDF, functionPdf);
+      expect(fs.statSync(FUNCTION_PDF).size).toBe(functionPdf.length);
 
       const pendingRow = rows.find((row) => row.file_name === 'interrupted.png');
       const markPending = await admin
