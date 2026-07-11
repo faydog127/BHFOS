@@ -30,11 +30,18 @@ const asNullableString = (value: unknown) => {
 const normalize = (value: unknown) => asString(value).toLowerCase();
 
 const inspectionScopeLanguage = (inspection: Record<string, unknown>, findings: Array<Record<string, unknown>>) => {
+  const categories = findings.map((row) => normalize(row.category));
   const signals = [
     asString(inspection.title),
     ...findings.flatMap((row) => [asString(row.category), asString(row.title)]),
   ].join(' ').toLowerCase();
 
+  if (categories.some((category) => category === 'air_duct' || category === 'air duct')) {
+    return {
+      scope: 'Visible and readily accessible HVAC and air-distribution components documented during the scheduled inspection.',
+      exclusions: 'Concealed ductwork, sealed equipment, destructive access, engineering analysis, code compliance, and performance testing not expressly recorded are outside this report.',
+    };
+  }
   if (signals.includes('dryer') || signals.includes('vent')) {
     return {
       scope: 'Visible and readily accessible portions of the dryer-vent system documented during the scheduled inspection.',
