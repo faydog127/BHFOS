@@ -72,14 +72,15 @@ const buildInspectionHtml = async (params: {
   findings: Array<Record<string, unknown>>;
   recommendations: Array<Record<string, unknown>>;
   photos: Array<Record<string, unknown>>;
+  reportVersion: number;
 }) => {
   const inspection = params.inspection;
   const lead = params.lead || {};
   const job = params.job || {};
   const quote = params.quote || {};
   const technician = params.technician || {};
-  const findings = (params.findings || []).filter((row) => (row as any)?.is_customer_visible !== false);
-  const recommendations = (params.recommendations || []).filter((row) => (row as any)?.is_customer_visible !== false);
+  const findings = (params.findings || []).filter((row) => (row as any)?.is_customer_visible === true);
+  const recommendations = (params.recommendations || []).filter((row) => (row as any)?.is_customer_visible === true);
   // Only include non-voided photos that are fully uploaded.
   // Allow empty upload_state for backwards compatibility in older/local environments.
   const photos = (params.photos || []).filter((row) => {
@@ -98,15 +99,21 @@ const buildInspectionHtml = async (params: {
   const serviceAddress = asString((inspection as any).service_address) || asString(job.service_address) || leadAddress(lead);
   const inspectedOn = formatDate(inspection.completed_at || inspection.started_at || inspection.created_at);
   const techName = asString(technician.full_name) || 'The Vent Guys Technician';
-  const quoteNumber = asString(quote.quote_number) || '';
-  const quoteTotal = typeof quote.total_amount === 'number' ? quote.total_amount : Number(quote.total_amount || 0);
-  const quoteDisplay =
-    quoteNumber && Number.isFinite(quoteTotal) && quoteTotal > 0
-      ? `#${quoteNumber} ($${quoteTotal.toFixed(2)})`
-      : quoteNumber
-        ? `#${quoteNumber}`
-        : '';
   const summary = asString(inspection.summary);
+  const reportIdentifier = `INS-${asString(inspection.id).slice(0, 8).toUpperCase()}-R${Number((inspection as any).revision || 1)}`;
+  const reviewedAt = formatDate((inspection as any).reviewed_at);
+  const severityRank: Record<string, number> = { critical: 4, high: 3, moderate: 2, medium: 2, low: 1, informational: 0 };
+  const topSeverity = findings.reduce((highest, row) => {
+    const severity = normalize(row.severity) || 'informational';
+    return (severityRank[severity] ?? 0) > (severityRank[highest] ?? 0) ? severity : highest;
+  }, 'informational');
+  const condition = findings.length === 0
+    ? 'No Approved Deficiencies Recorded'
+    : ['critical', 'high'].includes(topSeverity)
+      ? 'Action Recommended'
+      : topSeverity === 'informational'
+        ? 'Observations Documented'
+        : 'Maintenance Recommended';
   const disclaimer = asString(inspection.disclaimer_text) ||
     'This report reflects visible conditions at the time of inspection. Hidden conditions may exist.';
 
@@ -191,17 +198,10 @@ const buildInspectionHtml = async (params: {
         const title = escapeHtml(asString(r.title) || 'Recommendation');
         const priority = escapeHtml(asString(r.priority) || 'normal');
         const desc = escapeHtml(asString(r.description));
-        const qty = r.suggested_quantity != null ? Number(r.suggested_quantity) : null;
-        const price = r.suggested_unit_price != null ? Number(r.suggested_unit_price) : null;
-        const line = [
-          Number.isFinite(qty) ? `Qty ${qty}` : null,
-          Number.isFinite(price) ? `$${price.toFixed(2)}` : null,
-        ].filter(Boolean).join(' - ');
-
         return `
           <div class="recItem">
             <div class="recTitle">${title}</div>
-            <div class="meta">Priority: ${priority}${line ? ` - ${escapeHtml(line)}` : ''}</div>
+            <div class="meta">Recommendation priority: ${priority}</div>
             ${desc ? `<div class="body">${desc}</div>` : ''}
           </div>
         `;
@@ -217,36 +217,49 @@ const buildInspectionHtml = async (params: {
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <title>Inspection Report</title>
       <style>
-        @page { size: Letter; margin: 0.45in; }
-        html, body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; }
-        .shell { border: 1px solid #e2e8f0; border-radius: 18px; overflow: hidden; }
-        .header { background: linear-gradient(90deg, #091e39, #173861); color: #fff; padding: 18px 20px; }
+        :root { --navy-dark:#091e39; --navy:#173861; --red:#b52025; --ink:#231f20; --muted:#475569; --border:#e2e8f0; --bg:#f8fafc; }
+        * { box-sizing: border-box; }
+        @page { size: Letter; margin: 0.55in; }
+        html, body { font-family: Arial, Helvetica, sans-serif; color: var(--ink); margin:0; }
+        .shell { max-width: 980px; margin: 0 auto; }
+        .header { background: linear-gradient(135deg, var(--navy-dark), var(--navy)); color: #fff; padding: 22px; border-radius: 16px; position:relative; overflow:hidden; }
+        .header:before { content:""; position:absolute; left:-46px; top:-58px; width:170px; height:230px; background:rgba(181,32,37,.82); transform:rotate(18deg); }
         .headerRow { display:flex; align-items:center; justify-content:space-between; gap: 16px; }
-        .logo { height: 44px; width: auto; }
-        .title { font-size: 20px; font-weight: 900; margin: 0; }
+        .headerRow > * { position:relative; z-index:1; }
+        .logo { height: 64px; width: auto; }
+        .title { font-size: 25px; font-weight: 900; margin: 0; }
         .sub { font-size: 12px; opacity: 0.9; margin-top: 4px; line-height: 1.35; }
-        .bar { height: 4px; background: #b52025; }
-        .content { padding: 16px 18px 14px 18px; }
+        .customerCopy { display:inline-block; margin-bottom:10px; padding:4px 9px; border:1px solid rgba(255,255,255,.25); border-radius:999px; font-size:11px; font-weight:700; }
+        .property { margin-top:14px; padding:12px 14px; border:1px solid rgba(255,255,255,.2); border-radius:12px; background:rgba(255,255,255,.1); }
+        .property .label { color:#dbeafe; }
+        .property .value { color:#fff; font-size:16px; font-weight:800; }
+        .content { padding: 18px 0 0; }
         .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .card { border: 1px solid #e2e8f0; border-radius: 16px; padding: 12px 14px; background: #fff; }
+        .card { border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; background: #fff; break-inside:avoid; page-break-inside:avoid; }
         .label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b; }
         .value { margin-top: 5px; font-size: 13px; color: #0f172a; }
-        .section { margin-top: 14px; }
-        .sectionTitle { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #0f172a; font-weight: 800; margin: 0 0 8px 0; }
-        .finding { border: 1px solid #e2e8f0; border-radius: 16px; padding: 12px 14px; margin-bottom: 10px; }
+        .section { margin-top: 22px; }
+        .sectionTitle { font-size: 16px; color: #0b1b4a; font-weight: 800; margin: 0 0 10px; padding-bottom:8px; border-bottom:1px solid var(--border); break-after:avoid-page; }
+        .status { border:1px solid var(--border); border-radius:16px; padding:17px; background:#fff; break-inside:avoid; }
+        .statusValue { font-size:21px; font-weight:900; color:#0b1b4a; margin:4px 0 10px; }
+        .finding { border: 1px solid var(--border); border-left:5px solid var(--red); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; break-inside:avoid; page-break-inside:avoid; }
         .findingTitle { font-size: 14px; font-weight: 900; margin: 0 0 6px 0; }
         .meta { font-size: 12px; color: #475569; margin-bottom: 6px; }
         .body { font-size: 13px; color: #0f172a; white-space: pre-wrap; margin-bottom: 6px; }
         .rec { font-size: 13px; color: #0f172a; white-space: pre-wrap; margin-top: 6px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 10px; }
         .photoGrid { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
         .photoCard { border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; }
-        .imgShell { position: relative; background: #f1f5f9; height: 160px; display:flex; align-items:center; justify-content:center; }
-        .imgShell img { width: 100%; height: 100%; object-fit: cover; display:block; }
+        .imgShell { position: relative; background: #f1f5f9; height: 210px; display:flex; align-items:center; justify-content:center; }
+        .imgShell img { width: 100%; height: 100%; object-fit: contain; display:block; }
         .imgFallback { font-size: 12px; color: #64748b; }
         .flag { position:absolute; left: 10px; top: 10px; background: rgba(15,23,42,0.85); color:#fff; padding: 4px 8px; border-radius: 999px; font-size: 11px; }
         .photoCaption { padding: 10px 10px; font-size: 12px; color: #0f172a; }
         .muted { font-size: 13px; color: #64748b; }
-        .footer { margin-top: 14px; border-top: 1px solid #e2e8f0; padding-top: 10px; font-size: 11px; color: #64748b; white-space: pre-wrap; }
+        .next { border:1px solid var(--border); border-left:5px solid #3b82f6; background:var(--bg); border-radius:12px; padding:14px 16px; }
+        .limits { border:1px dashed #939393; border-radius:12px; padding:12px 14px; color:var(--muted); font-size:11px; line-height:1.5; }
+        .footer { margin-top: 22px; border-top: 1px solid var(--border); padding-top: 12px; font-size: 11px; color: #64748b; line-height:1.5; }
+        @media screen and (max-width:720px) { .grid,.photoGrid { grid-template-columns:1fr; } }
+        @media print { html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;} .finding,.photoCard,.status,.card,.limits,.next{break-inside:avoid;page-break-inside:avoid;} }
       </style>
     </head>
     <body>
@@ -262,8 +275,9 @@ const buildInspectionHtml = async (params: {
             <div>${logoHtml}</div>
           </div>
         </div>
-        <div class="bar"></div>
         <div class="content">
+          <div class="customerCopy">Customer Copy</div>
+          <div class="property"><div class="label">Property</div><div class="value">${escapeHtml(serviceAddress || 'Not recorded')}</div></div>
           <div class="grid">
             <div class="card">
               <div class="label">Customer</div>
@@ -278,34 +292,35 @@ const buildInspectionHtml = async (params: {
               <div class="value">${escapeHtml(inspectedOn || '')}</div>
             </div>
             <div class="card">
-              <div class="label">Quote</div>
-              <div class="value">${escapeHtml(quoteDisplay || 'Unlinked')}</div>
+              <div class="label">Report ID / Version</div>
+              <div class="value">${escapeHtml(reportIdentifier)} / v${params.reportVersion}</div>
             </div>
             <div class="card">
               <div class="label">Work Order</div>
               <div class="value">${escapeHtml(workOrder || 'Unlinked')}</div>
             </div>
-            <div class="card" style="grid-column: 1 / -1;">
-              <div class="label">Service Address</div>
-              <div class="value">${escapeHtml(serviceAddress || 'Not recorded')}</div>
+            <div class="card">
+              <div class="label">Technician Review</div>
+              <div class="value">${reviewedAt ? `${escapeHtml(techName)} - ${escapeHtml(reviewedAt)}` : 'Not reviewed'}</div>
             </div>
           </div>
 
-          ${summary ? `<div class="section"><div class="sectionTitle">Summary</div><div class="card"><div class="body">${escapeHtml(summary)}</div></div></div>` : ''}
+          <div class="section"><div class="sectionTitle">System Status Summary</div><div class="status"><div class="label">Overall Condition</div><div class="statusValue">${escapeHtml(condition)}</div><div class="body">${escapeHtml(summary || 'The approved findings below summarize visible conditions documented during this inspection.')}</div></div></div>
 
           <div class="section">
-            <div class="sectionTitle">Findings</div>
-            ${findingsHtml || `<div class="muted">No findings recorded.</div>`}
+            <div class="sectionTitle">Technician-Approved Findings</div>
+            ${findingsHtml || `<div class="muted">No customer-approved findings recorded.</div>`}
           </div>
 
           <div class="section">
             <div class="sectionTitle">Recommendations</div>
             ${recsHtml}
+            <div class="muted" style="margin-top:8px;">Recommendations describe potential corrective actions. Proposed work and authoritative pricing, if requested, are provided separately in a quote.</div>
           </div>
 
-          <div class="footer">
-            <strong>Disclaimer:</strong> ${escapeHtml(disclaimer)}
-          </div>
+          <div class="section"><div class="sectionTitle">Next Step</div><div class="next">Contact The Vent Guys to discuss the approved findings and recommended corrective action. Any proposed scope and pricing will be issued as a separate quote.</div></div>
+          <div class="section"><div class="sectionTitle">Limitations and Disclaimers</div><div class="limits">${escapeHtml(disclaimer)} This is an observational report, not a medical, microbial, or licensed mechanical diagnosis unless separately stated.</div></div>
+          <div class="footer"><strong>The Vent Guys</strong><br />${escapeHtml(BUSINESS_ADDRESS_LINE1)}, ${escapeHtml(BUSINESS_ADDRESS_LINE2)}<br />${escapeHtml(BUSINESS_PHONE_DISPLAY)} | ${escapeHtml(BUSINESS_EMAIL)}<br />${escapeHtml(reportIdentifier)} | Report v${params.reportVersion}</div>
         </div>
       </div>
     </body>
@@ -504,6 +519,10 @@ const buildLocalInspectionPdf = (params: {
   recommendations: Array<Record<string, unknown>>;
   photos: PdfImage[];
   disclaimer: string;
+  reportIdentifier: string;
+  reportVersion: number;
+  reviewedAt: string;
+  overallCondition: string;
 }) => {
   const pages: PdfPage[] = [];
   let current: PdfPage = { lines: [], images: [] };
@@ -514,7 +533,7 @@ const buildLocalInspectionPdf = (params: {
     pages.push(current);
     y = 742;
 
-    current.lines.push({ text: continued ? 'Inspection Report (continued)' : 'Inspection Report', x: 50, y, size: 18, font: 'F2' });
+    current.lines.push({ text: continued ? 'Premium Inspection Report (continued)' : 'Premium Inspection Report', x: 50, y, size: 18, font: 'F2' });
     y -= 24;
 
     current.lines.push({ text: 'The Vent Guys', x: 50, y, size: 11, font: 'F2' });
@@ -538,15 +557,18 @@ const buildLocalInspectionPdf = (params: {
   pushLine(`Inspected On: ${params.inspectedOn}`, 'F1', 10);
   pushLine(`Work Order: ${params.workOrder || 'Unlinked'}`, 'F1', 10);
   if (params.serviceAddress) pushLine(`Address: ${params.serviceAddress}`, 'F1', 10);
+  pushLine(`Report: ${params.reportIdentifier} | Version ${params.reportVersion}`, 'F1', 10);
+  pushLine(`Technician Review: ${params.reviewedAt ? `${params.technicianName} - ${params.reviewedAt}` : 'Not reviewed'}`, 'F1', 10);
+  pushLine(`Overall Condition: ${params.overallCondition}`, 'F2', 11);
   y -= 6;
 
   if (params.summary) {
-    pushLine('Summary', 'F2', 12);
+    pushLine('Executive Summary', 'F2', 12);
     wrapText(params.summary, 92).forEach((line) => pushLine(line, 'F1', 10));
     y -= 6;
   }
 
-  pushLine('Findings', 'F2', 12);
+  pushLine('Technician-Approved Findings', 'F2', 12);
   if (!params.findings.length) {
     pushLine('No findings recorded.', 'F1', 10);
   } else {
@@ -554,33 +576,45 @@ const buildLocalInspectionPdf = (params: {
       const title = asString(finding.title) || `Finding ${idx + 1}`;
       const severity = asString(finding.severity);
       const category = asString(finding.category);
-      pushLine(`- ${title}${severity ? ` [${severity}]` : ''}${category ? ` (${category})` : ''}`, 'F2', 10);
       const desc = asString(finding.description);
-      wrapText(desc, 92).slice(0, 6).forEach((line) => pushLine(line, 'F1', 10, 14));
+      const descLines = wrapText(desc, 92).slice(0, 6);
       const rec = asString(finding.recommended_action);
+      const recLines = wrapText(rec, 92).slice(0, 6);
+      const requiredHeight = 22 + (descLines.length * 14) + (rec ? 16 + (recLines.length * 14) : 0);
+      if (y - requiredHeight < 60) startPage(true);
+      pushLine(`- ${title}${severity ? ` [${severity}]` : ''}${category ? ` (${category})` : ''}`, 'F2', 10);
+      if (descLines.length) pushLine('Observation:', 'F1', 10, 14);
+      descLines.forEach((line) => pushLine(line, 'F1', 10, 14));
       if (rec) {
         pushLine('Recommended:', 'F1', 10, 14);
-        wrapText(rec, 92).slice(0, 6).forEach((line) => pushLine(line, 'F1', 10, 14));
+        recLines.forEach((line) => pushLine(line, 'F1', 10, 14));
       }
       y -= 4;
     });
   }
 
   y -= 6;
+  if (y < 180) startPage(true);
   pushLine('Recommendations', 'F2', 12);
   if (!params.recommendations.length) {
     pushLine('No recommendations recorded.', 'F1', 10);
   } else {
     params.recommendations.forEach((rec) => {
       const title = asString(rec.title) || 'Recommendation';
-      pushLine(`- ${title}`, 'F2', 10);
       const desc = asString(rec.description);
-      wrapText(desc, 92).slice(0, 6).forEach((line) => pushLine(line, 'F1', 10, 14));
+      const descLines = wrapText(desc, 92).slice(0, 6);
+      if (y - (20 + descLines.length * 14) < 60) startPage(true);
+      pushLine(`- ${title}`, 'F2', 10);
+      descLines.forEach((line) => pushLine(line, 'F1', 10, 14));
     });
   }
 
   y -= 6;
-  pushLine('Disclaimer', 'F2', 12);
+  if (y < 160) startPage(true);
+  pushLine('Next Step', 'F2', 12);
+  wrapText('Contact The Vent Guys to discuss recommended corrective action. Proposed work and pricing are provided separately in a quote.', 92).forEach((line) => pushLine(line, 'F1', 10));
+  y -= 6;
+  pushLine('Limitations and Disclaimer', 'F2', 12);
   wrapText(params.disclaimer || '', 92).slice(0, 8).forEach((line) => pushLine(line, 'F1', 10));
 
   if (params.photos.length) {
@@ -602,7 +636,7 @@ const buildLocalInspectionPdf = (params: {
     for (let offset = 0; offset < remaining.length; offset += 6) {
       current = { lines: [], images: [] };
       pages.push(current);
-      current.lines.push({ text: 'Inspection Report - Photo Evidence', x: 50, y: 742, size: 18, font: 'F2' });
+      current.lines.push({ text: 'Premium Inspection Report - Approved Evidence', x: 50, y: 742, size: 18, font: 'F2' });
       current.lines.push({ text: 'The Vent Guys', x: 50, y: 718, size: 11, font: 'F2' });
       const pagePhotos = remaining.slice(offset, offset + 6);
       pagePhotos.forEach((photo, index) => {
@@ -695,6 +729,16 @@ Deno.serve(async (req) => {
     const findings = (findingsRes.data || []) as Array<Record<string, unknown>>;
     const recommendations = (recRes.data || []) as Array<Record<string, unknown>>;
     const photos = (photosRes.data || []) as Array<Record<string, unknown>>;
+    const approvedFindings = findings.filter((row) => (row as any).is_customer_visible === true);
+    const approvedRecommendations = recommendations.filter((row) => (row as any).is_customer_visible === true);
+    const approvedFindingIds = new Set(approvedFindings.map((row) => asString(row.id)).filter(Boolean));
+    const approvedPhotos = photos.filter((row) => approvedFindingIds.has(asString(row.finding_id)));
+    const inspectionRevision = Number.isFinite(Number((inspection as any).revision)) ? Number((inspection as any).revision) : 1;
+    const { data: lastReport } = await supabaseAdmin.from('inspection_reports').select('report_version')
+      .eq('tenant_id', tenantId).eq('inspection_id', inspectionId).eq('inspection_revision', inspectionRevision)
+      .order('report_version', { ascending: false }).limit(1).maybeSingle();
+    const nextVersion = Number(lastReport?.report_version || 0) + 1;
+    const reportIdentifier = `INS-${inspectionId.slice(0, 8).toUpperCase()}-R${inspectionRevision}`;
 
     let rendererUsed: 'pdfshift' | 'local_pdf' = 'local_pdf';
     let pdfBytes: Uint8Array;
@@ -711,6 +755,7 @@ Deno.serve(async (req) => {
         findings,
         recommendations,
         photos,
+        reportVersion: nextVersion,
       });
 
       const pdfRes = await renderHtmlToPdfBytes({ html, filename: `inspection-${inspectionId}.pdf`, letter: true });
@@ -738,7 +783,15 @@ Deno.serve(async (req) => {
       const disclaimer = asString((inspection as any).disclaimer_text) ||
         'This report reflects visible conditions at the time of inspection. Hidden conditions may exist.';
 
-      const fallbackPhotos = await loadFallbackPdfImages(photos);
+      const fallbackPhotos = await loadFallbackPdfImages(approvedPhotos);
+      const fallbackSeverityRank: Record<string, number> = { critical: 4, high: 3, moderate: 2, medium: 2, low: 1, informational: 0 };
+      const fallbackTopSeverity = approvedFindings.reduce((highest, row) => {
+        const severity = normalize(row.severity) || 'informational';
+        return (fallbackSeverityRank[severity] ?? 0) > (fallbackSeverityRank[highest] ?? 0) ? severity : highest;
+      }, 'informational');
+      const overallCondition = approvedFindings.length === 0 ? 'No Approved Deficiencies Recorded'
+        : ['critical', 'high'].includes(fallbackTopSeverity) ? 'Action Recommended'
+          : fallbackTopSeverity === 'informational' ? 'Observations Documented' : 'Maintenance Recommended';
       pdfBytes = buildLocalInspectionPdf({
         customerName,
         inspectedOn,
@@ -746,10 +799,14 @@ Deno.serve(async (req) => {
         serviceAddress,
         workOrder,
         summary,
-        findings,
-        recommendations,
+        findings: approvedFindings,
+        recommendations: approvedRecommendations,
         photos: fallbackPhotos,
         disclaimer,
+        reportIdentifier,
+        reportVersion: nextVersion,
+        reviewedAt: formatDate((inspection as any).reviewed_at),
+        overallCondition,
       });
     }
 
@@ -760,20 +817,6 @@ Deno.serve(async (req) => {
     let storedFileHash: string | null = null;
 
     if (storeArtifact) {
-      const rawRevision = (inspection as any)?.revision;
-      const inspectionRevision = Number.isFinite(Number(rawRevision)) ? Number(rawRevision) : 1;
-
-      const { data: lastReport } = await supabaseAdmin
-        .from('inspection_reports')
-        .select('report_version')
-        .eq('tenant_id', tenantId)
-        .eq('inspection_id', inspectionId)
-        .eq('inspection_revision', inspectionRevision)
-        .order('report_version', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      const nextVersion = Number(lastReport?.report_version || 0) + 1;
       storedFilePath = `${tenantId}/inspections/${inspectionId}/revision-${inspectionRevision}/reports/report-v${nextVersion}.pdf`;
       storedFileHash = await sha256Hex(pdfBytes);
 
@@ -803,9 +846,10 @@ Deno.serve(async (req) => {
           metadata: {
             renderer_used: rendererUsed,
             renderer_error: rendererError,
-            photos_count: photos.length,
-            findings_count: findings.length,
-            recommendations_count: recommendations.length,
+            photos_count: approvedPhotos.length,
+            findings_count: approvedFindings.length,
+            recommendations_count: approvedRecommendations.length,
+            premium_reference: '730-scott-before-condition-report',
           },
         })
         .select('*')
@@ -849,9 +893,9 @@ Deno.serve(async (req) => {
         inspection_id: inspectionId,
         renderer_used: rendererUsed,
         renderer_error: rendererError,
-        findings_count: findings.length,
-        photos_count: photos.length,
-        recommendations_count: recommendations.length,
+        findings_count: approvedFindings.length,
+        photos_count: approvedPhotos.length,
+        recommendations_count: approvedRecommendations.length,
         stored_file_path: storedFilePath,
         stored_file_hash: storedFileHash,
       },
