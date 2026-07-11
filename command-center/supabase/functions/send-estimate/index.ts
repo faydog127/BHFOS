@@ -1316,9 +1316,7 @@ Deno.serve(async (req) => {
     const customPreheader = asString(body.custom_preheader);
     const ccRecipients = normalizeEmailList(body.cc);
     const bccRecipients = normalizeEmailList(body.bcc);
-    // Inspection packages use the same approvable quote link as the Quotes/Estimates module.
-    // The reviewed inspection remains the only PDF attachment.
-    const attachPdf = deliveryChannel === 'email' && !inspectionLinkedQuote && body.attach_pdf !== false;
+    const attachPdf = deliveryChannel === 'email' && (inspectionLinkedQuote || body.attach_pdf !== false);
     const attachInspectionReportPdf = deliveryChannel === 'email' && asBoolean(body.attach_inspection_report_pdf);
     if (inspectionLinkedQuote && deliveryChannel !== 'email') {
       return respondJson({ error: 'Inspection quote delivery must use email so the reviewed report can be included.', code: 'INSPECTION_QUOTE_EMAIL_REQUIRED' }, 409);

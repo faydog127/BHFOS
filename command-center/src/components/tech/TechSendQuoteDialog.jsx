@@ -216,7 +216,7 @@ export default function TechSendQuoteDialog({
         quoteId: quote.id,
         lead,
         deliveryChannel: channel,
-        attachPdf: false,
+        attachPdf: requiresInspectionReport,
         attachInspectionReportPdf: channel === 'email' ? (requiresInspectionReport || attachInspectionReportPdf) : false,
         recipientEmail: channel === 'email' ? asText(toEmail) : null,
         recipientPhone: channel === 'sms' ? asText(toPhone) : null,
@@ -254,7 +254,9 @@ export default function TechSendQuoteDialog({
         <DialogHeader>
           <DialogTitle>Send Quote</DialogTitle>
           <DialogDescription>
-            Link-only send. No PDF attachment.
+            {requiresInspectionReport
+              ? 'Sends the canonical quote PDF and approval link with the reviewed inspection report.'
+              : 'Link-only send. No PDF attachment.'}
           </DialogDescription>
         </DialogHeader>
 
