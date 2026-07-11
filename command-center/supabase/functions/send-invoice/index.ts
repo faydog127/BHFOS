@@ -790,12 +790,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const body = await parseJson(req);
-    const invoiceId = asString(body.invoice_id);
-    if (!invoiceId) {
-      return respondJson({ error: 'invoice_id is required' }, 400);
-    }
-
     let claimsTenantId: string | null = null;
     let actorId: string | null = null;
     try {
@@ -803,10 +797,23 @@ Deno.serve(async (req) => {
       claimsTenantId = getTenantIdFromClaims(verified.claims);
       actorId = typeof verified.claims.sub === 'string' ? verified.claims.sub : null;
     } catch {
-      // Request can still proceed for system/service invocations.
+      return respondJson({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, 401);
+    }
+
+    if (!claimsTenantId) {
+      return respondJson({ error: 'Forbidden' }, 403);
+    }
+
+    const body = await parseJson(req);
+    const invoiceId = asString(body.invoice_id);
+    if (!invoiceId) {
+      return respondJson({ error: 'invoice_id is required' }, 400);
     }
 
     const bodyTenantId = asString(body.tenant_id);
+    if (bodyTenantId && bodyTenantId !== claimsTenantId) {
+      return respondJson({ error: 'Tenant mismatch' }, 403);
+    }
 
     const { data: invoiceRaw, error: invoiceError } = await supabaseAdmin
       .from('invoices')
@@ -855,7 +862,7 @@ Deno.serve(async (req) => {
 
     const invoice = invoiceRaw as InvoiceRow;
 
-    if (claimsTenantId && invoice.tenant_id && claimsTenantId !== invoice.tenant_id) {
+    if (invoice.tenant_id && claimsTenantId !== invoice.tenant_id) {
       return respondJson({ error: 'Forbidden' }, 403);
     }
 
