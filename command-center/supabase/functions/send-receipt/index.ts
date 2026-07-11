@@ -86,21 +86,22 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const verified = await getVerifiedClaims(req);
+    const claims = verified.claims as Record<string, unknown>;
+    const effectiveTenantId = getTenantIdFromClaims(claims);
+
+    if (!effectiveTenantId) {
+      return respondJson({ error: 'Forbidden' }, 403);
+    }
+
     const body = await parseJson(req);
     const invoiceId = asString(body.invoice_id);
     const jobId = asString(body.job_id);
     const bodyTenantId = asString(body.tenant_id);
 
-    let claims: Record<string, unknown> | null = null;
-    try {
-      const verified = await getVerifiedClaims(req);
-      claims = verified.claims as Record<string, unknown>;
-    } catch {
-      claims = null;
+    if (bodyTenantId && bodyTenantId !== effectiveTenantId) {
+      return respondJson({ error: 'Forbidden' }, 403);
     }
-
-    const claimsTenantId = claims ? getTenantIdFromClaims(claims) : null;
-    const effectiveTenantId = claimsTenantId || bodyTenantId || null;
 
     let invoiceQuery = supabaseAdmin
       .from('invoices')
@@ -143,7 +144,7 @@ Deno.serve(async (req) => {
       return respondJson({ error: 'Receipt invoice not found' }, 404);
     }
 
-    if (claimsTenantId && invoice.tenant_id && claimsTenantId !== invoice.tenant_id) {
+    if (invoice.tenant_id && invoice.tenant_id !== effectiveTenantId) {
       return respondJson({ error: 'Forbidden' }, 403);
     }
 
