@@ -7,6 +7,14 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
 })
 
+const toBase64 = (bytes: Uint8Array) => {
+  let binary = ''
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
+  }
+  return btoa(binary)
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   try {
@@ -25,7 +33,7 @@ Deno.serve(async (req) => {
     if (!inspection) return json({ error: 'Inspection not found' }, 404)
 
     const { data: photos, error: photoError } = await supabaseAdmin.from('inspection_photos')
-      .select('id, bucket_id, object_path, caption').eq('tenant_id', tenantId).eq('inspection_id', inspectionId)
+      .select('id, bucket_id, object_path, caption, content_type').eq('tenant_id', tenantId).eq('inspection_id', inspectionId)
       .eq('is_voided', false).eq('upload_state', 'complete')
     if (photoError) throw photoError
     if (!photos?.length) return json({ error: 'No completed photos to analyze' }, 400)
@@ -42,10 +50,12 @@ Deno.serve(async (req) => {
         .eq('tenant_id', tenantId).eq('inspection_id', inspectionId).eq('inspection_revision', inspection.revision)
         .eq('photo_id', photo.id).limit(1)
       if (existing.data?.length) continue
-      const { data: signed, error: signedError } = await supabaseAdmin.storage
-        .from(photo.bucket_id || 'inspection-photos').createSignedUrl(photo.object_path, 300)
-      if (signedError || !signed?.signedUrl) throw signedError || new Error('Could not access private photo')
-      const result = await analyzeInspectionPhoto({ imageUrl: signed.signedUrl, caption: photo.caption, notes: inspection.summary })
+      const { data: image, error: imageError } = await supabaseAdmin.storage
+        .from(photo.bucket_id || 'inspection-photos').download(photo.object_path)
+      if (imageError || !image) throw imageError || new Error('Could not access private photo')
+      const bytes = new Uint8Array(await image.arrayBuffer())
+      const imageUrl = `data:${photo.content_type || 'image/jpeg'};base64,${toBase64(bytes)}`
+      const result = await analyzeInspectionPhoto({ imageUrl, caption: photo.caption, notes: inspection.summary })
       const rows = [
         { suggestion_type: 'finding', content: result.finding },
         { suggestion_type: 'report_narrative', content: { narrative: result.narrative } },
