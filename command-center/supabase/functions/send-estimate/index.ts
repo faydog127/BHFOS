@@ -1141,6 +1141,20 @@ Deno.serve(async (req) => {
   }
 
   try {
+    let claims: Record<string, unknown>;
+    try {
+      const verified = await getVerifiedClaims(req);
+      claims = verified.claims as Record<string, unknown>;
+    } catch (err) {
+      console.warn('send-estimate rejected unverified request:', err instanceof Error ? err.message : String(err));
+      return respondJson({ error: 'Unauthorized.', code: 'AUTH_REQUIRED' }, 401);
+    }
+    const verifiedClaims = true;
+    const effectiveTenantId = getTenantIdFromClaims(claims);
+    if (!effectiveTenantId) {
+      return respondJson({ error: 'Verified identity has no tenant authority.', code: 'TENANT_AUTHORITY_REQUIRED' }, 403);
+    }
+
     const body = await parseJson(req);
     const requestOrigin = new URL(req.url).origin;
     const quoteId = asString(body.quote_id);
@@ -1159,28 +1173,11 @@ Deno.serve(async (req) => {
       return respondJson({ error: 'Missing quote_id.' }, 400);
     }
 
-    let claims: Record<string, unknown> | null = null;
-    let verifiedClaims = false;
-    try {
-      const verified = await getVerifiedClaims(req);
-      claims = verified.claims as Record<string, unknown>;
-      verifiedClaims = true;
-    } catch (err) {
-      console.warn('send-estimate proceeding without verified JWT:', err instanceof Error ? err.message : String(err));
-    }
-
-    const jwtTenantId = claims ? getTenantIdFromClaims(claims) : null;
-    const effectiveTenantId = jwtTenantId || bodyTenantId;
-
-    if (!effectiveTenantId) {
-      return respondJson({ error: 'Missing tenant_id.' }, 400);
-    }
-
-    if (jwtTenantId && bodyTenantId && bodyTenantId !== jwtTenantId) {
+    if (bodyTenantId && bodyTenantId !== effectiveTenantId) {
       return respondJson({ error: 'Tenant mismatch.' }, 403);
     }
 
-    const actorId = claims ? asString(claims.sub) || null : null;
+    const actorId = asString(claims.sub) || null;
 
     let quoteResult = await supabaseAdmin
       .from('quotes')
