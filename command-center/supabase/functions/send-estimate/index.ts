@@ -1178,7 +1178,7 @@ Deno.serve(async (req) => {
 
     let quoteResult = await supabaseAdmin
       .from('quotes')
-      .select('id,tenant_id,lead_id,estimate_id,customer_name,customer_email,customer_phone,quote_number,status,subtotal,tax_amount,total_amount,valid_until,created_at,public_token,line_items,service_address')
+      .select('id,tenant_id,lead_id,estimate_id,customer_name,customer_email,customer_phone,quote_number,status,subtotal,tax_amount,total_amount,valid_until,created_at,public_token,line_items,service_address,inspection_id,inspection_revision,inspection_human_reviewed_at')
       .eq('id', quoteId)
       .eq('tenant_id', effectiveTenantId)
       .maybeSingle<QuoteRow>();
@@ -1210,6 +1210,11 @@ Deno.serve(async (req) => {
 
     if (quoteError || !quote) {
       return respondJson({ error: 'Quote not found.' }, 404);
+    }
+
+    const inspectionLinkedQuote = Boolean((quote as any).inspection_id);
+    if (inspectionLinkedQuote && !(quote as any).inspection_human_reviewed_at) {
+      return respondJson({ error: 'Inspection quote requires human review before sending.', code: 'INSPECTION_QUOTE_NOT_REVIEWED' }, 409);
     }
 
     let publicToken = asString(quote.public_token);
@@ -1310,6 +1315,12 @@ Deno.serve(async (req) => {
     const bccRecipients = normalizeEmailList(body.bcc);
     const attachPdf = deliveryChannel === 'email' && body.attach_pdf !== false;
     const attachInspectionReportPdf = deliveryChannel === 'email' && asBoolean(body.attach_inspection_report_pdf);
+    if (inspectionLinkedQuote && deliveryChannel !== 'email') {
+      return respondJson({ error: 'Inspection quote delivery must use email so the reviewed report can be included.', code: 'INSPECTION_QUOTE_EMAIL_REQUIRED' }, 409);
+    }
+    if (inspectionLinkedQuote && !attachInspectionReportPdf) {
+      return respondJson({ error: 'Inspection quote delivery must include the reviewed inspection report.', code: 'INSPECTION_REPORT_REQUIRED' }, 409);
+    }
 
     const requiredFieldErrors: string[] = [];
     if (!quote.quote_number) requiredFieldErrors.push('quote_number');
@@ -1820,6 +1831,8 @@ Deno.serve(async (req) => {
 
       return {
         ok: true as const,
+        inspectionId: inspection.id as string,
+        reportId: (report as any).id as string,
         attachment: pdfAttachmentFromBytes({
           filename: `inspection-report-${String(inspection.id).slice(0, 8)}.pdf`,
           bytes,
@@ -1880,6 +1893,7 @@ Deno.serve(async (req) => {
       attachments = [pdfAttachment];
     }
 
+    let combinedInspectionReport: { inspectionId: string; reportId: string } | null = null;
     if (attachInspectionReportPdf) {
       const reportResult = await buildInspectionReportAttachment();
       if (!reportResult.ok) {
@@ -1893,6 +1907,7 @@ Deno.serve(async (req) => {
       }
 
       attachments = [...attachments, reportResult.attachment];
+      combinedInspectionReport = { inspectionId: reportResult.inspectionId, reportId: reportResult.reportId };
     }
 
     if (asString(quote.status).toLowerCase() === 'superseded') {
@@ -2003,6 +2018,29 @@ Deno.serve(async (req) => {
     let smsResult: Awaited<ReturnType<typeof sendDocumentSms>> | null = null;
     let deliveryProvider: string | null = null;
     let deliveryMocked: boolean | null = null;
+    let inspectionDeliveryId: string | null = null;
+
+    if (combinedInspectionReport) {
+      const idempotencyKey = `quote-with-report:${quote.id}:${combinedInspectionReport.reportId}:${recipientEmail.toLowerCase()}`;
+      const existingDelivery = await supabaseAdmin.from('inspection_report_deliveries').select('id, status')
+        .eq('tenant_id', effectiveTenantId).eq('idempotency_key', idempotencyKey).maybeSingle();
+      if (existingDelivery.data?.status === 'sent') {
+        return respondJson({ success: true, quote_id: quote.id, skipped: true, reason: 'duplicate_delivery', delivery_id: existingDelivery.data.id });
+      }
+      if (existingDelivery.data?.id) {
+        inspectionDeliveryId = existingDelivery.data.id;
+        await supabaseAdmin.from('inspection_report_deliveries').update({ status: 'pending', error_message: null }).eq('id', inspectionDeliveryId);
+      } else {
+        const insertedDelivery = await supabaseAdmin.from('inspection_report_deliveries').insert({
+          tenant_id: effectiveTenantId, inspection_id: combinedInspectionReport.inspectionId,
+          inspection_report_id: combinedInspectionReport.reportId, quote_id: quote.id,
+          delivery_kind: 'quote_with_report', recipient: recipientEmail.toLowerCase(),
+          idempotency_key: idempotencyKey, requested_by_user_id: actorId,
+        }).select('id').single();
+        if (insertedDelivery.error) return respondJson({ error: insertedDelivery.error.message, code: 'INSPECTION_DELIVERY_RECORD_FAILED' }, 500);
+        inspectionDeliveryId = insertedDelivery.data.id;
+      }
+    }
 
     if (deliveryChannel === 'sms') {
       const duplicateSms = await hasRecentEvent({
@@ -2100,6 +2138,21 @@ Deno.serve(async (req) => {
         updated_at: now.toISOString(),
       })
       .eq('id', quote.id);
+
+    if (inspectionDeliveryId && combinedInspectionReport) {
+      await supabaseAdmin.from('inspection_report_deliveries').update({
+        status: 'sent', provider_id: providerId, sent_at: now.toISOString(),
+      }).eq('id', inspectionDeliveryId);
+      await supabaseAdmin.from('inspection_reports').update({
+        status: 'sent', sent_at: now.toISOString(), sent_by: actorId, sent_method: 'email', sent_to: recipientEmail,
+      }).eq('id', combinedInspectionReport.reportId);
+      await supabaseAdmin.from('inspection_events').insert({
+        tenant_id: effectiveTenantId, inspection_id: combinedInspectionReport.inspectionId,
+        event_type: 'inspection_quote_and_report_sent', actor_user_id: actorId,
+        inspection_revision: (quote as any).inspection_revision,
+        metadata: { quote_id: quote.id, report_id: combinedInspectionReport.reportId, delivery_id: inspectionDeliveryId },
+      });
+    }
 
     await enqueueQuoteReminderTask({
       tenantId: quote.tenant_id || effectiveTenantId || 'tvg',

@@ -6,6 +6,7 @@ import { getTenantId } from '@/lib/tenantUtils';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
+import InspectionDeliveryPanel from '@/components/tech/InspectionDeliveryPanel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -1403,9 +1404,9 @@ export default function InspectionEditor({ forceNew = false } = {}) {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between gap-3">
                   <CardTitle className="text-base">Recommendations</CardTitle>
-                  <Button variant="outline" onClick={createQuoteDraftFromRecommendations} disabled={saving || Boolean(inspection?.quote_id)} className="gap-2">
+                  <Button variant="outline" onClick={createQuoteDraftFromRecommendations} disabled className="gap-2" title="Use the reviewed report tab and price book">
                     <FileDown className="h-4 w-4" />
-                    Create Quote Draft
+                    Create Quote in Report Tab
                   </Button>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -1443,6 +1444,12 @@ export default function InspectionEditor({ forceNew = false } = {}) {
           </TabsContent>
 
           <TabsContent value="report">
+            <InspectionDeliveryPanel
+              tenantId={tenantId}
+              inspection={inspection}
+              quote={linkedQuote}
+              onChanged={() => fetchInspection(inspection.id)}
+            />
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-3">
                 <CardTitle className="text-base">Customer Report</CardTitle>

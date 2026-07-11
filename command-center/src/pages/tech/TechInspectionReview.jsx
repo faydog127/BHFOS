@@ -13,6 +13,7 @@ import { mediaQueue } from '@/lib/offlineInspectionMediaQueue';
 import { v4 as uuidv4 } from 'uuid';
 import TechSendQuoteDialog from '@/components/tech/TechSendQuoteDialog';
 import InspectionAiReviewPanel from '@/components/tech/InspectionAiReviewPanel';
+import InspectionDeliveryPanel from '@/components/tech/InspectionDeliveryPanel';
 
 const asText = (v) => (typeof v === 'string' ? v.trim() : '');
 const statusText = (v) => asText(v).toLowerCase() || 'draft';
@@ -414,6 +415,8 @@ export default function TechInspectionReview() {
         </CardContent>
       </Card>
 
+      <InspectionDeliveryPanel tenantId={tenantId} inspection={inspection} quote={quote} onChanged={load} />
+
       <Card className="border-slate-200 shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">Send Quote</CardTitle>
@@ -465,6 +468,7 @@ export default function TechInspectionReview() {
         quoteItems={quoteItems}
         lead={inspection?.lead || null}
         serviceAddressFallback={inspection?.job?.service_address || null}
+        requiresInspectionReport
       />
     </div>
   );

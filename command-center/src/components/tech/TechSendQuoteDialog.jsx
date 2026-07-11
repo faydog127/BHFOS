@@ -46,6 +46,7 @@ export default function TechSendQuoteDialog({
   quoteItems,
   lead,
   serviceAddressFallback,
+  requiresInspectionReport = false,
 }) {
   const { toast } = useToast();
   const [step, setStep] = useState('recipient'); // recipient | confirm
@@ -131,7 +132,7 @@ export default function TechSendQuoteDialog({
     setToEmail(leadEmail || asText(quote?.customer_email) || '');
     setToPhone(leadPhone || asText(quote?.customer_phone) || '');
     setSubjectPrefix('');
-    setAttachInspectionReportPdf(false);
+    setAttachInspectionReportPdf(requiresInspectionReport);
     setChecks({
       scope: false,
       report: false,
@@ -142,7 +143,7 @@ export default function TechSendQuoteDialog({
     });
     setAckNonCustomer(false);
     setAckDecisionState(false);
-  }, [open, leadEmail, leadPhone, quote?.customer_email, quote?.customer_phone]);
+  }, [open, leadEmail, leadPhone, quote?.customer_email, quote?.customer_phone, requiresInspectionReport]);
 
   useEffect(() => {
     if (!open) return;
@@ -207,7 +208,7 @@ export default function TechSendQuoteDialog({
         lead,
         deliveryChannel: channel,
         attachPdf: false,
-        attachInspectionReportPdf: channel === 'email' ? attachInspectionReportPdf : false,
+        attachInspectionReportPdf: channel === 'email' ? (requiresInspectionReport || attachInspectionReportPdf) : false,
         recipientEmail: channel === 'email' ? asText(toEmail) : null,
         recipientPhone: channel === 'sms' ? asText(toPhone) : null,
         customSubject: channel === 'email' ? subject : undefined,
@@ -434,6 +435,7 @@ export default function TechSendQuoteDialog({
                       type="checkbox"
                       checked={attachInspectionReportPdf}
                       onChange={() => setAttachInspectionReportPdf((v) => !v)}
+                      disabled={requiresInspectionReport}
                     />
                     Attach inspection report PDF
                   </Label>
