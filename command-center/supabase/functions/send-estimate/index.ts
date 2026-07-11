@@ -1316,7 +1316,9 @@ Deno.serve(async (req) => {
     const customPreheader = asString(body.custom_preheader);
     const ccRecipients = normalizeEmailList(body.cc);
     const bccRecipients = normalizeEmailList(body.bcc);
-    const attachPdf = deliveryChannel === 'email' && body.attach_pdf !== false;
+    // Inspection packages use the same approvable quote link as the Quotes/Estimates module.
+    // The reviewed inspection remains the only PDF attachment.
+    const attachPdf = deliveryChannel === 'email' && !inspectionLinkedQuote && body.attach_pdf !== false;
     const attachInspectionReportPdf = deliveryChannel === 'email' && asBoolean(body.attach_inspection_report_pdf);
     if (inspectionLinkedQuote && deliveryChannel !== 'email') {
       return respondJson({ error: 'Inspection quote delivery must use email so the reviewed report can be included.', code: 'INSPECTION_QUOTE_EMAIL_REQUIRED' }, 409);
@@ -1682,7 +1684,9 @@ Deno.serve(async (req) => {
     const html = renderEmailLayout({
       preheader: customPreheader || `Quote #${quoteNumberText} for ${formatCurrency(totalAmount)}`,
       title: customTitle || `Service Quote #${quoteNumberText}`,
-      bodyHtml: customBodyHtml || bodyHtml,
+      bodyHtml: customBodyHtml
+        ? `${customBodyHtml}<div style="border-top:1px solid #e5e7eb;margin:18px 0;"></div>${bodyHtml}`
+        : bodyHtml,
     });
     const wantsHtml = String(body.pdf_renderer || '').toLowerCase() !== 'text';
 
