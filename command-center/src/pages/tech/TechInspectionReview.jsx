@@ -35,6 +35,7 @@ export default function TechInspectionReview() {
   const [quote, setQuote] = useState(null);
   const [quoteItems, setQuoteItems] = useState([]);
   const [sendQuoteOpen, setSendQuoteOpen] = useState(false);
+  const [resendRequested, setResendRequested] = useState(false);
 
   const load = async () => {
     if (!inspectionId) return;
@@ -75,7 +76,7 @@ export default function TechInspectionReview() {
         const [quoteRes, itemsRes] = await Promise.all([
           supabase
             .from('quotes')
-            .select('id, quote_number, status, total_amount, valid_until, service_address, customer_name, customer_email, customer_phone')
+            .select('id, quote_number, status, total_amount, valid_until, service_address, customer_name, customer_email, customer_phone, inspection_human_reviewed_at')
             .eq('tenant_id', tenantId)
             .eq('id', normalized.quote_id)
             .maybeSingle(),
@@ -415,60 +416,19 @@ export default function TechInspectionReview() {
         </CardContent>
       </Card>
 
-      <InspectionDeliveryPanel tenantId={tenantId} inspection={inspection} quote={quote} onChanged={load} />
-
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base">Send Quote</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm text-slate-700">
-          {quote?.id ? (
-            <>
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-xs text-slate-500">Quote</div>
-                    <div className="font-semibold">{quote.quote_number || 'Quote'}</div>
-                    <div className="text-xs text-slate-500">Status: {String(quote.status || 'draft')}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs text-slate-500">Total</div>
-                    <div className="font-semibold">${Number(quote.total_amount || 0).toFixed(2)}</div>
-                    <div className="text-xs text-slate-500">Valid thru: {quote.valid_until ? String(quote.valid_until).slice(0, 10) : 'Not set'}</div>
-                  </div>
-                </div>
-              </div>
-
-              <Button
-                size="lg"
-                className="w-full gap-2 bg-blue-600 hover:bg-blue-700"
-                onClick={() => setSendQuoteOpen(true)}
-                disabled={!navigator.onLine || !isReviewed}
-              >
-                Send Quote
-              </Button>
-              {!navigator.onLine ? (
-                <div className="text-xs text-slate-500">Sending requires connectivity.</div>
-              ) : null}
-              {!isReviewed ? <div className="text-xs text-amber-700">Review the full report before sending.</div> : null}
-            </>
-          ) : (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-600">
-              No quote is linked to this inspection yet.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <InspectionDeliveryPanel tenantId={tenantId} inspection={inspection} quote={quote} onChanged={load}
+        onSendQuote={(options) => { setResendRequested(Boolean(options?.intentionalResend)); setSendQuoteOpen(true); }} />
 
       <TechSendQuoteDialog
         open={sendQuoteOpen}
-        onOpenChange={setSendQuoteOpen}
+        onOpenChange={(open) => { setSendQuoteOpen(open); if (!open) setResendRequested(false); }}
         tenantId={tenantId}
         quote={quote}
         quoteItems={quoteItems}
         lead={inspection?.lead || null}
         serviceAddressFallback={inspection?.job?.service_address || null}
         requiresInspectionReport
+        initialIntentionalResend={resendRequested}
       />
     </div>
   );

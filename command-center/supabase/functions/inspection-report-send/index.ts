@@ -28,7 +28,10 @@ Deno.serve(async (req) => {
     const tenantId = String(user.app_metadata?.tenant_id || user.user_metadata?.tenant_id || '').trim()
     const body = await req.json()
     const inspectionId = String(body.inspection_id || '').trim()
+    const intentionalResend = body.intentional_resend === true
+    const resendReason = String(body.resend_reason || '').trim()
     if (!tenantId || !inspectionId) return json({ error: 'Missing inspection' }, 400)
+    if (intentionalResend && !resendReason) return json({ error: 'A resend reason is required.', code: 'RESEND_REASON_REQUIRED' }, 400)
 
     const { data: inspection } = await supabaseAdmin.from('inspections')
       .select('id, revision, reviewed_at, reviewed_revision, lead_id, title')
@@ -62,7 +65,8 @@ Deno.serve(async (req) => {
     }
     if (!report?.id || !report.file_path) return json({ error: 'Reviewed report artifact is unavailable', code: 'REPORT_NOT_AVAILABLE' }, 409)
 
-    const key = `report-only:${report.id}:${recipient}`
+    const baseKey = `report-only:${report.id}:${recipient}`
+    const key = intentionalResend ? `${baseKey}:resend:${crypto.randomUUID()}` : baseKey
     const existing = await supabaseAdmin.from('inspection_report_deliveries').select('*')
       .eq('tenant_id', tenantId).eq('idempotency_key', key).maybeSingle()
     if (existing.data?.status === 'sent') return json({ success: true, skipped: true, reason: 'duplicate_delivery', delivery_id: existing.data.id })
@@ -97,8 +101,9 @@ Deno.serve(async (req) => {
       status: 'sent', sent_at: sentAt, sent_by: user.id, sent_method: 'email', sent_to: recipient,
     }).eq('id', report.id)
     await supabaseAdmin.from('inspection_events').insert({
-      tenant_id: tenantId, inspection_id: inspectionId, event_type: 'inspection_report_sent', actor_user_id: user.id,
-      inspection_revision: inspection.revision, metadata: { delivery_id: deliveryId, report_id: report.id, recipient },
+      tenant_id: tenantId, inspection_id: inspectionId,
+      event_type: intentionalResend ? 'inspection_report_resent' : 'inspection_report_sent', actor_user_id: user.id,
+      inspection_revision: inspection.revision, metadata: { delivery_id: deliveryId, report_id: report.id, recipient, resend_reason: intentionalResend ? resendReason : null },
     })
     return json({ success: true, delivery_id: deliveryId, report_id: report.id })
   } catch (error) {

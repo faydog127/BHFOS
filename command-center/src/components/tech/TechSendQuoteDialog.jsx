@@ -47,6 +47,7 @@ export default function TechSendQuoteDialog({
   lead,
   serviceAddressFallback,
   requiresInspectionReport = false,
+  initialIntentionalResend = false,
 }) {
   const { toast } = useToast();
   const [step, setStep] = useState('recipient'); // recipient | confirm
@@ -57,6 +58,8 @@ export default function TechSendQuoteDialog({
   const [toPhone, setToPhone] = useState('');
   const [subjectPrefix, setSubjectPrefix] = useState('');
   const [attachInspectionReportPdf, setAttachInspectionReportPdf] = useState(false);
+  const [intentionalResend, setIntentionalResend] = useState(false);
+  const [resendReason, setResendReason] = useState('');
 
   const [checks, setChecks] = useState({
     scope: false,
@@ -133,6 +136,8 @@ export default function TechSendQuoteDialog({
     setToPhone(leadPhone || asText(quote?.customer_phone) || '');
     setSubjectPrefix('');
     setAttachInspectionReportPdf(requiresInspectionReport);
+    setIntentionalResend(initialIntentionalResend);
+    setResendReason('');
     setChecks({
       scope: false,
       report: false,
@@ -143,7 +148,7 @@ export default function TechSendQuoteDialog({
     });
     setAckNonCustomer(false);
     setAckDecisionState(false);
-  }, [open, leadEmail, leadPhone, quote?.customer_email, quote?.customer_phone, requiresInspectionReport]);
+  }, [open, leadEmail, leadPhone, quote?.customer_email, quote?.customer_phone, requiresInspectionReport, initialIntentionalResend]);
 
   useEffect(() => {
     if (!open) return;
@@ -187,6 +192,10 @@ export default function TechSendQuoteDialog({
       toast({ variant: 'destructive', title: 'Decision already recorded', description: 'Acknowledge quote decision state before sending.' });
       return;
     }
+    if (intentionalResend && !asText(resendReason)) {
+      toast({ variant: 'destructive', title: 'Resend reason required', description: 'Record why this customer delivery is being repeated.' });
+      return;
+    }
 
     const isReviewSend = !recipientIsCustomer;
     const prefix = asText(subjectPrefix);
@@ -214,6 +223,8 @@ export default function TechSendQuoteDialog({
         customSubject: channel === 'email' ? subject : undefined,
         customBodyHtml: channel === 'email' ? bodyLines.join('') : undefined,
         tenantId,
+        intentionalResend,
+        resendReason: asText(resendReason),
       });
 
       toast({
@@ -370,6 +381,14 @@ export default function TechSendQuoteDialog({
                 />
               </div>
             ) : null}
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+              <Label className="flex items-center gap-2">
+                <input type="checkbox" checked={intentionalResend} onChange={() => setIntentionalResend((value) => !value)} />
+                Intentional resend (audited)
+              </Label>
+              {intentionalResend ? <Input className="mt-2" value={resendReason} onChange={(event) => setResendReason(event.target.value)} placeholder="Reason for resend" /> : null}
+            </div>
 
             {Array.isArray(itemsPreview) && itemsPreview.length ? (
               <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm">

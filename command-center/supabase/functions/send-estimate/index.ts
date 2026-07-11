@@ -1148,6 +1148,12 @@ Deno.serve(async (req) => {
     const dryRun = body.dry_run === true;
     const overrideAcknowledged = body.override_acknowledged === true;
     const overrideReason = asString(body.override_reason);
+    const intentionalResend = body.intentional_resend === true;
+    const resendReason = asString(body.resend_reason);
+
+    if (intentionalResend && !resendReason) {
+      return respondJson({ error: 'A resend reason is required.', code: 'RESEND_REASON_REQUIRED' }, 400);
+    }
 
     if (!quoteId) {
       return respondJson({ error: 'Missing quote_id.' }, 400);
@@ -2021,7 +2027,8 @@ Deno.serve(async (req) => {
     let inspectionDeliveryId: string | null = null;
 
     if (combinedInspectionReport) {
-      const idempotencyKey = `quote-with-report:${quote.id}:${combinedInspectionReport.reportId}:${recipientEmail.toLowerCase()}`;
+      const baseIdempotencyKey = `quote-with-report:${quote.id}:${combinedInspectionReport.reportId}:${recipientEmail.toLowerCase()}`;
+      const idempotencyKey = intentionalResend ? `${baseIdempotencyKey}:resend:${crypto.randomUUID()}` : baseIdempotencyKey;
       const existingDelivery = await supabaseAdmin.from('inspection_report_deliveries').select('id, status')
         .eq('tenant_id', effectiveTenantId).eq('idempotency_key', idempotencyKey).maybeSingle();
       if (existingDelivery.data?.status === 'sent') {
@@ -2148,9 +2155,9 @@ Deno.serve(async (req) => {
       }).eq('id', combinedInspectionReport.reportId);
       await supabaseAdmin.from('inspection_events').insert({
         tenant_id: effectiveTenantId, inspection_id: combinedInspectionReport.inspectionId,
-        event_type: 'inspection_quote_and_report_sent', actor_user_id: actorId,
+        event_type: intentionalResend ? 'inspection_quote_and_report_resent' : 'inspection_quote_and_report_sent', actor_user_id: actorId,
         inspection_revision: (quote as any).inspection_revision,
-        metadata: { quote_id: quote.id, report_id: combinedInspectionReport.reportId, delivery_id: inspectionDeliveryId },
+        metadata: { quote_id: quote.id, report_id: combinedInspectionReport.reportId, delivery_id: inspectionDeliveryId, resend_reason: intentionalResend ? resendReason : null },
       });
     }
 
