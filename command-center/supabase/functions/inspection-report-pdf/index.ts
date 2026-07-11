@@ -29,6 +29,30 @@ const asNullableString = (value: unknown) => {
 
 const normalize = (value: unknown) => asString(value).toLowerCase();
 
+const inspectionScopeLanguage = (inspection: Record<string, unknown>, findings: Array<Record<string, unknown>>) => {
+  const signals = [
+    asString(inspection.title),
+    ...findings.flatMap((row) => [asString(row.category), asString(row.title)]),
+  ].join(' ').toLowerCase();
+
+  if (signals.includes('dryer') || signals.includes('vent')) {
+    return {
+      scope: 'Visible and readily accessible portions of the dryer-vent system documented during the scheduled inspection.',
+      exclusions: 'Concealed duct sections, inaccessible terminations, destructive access, appliance diagnosis, and airflow testing not expressly recorded are outside this report.',
+    };
+  }
+  if (signals.includes('coil') || signals.includes('blower') || signals.includes('duct') || signals.includes('hvac')) {
+    return {
+      scope: 'Visible and readily accessible HVAC and air-distribution components documented during the scheduled inspection.',
+      exclusions: 'Concealed ductwork, sealed equipment, destructive access, engineering analysis, code compliance, and performance testing not expressly recorded are outside this report.',
+    };
+  }
+  return {
+    scope: 'Visible and readily accessible conditions within the agreed inspection scope on the date shown.',
+    exclusions: 'Concealed, inaccessible, obstructed, unsafe, or uninspected areas and destructive testing are outside this report.',
+  };
+};
+
 const leadAddress = (lead: Record<string, unknown>) => {
   const direct = asString(lead.address) || asString(lead.service_address);
   if (direct) return direct;
@@ -114,8 +138,8 @@ const buildInspectionHtml = async (params: {
       : topSeverity === 'informational'
         ? 'Observations Documented'
         : 'Maintenance Recommended';
-  const disclaimer = asString(inspection.disclaimer_text) ||
-    'This report reflects visible conditions at the time of inspection. Hidden conditions may exist.';
+  const customDisclaimer = asString(inspection.disclaimer_text);
+  const scopeLanguage = inspectionScopeLanguage(inspection, findings);
 
   const photosByFinding = new Map<string, Array<Record<string, unknown>>>();
   photos.forEach((photo) => {
@@ -145,7 +169,7 @@ const buildInspectionHtml = async (params: {
   const renderPhotoGrid = (rows: Array<Record<string, unknown>>) => {
     if (!rows.length) return '';
     const cards = rows.map((photo) => {
-      const caption = escapeHtml(asString(photo.caption) || asString(photo.file_name) || 'Photo');
+      const caption = escapeHtml(asString(photo.caption) || 'Inspection evidence');
       const flag = photo.is_before === true ? 'Before' : photo.is_before === false ? 'After' : '';
       const flagHtml = flag ? `<div class="flag">${escapeHtml(flag)}</div>` : '';
       const imgSrc = embeddedMap.get(asString(photo.id));
@@ -180,7 +204,6 @@ const buildInspectionHtml = async (params: {
     const descHtml = description ? `<div class="body">${description}</div>` : '';
     const recHtml = recommended ? `<div class="rec"><strong>Recommended:</strong> ${recommended}</div>` : '';
     const photoRows = photosByFinding.get(id) || [];
-    const photoHtml = photoRows.length ? `<div class="sectionTitle">Photo Evidence</div>${renderPhotoGrid(photoRows)}` : '';
 
     return `
       <div class="finding">
@@ -188,8 +211,8 @@ const buildInspectionHtml = async (params: {
         ${metaHtml}
         ${descHtml}
         ${recHtml}
-        ${photoHtml}
       </div>
+      ${photoRows.length ? `<div class="evidenceGroup"><div class="evidenceTitle">Evidence for ${title}</div>${renderPhotoGrid(photoRows)}</div>` : ''}
     `;
   }).join('');
 
@@ -219,45 +242,55 @@ const buildInspectionHtml = async (params: {
       <style>
         :root { --navy-dark:#091e39; --navy:#173861; --red:#b52025; --ink:#231f20; --muted:#475569; --border:#e2e8f0; --bg:#f8fafc; }
         * { box-sizing: border-box; }
-        @page { size: Letter; margin: 0.55in; }
+        @page {
+          size: Letter;
+          margin: 0.48in 0.52in 0.7in;
+          @bottom-left { content: "The Vent Guys | ${escapeHtml(reportIdentifier)} | v${params.reportVersion}"; color:#64748b; font-size:8px; }
+          @bottom-right { content: "Page " counter(page) " of " counter(pages); color:#64748b; font-size:8px; }
+        }
         html, body { font-family: Arial, Helvetica, sans-serif; color: var(--ink); margin:0; }
         .shell { max-width: 980px; margin: 0 auto; }
-        .header { background: linear-gradient(135deg, var(--navy-dark), var(--navy)); color: #fff; padding: 22px; border-radius: 16px; position:relative; overflow:hidden; }
+        .header { background: linear-gradient(135deg, var(--navy-dark), var(--navy)); color: #fff; padding: 18px 20px; border-radius: 14px; position:relative; overflow:hidden; }
         .header:before { content:""; position:absolute; left:-46px; top:-58px; width:170px; height:230px; background:rgba(181,32,37,.82); transform:rotate(18deg); }
         .headerRow { display:flex; align-items:center; justify-content:space-between; gap: 16px; }
         .headerRow > * { position:relative; z-index:1; }
-        .logo { height: 64px; width: auto; }
-        .title { font-size: 25px; font-weight: 900; margin: 0; }
+        .logo { height: 58px; width: auto; }
+        .eyebrow { font-size:9px; font-weight:800; letter-spacing:.22em; text-transform:uppercase; color:#dbeafe; margin-bottom:5px; }
+        .title { font-size: 24px; font-weight: 900; margin: 0; }
         .sub { font-size: 12px; opacity: 0.9; margin-top: 4px; line-height: 1.35; }
-        .customerCopy { display:inline-block; margin-bottom:10px; padding:4px 9px; border:1px solid rgba(255,255,255,.25); border-radius:999px; font-size:11px; font-weight:700; }
-        .property { margin-top:14px; padding:12px 14px; border:1px solid rgba(255,255,255,.2); border-radius:12px; background:rgba(255,255,255,.1); }
-        .property .label { color:#dbeafe; }
-        .property .value { color:#fff; font-size:16px; font-weight:800; }
-        .content { padding: 18px 0 0; }
-        .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .card { border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; background: #fff; break-inside:avoid; page-break-inside:avoid; }
+        .content { padding: 13px 0 0; }
+        .documentBar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:9px; font-size:10px; color:#475569; }
+        .customerCopy { padding:3px 8px; border:1px solid var(--border); border-radius:999px; font-weight:800; color:#0b1b4a; }
+        .grid { display:grid; grid-template-columns: 1.15fr 1.6fr 1fr; gap: 8px; }
+        .card { border: 1px solid var(--border); border-radius: 11px; padding: 9px 11px; background: #fff; break-inside:avoid; page-break-inside:avoid; min-height:57px; }
+        .card.address { grid-column:span 2; }
         .label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b; }
         .value { margin-top: 5px; font-size: 13px; color: #0f172a; }
-        .section { margin-top: 22px; }
-        .sectionTitle { font-size: 16px; color: #0b1b4a; font-weight: 800; margin: 0 0 10px; padding-bottom:8px; border-bottom:1px solid var(--border); break-after:avoid-page; }
-        .status { border:1px solid var(--border); border-radius:16px; padding:17px; background:#fff; break-inside:avoid; }
-        .statusValue { font-size:21px; font-weight:900; color:#0b1b4a; margin:4px 0 10px; }
-        .finding { border: 1px solid var(--border); border-left:5px solid var(--red); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; break-inside:avoid; page-break-inside:avoid; }
+        .section { margin-top: 15px; }
+        .sectionTitle { font-size: 15px; color: #0b1b4a; font-weight: 800; margin: 0 0 8px; padding-bottom:6px; border-bottom:1px solid var(--border); break-after:avoid-page; }
+        .status { border:1px solid var(--border); border-radius:12px; padding:12px 14px; background:#fff; break-inside:avoid; }
+        .statusValue { font-size:18px; font-weight:900; color:#0b1b4a; margin:3px 0 6px; }
+        .finding { border: 1px solid var(--border); border-left:4px solid var(--red); border-radius: 11px; padding: 11px 13px; margin-bottom: 7px; break-inside:avoid; page-break-inside:avoid; }
         .findingTitle { font-size: 14px; font-weight: 900; margin: 0 0 6px 0; }
         .meta { font-size: 12px; color: #475569; margin-bottom: 6px; }
         .body { font-size: 13px; color: #0f172a; white-space: pre-wrap; margin-bottom: 6px; }
-        .rec { font-size: 13px; color: #0f172a; white-space: pre-wrap; margin-top: 6px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 10px; }
-        .photoGrid { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
-        .photoCard { border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; }
-        .imgShell { position: relative; background: #f1f5f9; height: 210px; display:flex; align-items:center; justify-content:center; }
+        .rec { font-size: 12px; color: #0f172a; white-space: pre-wrap; margin-top: 6px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 9px; padding: 8px 9px; }
+        .evidenceGroup { margin: 6px 0 12px; break-inside:auto; page-break-inside:auto; }
+        .evidenceTitle { font-size:11px; font-weight:800; color:#334155; margin:0 0 6px; break-after:avoid; }
+        .photoGrid { display:grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .photoCard { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; break-inside:avoid; page-break-inside:avoid; }
+        .imgShell { position: relative; background: #f1f5f9; height: 155px; display:flex; align-items:center; justify-content:center; }
         .imgShell img { width: 100%; height: 100%; object-fit: contain; display:block; }
         .imgFallback { font-size: 12px; color: #64748b; }
         .flag { position:absolute; left: 10px; top: 10px; background: rgba(15,23,42,0.85); color:#fff; padding: 4px 8px; border-radius: 999px; font-size: 11px; }
-        .photoCaption { padding: 10px 10px; font-size: 12px; color: #0f172a; }
+        .photoCaption { padding: 7px 8px; font-size: 10px; color: #334155; line-height:1.35; }
         .muted { font-size: 13px; color: #64748b; }
         .next { border:1px solid var(--border); border-left:5px solid #3b82f6; background:var(--bg); border-radius:12px; padding:14px 16px; }
-        .limits { border:1px dashed #939393; border-radius:12px; padding:12px 14px; color:var(--muted); font-size:11px; line-height:1.5; }
-        .footer { margin-top: 22px; border-top: 1px solid var(--border); padding-top: 12px; font-size: 11px; color: #64748b; line-height:1.5; }
+        .limits { border:1px solid var(--border); border-radius:11px; padding:11px 13px; color:var(--muted); font-size:10px; line-height:1.45; background:#f8fafc; }
+        .limits p { margin:0 0 6px; }
+        .limits p:last-child { margin-bottom:0; }
+        .draftNote { font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#991b1b; margin-bottom:6px; }
+        .footer { margin-top: 15px; border-top: 1px solid var(--border); padding-top: 9px; font-size: 9px; color: #64748b; line-height:1.45; display:flex; justify-content:space-between; gap:16px; }
         @media screen and (max-width:720px) { .grid,.photoGrid { grid-template-columns:1fr; } }
         @media print { html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;} .finding,.photoCard,.status,.card,.limits,.next{break-inside:avoid;page-break-inside:avoid;} }
       </style>
@@ -267,7 +300,8 @@ const buildInspectionHtml = async (params: {
         <div class="header">
           <div class="headerRow">
             <div>
-              <div class="title">Inspection Report</div>
+              <div class="eyebrow">The Vent Guys</div>
+              <div class="title">Customer Inspection Report</div>
               <div class="sub">${escapeHtml(BUSINESS_ADDRESS_LINE1)} | ${escapeHtml(BUSINESS_ADDRESS_LINE2)}<br />
                 ${escapeHtml(BUSINESS_PHONE_DISPLAY)} | ${escapeHtml(BUSINESS_EMAIL)}
               </div>
@@ -276,33 +310,29 @@ const buildInspectionHtml = async (params: {
           </div>
         </div>
         <div class="content">
-          <div class="customerCopy">Customer Copy</div>
-          <div class="property"><div class="label">Property</div><div class="value">${escapeHtml(serviceAddress || 'Not recorded')}</div></div>
+          <div class="documentBar"><div class="customerCopy">Customer Copy</div><div>${escapeHtml(reportIdentifier)} &nbsp;|&nbsp; Version ${params.reportVersion}</div></div>
           <div class="grid">
             <div class="card">
               <div class="label">Customer</div>
               <div class="value">${escapeHtml(customerName)}</div>
             </div>
             <div class="card">
+              <div class="label">Inspection Date</div>
+              <div class="value">${escapeHtml(inspectedOn || 'Not recorded')}</div>
+            </div>
+            <div class="card address">
+              <div class="label">Service Address</div>
+              <div class="value">${escapeHtml(serviceAddress || 'Address not provided')}</div>
+            </div>
+            <div class="card">
               <div class="label">Technician</div>
               <div class="value">${escapeHtml(techName)}</div>
             </div>
             <div class="card">
-              <div class="label">Inspected On</div>
-              <div class="value">${escapeHtml(inspectedOn || '')}</div>
-            </div>
-            <div class="card">
-              <div class="label">Report ID / Version</div>
-              <div class="value">${escapeHtml(reportIdentifier)} / v${params.reportVersion}</div>
-            </div>
-            <div class="card">
-              <div class="label">Work Order</div>
-              <div class="value">${escapeHtml(workOrder || 'Unlinked')}</div>
-            </div>
-            <div class="card">
               <div class="label">Technician Review</div>
-              <div class="value">${reviewedAt ? `${escapeHtml(techName)} - ${escapeHtml(reviewedAt)}` : 'Not reviewed'}</div>
+              <div class="value">${reviewedAt ? escapeHtml(reviewedAt) : 'Not reviewed'}</div>
             </div>
+            ${workOrder ? `<div class="card"><div class="label">Work Order</div><div class="value">${escapeHtml(workOrder)}</div></div>` : ''}
           </div>
 
           <div class="section"><div class="sectionTitle">System Status Summary</div><div class="status"><div class="label">Overall Condition</div><div class="statusValue">${escapeHtml(condition)}</div><div class="body">${escapeHtml(summary || 'The approved findings below summarize visible conditions documented during this inspection.')}</div></div></div>
@@ -319,8 +349,15 @@ const buildInspectionHtml = async (params: {
           </div>
 
           <div class="section"><div class="sectionTitle">Next Step</div><div class="next">Contact The Vent Guys to discuss the approved findings and recommended corrective action. Any proposed scope and pricing will be issued as a separate quote.</div></div>
-          <div class="section"><div class="sectionTitle">Limitations and Disclaimers</div><div class="limits">${escapeHtml(disclaimer)} This is an observational report, not a medical, microbial, or licensed mechanical diagnosis unless separately stated.</div></div>
-          <div class="footer"><strong>The Vent Guys</strong><br />${escapeHtml(BUSINESS_ADDRESS_LINE1)}, ${escapeHtml(BUSINESS_ADDRESS_LINE2)}<br />${escapeHtml(BUSINESS_PHONE_DISPLAY)} | ${escapeHtml(BUSINESS_EMAIL)}<br />${escapeHtml(reportIdentifier)} | Report v${params.reportVersion}</div>
+          <div class="section"><div class="sectionTitle">Important Information, Scope, and Limitations</div><div class="limits">
+            <div class="draftNote">Draft language pending Florida legal review</div>
+            <p><strong>Inspection scope.</strong> ${escapeHtml(scopeLanguage.scope)}</p>
+            <p><strong>Limitations.</strong> ${escapeHtml(scopeLanguage.exclusions)} Conditions may exist that were not visible or reasonably discoverable at the time of inspection.</p>
+            <p><strong>Report purpose.</strong> This is a point-in-time, non-invasive informational report. It is not a warranty, guarantee, insurance policy, engineering analysis, code-compliance certification, or environmental assessment. Photographs are representative and may not show every observed area.</p>
+            <p><strong>Separate estimate.</strong> Recommendations do not authorize work or establish final pricing. Proposed scope, authoritative pricing, and customer authorization are provided only in a separate estimate.</p>
+            ${customDisclaimer ? `<p><strong>Additional inspection note.</strong> ${escapeHtml(customDisclaimer)}</p>` : ''}
+          </div></div>
+          <div class="footer"><div><strong>The Vent Guys</strong><br />${escapeHtml(BUSINESS_ADDRESS_LINE1)}, ${escapeHtml(BUSINESS_ADDRESS_LINE2)}</div><div>${escapeHtml(BUSINESS_PHONE_DISPLAY)}<br />${escapeHtml(BUSINESS_EMAIL)}</div></div>
         </div>
       </div>
     </body>
@@ -419,7 +456,7 @@ const loadFallbackPdfImages = async (photos: Array<Record<string, unknown>>): Pr
         bytes,
         width: dimensions.width,
         height: dimensions.height,
-        caption: asString(photo.caption) || asString(photo.file_name) || 'Photo',
+        caption: asString(photo.caption) || 'Inspection evidence',
       });
     } catch {
       // Keep the report usable if an individual local image cannot be downloaded or decoded.
@@ -555,7 +592,7 @@ const buildLocalInspectionPdf = (params: {
   pushLine(`Customer: ${params.customerName}`, 'F2', 11);
   pushLine(`Technician: ${params.technicianName}`, 'F1', 10);
   pushLine(`Inspected On: ${params.inspectedOn}`, 'F1', 10);
-  pushLine(`Work Order: ${params.workOrder || 'Unlinked'}`, 'F1', 10);
+  if (params.workOrder) pushLine(`Work Order: ${params.workOrder}`, 'F1', 10);
   if (params.serviceAddress) pushLine(`Address: ${params.serviceAddress}`, 'F1', 10);
   pushLine(`Report: ${params.reportIdentifier} | Version ${params.reportVersion}`, 'F1', 10);
   pushLine(`Technician Review: ${params.reviewedAt ? `${params.technicianName} - ${params.reviewedAt}` : 'Not reviewed'}`, 'F1', 10);
