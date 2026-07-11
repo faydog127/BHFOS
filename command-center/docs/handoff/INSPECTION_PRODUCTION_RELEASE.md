@@ -35,6 +35,10 @@ Production migration history is ordered and has no production-only version. `sup
 
 The applied inspection baseline includes `20260710120000_inspection_production_hardening.sql`. The dry-run found no missing-local migration, out-of-order version, partial version, or migration-history conflict.
 
+### Production Forward Fix
+
+During controlled UAT, production's pre-existing `quote_items` table was found to be missing the canonical `updated_at` column defined by `20260101_create_money_loop_core_tables.sql`. This blocked `inspection_create_quote_from_price_book` while inserting price-book items. Apply `20260711150000_fix_inspection_quote_items_compatibility.sql` as a forward-only compatibility migration before resuming quote creation. It adds only `quote_items.updated_at timestamptz not null default now()` and preserves existing rows.
+
 ## Runtime Configuration
 
 Required configured secret names were verified without reading values:
@@ -101,4 +105,3 @@ Use clearly labeled synthetic inspection, customer, property, quote, and deliver
 7. Confirm provider acceptance, delivery/audit rows, and generated attachments or links.
 8. Manually confirm in `ol_mann@yahoo.com`: receipt, TEST subject/body, report opens, quote opens, and report/quote are distinct.
 9. Remove all synthetic production records through the approved cleanup path and retain only required audit evidence.
-
