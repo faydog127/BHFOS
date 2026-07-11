@@ -1219,6 +1219,23 @@ Deno.serve(async (req) => {
     if (inspectionLinkedQuote && !(quote as any).inspection_human_reviewed_at) {
       return respondJson({ error: 'Inspection quote requires human review before sending.', code: 'INSPECTION_QUOTE_NOT_REVIEWED' }, 409);
     }
+    if (inspectionLinkedQuote) {
+      const coherenceResult = await supabaseAdmin.rpc('inspection_report_coherence_issues', {
+        p_tenant_id: effectiveTenantId,
+        p_inspection_id: (quote as any).inspection_id,
+      });
+      if (coherenceResult.error) {
+        return respondJson({ error: 'Inspection coherence validation failed.', code: 'INSPECTION_COHERENCE_CHECK_FAILED' }, 500);
+      }
+      const coherenceIssues = Array.isArray(coherenceResult.data) ? coherenceResult.data : [];
+      if (coherenceIssues.length > 0) {
+        return respondJson({
+          error: 'Inspection findings and evidence must be reconciled before quote delivery.',
+          code: 'INSPECTION_COHERENCE_REQUIRED',
+          issues: coherenceIssues,
+        }, 409);
+      }
+    }
 
     let publicToken = asString(quote.public_token);
     if (!publicToken) {
