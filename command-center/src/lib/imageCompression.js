@@ -14,6 +14,14 @@ const SUPPORTED_MIME_TYPES = new Set([
 
 const SUPPORTED_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif']);
 const HEIC_MIME_TYPES = new Set(['image/heic', 'image/heif']);
+const MIME_EXTENSION_GROUPS = Object.freeze({
+  'image/jpeg': new Set(['jpg', 'jpeg']),
+  'image/jpg': new Set(['jpg', 'jpeg']),
+  'image/png': new Set(['png']),
+  'image/webp': new Set(['webp']),
+  'image/heic': new Set(['heic', 'heif']),
+  'image/heif': new Set(['heic', 'heif']),
+});
 
 const fileExtension = (name) => {
   const value = String(name || '').trim().toLowerCase();
@@ -36,6 +44,10 @@ export const validateInspectionImageFile = (
   const extension = fileExtension(file.name);
   if (!SUPPORTED_MIME_TYPES.has(mime) && !SUPPORTED_EXTENSIONS.has(extension)) {
     throw new Error('Unsupported image type. Use JPEG, PNG, WebP, HEIC, or HEIF.');
+  }
+  if (mime && extension && SUPPORTED_MIME_TYPES.has(mime) && SUPPORTED_EXTENSIONS.has(extension)
+    && !MIME_EXTENSION_GROUPS[mime]?.has(extension)) {
+    throw new Error('Image file type does not match its filename. Choose the original photo or export it again.');
   }
 
   const size = Number(file.size || 0);

@@ -72,10 +72,13 @@ const normalizeInBrowser = async (page, { bytes, name, type }) => page.evaluate(
     const binary = atob(base64);
     const data = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) data[index] = binary.charCodeAt(index);
-    const result = await normalizeInspectionImageFile(
-      new File([data], fileName, { type: mimeType }),
-      { maxDimension: 1800, targetMaxBytes: 850_000 },
-    );
+    const result = await Promise.race([
+      normalizeInspectionImageFile(
+        new File([data], fileName, { type: mimeType }),
+        { maxDimension: 1800, targetMaxBytes: 850_000 },
+      ),
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`Normalization timed out: ${fileName}`)), 30_000)),
+    ]);
     const signature = Array.from(new Uint8Array(await result.blob.slice(0, 3).arrayBuffer()));
     return {
       width: result.width,
@@ -156,10 +159,12 @@ test.describe.serial('Phase 2A inspection image normalization', () => {
       };
       return {
         unsupported: await capture(new File(['not an image'], 'evidence.gif', { type: 'image/gif' })),
+        mismatched: await capture(new File(['not an image'], 'evidence.jpg', { type: 'image/png' })),
         oversized: await capture(new File([new Uint8Array((30 * 1024 * 1024) + 1)], 'large.jpg', { type: 'image/jpeg' })),
       };
     });
     expect(invalidResults.unsupported).toContain('Unsupported image type');
+    expect(invalidResults.mismatched).toContain('does not match its filename');
     expect(invalidResults.oversized).toContain('Image is too large');
   });
 
@@ -312,6 +317,21 @@ test.describe.serial('Phase 2A inspection image normalization', () => {
       expect(new Set(rows.map((row) => row.object_path)).size).toBe(rows.length);
       created.paths = rows.map((row) => row.object_path);
 
+      const approvedFinding = await insertWithRetry(admin, 'inspection_findings', {
+        tenant_id: TENANT_ID,
+        inspection_id: created.inspectionId,
+        title: 'Approved synthetic photo finding',
+        category: 'dryer_vent',
+        severity: 'medium',
+        description: 'Synthetic evidence used for local image validation.',
+        recommended_action: 'Review normalized evidence.',
+        is_customer_visible: true,
+      });
+      if (approvedFinding.error) throw approvedFinding.error;
+      const linkPhotos = await admin.from('inspection_photos').update({ finding_id: approvedFinding.data.id })
+        .eq('tenant_id', TENANT_ID).eq('inspection_id', created.inspectionId);
+      if (linkPhotos.error) throw linkPhotos.error;
+
       for (const row of rows) {
         const download = await admin.storage.from('inspection-photos').download(row.object_path);
         if (download.error) throw download.error;
@@ -384,7 +404,7 @@ test.describe.serial('Phase 2A inspection image normalization', () => {
       const functionPdf = Buffer.from(functionResult.data.pdf.content, 'base64');
       expect(functionPdf.subarray(0, 4).toString()).toBe('%PDF');
       const functionPdfSource = functionPdf.toString('latin1');
-      expect(functionPdfSource).toContain('/Count 2');
+      expect(functionPdfSource).toMatch(/\/Count [2-9]\d*/);
       expect(functionPdfSource.match(/\/Subtype \/Image/g)).toHaveLength(rows.length);
       fs.writeFileSync(FUNCTION_PDF, functionPdf);
       expect(fs.statSync(FUNCTION_PDF).size).toBe(functionPdf.length);

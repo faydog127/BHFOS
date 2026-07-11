@@ -2157,7 +2157,10 @@ Deno.serve(async (req) => {
         tenant_id: effectiveTenantId, inspection_id: combinedInspectionReport.inspectionId,
         event_type: intentionalResend ? 'inspection_quote_and_report_resent' : 'inspection_quote_and_report_sent', actor_user_id: actorId,
         inspection_revision: (quote as any).inspection_revision,
-        metadata: { quote_id: quote.id, report_id: combinedInspectionReport.reportId, delivery_id: inspectionDeliveryId, resend_reason: intentionalResend ? resendReason : null },
+        metadata: {
+          quote_id: quote.id, report_id: combinedInspectionReport.reportId, delivery_id: inspectionDeliveryId,
+          recipient: recipientEmail, subject, resend_reason: intentionalResend ? resendReason : null,
+        },
       });
     }
 

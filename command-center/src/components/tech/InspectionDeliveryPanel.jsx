@@ -115,6 +115,7 @@ export default function InspectionDeliveryPanel({ tenantId, inspection, quote, o
             ))}
           </div>
           <Button className="mt-3 w-full" onClick={createQuote} disabled={busy || !reviewed || Boolean(quote?.id)}>{quote?.id ? 'Linked quote created' : 'Create Quote'}</Button>
+          {quote?.id ? <Button asChild variant="outline" className="mt-2 w-full"><Link to={`/${tenantId}/crm/estimates/${quote.id}`}>Open Quote Editor</Link></Button> : null}
           {quote?.id && !pricingReviewed ? <Button className="mt-2 w-full gap-2 bg-emerald-600 hover:bg-emerald-700" onClick={confirmPricing} disabled={busy}><CheckCircle2 className="h-4 w-4" />Confirm scope and pricing reviewed</Button> : null}
           <Button className="mt-2 w-full gap-2 bg-blue-600 hover:bg-blue-700" onClick={onSendQuote} disabled={busy || !reviewed || !quote?.id || !pricingReviewed}><Send className="h-4 w-4" />Send Report + Quote</Button>
         </div>

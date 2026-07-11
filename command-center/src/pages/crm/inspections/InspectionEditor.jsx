@@ -78,6 +78,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
   const [photos, setPhotos] = useState([]);
   const [photoQueueItems, setPhotoQueueItems] = useState([]);
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoQueueError, setPhotoQueueError] = useState('');
   const photoUrlCacheRef = useRef(new Map());
   const createRequestIdRef = useRef(crypto.randomUUID());
 
@@ -203,7 +204,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
         *,
         lead:leads(id, first_name, last_name, company, email, phone, contact_id, property_id),
         job:jobs(id, work_order_number, status, service_address),
-        quote:quotes(id, quote_number, status, total_amount, public_token),
+        quote:quotes!inspections_quote_id_fkey(id, quote_number, status, total_amount, public_token),
         technician:technicians(id, full_name)
       `)
       .eq('tenant_id', tenantId)
@@ -511,22 +512,36 @@ export default function InspectionEditor({ forceNew = false } = {}) {
   }, [hydratePhotoUrls, inspection, photoUploading, refreshPhotoQueue, tenantId, user?.id]);
 
   const uploadPhotos = async (fileList) => {
-    if (!inspection?.id) return;
-    const { accepted, rejected } = await enqueueInspectionPhotoFiles({
-      files: fileList,
-      tenantId,
-      inspectionId: inspection.id,
-      revision: inspection.revision || 1,
-    });
-    await refreshPhotoQueue();
-    if (rejected.length) {
+    if (!inspection?.id) {
+      setPhotoQueueError('Inspection context is unavailable. Refresh before selecting the photo again.');
+      return;
+    }
+    try {
+      const { accepted, rejected } = await enqueueInspectionPhotoFiles({
+        files: fileList,
+        tenantId,
+        inspectionId: inspection.id,
+        revision: inspection.revision || 1,
+      });
+      if (accepted.length) setPhotoQueueError('');
+      await refreshPhotoQueue();
+      if (rejected.length) {
+        toast({
+          variant: 'destructive',
+          title: rejected.length === 1 ? 'Photo rejected' : 'Some photos were rejected',
+          description: rejected.map((item) => `${item.fileName}: ${item.error}`).join(' '),
+        });
+      }
+      if (accepted.length) await flushPhotoUploads();
+    } catch (error) {
+      await refreshPhotoQueue().catch(() => null);
+      setPhotoQueueError(error?.message || 'The photo was not queued. Select it again to retry.');
       toast({
         variant: 'destructive',
-        title: rejected.length === 1 ? 'Photo rejected' : 'Some photos were rejected',
-        description: rejected.map((item) => `${item.fileName}: ${item.error}`).join(' '),
+        title: 'Photo upload failed',
+        description: error?.message || 'The photo was not queued. Select it again to retry.',
       });
     }
-    if (accepted.length) await flushPhotoUploads();
   };
 
   useEffect(() => {
@@ -1189,6 +1204,11 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                     <div className="mt-2 text-xs text-slate-500">
                       JPEG, PNG, WebP, HEIC, and HEIF are normalized to a private report-ready JPEG.
                     </div>
+                    {photoQueueError ? (
+                      <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700" role="alert">
+                        Photo upload failed: {photoQueueError}
+                      </div>
+                    ) : null}
                     {photoQueueItems.length ? (
                       <div className="mt-3 space-y-2">
                         {photoQueueItems.map((item) => (

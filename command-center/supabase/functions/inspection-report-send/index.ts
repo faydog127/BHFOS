@@ -30,6 +30,7 @@ Deno.serve(async (req) => {
     const inspectionId = String(body.inspection_id || '').trim()
     const intentionalResend = body.intentional_resend === true
     const resendReason = String(body.resend_reason || '').trim()
+    const subject = String(body.custom_subject || '').trim() || 'Your reviewed inspection report'
     if (!tenantId || !inspectionId) return json({ error: 'Missing inspection' }, 400)
     if (intentionalResend && !resendReason) return json({ error: 'A resend reason is required.', code: 'RESEND_REASON_REQUIRED' }, 400)
 
@@ -88,7 +89,7 @@ Deno.serve(async (req) => {
     const customer = String(lead?.company || `${lead?.first_name || ''} ${lead?.last_name || ''}`.trim() || 'Customer')
     const provider = await sendEmail({
       from: 'The Vent Guys Reports <quotes@vent-guys.com>', to: [recipient],
-      subject: 'Your reviewed inspection report',
+      subject,
       html: `<p>Hi ${customer},</p><p>Your reviewed inspection report is attached.</p>`,
       attachments: [{ filename: `inspection-report-${inspectionId}.pdf`, content: base64(bytes), content_type: 'application/pdf' }],
       tags: [{ name: 'inspection_id', value: inspectionId }, { name: 'tenant_id', value: tenantId }],
@@ -103,7 +104,7 @@ Deno.serve(async (req) => {
     await supabaseAdmin.from('inspection_events').insert({
       tenant_id: tenantId, inspection_id: inspectionId,
       event_type: intentionalResend ? 'inspection_report_resent' : 'inspection_report_sent', actor_user_id: user.id,
-      inspection_revision: inspection.revision, metadata: { delivery_id: deliveryId, report_id: report.id, recipient, resend_reason: intentionalResend ? resendReason : null },
+      inspection_revision: inspection.revision, metadata: { delivery_id: deliveryId, report_id: report.id, recipient, subject, resend_reason: intentionalResend ? resendReason : null },
     })
     return json({ success: true, delivery_id: deliveryId, report_id: report.id })
   } catch (error) {

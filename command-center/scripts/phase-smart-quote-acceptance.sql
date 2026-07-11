@@ -3,12 +3,14 @@ begin;
 select set_config('request.jwt.claim.role', 'service_role', true);
 
 insert into public.leads (id, tenant_id, first_name, last_name, email, status)
-values ('91000000-0000-0000-0000-000000000001', 'phase-smart-test', 'Synthetic', 'Customer', 'synthetic@example.com', 'active');
+values
+  ('91000000-0000-0000-0000-000000000001', 'phase-smart-test', 'Synthetic', 'Customer', 'synthetic@example.com', 'active'),
+  ('91000000-0000-0000-0000-000000000002', 'phase-smart-test', 'No Match', 'Customer', 'no-match@example.com', 'active');
 
 insert into public.inspections (id, tenant_id, lead_id, status, title, revision, reviewed_at, reviewed_revision)
 values
   ('92000000-0000-0000-0000-000000000001', 'phase-smart-test', '91000000-0000-0000-0000-000000000001', 'completed', 'Smart quote acceptance', 1, now(), 1),
-  ('92000000-0000-0000-0000-000000000002', 'phase-smart-test', '91000000-0000-0000-0000-000000000001', 'completed', 'No match acceptance', 1, now(), 1);
+  ('92000000-0000-0000-0000-000000000002', 'phase-smart-test', '91000000-0000-0000-0000-000000000002', 'completed', 'No match acceptance', 1, now(), 1);
 
 insert into public.inspection_findings (id, tenant_id, inspection_id, title, category, severity, recommended_action, is_customer_visible, sort_order)
 values
