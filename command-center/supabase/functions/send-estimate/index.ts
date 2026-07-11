@@ -1693,7 +1693,7 @@ Deno.serve(async (req) => {
 
       const { data: inspection, error: inspectionError } = await supabaseAdmin
         .from('inspections')
-        .select('id')
+        .select('id, revision, reviewed_at, reviewed_revision')
         .eq('tenant_id', reportTenantId)
         .eq('quote_id', quote.id)
         .order('updated_at', { ascending: false })
@@ -1705,6 +1705,13 @@ Deno.serve(async (req) => {
       }
       if (!inspection?.id) {
         return { ok: false as const, code: 'INSPECTION_NOT_LINKED', error: 'No inspection is linked to this quote.' };
+      }
+      if (!inspection.reviewed_at || inspection.reviewed_revision !== inspection.revision) {
+        return {
+          ok: false as const,
+          code: 'INSPECTION_REPORT_NOT_REVIEWED',
+          error: 'The current inspection report revision must be reviewed before it can be sent.',
+        };
       }
 
       const { data: pendingPhotos, error: pendingError } = await supabaseAdmin
@@ -1777,6 +1784,13 @@ Deno.serve(async (req) => {
       }
 
       const filePath = asString((report as any)?.file_path);
+      if ((report as any)?.inspection_revision !== inspection.revision) {
+        return {
+          ok: false as const,
+          code: 'INSPECTION_REPORT_STALE_REVISION',
+          error: 'Generate and review the current inspection revision before sending.',
+        };
+      }
       if (!filePath) {
         return {
           ok: false as const,

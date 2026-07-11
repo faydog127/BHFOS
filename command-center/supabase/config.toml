@@ -133,3 +133,6 @@ port = 25434
 
 [functions.inspection-report-pdf]
   verify_jwt = false
+
+[functions.inspection-ai-analyze]
+  verify_jwt = false

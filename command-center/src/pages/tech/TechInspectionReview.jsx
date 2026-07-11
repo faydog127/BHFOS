@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { mediaQueue } from '@/lib/offlineInspectionMediaQueue';
 import { v4 as uuidv4 } from 'uuid';
 import TechSendQuoteDialog from '@/components/tech/TechSendQuoteDialog';
+import InspectionAiReviewPanel from '@/components/tech/InspectionAiReviewPanel';
 
 const asText = (v) => (typeof v === 'string' ? v.trim() : '');
 const statusText = (v) => asText(v).toLowerCase() || 'draft';
@@ -50,6 +51,8 @@ export default function TechInspectionReview() {
           technician_id,
           title,
           updated_at,
+          reviewed_at,
+          reviewed_revision,
           lead:leads(first_name,last_name,company,email,phone),
           job:jobs(work_order_number, service_address)
         `,
@@ -295,6 +298,18 @@ export default function TechInspectionReview() {
 
   const status = statusText(inspection.status);
   const locked = status !== 'draft';
+  const isReviewed = Boolean(inspection.reviewed_at && inspection.reviewed_revision === (inspection.revision || 1));
+
+  const markReviewed = async () => {
+    setSaving(true);
+    const { data, error } = await supabase.rpc('inspection_mark_reviewed', {
+      p_tenant_id: tenantId, p_inspection_id: inspectionId, p_expected_revision: inspection.revision || 1,
+    });
+    setSaving(false);
+    if (error) return toast({ variant: 'destructive', title: 'Review incomplete', description: error.message });
+    setInspection((current) => ({ ...current, ...data }));
+    toast({ title: 'Report reviewed', description: 'This revision is now eligible to send.' });
+  };
 
   return (
     <div className="space-y-4">
@@ -381,6 +396,24 @@ export default function TechInspectionReview() {
         </CardContent>
       </Card>
 
+      <InspectionAiReviewPanel
+        tenantId={tenantId}
+        inspectionId={inspectionId}
+        revision={inspection.revision || 1}
+        locked={locked}
+        onChanged={load}
+      />
+
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader><CardTitle className="text-base">Full report review</CardTitle></CardHeader>
+        <CardContent className="space-y-3 text-sm text-slate-700">
+          <Button variant="outline" asChild className="w-full"><Link to={`/${tenantId}/crm/inspections/${inspectionId}/report`}>Open full report</Link></Button>
+          <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={markReviewed} disabled={saving || isReviewed}>
+            {isReviewed ? 'Reviewed' : 'Mark this revision reviewed'}
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card className="border-slate-200 shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">Send Quote</CardTitle>
@@ -407,13 +440,14 @@ export default function TechInspectionReview() {
                 size="lg"
                 className="w-full gap-2 bg-blue-600 hover:bg-blue-700"
                 onClick={() => setSendQuoteOpen(true)}
-                disabled={!navigator.onLine}
+                disabled={!navigator.onLine || !isReviewed}
               >
                 Send Quote
               </Button>
               {!navigator.onLine ? (
                 <div className="text-xs text-slate-500">Sending requires connectivity.</div>
               ) : null}
+              {!isReviewed ? <div className="text-xs text-amber-700">Review the full report before sending.</div> : null}
             </>
           ) : (
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-600">
