@@ -1321,9 +1321,6 @@ Deno.serve(async (req) => {
     if (inspectionLinkedQuote && deliveryChannel !== 'email') {
       return respondJson({ error: 'Inspection quote delivery must use email so the reviewed report can be included.', code: 'INSPECTION_QUOTE_EMAIL_REQUIRED' }, 409);
     }
-    if (inspectionLinkedQuote && !attachInspectionReportPdf) {
-      return respondJson({ error: 'Inspection quote delivery must include the reviewed inspection report.', code: 'INSPECTION_REPORT_REQUIRED' }, 409);
-    }
 
     const requiredFieldErrors: string[] = [];
     if (!quote.quote_number) requiredFieldErrors.push('quote_number');
