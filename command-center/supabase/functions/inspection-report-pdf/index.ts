@@ -53,6 +53,12 @@ const inspectionScopeLanguage = (inspection: Record<string, unknown>, findings: 
   };
 };
 
+const customerEvidenceCaption = (value: unknown) => {
+  const caption = asString(value).replace(/^.*?\bevidence\s+\d+\s*:\s*/i, '').trim();
+  if (!caption) return 'Inspection evidence';
+  return caption.charAt(0).toUpperCase() + caption.slice(1);
+};
+
 const leadAddress = (lead: Record<string, unknown>) => {
   const direct = asString(lead.address) || asString(lead.service_address);
   if (direct) return direct;
@@ -169,7 +175,7 @@ const buildInspectionHtml = async (params: {
   const renderPhotoGrid = (rows: Array<Record<string, unknown>>) => {
     if (!rows.length) return '';
     const cards = rows.map((photo) => {
-      const caption = escapeHtml(asString(photo.caption) || 'Inspection evidence');
+      const caption = escapeHtml(customerEvidenceCaption(photo.caption));
       const flag = photo.is_before === true ? 'Before' : photo.is_before === false ? 'After' : '';
       const flagHtml = flag ? `<div class="flag">${escapeHtml(flag)}</div>` : '';
       const imgSrc = embeddedMap.get(asString(photo.id));
@@ -216,8 +222,7 @@ const buildInspectionHtml = async (params: {
     `;
   }).join('');
 
-  const recsHtml = recommendations.length
-    ? recommendations.map((r) => {
+  const recsHtml = recommendations.map((r) => {
         const title = escapeHtml(asString(r.title) || 'Recommendation');
         const priority = escapeHtml(asString(r.priority) || 'normal');
         const desc = escapeHtml(asString(r.description));
@@ -228,8 +233,7 @@ const buildInspectionHtml = async (params: {
             ${desc ? `<div class="body">${desc}</div>` : ''}
           </div>
         `;
-      }).join('')
-    : `<div class="muted">No recommendations recorded.</div>`;
+      }).join('');
 
   const logoHtml = LOGO_URL ? `<img class="logo" src="${escapeHtml(LOGO_URL)}" alt="logo" />` : '';
 
@@ -289,7 +293,6 @@ const buildInspectionHtml = async (params: {
         .limits { border:1px solid var(--border); border-radius:11px; padding:11px 13px; color:var(--muted); font-size:10px; line-height:1.45; background:#f8fafc; }
         .limits p { margin:0 0 6px; }
         .limits p:last-child { margin-bottom:0; }
-        .draftNote { font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#991b1b; margin-bottom:6px; }
         .footer { margin-top: 15px; border-top: 1px solid var(--border); padding-top: 9px; font-size: 9px; color: #64748b; line-height:1.45; display:flex; justify-content:space-between; gap:16px; }
         @media screen and (max-width:720px) { .grid,.photoGrid { grid-template-columns:1fr; } }
         @media print { html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;} .finding,.photoCard,.status,.card,.limits,.next{break-inside:avoid;page-break-inside:avoid;} }
@@ -342,15 +345,14 @@ const buildInspectionHtml = async (params: {
             ${findingsHtml || `<div class="muted">No customer-approved findings recorded.</div>`}
           </div>
 
-          <div class="section">
+          ${recommendations.length ? `<div class="section">
             <div class="sectionTitle">Recommendations</div>
             ${recsHtml}
             <div class="muted" style="margin-top:8px;">Recommendations describe potential corrective actions. Proposed work and authoritative pricing, if requested, are provided separately in a quote.</div>
-          </div>
+          </div>` : ''}
 
           <div class="section"><div class="sectionTitle">Next Step</div><div class="next">Contact The Vent Guys to discuss the approved findings and recommended corrective action. Any proposed scope and pricing will be issued as a separate quote.</div></div>
           <div class="section"><div class="sectionTitle">Important Information, Scope, and Limitations</div><div class="limits">
-            <div class="draftNote">Draft language pending Florida legal review</div>
             <p><strong>Inspection scope.</strong> ${escapeHtml(scopeLanguage.scope)}</p>
             <p><strong>Limitations.</strong> ${escapeHtml(scopeLanguage.exclusions)} Conditions may exist that were not visible or reasonably discoverable at the time of inspection.</p>
             <p><strong>Report purpose.</strong> This is a point-in-time, non-invasive informational report. It is not a warranty, guarantee, insurance policy, engineering analysis, code-compliance certification, or environmental assessment. Photographs are representative and may not show every observed area.</p>
@@ -456,7 +458,7 @@ const loadFallbackPdfImages = async (photos: Array<Record<string, unknown>>): Pr
         bytes,
         width: dimensions.width,
         height: dimensions.height,
-        caption: asString(photo.caption) || 'Inspection evidence',
+        caption: customerEvidenceCaption(photo.caption),
       });
     } catch {
       // Keep the report usable if an individual local image cannot be downloaded or decoded.
