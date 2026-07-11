@@ -30,6 +30,12 @@ Deno.serve(async (req) => {
     if (photoError) throw photoError
     if (!photos?.length) return json({ error: 'No completed photos to analyze' }, 400)
 
+    await supabaseAdmin.from('inspection_events').insert({
+      tenant_id: tenantId, inspection_id: inspectionId, event_type: 'ai_photo_analysis_started',
+      actor_user_id: user.id, inspection_revision: inspection.revision,
+      metadata: { photos_count: photos.length, prompt_version: TIS_INSPECTION_PROMPT_VERSION },
+    })
+
     let created = 0
     for (const photo of photos) {
       const existing = await supabaseAdmin.from('inspection_ai_suggestions').select('id')

@@ -8,10 +8,9 @@ export const analyzeInspectionPhoto = async (input: {
   notes?: string | null
 }) => {
   const client = new OpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
-  const model = Deno.env.get('TIS_INSPECTION_AI_MODEL') || 'gpt-4o-mini'
+  const model = Deno.env.get('TIS_INSPECTION_AI_MODEL') || 'gpt-5.2'
   const completion = await client.chat.completions.create({
     model,
-    temperature: 0.2,
     response_format: { type: 'json_object' },
     messages: [
       {
