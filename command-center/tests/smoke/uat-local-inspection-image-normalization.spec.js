@@ -110,7 +110,9 @@ const waitForPhoto = async (admin, inspectionId, fileName, expectedState = 'comp
 
 test.describe.serial('Phase 2A inspection image normalization', () => {
   test('normalizes HEIC, JPEG, PNG, and WebP and rejects invalid inputs', async ({ page }) => {
-    await page.goto('/tvg/login');
+    // Use a stable same-origin module page; the CRM login route may redirect while
+    // large HEIC fixtures are being decoded and destroy the evaluation context.
+    await page.goto('/src/lib/imageCompression.js');
     const jpeg = await browserGeneratedImage(page, 'image/jpeg');
     const png = await browserGeneratedImage(page, 'image/png');
     const webp = await browserGeneratedImage(page, 'image/webp');

@@ -8,7 +8,7 @@ import { useToast } from '@/components/ui/use-toast';
 
 const formatTime = (value) => value ? new Date(value).toLocaleString() : 'Not sent';
 
-export default function InspectionDeliveryPanel({ tenantId, inspection, quote, onChanged }) {
+export default function InspectionDeliveryPanel({ tenantId, inspection, quote, reportReady = true, reportBlockers = [], onChanged }) {
   const { toast } = useToast();
   const [deliveries, setDeliveries] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -17,6 +17,8 @@ export default function InspectionDeliveryPanel({ tenantId, inspection, quote, o
   const lastDelivery = deliveries[0];
   const sendBlocker = !reviewed
     ? 'Review and finalize this inspection revision before sending.'
+    : !reportReady
+      ? 'Generate the authoritative customer PDF before sending.'
     : !recipientEmail
       ? 'Add a customer email address before sending.'
       : '';
@@ -37,7 +39,7 @@ export default function InspectionDeliveryPanel({ tenantId, inspection, quote, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, inspection?.id]);
 
-  const sendReport = async (intentionalResend = false) => {
+  const sendReport = async (intentionalResend = false, dryRun = false) => {
     const resendReason = intentionalResend ? window.prompt('Reason for intentional resend:')?.trim() : '';
     if (intentionalResend && !resendReason) return;
     setBusy(true);
@@ -47,15 +49,20 @@ export default function InspectionDeliveryPanel({ tenantId, inspection, quote, o
         to_email: recipientEmail || undefined,
         intentional_resend: intentionalResend,
         resend_reason: resendReason || undefined,
+        dry_run: dryRun,
       },
     });
     setBusy(false);
     if (error || data?.error) {
       return toast({
         variant: 'destructive',
-        title: 'Report send failed',
+        title: dryRun ? 'Delivery validation failed' : 'Report send failed',
         description: data?.error || error?.message || 'The customer report could not be sent. Review the report status and try again.',
       });
+    }
+    if (dryRun) {
+      toast({ title: 'Delivery validation passed', description: 'The report attachment and recipient are valid. No email was sent.' });
+      return;
     }
     toast({ title: data?.skipped ? 'Duplicate prevented' : intentionalResend ? 'Report resent' : 'Report sent' });
     await load();
@@ -83,6 +90,16 @@ export default function InspectionDeliveryPanel({ tenantId, inspection, quote, o
         </Button>
 
         <Button
+          variant="outline"
+          className="w-full gap-2"
+          onClick={() => sendReport(false, true)}
+          disabled={busy || Boolean(sendBlocker)}
+        >
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+          Validate Delivery (No Email)
+        </Button>
+
+        <Button
           className="w-full gap-2 bg-blue-600 hover:bg-blue-700"
           onClick={() => sendReport(false)}
           disabled={busy || Boolean(sendBlocker)}
@@ -94,7 +111,7 @@ export default function InspectionDeliveryPanel({ tenantId, inspection, quote, o
         {sendBlocker ? (
           <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{sendBlocker}</span>
+            <div><div>{sendBlocker}</div>{reportBlockers.length ? <ul className="mt-1 list-disc pl-4">{reportBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul> : null}</div>
           </div>
         ) : (
           <p className="text-xs text-slate-500">The authoritative inspection PDF will be sent to {recipientEmail}. No estimate is required or attached.</p>

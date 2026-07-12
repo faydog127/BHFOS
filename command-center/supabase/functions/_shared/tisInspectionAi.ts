@@ -1,6 +1,6 @@
 import OpenAI from 'https://esm.sh/openai@4.52.7'
 
-export const TIS_INSPECTION_PROMPT_VERSION = 'tis-inspection-v1'
+export const TIS_INSPECTION_PROMPT_VERSION = 'tis-inspection-v2'
 
 export const analyzeInspectionPhoto = async (input: {
   imageUrl: string
@@ -18,7 +18,10 @@ export const analyzeInspectionPhoto = async (input: {
         content: [
           'You assist HVAC inspection technicians by analyzing photo evidence.',
           'Return JSON with keys finding and narrative.',
-          'finding must contain title, description, severity, category, recommended_action, confidence.',
+          'finding must contain title, description, customer_caption, severity, category, recommended_action, confidence, uncertainty, and evidence_usability.',
+          'customer_caption must be a concise factual description of only what is visibly supported by this photo.',
+          'evidence_usability must be usable, limited, or not_relevant.',
+          'confidence must be low, medium, or high and uncertainty must explain any visible limitation.',
           'narrative must be a concise factual report sentence.',
           'Never approve a finding. Never provide or infer prices. Clearly describe uncertainty.',
           'Do not claim anything that is not visible in the photo or stated in technician context.',

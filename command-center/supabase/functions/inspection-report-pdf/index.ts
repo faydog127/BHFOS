@@ -948,6 +948,11 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return json({ error: message }, 500);
+    const code = message.startsWith('report_storage_upload_failed')
+      ? 'REPORT_STORAGE_UPLOAD_FAILED'
+      : message.startsWith('report_row_insert_failed')
+        ? 'REPORT_RECORD_CREATE_FAILED'
+        : 'REPORT_PDF_GENERATION_FAILED';
+    return json({ error: message, code }, 500);
   }
 });

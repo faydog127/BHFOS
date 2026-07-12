@@ -25,16 +25,21 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authError } = await authClient.auth.getUser()
     if (authError || !user) return json({ error: 'Unauthorized' }, 401)
     const tenantId = String(user.app_metadata?.tenant_id || user.user_metadata?.tenant_id || '').trim()
-    const { inspection_id: inspectionId } = await req.json()
+    const body = await req.json()
+    const inspectionId = body.inspection_id
+    const requestedPhotoId = String(body.photo_id || '').trim()
+    const retry = body.retry === true
     if (!tenantId || !inspectionId) return json({ error: 'Missing tenant or inspection' }, 400)
 
     const { data: inspection } = await supabaseAdmin.from('inspections')
       .select('id, tenant_id, revision, summary').eq('id', inspectionId).eq('tenant_id', tenantId).maybeSingle()
     if (!inspection) return json({ error: 'Inspection not found' }, 404)
 
-    const { data: photos, error: photoError } = await supabaseAdmin.from('inspection_photos')
+    let photoQuery = supabaseAdmin.from('inspection_photos')
       .select('id, bucket_id, object_path, caption, content_type').eq('tenant_id', tenantId).eq('inspection_id', inspectionId)
       .eq('is_voided', false).eq('upload_state', 'complete')
+    if (requestedPhotoId) photoQuery = photoQuery.eq('id', requestedPhotoId)
+    const { data: photos, error: photoError } = await photoQuery
     if (photoError) throw photoError
     if (!photos?.length) return json({ error: 'No completed photos to analyze' }, 400)
 
@@ -46,10 +51,13 @@ Deno.serve(async (req) => {
 
     let created = 0
     for (const photo of photos) {
-      const existing = await supabaseAdmin.from('inspection_ai_suggestions').select('id')
+      const existing = await supabaseAdmin.from('inspection_ai_suggestions').select('id, status, suggestion_version')
         .eq('tenant_id', tenantId).eq('inspection_id', inspectionId).eq('inspection_revision', inspection.revision)
-        .eq('photo_id', photo.id).limit(1)
-      if (existing.data?.length) continue
+        .eq('photo_id', photo.id).order('suggestion_version', { ascending: false })
+      const existingRows = existing.data || []
+      if (existingRows.some((row) => row.status === 'pending')) continue
+      if (existingRows.length && !retry) continue
+      const suggestionVersion = existingRows.reduce((max, row) => Math.max(max, Number(row.suggestion_version || 1)), 0) + 1
       const { data: image, error: imageError } = await supabaseAdmin.storage
         .from(photo.bucket_id || 'inspection-photos').download(photo.object_path)
       if (imageError || !image) throw imageError || new Error('Could not access private photo')
@@ -62,7 +70,8 @@ Deno.serve(async (req) => {
       ].filter((row) => row.content && typeof row.content === 'object')
       const { error } = await supabaseAdmin.from('inspection_ai_suggestions').insert(rows.map((row) => ({
         tenant_id: tenantId, inspection_id: inspectionId, inspection_revision: inspection.revision,
-        photo_id: photo.id, model: result.model, prompt_version: TIS_INSPECTION_PROMPT_VERSION, ...row,
+        photo_id: photo.id, suggestion_version: suggestionVersion, model: result.model,
+        prompt_version: TIS_INSPECTION_PROMPT_VERSION, ...row,
       })))
       if (error) throw error
       created += rows.length
@@ -71,7 +80,7 @@ Deno.serve(async (req) => {
       tenant_id: tenantId, inspection_id: inspectionId, event_type: 'ai_photo_analysis_completed',
       actor_user_id: user.id, inspection_revision: inspection.revision, metadata: { suggestions_created: created, prompt_version: TIS_INSPECTION_PROMPT_VERSION },
     })
-    return json({ created, advisory: true })
+    return json({ created, advisory: true, photo_id: requestedPhotoId || null, retry })
   } catch (error) {
     console.error('inspection-ai-analyze', error)
     return json({ error: error instanceof Error ? error.message : 'Analysis failed' }, 500)

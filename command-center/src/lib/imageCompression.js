@@ -60,21 +60,21 @@ export const validateInspectionImageFile = (
 };
 
 const decodeHeic = async (file) => {
-  let heic2any;
+  let heicTo;
   try {
-    ({ default: heic2any } = await import('heic2any'));
+    ({ heicTo } = await import('heic-to/next'));
   } catch {
     throw new Error('HEIC conversion is unavailable in this browser.');
   }
 
   let converted;
   try {
-    converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.94 });
+    converted = await heicTo({ blob: file, type: 'image/jpeg', quality: 0.94 });
   } catch {
-    throw new Error('Unable to decode this HEIC/HEIF image. Try exporting it as JPEG.');
+    throw new Error('Unable to decode this HEIC/HEIF image. The file may use an unsupported encoding profile.');
   }
 
-  const blob = Array.isArray(converted) ? converted[0] : converted;
+  const blob = converted;
   if (!(blob instanceof Blob) || blob.size <= 0) throw new Error('HEIC conversion returned an empty image.');
   return blob;
 };

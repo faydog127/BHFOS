@@ -29,6 +29,7 @@ Deno.serve(async (req) => {
     const body = await req.json()
     const inspectionId = String(body.inspection_id || '').trim()
     const intentionalResend = body.intentional_resend === true
+    const dryRun = body.dry_run === true
     const resendReason = String(body.resend_reason || '').trim()
     const subject = String(body.custom_subject || '').trim() || 'Your reviewed inspection report'
     if (!tenantId || !inspectionId) return json({ error: 'Missing inspection' }, 400)
@@ -65,6 +66,24 @@ Deno.serve(async (req) => {
       report = latest.data
     }
     if (!report?.id || !report.file_path) return json({ error: 'Reviewed report artifact is unavailable', code: 'REPORT_NOT_AVAILABLE' }, 409)
+
+    if (dryRun) {
+      const probe = await supabaseAdmin.storage.from('inspection-reports').download(report.file_path)
+      if (probe.error || !probe.data) {
+        return json({ error: probe.error?.message || 'Report download failed', code: 'REPORT_DOWNLOAD_FAILED' }, 500)
+      }
+      return json({
+        success: true,
+        dry_run: true,
+        report_id: report.id,
+        recipient,
+        attachment: {
+          filename: `inspection-report-${inspectionId}.pdf`,
+          content_type: 'application/pdf',
+          byte_size: probe.data.size,
+        },
+      })
+    }
 
     const baseKey = `report-only:${report.id}:${recipient}`
     const key = intentionalResend ? `${baseKey}:resend:${crypto.randomUUID()}` : baseKey

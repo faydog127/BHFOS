@@ -7,6 +7,7 @@ import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import InspectionDeliveryPanel from '@/components/tech/InspectionDeliveryPanel';
+import InspectionAiReviewPanel from '@/components/tech/InspectionAiReviewPanel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -57,6 +58,18 @@ const downloadFromBase64 = (payload, fallbackName) => {
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 };
 
+const functionErrorDetail = async (error, fallback) => {
+  try {
+    const body = await error?.context?.json?.();
+    if (body?.error || body?.code) {
+      return [body.code, body.error].filter(Boolean).join(': ');
+    }
+  } catch {
+    // Fall through to the client message.
+  }
+  return error?.message || fallback;
+};
+
 export default function InspectionEditor({ forceNew = false } = {}) {
   const tenantId = getTenantId();
   const { id } = useParams();
@@ -76,6 +89,10 @@ export default function InspectionEditor({ forceNew = false } = {}) {
   const [findings, setFindings] = useState([]);
   const [recs, setRecs] = useState([]);
   const [photos, setPhotos] = useState([]);
+  const [aiSuggestions, setAiSuggestions] = useState([]);
+  const [latestReport, setLatestReport] = useState(null);
+  const [reportError, setReportError] = useState('');
+  const [reportGenerating, setReportGenerating] = useState(false);
   const [photoQueueItems, setPhotoQueueItems] = useState([]);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoQueueError, setPhotoQueueError] = useState('');
@@ -225,10 +242,11 @@ export default function InspectionEditor({ forceNew = false } = {}) {
     setInspection(normalized);
     setSummary(asText(normalized.summary));
     setDisclaimer(asText(normalized.disclaimer_text) || disclaimer);
+    return normalized;
   }, [tenantId, disclaimer]);
 
-  const fetchChildRows = useCallback(async (inspectionId) => {
-    const [findingRes, recRes, photoRes] = await Promise.all([
+  const fetchChildRows = useCallback(async (inspectionId, inspectionRevision) => {
+    const [findingRes, recRes, photoRes, aiRes, reportRes] = await Promise.all([
       supabase
         .from('inspection_findings')
         .select('*')
@@ -248,16 +266,35 @@ export default function InspectionEditor({ forceNew = false } = {}) {
         .eq('tenant_id', tenantId)
         .eq('inspection_id', inspectionId)
         .order('uploaded_at', { ascending: true }),
+      supabase
+        .from('inspection_ai_suggestions')
+        .select('id, photo_id, status, suggestion_type, suggestion_version')
+        .eq('tenant_id', tenantId)
+        .eq('inspection_id', inspectionId)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('inspection_reports')
+        .select('id, inspection_revision, report_version, status, file_path, generated_at, metadata')
+        .eq('tenant_id', tenantId)
+        .eq('inspection_id', inspectionId)
+        .eq('inspection_revision', inspectionRevision)
+        .order('report_version', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     if (findingRes.error) throw findingRes.error;
     if (recRes.error) throw recRes.error;
     if (photoRes.error) throw photoRes.error;
+    if (aiRes.error) throw aiRes.error;
+    if (reportRes.error) throw reportRes.error;
 
     setFindings(findingRes.data || []);
     setRecs(recRes.data || []);
     const withUrls = await hydratePhotoUrls(photoRes.data || []);
     setPhotos(withUrls);
+    setAiSuggestions(aiRes.data || []);
+    setLatestReport(reportRes.data || null);
   }, [tenantId, hydratePhotoUrls]);
 
   useEffect(() => {
@@ -274,8 +311,8 @@ export default function InspectionEditor({ forceNew = false } = {}) {
           return;
         }
 
-        await fetchInspection(id);
-        await fetchChildRows(id);
+        const loadedInspection = await fetchInspection(id);
+        await fetchChildRows(id, loadedInspection.revision || 1);
       } catch (err) {
         console.error(err);
         toast({ variant: 'destructive', title: 'Load failed', description: err?.message || 'Could not load inspection.' });
@@ -600,6 +637,24 @@ export default function InspectionEditor({ forceNew = false } = {}) {
 
   const submitForReview = async () => {
     if (!inspection?.id) return;
+    const submitActivePhotos = photos.filter((photo) => photo?.is_voided !== true);
+    const submitFailedCount = submitActivePhotos.filter((photo) => photo.upload_state === 'failed').length;
+    const submitReadyIds = new Set(submitActivePhotos.filter((photo) => photo.upload_state === 'complete').map((photo) => photo.id));
+    const submitAnalyzedIds = new Set(aiSuggestions.filter((row) => submitReadyIds.has(row.photo_id)).map((row) => row.photo_id));
+    const submitUnanalyzedCount = [...submitReadyIds].filter((photoId) => !submitAnalyzedIds.has(photoId)).length;
+    const submitPendingCount = aiSuggestions.filter((row) => row.status === 'pending').length;
+    if (submitFailedCount || submitUnanalyzedCount || submitPendingCount) {
+      toast({
+        variant: 'destructive',
+        title: 'Inspection is not ready to finalize',
+        description: [
+          submitFailedCount ? `${submitFailedCount} failed photo upload(s)` : '',
+          submitUnanalyzedCount ? `${submitUnanalyzedCount} photo(s) not analyzed` : '',
+          submitPendingCount ? `${submitPendingCount} AI decision(s) pending` : '',
+        ].filter(Boolean).join('. '),
+      });
+      return;
+    }
     setSaving(true);
     try {
       const snapshot = {
@@ -620,8 +675,9 @@ export default function InspectionEditor({ forceNew = false } = {}) {
       if (error) throw error;
       if (!data?.id) throw new Error('Submit failed.');
 
-      toast({ title: 'Submitted for review', description: 'Inspection is now locked pending office QA.' });
+      toast({ title: 'Ready for final review', description: 'Complete technician decisions and finalize this inspection revision.' });
       await fetchInspection(inspection.id);
+      navigate(`/${tenantId}/tech/inspections/${inspection.id}/review`);
     } catch (err) {
       toast({ variant: 'destructive', title: 'Submit failed', description: err?.message || 'Could not submit inspection.' });
     } finally {
@@ -648,7 +704,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
 
       toast({ title: 'Inspection reopened', description: `Revision incremented to ${data.revision || '?'}.` });
       await fetchInspection(inspection.id);
-      await fetchChildRows(inspection.id);
+      await fetchChildRows(inspection.id, inspection.revision || 1);
     } catch (err) {
       toast({ variant: 'destructive', title: 'Reopen failed', description: err?.message || 'Could not reopen inspection.' });
     } finally {
@@ -689,23 +745,52 @@ export default function InspectionEditor({ forceNew = false } = {}) {
 
   const generateReportPdf = async () => {
     if (!inspection?.id) return;
-    setSaving(true);
+    const reviewed = inspection.reviewed_at && inspection.reviewed_revision === (inspection.revision || 1);
+    if (!reviewed) {
+      setReportError('REVIEW_REQUIRED: Review and finalize this inspection revision before generating the customer PDF.');
+      return;
+    }
+    setReportGenerating(true);
+    setReportError('');
     try {
       const { data, error } = await supabase.functions.invoke('inspection-report-pdf', {
         body: { tenant_id: tenantId, inspection_id: inspection.id, store: true, return_pdf: true },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error) throw new Error(await functionErrorDetail(error, 'PDF generation failed.'));
+      if (data?.error) throw new Error([data.code, data.error].filter(Boolean).join(': '));
       if (!data?.pdf) throw new Error('PDF response was empty.');
 
       downloadFromBase64(data.pdf, `inspection-${inspection.id}.pdf`);
-      toast({ title: 'Report ready', description: 'Downloaded inspection report PDF.' });
+      setLatestReport(data.report || null);
+      toast({ title: 'PDF ready', description: `Generated and downloaded report version ${data.report?.report_version || ''}.` });
     } catch (err) {
       console.error(err);
-      toast({ variant: 'destructive', title: 'Report failed', description: err?.message || 'Could not generate report.' });
+      const message = err?.message || 'PDF_GENERATION_FAILED: Could not generate report.';
+      setReportError(message);
+      toast({ variant: 'destructive', title: 'PDF generation failed', description: message });
     } finally {
-      setSaving(false);
+      setReportGenerating(false);
     }
+  };
+
+  const downloadStoredReport = async () => {
+    if (!latestReport?.file_path) return;
+    setReportError('');
+    const { data, error } = await supabase.storage.from('inspection-reports').download(latestReport.file_path);
+    if (error || !data) {
+      const message = `PDF_DOWNLOAD_FAILED: ${error?.message || 'Stored report is unavailable.'}`;
+      setReportError(message);
+      toast({ variant: 'destructive', title: 'PDF download failed', description: message });
+      return;
+    }
+    const url = URL.createObjectURL(data);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `inspection-${inspection.id}-v${latestReport.report_version}.pdf`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
   };
 
   const createQuoteDraftFromRecommendations = async () => {
@@ -810,6 +895,32 @@ export default function InspectionEditor({ forceNew = false } = {}) {
 
   const linkedQuote = inspection?.quote || null;
   const publicQuoteLink = linkedQuote?.public_token ? `/quotes/${linkedQuote.public_token}` : null;
+  const currentRevision = inspection?.revision || 1;
+  const activePhotos = photos.filter((photo) => photo?.is_voided !== true);
+  const failedPhotoCount = activePhotos.filter((photo) => photo.upload_state === 'failed').length;
+  const readyPhotoIds = new Set(activePhotos.filter((photo) => photo.upload_state === 'complete').map((photo) => photo.id));
+  const analyzedPhotoIds = new Set(aiSuggestions.filter((row) => readyPhotoIds.has(row.photo_id)).map((row) => row.photo_id));
+  const unanalyzedPhotoCount = [...readyPhotoIds].filter((photoId) => !analyzedPhotoIds.has(photoId)).length;
+  const pendingAiCount = aiSuggestions.filter((row) => row.status === 'pending').length;
+  const reviewed = Boolean(inspection?.reviewed_at && inspection?.reviewed_revision === currentRevision);
+  const currentReport = latestReport?.inspection_revision === currentRevision ? latestReport : null;
+  const reportBlockers = [
+    failedPhotoCount ? `${failedPhotoCount} photo upload${failedPhotoCount === 1 ? '' : 's'} failed` : '',
+    unanalyzedPhotoCount ? `${unanalyzedPhotoCount} ready photo${unanalyzedPhotoCount === 1 ? '' : 's'} still need AI analysis` : '',
+    pendingAiCount ? `${pendingAiCount} AI suggestion${pendingAiCount === 1 ? '' : 's'} need technician decisions` : '',
+    !reviewed ? 'Current revision has not been reviewed and finalized' : '',
+  ].filter(Boolean);
+  const reportState = reportError
+    ? 'Failed - retry available'
+    : reportGenerating
+      ? 'Generating PDF'
+      : currentReport
+        ? 'PDF ready'
+        : reviewed
+          ? 'Ready to generate'
+          : pendingAiCount || unanalyzedPhotoCount
+            ? 'AI incomplete'
+            : 'Technician review required';
 
   if (loading) {
     return (
@@ -866,13 +977,13 @@ export default function InspectionEditor({ forceNew = false } = {}) {
               className="gap-2"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save
+              Save Draft
             </Button>
 
             {statusLabel(inspection?.status) === 'draft' ? (
               <Button onClick={submitForReview} disabled={saving} className="gap-2 bg-amber-600 hover:bg-amber-700">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                Submit For Review
+                Review & Finalize
               </Button>
             ) : null}
 
@@ -1177,6 +1288,17 @@ export default function InspectionEditor({ forceNew = false } = {}) {
           </TabsContent>
 
           <TabsContent value="photos">
+            <InspectionAiReviewPanel
+              tenantId={tenantId}
+              inspectionId={inspection.id}
+              revision={inspection.revision || 1}
+              locked={statusLabel(inspection?.status) !== 'draft'}
+              photos={photos}
+              onChanged={async () => {
+                await fetchInspection(inspection.id);
+                await fetchChildRows(inspection.id, inspection.revision || 1);
+              }}
+            />
             <div className="grid gap-4 lg:grid-cols-2">
               <Card>
                 <CardHeader>
@@ -1464,23 +1586,23 @@ export default function InspectionEditor({ forceNew = false } = {}) {
           </TabsContent>
 
           <TabsContent value="report">
-            <InspectionDeliveryPanel
-              tenantId={tenantId}
-              inspection={inspection}
-              quote={linkedQuote}
-              onChanged={() => fetchInspection(inspection.id)}
-            />
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-3">
+              <CardHeader>
                 <CardTitle className="text-base">Customer Report</CardTitle>
-                <Button onClick={generateReportPdf} disabled={saving} className="gap-2 bg-blue-600 hover:bg-blue-700">
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-                  Download PDF
-                </Button>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-slate-600">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  This PDF includes customer header, summary, findings, photo evidence, and recommendations. Photos are embedded server-side.
+                <div className={`rounded-xl border p-4 ${reportError ? 'border-rose-200 bg-rose-50' : currentReport ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
+                  <div className="font-semibold text-slate-900">Status: {reportState}</div>
+                  {currentReport ? <div className="mt-1 text-xs">Current report version: {currentReport.report_version}</div> : null}
+                  {reportBlockers.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">{reportBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul> : null}
+                  {reportError ? <div className="mt-2 text-xs text-rose-800">{reportError}</div> : null}
+                </div>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Button asChild variant="outline"><Link to={`/${tenantId}/tech/inspections/${inspection.id}/review`}>Review & Finalize</Link></Button>
+                  <Button onClick={generateReportPdf} disabled={reportGenerating || reportBlockers.length > 0} className="gap-2 bg-blue-600 hover:bg-blue-700">
+                    {reportGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}Generate PDF
+                  </Button>
+                  <Button variant="outline" onClick={downloadStoredReport} disabled={!currentReport?.file_path}>Download PDF</Button>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -1498,6 +1620,17 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                 </div>
               </CardContent>
             </Card>
+            <InspectionDeliveryPanel
+              tenantId={tenantId}
+              inspection={inspection}
+              quote={linkedQuote}
+              reportReady={Boolean(currentReport?.file_path)}
+              reportBlockers={reportBlockers}
+              onChanged={async () => {
+                await fetchInspection(inspection.id);
+                await fetchChildRows(inspection.id, inspection.revision || 1);
+              }}
+            />
           </TabsContent>
         </Tabs>
       )}
