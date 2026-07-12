@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
 import { getTenantId, tenantPath } from '@/lib/tenantUtils';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
@@ -150,7 +150,7 @@ const isMissingColumnError = (error) =>
   /column .* does not exist/i.test(error?.message || '') ||
   /could not find the '.*' column/i.test(error?.message || '');
 const isMissingRelationError = (error) =>
-  ['42P01', 'PGRST201', 'PGRST204', 'PGRST205'].includes(String(error?.code || '')) ||
+  ['42P01', 'PGRST200', 'PGRST201', 'PGRST204', 'PGRST205'].includes(String(error?.code || '')) ||
   /relation .* does not exist/i.test(String(error?.message || '')) ||
   /could not find the (table|relation) .* schema cache/i.test(String(error?.message || '')) ||
   /more than one relationship was found/i.test(String(error?.message || ''));
@@ -208,8 +208,7 @@ const insertQuoteItemsWithSchemaFallback = async (items) => {
 
 const fetchLeadsWithFallback = async (tenantId) => {
   const selectVariants = [
-    '*, contact:contacts!leads_contact_id_fkey(preferred_contact_method), property:property_id(address1,address2,city,state,zip)',
-    '*, property:property_id(address1,address2,city,state,zip)',
+    '*, contact:contacts!leads_contact_id_fkey(preferred_contact_method)',
     '*',
   ];
 
@@ -273,6 +272,9 @@ const resolvePostSendQuoteStatus = (status) => {
 
 const ProposalBuilder = () => {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
+  const sourceInspectionId = searchParams.get('inspection_id')?.trim() || '';
+  const builderRecordKey = id || sourceInspectionId || 'new';
   const navigate = useNavigate();
   const { toast } = useToast();
   // 1. Get activeTenantId from context
@@ -319,6 +321,7 @@ const ProposalBuilder = () => {
 
   // Proposal State
   const [proposal, setProposal] = useState({
+    inspection_id: sourceInspectionId,
     lead_id: '',
     customer_name: '',
     customer_email: '',
@@ -334,7 +337,7 @@ const ProposalBuilder = () => {
   useEffect(() => {
     restoredDraftRef.current = false;
     proposalLoadedRef.current = false;
-  }, [id, activeTenantId]);
+  }, [id, activeTenantId, sourceInspectionId]);
 
   const handleServiceAddressSelect = (addressData) => {
     const selected = formatSelectedAddress(addressData);
@@ -346,13 +349,13 @@ const ProposalBuilder = () => {
     if (activeTenantId) {
       fetchInitialData();
     }
-  }, [id, activeTenantId]);
+  }, [id, activeTenantId, sourceInspectionId]);
 
   useEffect(() => {
     if (!activeTenantId || restoredDraftRef.current || !proposalLoadedRef.current || loading) return;
 
     restoredDraftRef.current = true;
-    const storedDraft = loadBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, activeTenantId, id || 'new');
+    const storedDraft = loadBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, activeTenantId, builderRecordKey);
     if (!storedDraft?.proposal) return;
 
     setProposal((prev) => ({
@@ -375,11 +378,11 @@ const ProposalBuilder = () => {
     if (!activeTenantId || !proposalLoadedRef.current || loading) return;
 
     if (!hasMeaningfulProposalDraft(proposal, sendChannel)) {
-      clearBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, activeTenantId, id || 'new');
+      clearBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, activeTenantId, builderRecordKey);
       return;
     }
 
-    saveBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, activeTenantId, id || 'new', {
+    saveBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, activeTenantId, builderRecordKey, {
       proposal,
       sendChannel,
     });
@@ -470,17 +473,26 @@ const ProposalBuilder = () => {
       console.log(`Fetching leads for activeTenantId=${activeTenantId}`);
       console.log(`Fetching price_book for activeTenantId=${activeTenantId}`);
 
-      const [leadsRes, priceBookRes] = await Promise.all([
+      const [leadsRes, priceBookRes, inspectionRes] = await Promise.all([
           fetchLeadsWithFallback(activeTenantId),
           supabase.from('price_book')
             .select('*')
             .eq('active', true)
             .in('tenant_id', [activeTenantId || 'default', 'default'])
-            .order('name')
+            .order('name'),
+          !id && sourceInspectionId
+            ? supabase
+                .from('inspections')
+                .select('id, lead_id, revision, status, metadata, lead:leads(id, first_name, last_name, company, email, phone), job:jobs(id, service_address)')
+                .eq('tenant_id', activeTenantId)
+                .eq('id', sourceInspectionId)
+                .maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
       ]);
 
       if (leadsRes.error) throw leadsRes.error;
       if (priceBookRes.error) throw priceBookRes.error;
+      if (inspectionRes.error) throw inspectionRes.error;
 
       if (leadsRes.data) setLeads(leadsRes.data);
       if (priceBookRes.data) {
@@ -500,6 +512,26 @@ const ProposalBuilder = () => {
           deduped.push(row);
         }
         setPriceBook(deduped);
+      }
+
+      if (!id && sourceInspectionId) {
+        const sourceInspection = inspectionRes.data;
+        if (!sourceInspection) throw new Error('The selected inspection was not found for this tenant.');
+        const sourceLead = Array.isArray(sourceInspection.lead) ? sourceInspection.lead[0] : sourceInspection.lead;
+        const sourceJob = Array.isArray(sourceInspection.job) ? sourceInspection.job[0] : sourceInspection.job;
+        const customerName = sourceLead?.company || `${sourceLead?.first_name || ''} ${sourceLead?.last_name || ''}`.trim();
+        const serviceAddress = normalizeAddress(sourceJob?.service_address || sourceInspection.metadata?.service_address);
+
+        setProposal((current) => ({
+          ...current,
+          inspection_id: sourceInspection.id,
+          inspection_revision: sourceInspection.revision || 1,
+          lead_id: sourceInspection.lead_id || '',
+          customer_name: customerName,
+          customer_email: sourceLead?.email || '',
+          customer_phone: sourceLead?.phone || '',
+          service_address: serviceAddress,
+        }));
       }
 
       if (id) {
@@ -1093,7 +1125,7 @@ const ProposalBuilder = () => {
       setOverrideReason('');
       setOverrideAcknowledged(false);
       setPendingOverridePayload(null);
-      clearBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, activeTenantId, id || 'new');
+      clearBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, activeTenantId, builderRecordKey);
 
       toast({
         title: 'Sent',
@@ -1169,6 +1201,10 @@ const ProposalBuilder = () => {
 
     const quoteNumber = isReleasedEdit ? generateQuoteNumber() : (proposal.quote_number || generateQuoteNumber());
     const baseQuoteData = {
+        ...(proposal.inspection_id ? {
+          inspection_id: proposal.inspection_id,
+          inspection_revision: proposal.inspection_revision || 1,
+        } : {}),
         lead_id: proposal.lead_id,
         user_id: user?.id,
         status: statusToPersist,
@@ -1515,7 +1551,7 @@ const ProposalBuilder = () => {
              toast({ title: 'Success', description: 'Quote saved successfully.' });
         }
 
-        clearBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, activeTenantId, id || 'new');
+        clearBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, activeTenantId, builderRecordKey);
 
         if (!id || isReleasedEdit || quoteId !== id) {
           navigate(tenantPath(`/crm/estimates/${quoteId}`, resolvedTenantId));
