@@ -301,6 +301,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
     let mounted = true;
 
     const init = async () => {
+      setLoading(true);
       try {
         await fetchReferenceData();
         if (!mounted) return;
@@ -380,6 +381,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
       if (!data?.id) throw new Error('Inspection create failed.');
 
       toast({ title: 'Inspection created', description: 'You can now add findings and photos.', className: 'bg-green-50 border-green-200' });
+      setLoading(true);
       navigate(`/${tenantId}/crm/inspections/${data.id}`, { replace: true });
     } catch (err) {
       console.error(err);
