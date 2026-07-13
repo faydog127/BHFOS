@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Loader2, ArrowLeft, Camera, Plus, Save, CheckCircle2, FileDown, Link2, Trash2 } from 'lucide-react';
 import { INSPECTION_IMAGE_ACCEPT } from '@/lib/imageCompression';
+import { assessInspectionPhotoQuality } from '@/lib/inspectionPhotoQuality';
 import { mediaQueue } from '@/lib/offlineInspectionMediaQueue';
 import {
   enqueueInspectionPhotoFiles,
@@ -98,14 +99,21 @@ export default function InspectionEditor({ forceNew = false } = {}) {
   const [photoQueueError, setPhotoQueueError] = useState('');
   const photoUrlCacheRef = useRef(new Map());
   const createRequestIdRef = useRef(crypto.randomUUID());
+  const beforeCameraRef = useRef(null);
+  const afterCameraRef = useRef(null);
 
   // Draft inputs (new inspection)
   const [draftLeadId, setDraftLeadId] = useState('');
   const [draftJobId, setDraftJobId] = useState('unlinked');
   const [draftTechnicianId, setDraftTechnicianId] = useState('unassigned');
   const [draftTitle, setDraftTitle] = useState('');
+  const [draftInspectionType, setDraftInspectionType] = useState('dryer_vent');
 
   const [summary, setSummary] = useState('');
+  const [summaryStatus, setSummaryStatus] = useState('draft');
+  const [captureMode, setCaptureMode] = useState('before');
+  const [batchMode, setBatchMode] = useState('before');
+  const [preflightIssues, setPreflightIssues] = useState([]);
   const [disclaimer, setDisclaimer] = useState(
     'This report reflects visible conditions at the time of inspection. Hidden conditions may exist. Work is performed per customer authorization and applicable safety standards.'
   );
@@ -241,6 +249,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
 
     setInspection(normalized);
     setSummary(asText(normalized.summary));
+    setSummaryStatus(normalized.summary_status || 'draft');
     setDisclaimer(asText(normalized.disclaimer_text) || disclaimer);
     return normalized;
   }, [tenantId, disclaimer]);
@@ -351,6 +360,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
         created_by_user_id: user?.id || null,
         client_request_id: createRequestIdRef.current,
         status: 'draft',
+        inspection_type: draftInspectionType,
         title: asText(draftTitle) || null,
         started_at: nowIso,
         created_at: nowIso,
@@ -400,6 +410,10 @@ export default function InspectionEditor({ forceNew = false } = {}) {
         .from('inspections')
         .update({
           summary: summary || null,
+          summary_status: summaryStatus,
+          summary_source_revision: inspection.revision || 1,
+          summary_reviewed_at: ['accepted', 'edited'].includes(summaryStatus) ? nowIso : null,
+          summary_reviewed_by: ['accepted', 'edited'].includes(summaryStatus) ? user?.id || null : null,
           disclaimer_text: disclaimer || null,
           updated_at: nowIso,
         })
@@ -414,6 +428,35 @@ export default function InspectionEditor({ forceNew = false } = {}) {
     } finally {
       if (manageSaving) setSaving(false);
     }
+  };
+
+  const buildInspectionSummary = useCallback(() => {
+    const visibleFindings = findings.filter((finding) => finding.is_customer_visible !== false);
+    const visibleRecommendations = recs.filter((recommendation) => recommendation.is_customer_visible !== false);
+    const beforeCount = photos.filter((photo) => photo.is_before === true && !photo.is_voided).length;
+    const afterCount = photos.filter((photo) => photo.is_before === false && !photo.is_voided).length;
+    const qualityWarnings = photos.filter((photo) => photo.quality_status === 'kept_with_warning').length;
+    const parts = [];
+    if (visibleFindings.length) parts.push(`The inspection documented ${visibleFindings.length} technician-approved condition${visibleFindings.length === 1 ? '' : 's'}: ${visibleFindings.map((finding) => finding.title).join('; ')}.`);
+    if (visibleRecommendations.length) parts.push(`Recommended next steps include ${visibleRecommendations.map((recommendation) => recommendation.title).join('; ')}.`);
+    if (beforeCount || afterCount) parts.push(`Evidence includes ${beforeCount} before and ${afterCount} after photo${beforeCount + afterCount === 1 ? '' : 's'}.`);
+    if (qualityWarnings) parts.push(`${qualityWarnings} retained photo${qualityWarnings === 1 ? '' : 's'} had a documented quality limitation and should be interpreted with the technician-approved findings.`);
+    return parts.join(' ') || '';
+  }, [findings, photos, recs]);
+
+  useEffect(() => {
+    const generated = buildInspectionSummary();
+    const shouldGenerate = summaryStatus === 'draft' && !summary;
+    const shouldRefresh = summaryStatus === 'generated' && generated !== summary;
+    if (generated && (shouldGenerate || shouldRefresh)) {
+      setSummary(generated);
+      setSummaryStatus('generated');
+    }
+  }, [buildInspectionSummary, summary, summaryStatus]);
+
+  const regenerateSummary = () => {
+    setSummary(buildInspectionSummary());
+    setSummaryStatus('generated');
   };
 
   const addFinding = async () => {
@@ -550,17 +593,34 @@ export default function InspectionEditor({ forceNew = false } = {}) {
     }
   }, [hydratePhotoUrls, inspection, photoUploading, refreshPhotoQueue, tenantId, user?.id]);
 
-  const uploadPhotos = async (fileList) => {
+  const uploadPhotos = async (fileList, mode = batchMode) => {
     if (!inspection?.id) {
       setPhotoQueueError('Inspection context is unavailable. Refresh before selecting the photo again.');
       return;
     }
     try {
+      const qualityResults = new Map();
+      const knownHashes = photos.map((photo) => photo?.quality_metrics?.normalized_hash).filter(Boolean);
+      for (const file of Array.from(fileList || [])) {
+        // Quality feedback is deliberately shown before the normal upload finishes.
+        // eslint-disable-next-line no-await-in-loop
+        const quality = await assessInspectionPhotoQuality(file, knownHashes);
+        if (quality.status === 'retake_recommended') {
+          const keep = window.confirm(`Retake recommended for ${file.name}: ${quality.warnings.join(' ')}\n\nSelect OK to Keep anyway, or Cancel to retake.`);
+          if (!keep) continue;
+          quality.status = 'kept_with_warning';
+        }
+        qualityResults.set(file, quality);
+        knownHashes.push(quality.metrics.normalized_hash);
+      }
+      const retainedFiles = Array.from(fileList || []).filter((file) => qualityResults.has(file));
       const { accepted, rejected } = await enqueueInspectionPhotoFiles({
-        files: fileList,
+        files: retainedFiles,
         tenantId,
         inspectionId: inspection.id,
         revision: inspection.revision || 1,
+        isBefore: mode === 'before' ? true : mode === 'after' ? false : null,
+        qualityResults,
       });
       if (accepted.length) setPhotoQueueError('');
       await refreshPhotoQueue();
@@ -637,56 +697,6 @@ export default function InspectionEditor({ forceNew = false } = {}) {
     }
   };
 
-  const submitForReview = async () => {
-    if (!inspection?.id) return;
-    const submitActivePhotos = photos.filter((photo) => photo?.is_voided !== true);
-    const submitFailedCount = submitActivePhotos.filter((photo) => photo.upload_state === 'failed').length;
-    const submitReadyIds = new Set(submitActivePhotos.filter((photo) => photo.upload_state === 'complete').map((photo) => photo.id));
-    const submitAnalyzedIds = new Set(aiSuggestions.filter((row) => submitReadyIds.has(row.photo_id)).map((row) => row.photo_id));
-    const submitUnanalyzedCount = [...submitReadyIds].filter((photoId) => !submitAnalyzedIds.has(photoId)).length;
-    const submitPendingCount = aiSuggestions.filter((row) => row.status === 'pending').length;
-    if (submitFailedCount || submitUnanalyzedCount || submitPendingCount) {
-      toast({
-        variant: 'destructive',
-        title: 'Inspection is not ready to finalize',
-        description: [
-          submitFailedCount ? `${submitFailedCount} failed photo upload(s)` : '',
-          submitUnanalyzedCount ? `${submitUnanalyzedCount} photo(s) not analyzed` : '',
-          submitPendingCount ? `${submitPendingCount} AI decision(s) pending` : '',
-        ].filter(Boolean).join('. '),
-      });
-      return;
-    }
-    setSaving(true);
-    try {
-      const snapshot = {
-        status: statusLabel(inspection?.status),
-        findings_count: findings.length,
-        photos_count: photos.filter((p) => p && p.is_voided !== true).length,
-        recommendations_count: recs.length,
-        unresolved_upload_count: 0,
-      };
-
-      const { data, error } = await supabase.rpc('inspection_submit', {
-        p_tenant_id: tenantId,
-        p_inspection_id: inspection.id,
-        p_expected_revision: inspection.revision || 1,
-        p_validation_snapshot: snapshot,
-      });
-
-      if (error) throw error;
-      if (!data?.id) throw new Error('Submit failed.');
-
-      toast({ title: 'Ready for final review', description: 'Complete technician decisions and finalize this inspection revision.' });
-      await fetchInspection(inspection.id);
-      navigate(`/${tenantId}/tech/inspections/${inspection.id}/review`);
-    } catch (err) {
-      toast({ variant: 'destructive', title: 'Submit failed', description: err?.message || 'Could not submit inspection.' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const reopenInspection = async () => {
     if (!inspection?.id) return;
     const reason = window.prompt('Reopen reason (required):');
@@ -745,10 +755,10 @@ export default function InspectionEditor({ forceNew = false } = {}) {
     }
   };
 
-  const generateReportPdf = async () => {
+  const generateReportPdf = async ({ skipReviewCheck = false } = {}) => {
     if (!inspection?.id) return;
     const reviewed = inspection.reviewed_at && inspection.reviewed_revision === (inspection.revision || 1);
-    if (!reviewed) {
+    if (!reviewed && !skipReviewCheck) {
       setReportError('REVIEW_REQUIRED: Review and finalize this inspection revision before generating the customer PDF.');
       return;
     }
@@ -772,6 +782,61 @@ export default function InspectionEditor({ forceNew = false } = {}) {
       toast({ variant: 'destructive', title: 'PDF generation failed', description: message });
     } finally {
       setReportGenerating(false);
+    }
+  };
+
+  const reviewAndFinalize = async () => {
+    if (!inspection?.id) return;
+    setSaving(true);
+    setPreflightIssues([]);
+    try {
+      const finalSummary = summary || buildInspectionSummary();
+      if (!finalSummary) throw new Error('Generate and review an inspection summary before finalizing.');
+      const nowIso = new Date().toISOString();
+      const summaryUpdate = await supabase.from('inspections').update({
+        summary: finalSummary,
+        summary_status: summaryStatus === 'edited' ? 'edited' : 'accepted',
+        summary_source_revision: inspection.revision || 1,
+        summary_reviewed_at: nowIso,
+        summary_reviewed_by: user?.id || null,
+        updated_at: nowIso,
+      }).eq('tenant_id', tenantId).eq('id', inspection.id);
+      if (summaryUpdate.error) throw summaryUpdate.error;
+
+      const preflight = await supabase.rpc('inspection_finalization_preflight', {
+        p_tenant_id: tenantId, p_inspection_id: inspection.id,
+      });
+      if (preflight.error) throw preflight.error;
+      if ((preflight.data || []).length) {
+        setPreflightIssues(preflight.data);
+        return;
+      }
+
+      if (statusLabel(inspection.status) === 'draft') {
+        const submitted = await supabase.rpc('inspection_submit', {
+          p_tenant_id: tenantId,
+          p_inspection_id: inspection.id,
+          p_expected_revision: inspection.revision || 1,
+          p_validation_snapshot: { source: 'phase5_finalize', photos_count: photos.length, findings_count: findings.length, recommendations_count: recs.length },
+        });
+        if (submitted.error) throw submitted.error;
+      }
+      const finalized = await supabase.rpc('inspection_finalize_phase5', {
+        p_tenant_id: tenantId, p_inspection_id: inspection.id, p_expected_revision: inspection.revision || 1,
+      });
+      if (finalized.error) throw finalized.error;
+      setInspection((current) => ({ ...current, ...finalized.data }));
+      setSummary(finalSummary);
+      setSummaryStatus(summaryStatus === 'edited' ? 'edited' : 'accepted');
+      await generateReportPdf({ skipReviewCheck: true });
+      await fetchChildRows(inspection.id, inspection.revision || 1);
+      toast({ title: 'Inspection finalized', description: 'The reviewed customer PDF is ready to download. No email was sent.' });
+    } catch (error) {
+      const detail = error?.details;
+      try { if (detail) setPreflightIssues(JSON.parse(detail)); } catch { /* Show the original error below. */ }
+      toast({ variant: 'destructive', title: 'Finalization incomplete', description: error?.message || 'Resolve the listed issues and try again.' });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -983,7 +1048,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
             </Button>
 
             {statusLabel(inspection?.status) === 'draft' ? (
-              <Button onClick={submitForReview} disabled={saving} className="gap-2 bg-amber-600 hover:bg-amber-700">
+              <Button onClick={reviewAndFinalize} disabled={saving} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                 Review & Finalize
               </Button>
@@ -1012,6 +1077,13 @@ export default function InspectionEditor({ forceNew = false } = {}) {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Inspection Type</Label>
+                <Select value={draftInspectionType} onValueChange={setDraftInspectionType} disabled={saving}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="dryer_vent">Dryer Vent</SelectItem><SelectItem value="air_duct">Air Duct</SelectItem><SelectItem value="hvac">HVAC</SelectItem><SelectItem value="indoor_air_quality">Indoor Air Quality</SelectItem><SelectItem value="other">Other</SelectItem></SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2">
                 <Label>Customer (Lead)</Label>
                 <Select value={draftLeadId} onValueChange={setDraftLeadId} disabled={saving}>
@@ -1137,11 +1209,16 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                     <Label>Inspection Summary</Label>
                     <Textarea
                       value={summary}
-                      onChange={(e) => setSummary(e.target.value)}
+                      onChange={(e) => { setSummary(e.target.value); setSummaryStatus('edited'); }}
                       placeholder="Brief summary a customer can read..."
                       className="min-h-28"
                       disabled={saving || statusLabel(inspection?.status) !== 'draft'}
                     />
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" size="sm" variant="outline" onClick={regenerateSummary}>Regenerate summary</Button>
+                      <Button type="button" size="sm" onClick={() => setSummaryStatus('accepted')} disabled={!summary}>Accept summary</Button>
+                      <Badge variant="outline" className="capitalize">{summaryStatus}</Badge>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Disclaimer</Label>
@@ -1273,6 +1350,18 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                           >
                             <Trash2 className="h-4 w-4 text-slate-500" />
                           </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              const { error } = await supabase.rpc('inspection_set_finding_visibility', { p_tenant_id: tenantId, p_finding_id: f.id, p_customer_visible: f.is_customer_visible === false });
+                              if (error) return toast({ variant: 'destructive', title: 'Visibility update failed', description: error.message });
+                              await fetchChildRows(inspection.id, inspection.revision || 1);
+                            }}
+                            disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+                          >
+                            {f.is_customer_visible === false ? 'Include in report' : 'Mark internal-only'}
+                          </Button>
                         </div>
                         {f.description ? <div className="mt-2 text-sm text-slate-600 whitespace-pre-wrap">{f.description}</div> : null}
                         {f.recommended_action ? (
@@ -1313,7 +1402,25 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                       Add inspection photos (stored in Supabase Storage)
                     </div>
                     <div className="mt-3">
+                      <div className="grid grid-cols-2 gap-2 sm:hidden">
+                        <Button type="button" size="lg" className={captureMode === 'before' ? 'min-h-12' : 'min-h-12 bg-slate-700'} onClick={() => { setCaptureMode('before'); beforeCameraRef.current?.click(); }} disabled={saving || photoUploading || statusLabel(inspection?.status) !== 'draft'}>
+                          <Camera className="mr-2 h-5 w-5" />Take Before Photo
+                        </Button>
+                        <Button type="button" size="lg" className={captureMode === 'after' ? 'min-h-12' : 'min-h-12 bg-slate-700'} onClick={() => { setCaptureMode('after'); afterCameraRef.current?.click(); }} disabled={saving || photoUploading || statusLabel(inspection?.status) !== 'draft'}>
+                          <Camera className="mr-2 h-5 w-5" />Take After Photo
+                        </Button>
+                        <input ref={beforeCameraRef} className="hidden" type="file" accept={INSPECTION_IMAGE_ACCEPT} capture="environment" onChange={(event) => { const files = Array.from(event.target.files || []); event.target.value = ''; uploadPhotos(files, 'before').catch(() => null); }} />
+                        <input ref={afterCameraRef} className="hidden" type="file" accept={INSPECTION_IMAGE_ACCEPT} capture="environment" onChange={(event) => { const files = Array.from(event.target.files || []); event.target.value = ''; uploadPhotos(files, 'after').catch(() => null); }} />
+                      </div>
+                      <div className="mb-2 hidden items-center gap-2 sm:flex">
+                        <Label className="whitespace-nowrap text-xs">Batch assignment</Label>
+                        <Select value={batchMode} onValueChange={setBatchMode}>
+                          <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="before">Before</SelectItem><SelectItem value="after">After</SelectItem><SelectItem value="unspecified">Unspecified</SelectItem></SelectContent>
+                        </Select>
+                      </div>
                       <Input
+                        className="hidden sm:block"
                         type="file"
                         multiple
                         accept={INSPECTION_IMAGE_ACCEPT}
@@ -1326,7 +1433,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                       />
                     </div>
                     <div className="mt-2 text-xs text-slate-500">
-                      JPEG, PNG, WebP, HEIC, and HEIF are normalized to a private report-ready JPEG.
+                      Capture mode stays {captureMode}. Quality is checked before upload; retained warnings remain visible during review.
                     </div>
                     {photoQueueError ? (
                       <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700" role="alert">
@@ -1458,6 +1565,8 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                             {p.is_voided ? (
                               <div className="text-xs text-amber-700">Voided: {p.void_reason || 'No reason recorded'}</div>
                             ) : null}
+                            {p.quality_status === 'good' ? <div className="text-xs font-medium text-emerald-700">Photo looks good</div> : null}
+                            {['retake_recommended', 'kept_with_warning'].includes(p.quality_status) ? <div className="rounded-md bg-amber-50 p-2 text-xs text-amber-800">Retake recommended: {(p.quality_warnings || []).join(' ')}</div> : null}
                           </div>
                         </div>
                       </div>
@@ -1599,9 +1708,16 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                   {reportBlockers.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">{reportBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul> : null}
                   {reportError ? <div className="mt-2 text-xs text-rose-800">{reportError}</div> : null}
                 </div>
+                {preflightIssues.length ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950"><div className="font-semibold">Resolve before finalizing</div><ul className="mt-2 space-y-2">{preflightIssues.map((issue, index) => <li key={`${issue.code}-${index}`}><div>{issue.message}</div><div className="text-xs font-medium">Action: {issue.action || 'Review the affected report content'}</div></li>)}</ul></div> : null}
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="rounded-lg border p-3"><div className="text-xs text-slate-500">Ready photos</div><b>{readyPhotoIds.size}/{activePhotos.length}</b></div>
+                  <div className="rounded-lg border p-3"><div className="text-xs text-slate-500">Retake recommended</div><b>{activePhotos.filter((photo) => ['retake_recommended', 'kept_with_warning'].includes(photo.quality_status)).length}</b></div>
+                  <div className="rounded-lg border p-3"><div className="text-xs text-slate-500">Customer findings</div><b>{findings.filter((finding) => finding.is_customer_visible !== false).length}</b></div>
+                  <div className="rounded-lg border p-3"><div className="text-xs text-slate-500">Internal findings</div><b>{findings.filter((finding) => finding.is_customer_visible === false).length}</b></div>
+                </div>
                 <div className="grid gap-2 sm:grid-cols-3">
-                  <Button asChild variant="outline"><Link to={`/${tenantId}/tech/inspections/${inspection.id}/review`}>Review & Finalize</Link></Button>
-                  <Button onClick={generateReportPdf} disabled={reportGenerating || reportBlockers.length > 0} className="gap-2 bg-blue-600 hover:bg-blue-700">
+                  <Button onClick={reviewAndFinalize} disabled={saving || reportGenerating} className="min-h-12 gap-2 bg-emerald-600 hover:bg-emerald-700">Review & Finalize</Button>
+                  <Button onClick={() => generateReportPdf()} disabled={reportGenerating || reportBlockers.length > 0} className="hidden gap-2 bg-blue-600 hover:bg-blue-700 sm:flex">
                     {reportGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}Generate PDF
                   </Button>
                   <Button variant="outline" onClick={downloadStoredReport} disabled={!currentReport?.file_path}>Download PDF</Button>

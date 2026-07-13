@@ -51,7 +51,7 @@ test('opens each newly created inspection on the first navigation without duplic
       const title = `POST CREATE NAVIGATION ${runId} ${index}`;
       await page.goto('/tvg/crm/inspections/new', { waitUntil: 'domcontentloaded' });
       await expect(page.getByRole('heading', { name: 'Create Inspection' })).toBeVisible();
-      await page.getByRole('combobox').first().click();
+      await page.getByText('Customer (Lead)', { exact: true }).locator('..').getByRole('combobox').click();
       await page.getByText(customerName, { exact: true }).click();
       await page.getByPlaceholder('e.g. Dryer Vent Inspection').fill(title);
       await page.getByRole('button', { name: 'Create', exact: true }).click();

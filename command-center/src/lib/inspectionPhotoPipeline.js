@@ -85,6 +85,10 @@ const ensureEvidenceRow = async ({
       caption: asText(item.caption) || null,
       category: asText(item.category) || null,
       is_before: typeof item.is_before === 'boolean' ? item.is_before : null,
+      quality_status: item.quality_status || 'unchecked',
+      quality_warnings: item.quality_warnings || [],
+      quality_metrics: item.quality_metrics || {},
+      quality_checked_at: item.quality_checked_at || null,
       taken_at: item.taken_at || null,
       upload_state: 'pending',
       storage_error: null,
@@ -104,6 +108,8 @@ export const enqueueInspectionPhotoFiles = async ({
   tenantId,
   inspectionId,
   revision,
+  isBefore = null,
+  qualityResults = new Map(),
 }) => {
   const accepted = [];
   const rejected = [];
@@ -128,7 +134,11 @@ export const enqueueInspectionPhotoFiles = async ({
         caption: '',
         finding_id: null,
         recommendation_id: null,
-        is_before: null,
+        is_before: typeof isBefore === 'boolean' ? isBefore : null,
+        quality_status: qualityResults.get(file)?.status || 'unchecked',
+        quality_warnings: qualityResults.get(file)?.warnings || [],
+        quality_metrics: qualityResults.get(file)?.metrics || {},
+        quality_checked_at: qualityResults.get(file) ? new Date().toISOString() : null,
       });
       accepted.push(item);
     } catch (error) {

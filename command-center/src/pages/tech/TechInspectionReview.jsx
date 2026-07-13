@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
 
 import { supabase } from '@/lib/customSupabaseClient';
@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { mediaQueue } from '@/lib/offlineInspectionMediaQueue';
-import { v4 as uuidv4 } from 'uuid';
 import TechSendQuoteDialog from '@/components/tech/TechSendQuoteDialog';
 import InspectionAiReviewPanel from '@/components/tech/InspectionAiReviewPanel';
 import InspectionDeliveryPanel from '@/components/tech/InspectionDeliveryPanel';
@@ -21,7 +20,6 @@ const statusText = (v) => asText(v).toLowerCase() || 'draft';
 export default function TechInspectionReview() {
   const tenantId = getTenantId();
   const { inspectionId } = useParams();
-  const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useSupabaseAuth();
 
@@ -36,6 +34,7 @@ export default function TechInspectionReview() {
   const [quoteItems, setQuoteItems] = useState([]);
   const [sendQuoteOpen, setSendQuoteOpen] = useState(false);
   const [resendRequested, setResendRequested] = useState(false);
+  const [preflightIssues, setPreflightIssues] = useState([]);
 
   const load = async () => {
     if (!inspectionId) return;
@@ -52,6 +51,7 @@ export default function TechInspectionReview() {
           quote_id,
           technician_id,
           title,
+          summary,
           updated_at,
           reviewed_at,
           reviewed_revision,
@@ -163,114 +163,6 @@ export default function TechInspectionReview() {
     };
   }, [findings, photos, queueItems, recs]);
 
-  const persistQueueEvidenceRows = async () => {
-    if (!inspection?.id) return { persisted: 0 };
-    if (!navigator.onLine) return { persisted: 0 };
-    if (statusText(inspection.status) !== 'draft') return { persisted: 0 };
-
-    const local = await mediaQueue.list({ tenantId, inspectionId });
-    const needsPersist = (local || []).filter((q) => !q.photo_row_id && q.file);
-    if (needsPersist.length === 0) return { persisted: 0 };
-
-    let persisted = 0;
-    for (const q of needsPersist) {
-      const photoRowId = uuidv4();
-      const objectPath = `${tenantId}/inspections/${inspectionId}/revision-${inspection.revision || 1}/photos/${photoRowId}.jpg`;
-      const nowIso = new Date().toISOString();
-
-      // eslint-disable-next-line no-await-in-loop
-      const { error } = await supabase
-        .from('inspection_photos')
-        .insert({
-          id: photoRowId,
-          tenant_id: tenantId,
-          inspection_id: inspectionId,
-          finding_id: q.finding_id || null,
-          technician_id: inspection.technician_id || null,
-          created_by_user_id: user?.id || null,
-          bucket_id: 'inspection-photos',
-          object_path: objectPath,
-          file_name: q.file_name || null,
-          content_type: 'image/jpeg',
-          byte_size: null,
-          caption: asText(q.caption) || null,
-          category: asText(q.category) || null,
-          is_before: typeof q.is_before === 'boolean' ? q.is_before : null,
-          taken_at: q.taken_at || null,
-          upload_state: 'pending',
-          storage_error: null,
-          storage_uploaded_at: null,
-          uploaded_at: nowIso,
-          created_at: nowIso,
-          updated_at: nowIso,
-        });
-
-      if (!error) {
-        // eslint-disable-next-line no-await-in-loop
-        await mediaQueue.patch(q.id, { photo_row_id: photoRowId, object_path: objectPath });
-        persisted += 1;
-      }
-    }
-
-    const updatedLocal = await mediaQueue.list({ tenantId, inspectionId });
-    setQueueItems(updatedLocal);
-    return { persisted };
-  };
-
-  const submit = async () => {
-    if (!inspection?.id) return;
-    if (!navigator.onLine) {
-      toast({ variant: 'destructive', title: 'Offline', description: 'Submission requires connectivity.' });
-      return;
-    }
-
-    setSaving(true);
-    try {
-      // Persist evidence records first (upload can still resolve later).
-      await persistQueueEvidenceRows();
-
-      const refreshedQueue = await mediaQueue.list({ tenantId, inspectionId });
-      const unresolvedQueue = (refreshedQueue || []).filter((q) => ['queued', 'uploading', 'failed'].includes(q.status)).length;
-      const failedQueue = (refreshedQueue || []).filter((q) => q.status === 'failed').length;
-
-      const pendingDb = await supabase
-        .from('inspection_photos')
-        .select('id, upload_state, is_voided')
-        .eq('tenant_id', tenantId)
-        .eq('inspection_id', inspectionId)
-        .neq('upload_state', 'complete');
-
-      const pendingDbCount = (pendingDb.data || []).filter((p) => p && p.is_voided !== true).length;
-
-      const snapshot = {
-        status: statusText(inspection.status),
-        findings_count: findings.length,
-        recommendations_count: recs.length,
-        photos_count: photos.filter((p) => p && p.is_voided !== true).length,
-        unresolved_upload_count: unresolvedQueue,
-        failed_upload_count: failedQueue,
-        pending_db_upload_count: pendingDbCount,
-        warnings: computed.warnings,
-      };
-
-      const { data, error } = await supabase.rpc('inspection_submit', {
-        p_tenant_id: tenantId,
-        p_inspection_id: inspection.id,
-        p_expected_revision: inspection.revision || 1,
-        p_validation_snapshot: snapshot,
-      });
-      if (error) throw error;
-      if (!data?.id) throw new Error('Submit failed.');
-
-      toast({ title: 'Submitted', description: 'Inspection is now locked for office QA.' });
-      navigate('../queue', { replace: true });
-    } catch (err) {
-      toast({ variant: 'destructive', title: 'Submit failed', description: err?.message || 'Could not submit inspection.' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16 text-slate-500">
@@ -302,15 +194,47 @@ export default function TechInspectionReview() {
   const locked = status !== 'draft';
   const isReviewed = Boolean(inspection.reviewed_at && inspection.reviewed_revision === (inspection.revision || 1));
 
-  const markReviewed = async () => {
+  const finalizeInspection = async () => {
     setSaving(true);
-    const { data, error } = await supabase.rpc('inspection_mark_reviewed', {
-      p_tenant_id: tenantId, p_inspection_id: inspectionId, p_expected_revision: inspection.revision || 1,
-    });
-    setSaving(false);
-    if (error) return toast({ variant: 'destructive', title: 'Review incomplete', description: error.message });
-    setInspection((current) => ({ ...current, ...data }));
-    toast({ title: 'Report reviewed', description: 'This revision is now eligible to send.' });
+    setPreflightIssues([]);
+    try {
+      const visibleFindings = findings.filter((finding) => finding.is_customer_visible !== false);
+      const visibleRecs = recs.filter((recommendation) => recommendation.is_customer_visible !== false);
+      const generatedSummary = inspection.summary || [
+        visibleFindings.length ? `The inspection documented ${visibleFindings.length} technician-approved condition${visibleFindings.length === 1 ? '' : 's'}: ${visibleFindings.map((finding) => finding.title).join('; ')}.` : '',
+        visibleRecs.length ? `Recommended next steps include ${visibleRecs.map((recommendation) => recommendation.title).join('; ')}.` : '',
+      ].filter(Boolean).join(' ');
+      if (generatedSummary && !inspection.summary) {
+        const update = await supabase.from('inspections').update({
+          summary: generatedSummary, summary_status: 'accepted', summary_source_revision: inspection.revision || 1,
+          summary_reviewed_at: new Date().toISOString(), summary_reviewed_by: user?.id || null,
+        }).eq('tenant_id', tenantId).eq('id', inspectionId);
+        if (update.error) throw update.error;
+      }
+      const preflight = await supabase.rpc('inspection_finalization_preflight', { p_tenant_id: tenantId, p_inspection_id: inspectionId });
+      if (preflight.error) throw preflight.error;
+      if ((preflight.data || []).length) { setPreflightIssues(preflight.data); return; }
+      if (statusText(inspection.status) === 'draft') {
+        const submitted = await supabase.rpc('inspection_submit', {
+          p_tenant_id: tenantId, p_inspection_id: inspectionId, p_expected_revision: inspection.revision || 1,
+          p_validation_snapshot: { source: 'phase5_mobile_finalize', photos_count: photos.length, findings_count: findings.length, recommendations_count: recs.length },
+        });
+        if (submitted.error) throw submitted.error;
+      }
+      const { data, error } = await supabase.rpc('inspection_finalize_phase5', {
+        p_tenant_id: tenantId, p_inspection_id: inspectionId, p_expected_revision: inspection.revision || 1,
+      });
+      if (error) throw error;
+      const pdf = await supabase.functions.invoke('inspection-report-pdf', { body: { tenant_id: tenantId, inspection_id: inspectionId, store: true, return_pdf: false } });
+      if (pdf.error || pdf.data?.error) throw pdf.error || new Error(pdf.data.error);
+      setInspection((current) => ({ ...current, ...data }));
+      toast({ title: 'Inspection finalized', description: 'The customer PDF is ready. No email was sent.' });
+    } catch (error) {
+      try { if (error?.details) setPreflightIssues(JSON.parse(error.details)); } catch { /* use toast */ }
+      toast({ variant: 'destructive', title: 'Finalization incomplete', description: error.message });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -330,7 +254,7 @@ export default function TechInspectionReview() {
 
       <Card className="border-slate-200 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-base">Submit For Review</CardTitle>
+          <CardTitle className="text-base">Review & Finalize</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-slate-700">
           <div className="grid grid-cols-3 gap-2">
@@ -362,7 +286,7 @@ export default function TechInspectionReview() {
             </div>
           ) : (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-emerald-900">
-              Ready to submit. No blocking warnings detected.
+              Capture checks passed. Final coherence preflight still runs before finalization.
             </div>
           )}
 
@@ -375,6 +299,7 @@ export default function TechInspectionReview() {
             </div>
           ) : null}
 
+          {preflightIssues.length ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><div className="font-semibold">Resolve before finalizing</div>{preflightIssues.map((issue) => <div key={issue.code} className="mt-2"><div>{issue.message}</div><div className="text-xs font-medium">Action: {issue.action}</div></div>)}</div> : null}
           <div className="grid grid-cols-2 gap-2">
             <Button asChild size="lg" variant="outline" className="w-full">
               <Link to={`../inspections/${inspectionId}`}>Continue Capture</Link>
@@ -382,19 +307,14 @@ export default function TechInspectionReview() {
             <Button
               size="lg"
               className="w-full bg-amber-600 hover:bg-amber-700 gap-2"
-              onClick={submit}
-              disabled={saving || locked}
+              onClick={finalizeInspection}
+              disabled={saving || isReviewed}
             >
               {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle2 className="h-5 w-5" />}
-              Submit
+              {isReviewed ? 'Finalized' : 'Finalize'}
             </Button>
           </div>
 
-          {locked ? (
-            <div className="text-xs text-slate-500">
-              This inspection is already submitted or completed.
-            </div>
-          ) : null}
         </CardContent>
       </Card>
 
@@ -406,15 +326,7 @@ export default function TechInspectionReview() {
         onChanged={load}
       />
 
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader><CardTitle className="text-base">Full report review</CardTitle></CardHeader>
-        <CardContent className="space-y-3 text-sm text-slate-700">
-          <Button variant="outline" asChild className="w-full"><Link to={`/${tenantId}/crm/inspections/${inspectionId}/report`}>Open full report</Link></Button>
-          <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={markReviewed} disabled={saving || isReviewed}>
-            {isReviewed ? 'Reviewed' : 'Mark this revision reviewed'}
-          </Button>
-        </CardContent>
-      </Card>
+      <Button variant="outline" asChild className="w-full"><Link to={`/${tenantId}/crm/inspections/${inspectionId}/report`}>Open full report preview</Link></Button>
 
       <InspectionDeliveryPanel tenantId={tenantId} inspection={inspection} quote={quote} onChanged={load}
         onSendQuote={(options) => { setResendRequested(Boolean(options?.intentionalResend)); setSendQuoteOpen(true); }} />

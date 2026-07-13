@@ -171,6 +171,7 @@ test.describe.serial('Phase 2A inspection image normalization', () => {
   });
 
   test('desktop and technician flows recover retries and render private normalized JPEGs in a PDF', async ({ page, request }) => {
+    page.on('dialog', (dialog) => dialog.accept());
     const { client: admin, env } = createAdminClient();
     assertLocalSupabaseEnv(env.supabaseUrl);
     const runId = createRunId().replace(/-/g, '').slice(0, 10).toLowerCase();
@@ -233,7 +234,7 @@ test.describe.serial('Phase 2A inspection image normalization', () => {
       await signIn(page, adminEmail, adminPassword);
       await page.goto(`/tvg/crm/inspections/${created.inspectionId}`, { waitUntil: 'networkidle' });
       await page.getByRole('tab', { name: 'Photos', exact: true }).click();
-      const desktopInput = page.locator('input[type="file"]').first();
+      const desktopInput = page.locator('input[type="file"][multiple]');
 
       // An interrupted storage request leaves a recoverable IndexedDB item and one evidence row.
       let interrupted = false;
