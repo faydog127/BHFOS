@@ -1,16 +1,9 @@
 name: Ledger Lock
 
 on:
+  # Always start on PRs so the required "Ledger Lock / ledger_lock" context is posted.
+  # Scope filtering happens inside the job (no-op success when unrelated).
   pull_request:
-    paths:
-      - 'command-center/tmp/billing-ledger-php/**'
-      - 'command-center/tmp/orchestrator-v2/**'
-      - 'command-center/tools/review-gate.mjs'
-      - 'command-center/review-policy.json'
-      - 'command-center/review-input.json'
-      - 'command-center/docs/reconciliation/lock/**'
-      - 'command-center/docs/governance/**'
-      - '.github/workflows/ledger-lock.yml'
   push:
     branches:
       - main
@@ -46,33 +39,81 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect ledger-controlled path changes
+        id: scope
+        working-directory: ${{ github.workspace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Keep in sync with historical pull_request path filters (enforcement scope unchanged).
+          RELEVANT_REGEX='^(command-center/tmp/billing-ledger-php/|command-center/tmp/orchestrator-v2/|command-center/tools/review-gate\.mjs$|command-center/review-policy\.json$|command-center/review-input\.json$|command-center/docs/reconciliation/lock/|command-center/docs/governance/|\.github/workflows/ledger-lock\.yml$)'
+
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            echo "Ledger Lock: ${{ github.event_name }} event - running full validation."
+            exit 0
+          fi
+
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          mapfile -t CHANGED < <(git diff --name-only "${BASE}...${HEAD}")
+
+          MATCHES=()
+          for f in "${CHANGED[@]+"${CHANGED[@]}"}"; do
+            if [[ "$f" =~ $RELEVANT_REGEX ]]; then
+              MATCHES+=("$f")
+            fi
+          done
+
+          if [ "${#MATCHES[@]}" -gt 0 ]; then
+            {
+              echo "relevant=true"
+            } >> "$GITHUB_OUTPUT"
+            echo "Ledger Lock: ledger-controlled paths changed - running full validation."
+            printf '%s\n' "${MATCHES[@]}"
+          else
+            {
+              echo "relevant=false"
+            } >> "$GITHUB_OUTPUT"
+            echo "Ledger Lock: no ledger-controlled paths changed - no-op success (required check reports pass)."
+          fi
 
       - name: Setup Node.js
+        if: steps.scope.outputs.relevant == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Docker info
+        if: steps.scope.outputs.relevant == 'true'
         run: docker version
 
       - name: Review gate
+        if: steps.scope.outputs.relevant == 'true'
         run: node ./tools/review-gate.mjs
 
       - name: Tenant artifact guardrails
+        if: steps.scope.outputs.relevant == 'true'
         run: node ./tools/validate-tenant-artifacts.mjs
 
       - name: Ledger deck (DB-backed)
+        if: steps.scope.outputs.relevant == 'true'
         run: |
           New-Item -ItemType Directory -Force -Path ./.ci_logs | Out-Null
           pwsh -NoProfile -File ./tmp/billing-ledger-php/tests/run.ps1 *>&1 | Tee-Object -FilePath ./.ci_logs/ledger_deck.log
           exit $LASTEXITCODE
 
       - name: Layer 2 baseline evaluation
+        if: steps.scope.outputs.relevant == 'true'
         run: |
           pwsh -NoProfile -File ./tmp/orchestrator-v2/runner/ci_layer2_eval.ps1 *>&1 | Tee-Object -FilePath ./.ci_logs/layer2_eval.log
           exit $LASTEXITCODE
 
       - name: Layer 3 raw doc contract (baseline)
+        if: steps.scope.outputs.relevant == 'true'
         run: pwsh -NoProfile -File ./tmp/orchestrator-v2/runner/ci_layer3_validate.ps1
 
       - name: Upload logs (on failure)
