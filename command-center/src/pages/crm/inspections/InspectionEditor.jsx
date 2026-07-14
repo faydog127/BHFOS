@@ -1,0 +1,1795 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Helmet } from 'react-helmet';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { supabase } from '@/lib/customSupabaseClient';
+import { getTenantId } from '@/lib/tenantUtils';
+import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { useToast } from '@/components/ui/use-toast';
+import { Button } from '@/components/ui/button';
+import InspectionDeliveryPanel from '@/components/tech/InspectionDeliveryPanel';
+import InspectionAiReviewPanel from '@/components/tech/InspectionAiReviewPanel';
+import InspectionFindingsNarrativeCard from '@/components/tech/InspectionFindingsNarrativeCard';
+import ManualConditionReviewControls, { isManualCondition } from '@/components/tech/ManualConditionReviewControls';
+import InspectionPreflightBlockers from '@/components/tech/InspectionPreflightBlockers';
+import {
+  buildPreflightBlockerModel,
+  scrollToInspectionTarget,
+} from '@/lib/inspectionPreflightBlockers';
+import { narrativeNeedsReview } from '@/lib/inspectionFindingsNarrative';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Loader2, ArrowLeft, Camera, Plus, Save, CheckCircle2, FileDown, Link2, Trash2 } from 'lucide-react';
+import { INSPECTION_IMAGE_ACCEPT } from '@/lib/imageCompression';
+import { assessInspectionPhotoQuality } from '@/lib/inspectionPhotoQuality';
+import { mediaQueue } from '@/lib/offlineInspectionMediaQueue';
+import {
+  enqueueInspectionPhotoFiles,
+  flushInspectionPhotoQueue,
+} from '@/lib/inspectionPhotoPipeline';
+
+const BUCKET_ID = 'inspection-photos';
+
+const asText = (value) => (typeof value === 'string' ? value.trim() : '');
+const normalizeStatus = (value) => asText(value).toLowerCase();
+const statusLabel = (value) => {
+  const s = normalizeStatus(value);
+  if (!s) return 'draft';
+  if (s === 'in_progress') return 'draft';
+  return s;
+};
+
+const downloadFromBase64 = (payload, fallbackName) => {
+  const raw = String(payload?.content_base64 || payload?.content || '').trim();
+  if (!raw) throw new Error('PDF was not returned.');
+
+  let base64 = raw.replace(/-/g, '+').replace(/_/g, '/').replace(/\s+/g, '');
+  const pad = base64.length % 4;
+  if (pad) base64 += '='.repeat(4 - pad);
+
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+
+  const blob = new Blob([bytes], { type: payload?.content_type || payload?.contentType || 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = payload?.filename || fallbackName || 'inspection-report.pdf';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+};
+
+const functionErrorDetail = async (error, fallback) => {
+  try {
+    const body = await error?.context?.json?.();
+    if (body?.error || body?.code) {
+      return [body.code, body.error].filter(Boolean).join(': ');
+    }
+  } catch {
+    // Fall through to the client message.
+  }
+  return error?.message || fallback;
+};
+
+export default function InspectionEditor({ forceNew = false } = {}) {
+  const tenantId = getTenantId();
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { user } = useSupabaseAuth();
+
+  const isNew = forceNew || id === 'new';
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [inspection, setInspection] = useState(null);
+  const [leads, setLeads] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  const [technicians, setTechnicians] = useState([]);
+
+  const [findings, setFindings] = useState([]);
+  const [recs, setRecs] = useState([]);
+  const [photos, setPhotos] = useState([]);
+  const [aiSuggestions, setAiSuggestions] = useState([]);
+  const [latestReport, setLatestReport] = useState(null);
+  const [reportError, setReportError] = useState('');
+  const [reportGenerating, setReportGenerating] = useState(false);
+  const [photoQueueItems, setPhotoQueueItems] = useState([]);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoQueueError, setPhotoQueueError] = useState('');
+  const photoUrlCacheRef = useRef(new Map());
+  const createRequestIdRef = useRef(crypto.randomUUID());
+  const beforeCameraRef = useRef(null);
+  const afterCameraRef = useRef(null);
+
+  // Draft inputs (new inspection)
+  const [draftLeadId, setDraftLeadId] = useState('');
+  const [draftJobId, setDraftJobId] = useState('unlinked');
+  const [draftTechnicianId, setDraftTechnicianId] = useState('unassigned');
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftInspectionType, setDraftInspectionType] = useState('dryer_vent');
+
+  const [summary, setSummary] = useState('');
+  const [summaryStatus, setSummaryStatus] = useState('draft');
+  const [captureMode, setCaptureMode] = useState('before');
+  const [batchMode, setBatchMode] = useState('before');
+  const [preflightIssues, setPreflightIssues] = useState([]);
+  const [activeTab, setActiveTab] = useState('findings');
+  const [disclaimer, setDisclaimer] = useState(
+    'This report reflects visible conditions at the time of inspection. Hidden conditions may exist. Work is performed per customer authorization and applicable safety standards.'
+  );
+
+  const [newFinding, setNewFinding] = useState({
+    title: '',
+    severity: 'medium',
+    category: 'general',
+    description: '',
+    recommended_action: '',
+    is_customer_visible: true,
+  });
+
+  const [newRec, setNewRec] = useState({
+    title: '',
+    priority: 'normal',
+    description: '',
+    suggested_quantity: '',
+    suggested_unit_price: '',
+    is_customer_visible: true,
+  });
+
+  const leadOptions = useMemo(() => {
+    return (leads || []).map((lead) => {
+      const label =
+        lead.company ||
+        `${lead.first_name || ''} ${lead.last_name || ''}`.trim() ||
+        lead.email ||
+        String(lead.id).slice(0, 8);
+      return { id: lead.id, label };
+    });
+  }, [leads]);
+
+  const jobOptions = useMemo(() => {
+    return (jobs || []).map((job) => {
+      const label = [
+        job.work_order_number || job.job_number || String(job.id).slice(0, 8),
+        job.service_address || '',
+      ]
+        .filter(Boolean)
+        .join(' • ');
+      return { id: job.id, label, lead_id: job.lead_id };
+    });
+  }, [jobs]);
+
+  const technicianOptions = useMemo(
+    () => (technicians || []).filter((t) => t && t.is_active !== false),
+    [technicians]
+  );
+
+  const fetchReferenceData = useCallback(async () => {
+    const [leadRes, jobRes, techRes] = await Promise.all([
+      supabase
+        .from('leads')
+        .select('id, first_name, last_name, company, email, property_id, contact_id')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .limit(250),
+      supabase
+        .from('jobs')
+        .select('id, lead_id, work_order_number, job_number, status, service_address, scheduled_start')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .limit(250),
+      supabase
+        .from('technicians')
+        .select('id, user_id, full_name, is_active, is_primary_default')
+        .eq('is_active', true)
+        .order('full_name', { ascending: true }),
+    ]);
+
+    if (leadRes.error) throw leadRes.error;
+    if (jobRes.error) throw jobRes.error;
+    if (techRes.error) throw techRes.error;
+
+    setLeads(leadRes.data || []);
+    setJobs(jobRes.data || []);
+    setTechnicians(techRes.data || []);
+  }, [tenantId]);
+
+  const hydratePhotoUrls = useCallback(async (rows) => {
+    const next = [];
+    for (const row of rows) {
+      const key = `${row.bucket_id}:${row.object_path}`;
+      const cached = photoUrlCacheRef.current.get(key);
+      if (cached && cached.expiresAtMs > Date.now() + 10_000) {
+        next.push({ ...row, signed_url: cached.url });
+        continue;
+      }
+
+      try {
+        const { data, error } = await supabase.storage
+          .from(row.bucket_id || BUCKET_ID)
+          .createSignedUrl(row.object_path, 60 * 60);
+        if (!error && data?.signedUrl) {
+          photoUrlCacheRef.current.set(key, { url: data.signedUrl, expiresAtMs: Date.now() + 55 * 60 * 1000 });
+          next.push({ ...row, signed_url: data.signedUrl });
+          continue;
+        }
+      } catch {
+        // ignore
+      }
+
+      next.push({ ...row, signed_url: null });
+    }
+    return next;
+  }, []);
+
+  const fetchInspection = useCallback(async (inspectionId) => {
+    const { data, error } = await supabase
+      .from('inspections')
+      .select(`
+        *,
+        lead:leads(id, first_name, last_name, company, email, phone, contact_id, property_id),
+        job:jobs(id, work_order_number, status, service_address),
+        quote:quotes!inspections_quote_id_fkey(id, quote_number, status, total_amount, public_token),
+        technician:technicians(id, full_name)
+      `)
+      .eq('tenant_id', tenantId)
+      .eq('id', inspectionId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) throw new Error('Inspection not found.');
+
+    const normalized = {
+      ...data,
+      lead: Array.isArray(data.lead) ? data.lead[0] : data.lead,
+      job: Array.isArray(data.job) ? data.job[0] : data.job,
+      quote: Array.isArray(data.quote) ? data.quote[0] : data.quote,
+      technician: Array.isArray(data.technician) ? data.technician[0] : data.technician,
+    };
+
+    setInspection(normalized);
+    setSummary(asText(normalized.summary));
+    setSummaryStatus(normalized.summary_status || 'draft');
+    setDisclaimer(asText(normalized.disclaimer_text) || disclaimer);
+    return normalized;
+  }, [tenantId, disclaimer]);
+
+  const fetchChildRows = useCallback(async (inspectionId, inspectionRevision) => {
+    const [findingRes, recRes, photoRes, aiRes, reportRes] = await Promise.all([
+      supabase
+        .from('inspection_findings')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .eq('inspection_id', inspectionId)
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('inspection_recommendations')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .eq('inspection_id', inspectionId)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('inspection_photos')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .eq('inspection_id', inspectionId)
+        .order('uploaded_at', { ascending: true }),
+      supabase
+        .from('inspection_ai_suggestions')
+        .select('id, photo_id, status, suggestion_type, suggestion_version')
+        .eq('tenant_id', tenantId)
+        .eq('inspection_id', inspectionId)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('inspection_reports')
+        .select('id, inspection_revision, report_version, status, file_path, generated_at, metadata')
+        .eq('tenant_id', tenantId)
+        .eq('inspection_id', inspectionId)
+        .eq('inspection_revision', inspectionRevision)
+        .order('report_version', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    if (findingRes.error) throw findingRes.error;
+    if (recRes.error) throw recRes.error;
+    if (photoRes.error) throw photoRes.error;
+    if (aiRes.error) throw aiRes.error;
+    if (reportRes.error) throw reportRes.error;
+
+    setFindings(findingRes.data || []);
+    setRecs(recRes.data || []);
+    const withUrls = await hydratePhotoUrls(photoRes.data || []);
+    setPhotos(withUrls);
+    setAiSuggestions(aiRes.data || []);
+    setLatestReport(reportRes.data || null);
+  }, [tenantId, hydratePhotoUrls]);
+
+  const refreshPreflight = useCallback(async (inspectionId) => {
+    if (!inspectionId) {
+      setPreflightIssues([]);
+      return [];
+    }
+    const preflight = await supabase.rpc('inspection_finalization_preflight', {
+      p_tenant_id: tenantId,
+      p_inspection_id: inspectionId,
+    });
+    if (preflight.error) throw preflight.error;
+    const issues = preflight.data || [];
+    setPreflightIssues(issues);
+    return issues;
+  }, [tenantId]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const init = async () => {
+      setLoading(true);
+      try {
+        await fetchReferenceData();
+        if (!mounted) return;
+
+        if (isNew) {
+          setInspection(null);
+          setLoading(false);
+          return;
+        }
+
+        const loadedInspection = await fetchInspection(id);
+        await fetchChildRows(id, loadedInspection.revision || 1);
+      } catch (err) {
+        console.error(err);
+        toast({ variant: 'destructive', title: 'Load failed', description: err?.message || 'Could not load inspection.' });
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    init();
+    return () => {
+      mounted = false;
+    };
+  }, [fetchChildRows, fetchInspection, fetchReferenceData, id, isNew, toast]);
+
+  const createInspection = async () => {
+    if (!draftLeadId) {
+      toast({ variant: 'destructive', title: 'Missing customer', description: 'Select a lead/customer before creating an inspection.' });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const lead = leads.find((row) => row.id === draftLeadId) || null;
+      const jobId = draftJobId && draftJobId !== 'unlinked' ? draftJobId : null;
+      const techId = draftTechnicianId && draftTechnicianId !== 'unassigned' ? draftTechnicianId : null;
+      const nowIso = new Date().toISOString();
+
+      const createPayload = {
+        tenant_id: tenantId,
+        lead_id: draftLeadId,
+        contact_id: lead?.contact_id || null,
+        property_id: lead?.property_id || null,
+        job_id: jobId,
+        technician_id: techId,
+        created_by_user_id: user?.id || null,
+        client_request_id: createRequestIdRef.current,
+        status: 'draft',
+        inspection_type: draftInspectionType,
+        title: asText(draftTitle) || null,
+        started_at: nowIso,
+        created_at: nowIso,
+        updated_at: nowIso,
+        disclaimer_text: disclaimer,
+      };
+
+      let { data, error } = await supabase
+        .from('inspections')
+        .insert(createPayload)
+        .select('id')
+        .single();
+
+      // A timed-out request may have committed successfully. Reuse that row instead of
+      // creating a duplicate when the operator retries the same create action.
+      if (error?.code === '23505') {
+        const existing = await supabase
+          .from('inspections')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .eq('client_request_id', createRequestIdRef.current)
+          .maybeSingle();
+        data = existing.data;
+        error = existing.error;
+      }
+
+      if (error) throw error;
+      if (!data?.id) throw new Error('Inspection create failed.');
+
+      toast({ title: 'Inspection created', description: 'You can now add findings and photos.', className: 'bg-green-50 border-green-200' });
+      setLoading(true);
+      navigate(`/${tenantId}/crm/inspections/${data.id}`, { replace: true });
+    } catch (err) {
+      console.error(err);
+      toast({ variant: 'destructive', title: 'Create failed', description: err?.message || 'Could not create inspection.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveInspectionMeta = async ({ manageSaving = true, throwOnError = false } = {}) => {
+    if (!inspection?.id) return;
+    if (manageSaving) setSaving(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const { error } = await supabase
+        .from('inspections')
+        .update({
+          disclaimer_text: disclaimer || null,
+          updated_at: nowIso,
+        })
+        .eq('tenant_id', tenantId)
+        .eq('id', inspection.id);
+      if (error) throw error;
+
+      toast({ title: 'Saved', description: 'Inspection updated.' });
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Save failed', description: err?.message || 'Could not save inspection.' });
+      if (throwOnError) throw err;
+    } finally {
+      if (manageSaving) setSaving(false);
+    }
+  };
+
+  const addFinding = async () => {
+    if (!inspection?.id) return;
+    if (!asText(newFinding.title)) {
+      toast({ variant: 'destructive', title: 'Missing title', description: 'Add a finding title first.' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('inspection_findings')
+        .insert({
+          tenant_id: tenantId,
+          inspection_id: inspection.id,
+          title: asText(newFinding.title),
+          severity: asText(newFinding.severity) || null,
+          category: asText(newFinding.category) || null,
+          description: asText(newFinding.description) || null,
+          recommended_action: asText(newFinding.recommended_action) || null,
+          is_customer_visible: newFinding.is_customer_visible !== false,
+          sort_order: findings.length,
+          created_by_user_id: user?.id || null,
+          created_at: nowIso,
+          updated_at: nowIso,
+        })
+        .select('*')
+        .single();
+      if (error) throw error;
+      setFindings((prev) => [...prev, data]);
+      setNewFinding({ title: '', severity: 'medium', category: 'general', description: '', recommended_action: '', is_customer_visible: true });
+      toast({ title: 'Finding added' });
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Add failed', description: err?.message || 'Could not add finding.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteFinding = async (findingId) => {
+    if (!inspection?.id) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('inspection_findings')
+        .delete()
+        .eq('tenant_id', tenantId)
+        .eq('inspection_id', inspection.id)
+        .eq('id', findingId);
+      if (error) throw error;
+      setFindings((prev) => prev.filter((f) => f.id !== findingId));
+      // Photos remain; user can reattach or delete. (We intentionally do not cascade delete storage objects here.)
+      toast({ title: 'Finding deleted' });
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Delete failed', description: err?.message || 'Could not delete finding.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addRecommendation = async () => {
+    if (!inspection?.id) return;
+    if (!asText(newRec.title)) {
+      toast({ variant: 'destructive', title: 'Missing title', description: 'Add a recommendation title first.' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const qty = Number(String(newRec.suggested_quantity || '').trim());
+      const price = Number(String(newRec.suggested_unit_price || '').trim());
+      const { data, error } = await supabase
+        .from('inspection_recommendations')
+        .insert({
+          tenant_id: tenantId,
+          inspection_id: inspection.id,
+          title: asText(newRec.title),
+          priority: asText(newRec.priority) || 'normal',
+          description: asText(newRec.description) || null,
+          suggested_quantity: Number.isFinite(qty) ? qty : null,
+          suggested_unit_price: Number.isFinite(price) ? price : null,
+          is_customer_visible: newRec.is_customer_visible !== false,
+          created_by_user_id: user?.id || null,
+          created_at: nowIso,
+          updated_at: nowIso,
+        })
+        .select('*')
+        .single();
+      if (error) throw error;
+      setRecs((prev) => [...prev, data]);
+      setNewRec({ title: '', priority: 'normal', description: '', suggested_quantity: '', suggested_unit_price: '', is_customer_visible: true });
+      toast({ title: 'Recommendation added' });
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Add failed', description: err?.message || 'Could not add recommendation.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const refreshPhotoQueue = useCallback(async () => {
+    if (!inspection?.id) {
+      setPhotoQueueItems([]);
+      return [];
+    }
+    const rows = await mediaQueue.list({ tenantId, inspectionId: inspection.id });
+    setPhotoQueueItems(rows);
+    return rows;
+  }, [inspection?.id, tenantId]);
+
+  const flushPhotoUploads = useCallback(async () => {
+    if (!inspection?.id || photoUploading || !['draft', 'submitted', 'completed'].includes(statusLabel(inspection.status)) || !navigator.onLine) return;
+    setPhotoUploading(true);
+    try {
+      await flushInspectionPhotoQueue({
+        tenantId,
+        inspectionId: inspection.id,
+        revision: inspection.revision || 1,
+        technicianId: inspection.technician_id || null,
+        userId: user?.id || null,
+        onQueueChange: setPhotoQueueItems,
+        onPhotoComplete: async (updated) => {
+          const withUrls = await hydratePhotoUrls([updated]);
+          setPhotos((prev) => (
+            prev.some((photo) => photo.id === updated.id)
+              ? prev.map((photo) => (photo.id === updated.id ? withUrls[0] : photo))
+              : [...prev, withUrls[0]]
+          ));
+        },
+      });
+    } finally {
+      await refreshPhotoQueue();
+      setPhotoUploading(false);
+    }
+  }, [hydratePhotoUrls, inspection, photoUploading, refreshPhotoQueue, tenantId, user?.id]);
+
+  const uploadPhotos = async (fileList, mode = batchMode) => {
+    if (!inspection?.id) {
+      setPhotoQueueError('Inspection context is unavailable. Refresh before selecting the photo again.');
+      return;
+    }
+    try {
+      const qualityResults = new Map();
+      const knownHashes = photos.map((photo) => photo?.quality_metrics?.normalized_hash).filter(Boolean);
+      for (const file of Array.from(fileList || [])) {
+        // Quality feedback is deliberately shown before the normal upload finishes.
+        // eslint-disable-next-line no-await-in-loop
+        const quality = await assessInspectionPhotoQuality(file, knownHashes);
+        if (quality.status === 'retake_recommended') {
+          const keep = window.confirm(`Retake recommended for ${file.name}: ${quality.warnings.join(' ')}\n\nSelect OK to Keep anyway, or Cancel to retake.`);
+          if (!keep) continue;
+          quality.status = 'kept_with_warning';
+        }
+        qualityResults.set(file, quality);
+        knownHashes.push(quality.metrics.normalized_hash);
+      }
+      const retainedFiles = Array.from(fileList || []).filter((file) => qualityResults.has(file));
+      const { accepted, rejected } = await enqueueInspectionPhotoFiles({
+        files: retainedFiles,
+        tenantId,
+        inspectionId: inspection.id,
+        revision: inspection.revision || 1,
+        isBefore: mode === 'before' ? true : mode === 'after' ? false : null,
+        qualityResults,
+      });
+      if (accepted.length) setPhotoQueueError('');
+      await refreshPhotoQueue();
+      if (rejected.length) {
+        toast({
+          variant: 'destructive',
+          title: rejected.length === 1 ? 'Photo rejected' : 'Some photos were rejected',
+          description: rejected.map((item) => `${item.fileName}: ${item.error}`).join(' '),
+        });
+      }
+      if (accepted.length) await flushPhotoUploads();
+    } catch (error) {
+      await refreshPhotoQueue().catch(() => null);
+      setPhotoQueueError(error?.message || 'The photo was not queued. Select it again to retry.');
+      toast({
+        variant: 'destructive',
+        title: 'Photo upload failed',
+        description: error?.message || 'The photo was not queued. Select it again to retry.',
+      });
+    }
+  };
+
+  useEffect(() => {
+    refreshPhotoQueue().catch(() => null);
+  }, [refreshPhotoQueue]);
+
+  useEffect(() => {
+    const onOnline = () => flushPhotoUploads().catch(() => null);
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [flushPhotoUploads]);
+
+  const updatePhoto = async (photoId, patch) => {
+    if (!inspection?.id) return;
+    try {
+      const nowIso = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('inspection_photos')
+        .update({ ...patch, updated_at: nowIso })
+        .eq('tenant_id', tenantId)
+        .eq('inspection_id', inspection.id)
+        .eq('id', photoId)
+        .select('*')
+        .single();
+      if (error) throw error;
+      const withUrls = await hydratePhotoUrls([data]);
+      setPhotos((prev) => prev.map((p) => (p.id === photoId ? withUrls[0] : p)));
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Update failed', description: err?.message || 'Could not update photo.' });
+    }
+  };
+
+  const deletePhoto = async (photo) => {
+    if (!inspection?.id) return;
+    const reason = window.prompt('Reason for voiding this photo (required):');
+    if (!asText(reason)) return;
+
+    setSaving(true);
+    try {
+      const { data, error } = await supabase.rpc('inspection_void_photo', {
+        p_tenant_id: tenantId,
+        p_photo_id: photo.id,
+        p_reason: asText(reason),
+      });
+      if (error) throw error;
+      if (!data?.id) throw new Error('Void failed.');
+
+      setPhotos((prev) => prev.map((p) => (p.id === photo.id ? { ...p, ...data, signed_url: p.signed_url } : p)));
+      toast({ title: 'Photo voided', description: 'Evidence preserved and excluded from customer report by default.' });
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Void failed', description: err?.message || 'Could not void photo.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reopenInspection = async () => {
+    if (!inspection?.id) return;
+    const reason = window.prompt('Reopen reason (required):');
+    if (!asText(reason)) return;
+
+    setSaving(true);
+    try {
+      const { data, error } = await supabase.rpc('inspection_reopen', {
+        p_tenant_id: tenantId,
+        p_inspection_id: inspection.id,
+        p_expected_revision: inspection.revision || 1,
+        p_reason: asText(reason),
+      });
+
+      if (error) throw error;
+      if (!data?.id) throw new Error('Reopen failed.');
+
+      toast({ title: 'Inspection reopened', description: `Revision incremented to ${data.revision || '?'}.` });
+      await fetchInspection(inspection.id);
+      await fetchChildRows(inspection.id, inspection.revision || 1);
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Reopen failed', description: err?.message || 'Could not reopen inspection.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const markComplete = async () => {
+    if (!inspection?.id) return;
+    setSaving(true);
+    try {
+      await saveInspectionMeta({ manageSaving: false, throwOnError: true });
+
+      const qaSnapshot = {
+        findings_count: findings.length,
+        photos_count: photos.filter((p) => p && p.is_voided !== true).length,
+        recommendations_count: recs.length,
+      };
+
+      const { data, error } = await supabase.rpc('inspection_complete', {
+        p_tenant_id: tenantId,
+        p_inspection_id: inspection.id,
+        p_expected_revision: inspection.revision || 1,
+        p_qa_snapshot: qaSnapshot,
+      });
+
+      if (error) throw error;
+      if (!data?.id) throw new Error('Complete failed.');
+
+      toast({ title: 'Inspection completed', className: 'bg-green-50 border-green-200' });
+      await fetchInspection(inspection.id);
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Complete failed', description: err?.message || 'Could not complete inspection.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const generateReportPdf = async ({ skipReviewCheck = false } = {}) => {
+    if (!inspection?.id) return;
+    const reviewed = inspection.reviewed_at && inspection.reviewed_revision === (inspection.revision || 1);
+    if (!reviewed && !skipReviewCheck) {
+      setReportError('REVIEW_REQUIRED: Review and finalize this inspection revision before generating the customer PDF.');
+      return;
+    }
+    setReportGenerating(true);
+    setReportError('');
+    try {
+      const { data, error } = await supabase.functions.invoke('inspection-report-pdf', {
+        body: { tenant_id: tenantId, inspection_id: inspection.id, store: true, return_pdf: true },
+      });
+      if (error) throw new Error(await functionErrorDetail(error, 'PDF generation failed.'));
+      if (data?.error) throw new Error([data.code, data.error].filter(Boolean).join(': '));
+      if (!data?.pdf) throw new Error('PDF response was empty.');
+
+      downloadFromBase64(data.pdf, `inspection-${inspection.id}.pdf`);
+      setLatestReport(data.report || null);
+      toast({ title: 'PDF ready', description: `Generated and downloaded report version ${data.report?.report_version || ''}.` });
+    } catch (err) {
+      console.error(err);
+      const message = err?.message || 'PDF_GENERATION_FAILED: Could not generate report.';
+      setReportError(message);
+      toast({ variant: 'destructive', title: 'PDF generation failed', description: message });
+    } finally {
+      setReportGenerating(false);
+    }
+  };
+
+  const reviewAndFinalize = async () => {
+    if (!inspection?.id) return;
+    setSaving(true);
+    setPreflightIssues([]);
+    try {
+      const latest = await fetchInspection(inspection.id);
+      const finalSummary = asText(latest?.summary) || asText(summary);
+      if (!finalSummary || narrativeNeedsReview(latest?.summary_status || summaryStatus)) {
+        throw new Error('Generate and accept the Findings narrative before finalizing.');
+      }
+
+      const preflight = await supabase.rpc('inspection_finalization_preflight', {
+        p_tenant_id: tenantId, p_inspection_id: inspection.id,
+      });
+      if (preflight.error) throw preflight.error;
+      if ((preflight.data || []).length) {
+        setPreflightIssues(preflight.data);
+        setActiveTab('report');
+        return;
+      }
+
+      if (statusLabel(inspection.status) === 'draft') {
+        const submitted = await supabase.rpc('inspection_submit', {
+          p_tenant_id: tenantId,
+          p_inspection_id: inspection.id,
+          p_expected_revision: inspection.revision || 1,
+          p_validation_snapshot: { source: 'phase5_finalize', photos_count: photos.length, findings_count: findings.length, recommendations_count: recs.length },
+        });
+        if (submitted.error) throw submitted.error;
+      }
+      const finalized = await supabase.rpc('inspection_finalize_phase5', {
+        p_tenant_id: tenantId, p_inspection_id: inspection.id, p_expected_revision: inspection.revision || 1,
+      });
+      if (finalized.error) throw finalized.error;
+      setInspection((current) => ({ ...current, ...finalized.data }));
+      setSummary(finalSummary);
+      setSummaryStatus(latest?.summary_status || summaryStatus);
+      await generateReportPdf({ skipReviewCheck: true });
+      await fetchChildRows(inspection.id, inspection.revision || 1);
+      toast({ title: 'Inspection finalized', description: 'The reviewed customer PDF is ready to download. No email was sent.' });
+    } catch (error) {
+      const detail = error?.details;
+      try { if (detail) setPreflightIssues(JSON.parse(detail)); } catch { /* Show the original error below. */ }
+      toast({ variant: 'destructive', title: 'Finalization incomplete', description: error?.message || 'Resolve the listed issues and try again.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const downloadStoredReport = async () => {
+    if (!latestReport?.file_path) return;
+    setReportError('');
+    const { data, error } = await supabase.storage.from('inspection-reports').download(latestReport.file_path);
+    if (error || !data) {
+      const message = `PDF_DOWNLOAD_FAILED: ${error?.message || 'Stored report is unavailable.'}`;
+      setReportError(message);
+      toast({ variant: 'destructive', title: 'PDF download failed', description: message });
+      return;
+    }
+    const url = URL.createObjectURL(data);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `inspection-${inspection.id}-v${latestReport.report_version}.pdf`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  };
+
+  const createQuoteDraftFromRecommendations = async () => {
+    if (!inspection?.id) return;
+    if (!inspection?.lead_id) {
+      toast({ variant: 'destructive', title: 'Missing lead', description: 'This inspection is not linked to a lead.' });
+      return;
+    }
+    if (!recs.length) {
+      toast({ variant: 'destructive', title: 'No recommendations', description: 'Add at least one recommendation first.' });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const lineItems = recs.map((r) => {
+        const qty = Number(r.suggested_quantity || 1);
+        const unit = Number(r.suggested_unit_price || 0);
+        const safeQty = Number.isFinite(qty) && qty > 0 ? qty : 1;
+        const safeUnit = Number.isFinite(unit) && unit > 0 ? unit : 0;
+        const total = safeQty * safeUnit;
+        return {
+          description: r.title,
+          quantity: safeQty,
+          unit_price: safeUnit,
+          total_price: total,
+        };
+      });
+
+      const subtotal = lineItems.reduce((sum, item) => sum + (Number(item.total_price) || 0), 0);
+      const totalAmount = subtotal;
+
+      const { data: quote, error: quoteError } = await supabase
+        .from('quotes')
+        .insert({
+          tenant_id: tenantId,
+          lead_id: inspection.lead_id,
+          status: 'draft',
+          subtotal,
+          tax_rate: 0,
+          tax_amount: 0,
+          total_amount: totalAmount,
+          valid_until: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+          header_text: 'Based on today’s inspection, here are the recommended next steps.',
+          footer_text: 'Thank you for your business.',
+          quote_number: Math.floor(100000 + Math.random() * 900000),
+          customer_email: inspection?.lead?.email || null,
+          created_at: nowIso,
+          updated_at: nowIso,
+        })
+        .select('id')
+        .single();
+
+      if (quoteError) throw quoteError;
+
+      const quoteItemsPayload = lineItems.map((item) => ({
+        quote_id: quote.id,
+        description: item.description,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total_price: item.total_price,
+        created_at: nowIso,
+        updated_at: nowIso,
+      }));
+
+      const { error: itemsError } = await supabase.from('quote_items').insert(quoteItemsPayload);
+      if (itemsError) throw itemsError;
+
+      const { error: linkError } = await supabase
+        .from('inspections')
+        .update({ quote_id: quote.id, updated_at: nowIso })
+        .eq('tenant_id', tenantId)
+        .eq('id', inspection.id);
+      if (linkError) throw linkError;
+
+      toast({ title: 'Quote draft created', description: 'Open Quotes to review and send.', className: 'bg-green-50 border-green-200' });
+      await fetchInspection(inspection.id);
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Quote create failed', description: err?.message || 'Could not create quote draft.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const statusBadge = (() => {
+    const s = statusLabel(inspection?.status);
+    if (!s) return null;
+    const label = s.replaceAll('_', ' ');
+    const tone =
+      s === 'completed'
+        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        : s === 'submitted'
+          ? 'bg-amber-50 text-amber-700 border-amber-200'
+          : 'bg-slate-50 text-slate-700 border-slate-200';
+    return (
+      <Badge variant="outline" className={tone}>
+        {label}
+      </Badge>
+    );
+  })();
+
+  const linkedQuote = inspection?.quote || null;
+  const publicQuoteLink = linkedQuote?.public_token ? `/quotes/${linkedQuote.public_token}` : null;
+  const currentRevision = inspection?.revision || 1;
+  const activePhotos = photos.filter((photo) => photo?.is_voided !== true);
+  const readyPhotoIds = new Set(activePhotos.filter((photo) => photo.upload_state === 'complete').map((photo) => photo.id));
+  const reviewed = Boolean(inspection?.reviewed_at && inspection?.reviewed_revision === currentRevision);
+  const currentReport = latestReport?.inspection_revision === currentRevision ? latestReport : null;
+  const preflightContext = {
+    findings,
+    recommendations: recs,
+    aiSuggestions,
+    photos: activePhotos,
+  };
+  const preflightModel = buildPreflightBlockerModel(preflightIssues, preflightContext);
+  const highlightedFindingIds = new Set(preflightModel.highlights.findingIds);
+  const highlightedPhotoIds = preflightModel.highlights.photoIds;
+  const highlightedRecommendationIds = new Set(preflightModel.highlights.recommendationIds);
+  const reportBlockers = preflightModel.groups.map((group) => `${group.count} ${group.title}`);
+  const reportState = reportError
+    ? 'Failed - retry available'
+    : reportGenerating
+      ? 'Generating PDF'
+      : currentReport
+        ? 'PDF ready'
+        : reviewed && !preflightModel.groups.length
+          ? 'Ready to generate'
+          : preflightModel.groups.length
+            ? 'Fix blockers to finalize'
+            : 'Technician review required';
+
+  const navigatePreflightGroup = (group) => {
+    if (group?.tab) setActiveTab(group.tab);
+    window.setTimeout(() => {
+      scrollToInspectionTarget(group?.target, group?.findingIds?.[0] || group?.photoIds?.[0] || group?.recommendationIds?.[0] || '');
+    }, 50);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16 text-slate-500">
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+        Loading inspection...
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Helmet>
+        <title>{isNew ? 'New Inspection' : 'Inspection'} | TVG CRM</title>
+      </Helmet>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <Button variant="outline" className="gap-2" onClick={() => navigate(`/${tenantId}/crm/inspections`)}>
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold text-slate-900 truncate">
+                {isNew ? 'New Inspection' : (inspection?.title || 'Inspection')}
+              </h1>
+              {!isNew ? statusBadge : null}
+            </div>
+            {!isNew ? (
+              <p className="text-sm text-slate-500 truncate">
+                {inspection?.lead?.company || `${inspection?.lead?.first_name || ''} ${inspection?.lead?.last_name || ''}`.trim() || inspection?.lead?.email || ''}
+              </p>
+            ) : (
+              <p className="text-sm text-slate-500">Create an inspection that drives findings, photos, and recommendations.</p>
+            )}
+          </div>
+        </div>
+
+        {!isNew ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {publicQuoteLink ? (
+              <Button variant="outline" asChild className="gap-2">
+                <Link to={publicQuoteLink} target="_blank" rel="noreferrer">
+                  <Link2 className="h-4 w-4" />
+                  Public Quote
+                </Link>
+              </Button>
+            ) : null}
+            <Button
+              variant="outline"
+              onClick={saveInspectionMeta}
+              disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+              className="gap-2"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save Draft
+            </Button>
+
+            {statusLabel(inspection?.status) === 'draft' ? (
+              <Button onClick={async () => { setActiveTab('report'); await reviewAndFinalize(); }} disabled={saving} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                Review & Finalize
+              </Button>
+            ) : null}
+
+            {statusLabel(inspection?.status) === 'submitted' ? (
+              <>
+                <Button onClick={markComplete} disabled={saving} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  Mark Customer-Ready
+                </Button>
+                <Button variant="outline" onClick={reopenInspection} disabled={saving} className="gap-2">
+                  <Link2 className="h-4 w-4" />
+                  Reopen
+                </Button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      {isNew ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Create Inspection</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Inspection Type</Label>
+                <Select value={draftInspectionType} onValueChange={setDraftInspectionType} disabled={saving}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="dryer_vent">Dryer Vent</SelectItem><SelectItem value="air_duct">Air Duct</SelectItem><SelectItem value="hvac">HVAC</SelectItem><SelectItem value="indoor_air_quality">Indoor Air Quality</SelectItem><SelectItem value="other">Other</SelectItem></SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Customer (Lead)</Label>
+                <Select value={draftLeadId} onValueChange={setDraftLeadId} disabled={saving}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select lead/customer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {leadOptions.map((opt) => (
+                      <SelectItem key={opt.id} value={opt.id}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Work Order (Optional)</Label>
+                <Select
+                  value={draftJobId}
+                  onValueChange={(value) => {
+                    setDraftJobId(value);
+                    if (value && value !== 'unlinked') {
+                      const job = jobs.find((j) => j.id === value);
+                      if (job?.lead_id) setDraftLeadId(job.lead_id);
+                    }
+                  }}
+                  disabled={saving}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Unlinked" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unlinked">Unlinked</SelectItem>
+                    {jobOptions.map((opt) => (
+                      <SelectItem key={opt.id} value={opt.id}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Technician (Optional)</Label>
+                <Select value={draftTechnicianId} onValueChange={setDraftTechnicianId} disabled={saving}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Unassigned" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {technicianOptions.map((tech) => (
+                      <SelectItem key={tech.id} value={tech.id}>
+                        {tech.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Title (Optional)</Label>
+                <Input value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} placeholder="e.g. Dryer Vent Inspection" disabled={saving} />
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button onClick={createInspection} disabled={saving || !draftLeadId} className="bg-blue-600 hover:bg-blue-700 gap-2">
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                Create
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Tabs
+          value={activeTab}
+          onValueChange={async (value) => {
+            setActiveTab(value);
+            if (value === 'report' && inspection?.id) {
+              try { await refreshPreflight(inspection.id); } catch { /* Keep last known blockers visible. */ }
+            }
+          }}
+          className="space-y-4"
+        >
+          <TabsList className="flex h-auto w-full max-w-full justify-start overflow-x-auto">
+            <TabsTrigger value="overview" className="shrink-0">Overview</TabsTrigger>
+            <TabsTrigger value="findings" className="shrink-0">Findings</TabsTrigger>
+            <TabsTrigger value="photos" className="shrink-0">Photos</TabsTrigger>
+            <TabsTrigger value="recommendations" className="shrink-0">Recommendations</TabsTrigger>
+            <TabsTrigger value="report" className="shrink-0">Report</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Context</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-slate-500">Lead</div>
+                    <div className="text-right">
+                      {inspection?.lead?.company || `${inspection?.lead?.first_name || ''} ${inspection?.lead?.last_name || ''}`.trim() || inspection?.lead?.email || 'Unlinked'}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-slate-500">Work Order</div>
+                    <div className="text-right">{inspection?.job?.work_order_number || 'Unlinked'}</div>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-slate-500">Technician</div>
+                    <div className="text-right">{inspection?.technician?.full_name || 'Unassigned'}</div>
+                  </div>
+                  <Separator />
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-slate-500">Quote</div>
+                    <div className="text-right">
+                      {linkedQuote?.quote_number ? `#${linkedQuote.quote_number}` : 'None'}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-slate-500">Quote Status</div>
+                    <div className="text-right capitalize">{linkedQuote?.status ? String(linkedQuote.status).toLowerCase() : 'n/a'}</div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="space-y-4">
+                <InspectionFindingsNarrativeCard
+                  tenantId={tenantId}
+                  inspection={inspection}
+                  findings={findings}
+                  photos={photos}
+                  suggestions={aiSuggestions}
+                  locked={saving || statusLabel(inspection?.status) !== 'draft'}
+                  userId={user?.id || null}
+                  onChanged={async () => {
+                    if (!inspection?.id) return;
+                    await fetchInspection(inspection.id);
+                    await fetchChildRows(inspection.id, inspection.revision || 1);
+                  }}
+                />
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Disclaimer</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Textarea
+                      value={disclaimer}
+                      onChange={(e) => setDisclaimer(e.target.value)}
+                      className="min-h-24"
+                      disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="findings">
+            <div id="inspection-findings" className="grid gap-4 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Add Finding</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-2">
+                    <Label>Title</Label>
+                    <Input
+                      value={newFinding.title}
+                      onChange={(e) => setNewFinding((p) => ({ ...p, title: e.target.value }))}
+                      placeholder="e.g. Excess lint buildup in vent line"
+                      disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+                    />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Severity</Label>
+                      <Select
+                        value={newFinding.severity}
+                        onValueChange={(v) => setNewFinding((p) => ({ ...p, severity: v }))}
+                        disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="low">Low</SelectItem>
+                          <SelectItem value="medium">Medium</SelectItem>
+                          <SelectItem value="high">High</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Category</Label>
+                      <Select
+                        value={newFinding.category}
+                        onValueChange={(v) => setNewFinding((p) => ({ ...p, category: v }))}
+                        disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="general">General</SelectItem>
+                          <SelectItem value="dryer_vent">Dryer Vent</SelectItem>
+                          <SelectItem value="hvac">HVAC</SelectItem>
+                          <SelectItem value="bath_fan">Bath Fan</SelectItem>
+                          <SelectItem value="damage">Damage</SelectItem>
+                          <SelectItem value="safety">Safety</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Textarea
+                      value={newFinding.description}
+                      onChange={(e) => setNewFinding((p) => ({ ...p, description: e.target.value }))}
+                      className="min-h-24"
+                      disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Recommended Action</Label>
+                    <Textarea
+                      value={newFinding.recommended_action}
+                      onChange={(e) => setNewFinding((p) => ({ ...p, recommended_action: e.target.value }))}
+                      className="min-h-20"
+                      disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={newFinding.is_customer_visible !== false}
+                      onChange={(e) => setNewFinding((p) => ({ ...p, is_customer_visible: e.target.checked }))}
+                      disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+                    />
+                    <span className="text-sm text-slate-700">Customer-visible</span>
+                  </div>
+                  <Button onClick={addFinding} disabled={saving || statusLabel(inspection?.status) !== 'draft'} className="gap-2 bg-blue-600 hover:bg-blue-700">
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    Add Finding
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Findings</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {findings.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-slate-600">
+                      No findings yet.
+                    </div>
+                  ) : (
+                    findings.map((f) => (
+                      <div
+                        key={f.id}
+                        id={`inspection-finding-${f.id}`}
+                        data-finding-id={f.id}
+                        className={`rounded-xl border bg-white p-4 ${highlightedFindingIds.has(f.id) ? 'border-rose-500 ring-2 ring-rose-200' : 'border-slate-200'}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-slate-900 truncate">{f.title}</div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              {f.severity ? <Badge variant="secondary" className="text-[11px] capitalize">{String(f.severity)}</Badge> : null}
+                              {f.category ? <Badge variant="outline" className="text-[11px] capitalize">{String(f.category).replaceAll('_', ' ')}</Badge> : null}
+                              {f.is_customer_visible === false ? <Badge variant="outline" className="text-[11px] border-slate-300 text-slate-600">Internal</Badge> : null}
+                              {isManualCondition(f) ? (
+                                <Badge variant="outline" className="text-[11px] capitalize">
+                                  {(f.condition_status || 'draft').replaceAll('_', ' ')}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[11px]">AI-backed</Badge>
+                              )}
+                              <Badge variant="outline" className="text-[11px]">{photos.filter((p) => p.finding_id === f.id).length} photos</Badge>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => deleteFinding(f.id)}
+                            disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+                            title="Delete finding"
+                          >
+                            <Trash2 className="h-4 w-4 text-slate-500" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              const { error } = await supabase.rpc('inspection_set_finding_visibility', { p_tenant_id: tenantId, p_finding_id: f.id, p_customer_visible: f.is_customer_visible === false });
+                              if (error) return toast({ variant: 'destructive', title: 'Visibility update failed', description: error.message });
+                              await fetchChildRows(inspection.id, inspection.revision || 1);
+                            }}
+                            disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+                          >
+                            {f.is_customer_visible === false ? 'Include in report' : 'Mark internal-only'}
+                          </Button>
+                        </div>
+                        {f.description ? <div className="mt-2 text-sm text-slate-600 whitespace-pre-wrap">{f.description}</div> : null}
+                        {f.recommended_action ? (
+                          <div className="mt-2 text-sm">
+                            <div className="font-medium text-slate-900">Recommended</div>
+                            <div className="text-slate-600 whitespace-pre-wrap">{f.recommended_action}</div>
+                          </div>
+                        ) : null}
+                        <ManualConditionReviewControls
+                          tenantId={tenantId}
+                          finding={f}
+                          locked={saving || statusLabel(inspection?.status) !== 'draft'}
+                          onChanged={async () => {
+                            await fetchChildRows(inspection.id, inspection.revision || 1);
+                            await fetchInspection(inspection.id);
+                          }}
+                        />
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="photos">
+            <div id="inspection-ai-review">
+              <InspectionAiReviewPanel
+                tenantId={tenantId}
+                inspectionId={inspection.id}
+                revision={inspection.revision || 1}
+                locked={statusLabel(inspection?.status) !== 'draft'}
+                photos={photos}
+                onChanged={async () => {
+                  await fetchInspection(inspection.id);
+                  await fetchChildRows(inspection.id, inspection.revision || 1);
+                  try { await refreshPreflight(inspection.id); } catch { /* keep prior blockers */ }
+                }}
+              />
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Upload Photos</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                      <Camera className="h-4 w-4" />
+                      Add inspection photos (stored in Supabase Storage)
+                    </div>
+                    <div className="mt-3">
+                      <div className="grid grid-cols-2 gap-2 sm:hidden">
+                        <Button type="button" size="lg" className={captureMode === 'before' ? 'min-h-12' : 'min-h-12 bg-slate-700'} onClick={() => { setCaptureMode('before'); beforeCameraRef.current?.click(); }} disabled={saving || photoUploading || statusLabel(inspection?.status) !== 'draft'}>
+                          <Camera className="mr-2 h-5 w-5" />Take Before Photo
+                        </Button>
+                        <Button type="button" size="lg" className={captureMode === 'after' ? 'min-h-12' : 'min-h-12 bg-slate-700'} onClick={() => { setCaptureMode('after'); afterCameraRef.current?.click(); }} disabled={saving || photoUploading || statusLabel(inspection?.status) !== 'draft'}>
+                          <Camera className="mr-2 h-5 w-5" />Take After Photo
+                        </Button>
+                        <input ref={beforeCameraRef} className="hidden" type="file" accept={INSPECTION_IMAGE_ACCEPT} capture="environment" onChange={(event) => { const files = Array.from(event.target.files || []); event.target.value = ''; uploadPhotos(files, 'before').catch(() => null); }} />
+                        <input ref={afterCameraRef} className="hidden" type="file" accept={INSPECTION_IMAGE_ACCEPT} capture="environment" onChange={(event) => { const files = Array.from(event.target.files || []); event.target.value = ''; uploadPhotos(files, 'after').catch(() => null); }} />
+                      </div>
+                      <div className="mb-2 hidden items-center gap-2 sm:flex">
+                        <Label className="whitespace-nowrap text-xs">Batch assignment</Label>
+                        <Select value={batchMode} onValueChange={setBatchMode}>
+                          <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="before">Before</SelectItem><SelectItem value="after">After</SelectItem><SelectItem value="unspecified">Unspecified</SelectItem></SelectContent>
+                        </Select>
+                      </div>
+                      <Input
+                        className="hidden sm:block"
+                        type="file"
+                        multiple
+                        accept={INSPECTION_IMAGE_ACCEPT}
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []);
+                          e.target.value = '';
+                          uploadPhotos(files).catch(() => null);
+                        }}
+                        disabled={saving || photoUploading || statusLabel(inspection?.status) !== 'draft'}
+                      />
+                    </div>
+                    <div className="mt-2 text-xs text-slate-500">
+                      Capture mode stays {captureMode}. Quality is checked before upload; retained warnings remain visible during review.
+                    </div>
+                    {photoQueueError ? (
+                      <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700" role="alert">
+                        Photo upload failed: {photoQueueError}
+                      </div>
+                    ) : null}
+                    {photoQueueItems.length ? (
+                      <div className="mt-3 space-y-2">
+                        {photoQueueItems.map((item) => (
+                          <div key={item.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                            <div className="flex items-center justify-between gap-3 text-xs">
+                              <span className="truncate font-medium text-slate-700">{item.file_name || 'Photo'}</span>
+                              <span className="capitalize text-slate-500">{item.stage || item.status}</span>
+                            </div>
+                            <div
+                              className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"
+                              role="progressbar"
+                              aria-label={`Upload progress for ${item.file_name || 'photo'}`}
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                              aria-valuenow={Number(item.progress || 0)}
+                            >
+                              <div
+                                className="h-full rounded-full bg-blue-600 transition-all"
+                                style={{ width: `${Math.max(0, Math.min(100, Number(item.progress || 0)))}%` }}
+                              />
+                            </div>
+                            {item.error ? <div className="mt-2 text-xs text-red-600">{item.error}</div> : null}
+                          </div>
+                        ))}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => flushPhotoUploads()}
+                          disabled={photoUploading || !navigator.onLine}
+                        >
+                          {photoUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                          Retry pending uploads
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Photo Evidence</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {photos.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-slate-600">
+                      No photos uploaded yet.
+                    </div>
+                  ) : (
+                    photos.map((p) => (
+                      <div
+                        key={p.id}
+                        id={`inspection-photo-meta-${p.id}`}
+                        data-photo-id={p.id}
+                        className={`rounded-xl border bg-white p-4 ${highlightedPhotoIds.includes(p.id) || (p.finding_id && highlightedFindingIds.has(p.finding_id)) ? 'border-rose-500 ring-2 ring-rose-200' : 'border-slate-200'}`}
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row">
+                          <div className="h-28 w-full sm:w-40 rounded-lg bg-slate-100 overflow-hidden flex items-center justify-center">
+                            {p.signed_url ? (
+                              <img src={p.signed_url} alt={p.caption || p.file_name || 'photo'} className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="text-xs text-slate-500">Preview unavailable</div>
+                            )}
+                          </div>
+                          <div className="flex-1 space-y-2">
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Finding</Label>
+                                <Select
+                                  value={p.finding_id || 'unlinked'}
+                                  onValueChange={(value) => updatePhoto(p.id, { finding_id: value === 'unlinked' ? null : value })}
+                                  disabled={saving || statusLabel(inspection?.status) !== 'draft' || p.is_voided === true}
+                                >
+                                  <SelectTrigger className="h-8">
+                                    <SelectValue placeholder="Unlinked" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="unlinked">Unlinked</SelectItem>
+                                    {findings.map((f) => (
+                                      <SelectItem key={f.id} value={f.id}>{f.title}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Before/After</Label>
+                                <Select
+                                  value={p.is_before === true ? 'before' : p.is_before === false ? 'after' : 'unspecified'}
+                                  onValueChange={(value) => updatePhoto(p.id, { is_before: value === 'before' ? true : value === 'after' ? false : null })}
+                                  disabled={saving || statusLabel(inspection?.status) !== 'draft' || p.is_voided === true}
+                                >
+                                  <SelectTrigger className="h-8">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="unspecified">Unspecified</SelectItem>
+                                    <SelectItem value="before">Before</SelectItem>
+                                    <SelectItem value="after">After</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Caption</Label>
+                              <Input
+                                value={p.caption || ''}
+                                onChange={(e) => updatePhoto(p.id, { caption: e.target.value })}
+                                placeholder="Short caption the customer can read..."
+                                className="h-8"
+                                disabled={saving || statusLabel(inspection?.status) !== 'draft' || p.is_voided === true}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="text-xs text-slate-500 truncate">
+                                {p.file_name || p.object_path}
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => deletePhoto(p)}
+                                title="Void photo"
+                                disabled={saving || statusLabel(inspection?.status) !== 'draft' || p.is_voided === true}
+                              >
+                                <Trash2 className="h-4 w-4 text-slate-500" />
+                              </Button>
+                            </div>
+                            {p.is_voided ? (
+                              <div className="text-xs text-amber-700">Voided: {p.void_reason || 'No reason recorded'}</div>
+                            ) : null}
+                            {p.quality_status === 'good' ? <div className="text-xs font-medium text-emerald-700">Photo looks good</div> : null}
+                            {['retake_recommended', 'kept_with_warning'].includes(p.quality_status) ? <div className="rounded-md bg-amber-50 p-2 text-xs text-amber-800">Retake recommended: {(p.quality_warnings || []).join(' ')}</div> : null}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="recommendations">
+            <div id="inspection-recommendations" className="grid gap-4 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Add Recommendation</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-2">
+                    <Label>Title</Label>
+                    <Input
+                      value={newRec.title}
+                      onChange={(e) => setNewRec((p) => ({ ...p, title: e.target.value }))}
+                      placeholder="e.g. Full dryer vent cleaning"
+                      disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+                    />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Priority</Label>
+                      <Select
+                        value={newRec.priority}
+                        onValueChange={(v) => setNewRec((p) => ({ ...p, priority: v }))}
+                        disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="normal">Normal</SelectItem>
+                          <SelectItem value="urgent">Urgent</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Suggested Qty</Label>
+                      <Input
+                        value={newRec.suggested_quantity}
+                        onChange={(e) => setNewRec((p) => ({ ...p, suggested_quantity: e.target.value }))}
+                        inputMode="decimal"
+                        placeholder="1"
+                        disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Suggested Unit Price</Label>
+                    <Input
+                      value={newRec.suggested_unit_price}
+                      onChange={(e) => setNewRec((p) => ({ ...p, suggested_unit_price: e.target.value }))}
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Textarea
+                      value={newRec.description}
+                      onChange={(e) => setNewRec((p) => ({ ...p, description: e.target.value }))}
+                      className="min-h-24"
+                      disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={newRec.is_customer_visible !== false}
+                      onChange={(e) => setNewRec((p) => ({ ...p, is_customer_visible: e.target.checked }))}
+                      disabled={saving || statusLabel(inspection?.status) !== 'draft'}
+                    />
+                    <span className="text-sm text-slate-700">Customer-visible</span>
+                  </div>
+                  <Button onClick={addRecommendation} disabled={saving || statusLabel(inspection?.status) !== 'draft'} className="gap-2 bg-blue-600 hover:bg-blue-700">
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    Add Recommendation
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-3">
+                  <CardTitle className="text-base">Recommendations</CardTitle>
+                  <Button variant="outline" onClick={createQuoteDraftFromRecommendations} disabled className="gap-2" title="Use the reviewed report tab and price book">
+                    <FileDown className="h-4 w-4" />
+                    Create Quote in Report Tab
+                  </Button>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {recs.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-slate-600">
+                      No recommendations yet.
+                    </div>
+                  ) : (
+                    recs.map((r) => (
+                      <div
+                        key={r.id}
+                        id={`inspection-recommendation-${r.id}`}
+                        data-recommendation-id={r.id}
+                        data-finding-id={r.finding_id || undefined}
+                        className={`rounded-xl border bg-white p-4 ${highlightedRecommendationIds.has(r.id) || (r.finding_id && highlightedFindingIds.has(r.finding_id)) ? 'border-rose-500 ring-2 ring-rose-200' : 'border-slate-200'}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-slate-900 truncate">{r.title}</div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              {r.priority ? <Badge variant="secondary" className="text-[11px] capitalize">{String(r.priority)}</Badge> : null}
+                              {r.is_customer_visible === false ? <Badge variant="outline" className="text-[11px] border-slate-300 text-slate-600">Internal</Badge> : null}
+                              {Number(r.suggested_unit_price) > 0 ? (
+                                <Badge variant="outline" className="text-[11px]">${Number(r.suggested_unit_price).toFixed(2)}</Badge>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                        {r.description ? <div className="mt-2 text-sm text-slate-600 whitespace-pre-wrap">{r.description}</div> : null}
+                      </div>
+                    ))
+                  )}
+                  {inspection?.quote_id ? (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                      Quote linked to this inspection: {linkedQuote?.quote_number ? `#${linkedQuote.quote_number}` : inspection.quote_id}
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="report">
+            <Card id="inspection-report">
+              <CardHeader>
+                <CardTitle className="text-base">Customer Report</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-slate-600">
+                <div className={`rounded-xl border p-4 ${reportError ? 'border-rose-200 bg-rose-50' : currentReport ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
+                  <div className="font-semibold text-slate-900">Status: {reportState}</div>
+                  {currentReport ? <div className="mt-1 text-xs">Current report version: {currentReport.report_version}</div> : null}
+                  {reportError ? <div className="mt-2 text-xs text-rose-800">{reportError}</div> : null}
+                  {!reviewed ? <div className="mt-2 text-xs text-slate-600">Path: Fix blockers → Review & Finalize → Generate PDF → Download/Send</div> : null}
+                </div>
+                <InspectionPreflightBlockers
+                  issues={preflightIssues}
+                  context={preflightContext}
+                  onNavigate={navigatePreflightGroup}
+                />
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="rounded-lg border p-3"><div className="text-xs text-slate-500">Ready photos</div><b>{readyPhotoIds.size}/{activePhotos.length}</b></div>
+                  <div className="rounded-lg border p-3"><div className="text-xs text-slate-500">Retake recommended</div><b>{activePhotos.filter((photo) => ['retake_recommended', 'kept_with_warning'].includes(photo.quality_status)).length}</b></div>
+                  <div className="rounded-lg border p-3"><div className="text-xs text-slate-500">Customer findings</div><b>{findings.filter((finding) => finding.is_customer_visible !== false).length}</b></div>
+                  <div className="rounded-lg border p-3"><div className="text-xs text-slate-500">Internal findings</div><b>{findings.filter((finding) => finding.is_customer_visible === false).length}</b></div>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Button onClick={async () => { setActiveTab('report'); await reviewAndFinalize(); }} disabled={saving || reportGenerating} className="min-h-12 gap-2 bg-emerald-600 hover:bg-emerald-700">Review & Finalize</Button>
+                  <Button onClick={() => generateReportPdf()} disabled={reportGenerating || !reviewed || reportBlockers.length > 0} className="gap-2 bg-blue-600 hover:bg-blue-700">
+                    {reportGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}Generate PDF
+                  </Button>
+                  <Button variant="outline" onClick={downloadStoredReport} disabled={!currentReport?.file_path}>Download PDF</Button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Findings</div>
+                    <div className="mt-1 text-2xl font-bold text-slate-900">{findings.length}</div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Photos</div>
+                    <div className="mt-1 text-2xl font-bold text-slate-900">{photos.length}</div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Recommendations</div>
+                    <div className="mt-1 text-2xl font-bold text-slate-900">{recs.length}</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <InspectionDeliveryPanel
+              tenantId={tenantId}
+              inspection={inspection}
+              quote={linkedQuote}
+              reportReady={Boolean(currentReport?.file_path)}
+              reportBlockers={reportBlockers}
+              onChanged={async () => {
+                await fetchInspection(inspection.id);
+                await fetchChildRows(inspection.id, inspection.revision || 1);
+              }}
+            />
+          </TabsContent>
+        </Tabs>
+      )}
+    </div>
+  );
+}

@@ -52,16 +52,22 @@ export const sendQuoteDocument = async ({
   customSubject,
   customBodyHtml,
   attachPdf = true,
+  attachInspectionReportPdf = false,
   recipientEmail,
   recipientPhone,
+  intentionalResend = false,
+  resendReason,
   tenantId = getTenantId(),
 }) => invokeDocumentFunction('send-estimate', {
   quote_id: quoteId,
   tenant_id: tenantId,
   delivery_channel: deliveryChannel,
   attach_pdf: attachPdf,
+  attach_inspection_report_pdf: attachInspectionReportPdf,
   custom_subject: customSubject || undefined,
   custom_body_html: customBodyHtml || undefined,
+  intentional_resend: intentionalResend,
+  resend_reason: resendReason || undefined,
   ...getLeadPayload({ lead, recipientEmail, recipientPhone }),
 });
 
