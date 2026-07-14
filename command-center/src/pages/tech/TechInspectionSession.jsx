@@ -18,6 +18,7 @@ import {
   enqueueInspectionPhotoFiles,
   flushInspectionPhotoQueue,
 } from '@/lib/inspectionPhotoPipeline';
+import { assessInspectionPhotoQuality } from '@/lib/inspectionPhotoQuality';
 import { normalizeInspectionStatus } from '@/lib/inspectionStatus';
 
 const PHOTO_BUCKET = 'inspection-photos';
@@ -150,22 +151,49 @@ export default function TechInspectionSession() {
       return;
     }
 
-    const { accepted, rejected } = await enqueueInspectionPhotoFiles({
-      files,
-      tenantId,
-      inspectionId,
-      revision,
-    });
-    await refreshQueue();
-    if (rejected.length) {
+    try {
+      const qualityResults = new Map();
+      const knownHashes = photos.map((photo) => photo?.quality_metrics?.normalized_hash).filter(Boolean);
+      for (const file of Array.from(files || [])) {
+        // Quality feedback is deliberately shown before the normal upload finishes.
+        // eslint-disable-next-line no-await-in-loop
+        const quality = await assessInspectionPhotoQuality(file, knownHashes);
+        if (quality.status === 'retake_recommended') {
+          const keep = window.confirm(`Retake recommended for ${file.name}: ${quality.warnings.join(' ')}\n\nSelect OK to Keep anyway, or Cancel to retake.`);
+          if (!keep) continue;
+          quality.status = 'kept_with_warning';
+        }
+        qualityResults.set(file, quality);
+        knownHashes.push(quality.metrics.normalized_hash);
+      }
+      const retainedFiles = Array.from(files || []).filter((file) => qualityResults.has(file));
+      if (!retainedFiles.length) return;
+
+      const { accepted, rejected } = await enqueueInspectionPhotoFiles({
+        files: retainedFiles,
+        tenantId,
+        inspectionId,
+        revision,
+        qualityResults,
+      });
+      await refreshQueue();
+      if (rejected.length) {
+        toast({
+          variant: 'destructive',
+          title: rejected.length === 1 ? 'Photo rejected' : 'Some photos were rejected',
+          description: rejected.map((item) => `${item.fileName}: ${item.error}`).join(' '),
+        });
+      }
+      // Best-effort auto-upload if online.
+      if (accepted.length) flushUploads().catch(() => null);
+    } catch (error) {
+      await refreshQueue().catch(() => null);
       toast({
         variant: 'destructive',
-        title: rejected.length === 1 ? 'Photo rejected' : 'Some photos were rejected',
-        description: rejected.map((item) => `${item.fileName}: ${item.error}`).join(' '),
+        title: 'Photo upload failed',
+        description: error?.message || 'The photo was not queued. Select it again to retry.',
       });
     }
-    // Best-effort auto-upload if online.
-    if (accepted.length) flushUploads().catch(() => null);
   };
 
   const flushUploads = useCallback(async () => {

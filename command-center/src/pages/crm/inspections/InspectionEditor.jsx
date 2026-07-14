@@ -8,6 +8,14 @@ import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import InspectionDeliveryPanel from '@/components/tech/InspectionDeliveryPanel';
 import InspectionAiReviewPanel from '@/components/tech/InspectionAiReviewPanel';
+import InspectionFindingsNarrativeCard from '@/components/tech/InspectionFindingsNarrativeCard';
+import ManualConditionReviewControls, { isManualCondition } from '@/components/tech/ManualConditionReviewControls';
+import InspectionPreflightBlockers from '@/components/tech/InspectionPreflightBlockers';
+import {
+  buildPreflightBlockerModel,
+  scrollToInspectionTarget,
+} from '@/lib/inspectionPreflightBlockers';
+import { narrativeNeedsReview } from '@/lib/inspectionFindingsNarrative';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -114,6 +122,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
   const [captureMode, setCaptureMode] = useState('before');
   const [batchMode, setBatchMode] = useState('before');
   const [preflightIssues, setPreflightIssues] = useState([]);
+  const [activeTab, setActiveTab] = useState('findings');
   const [disclaimer, setDisclaimer] = useState(
     'This report reflects visible conditions at the time of inspection. Hidden conditions may exist. Work is performed per customer authorization and applicable safety standards.'
   );
@@ -306,6 +315,21 @@ export default function InspectionEditor({ forceNew = false } = {}) {
     setLatestReport(reportRes.data || null);
   }, [tenantId, hydratePhotoUrls]);
 
+  const refreshPreflight = useCallback(async (inspectionId) => {
+    if (!inspectionId) {
+      setPreflightIssues([]);
+      return [];
+    }
+    const preflight = await supabase.rpc('inspection_finalization_preflight', {
+      p_tenant_id: tenantId,
+      p_inspection_id: inspectionId,
+    });
+    if (preflight.error) throw preflight.error;
+    const issues = preflight.data || [];
+    setPreflightIssues(issues);
+    return issues;
+  }, [tenantId]);
+
   useEffect(() => {
     let mounted = true;
 
@@ -409,11 +433,6 @@ export default function InspectionEditor({ forceNew = false } = {}) {
       const { error } = await supabase
         .from('inspections')
         .update({
-          summary: summary || null,
-          summary_status: summaryStatus,
-          summary_source_revision: inspection.revision || 1,
-          summary_reviewed_at: ['accepted', 'edited'].includes(summaryStatus) ? nowIso : null,
-          summary_reviewed_by: ['accepted', 'edited'].includes(summaryStatus) ? user?.id || null : null,
           disclaimer_text: disclaimer || null,
           updated_at: nowIso,
         })
@@ -428,35 +447,6 @@ export default function InspectionEditor({ forceNew = false } = {}) {
     } finally {
       if (manageSaving) setSaving(false);
     }
-  };
-
-  const buildInspectionSummary = useCallback(() => {
-    const visibleFindings = findings.filter((finding) => finding.is_customer_visible !== false);
-    const visibleRecommendations = recs.filter((recommendation) => recommendation.is_customer_visible !== false);
-    const beforeCount = photos.filter((photo) => photo.is_before === true && !photo.is_voided).length;
-    const afterCount = photos.filter((photo) => photo.is_before === false && !photo.is_voided).length;
-    const qualityWarnings = photos.filter((photo) => photo.quality_status === 'kept_with_warning').length;
-    const parts = [];
-    if (visibleFindings.length) parts.push(`The inspection documented ${visibleFindings.length} technician-approved condition${visibleFindings.length === 1 ? '' : 's'}: ${visibleFindings.map((finding) => finding.title).join('; ')}.`);
-    if (visibleRecommendations.length) parts.push(`Recommended next steps include ${visibleRecommendations.map((recommendation) => recommendation.title).join('; ')}.`);
-    if (beforeCount || afterCount) parts.push(`Evidence includes ${beforeCount} before and ${afterCount} after photo${beforeCount + afterCount === 1 ? '' : 's'}.`);
-    if (qualityWarnings) parts.push(`${qualityWarnings} retained photo${qualityWarnings === 1 ? '' : 's'} had a documented quality limitation and should be interpreted with the technician-approved findings.`);
-    return parts.join(' ') || '';
-  }, [findings, photos, recs]);
-
-  useEffect(() => {
-    const generated = buildInspectionSummary();
-    const shouldGenerate = summaryStatus === 'draft' && !summary;
-    const shouldRefresh = summaryStatus === 'generated' && generated !== summary;
-    if (generated && (shouldGenerate || shouldRefresh)) {
-      setSummary(generated);
-      setSummaryStatus('generated');
-    }
-  }, [buildInspectionSummary, summary, summaryStatus]);
-
-  const regenerateSummary = () => {
-    setSummary(buildInspectionSummary());
-    setSummaryStatus('generated');
   };
 
   const addFinding = async () => {
@@ -790,18 +780,11 @@ export default function InspectionEditor({ forceNew = false } = {}) {
     setSaving(true);
     setPreflightIssues([]);
     try {
-      const finalSummary = summary || buildInspectionSummary();
-      if (!finalSummary) throw new Error('Generate and review an inspection summary before finalizing.');
-      const nowIso = new Date().toISOString();
-      const summaryUpdate = await supabase.from('inspections').update({
-        summary: finalSummary,
-        summary_status: summaryStatus === 'edited' ? 'edited' : 'accepted',
-        summary_source_revision: inspection.revision || 1,
-        summary_reviewed_at: nowIso,
-        summary_reviewed_by: user?.id || null,
-        updated_at: nowIso,
-      }).eq('tenant_id', tenantId).eq('id', inspection.id);
-      if (summaryUpdate.error) throw summaryUpdate.error;
+      const latest = await fetchInspection(inspection.id);
+      const finalSummary = asText(latest?.summary) || asText(summary);
+      if (!finalSummary || narrativeNeedsReview(latest?.summary_status || summaryStatus)) {
+        throw new Error('Generate and accept the Findings narrative before finalizing.');
+      }
 
       const preflight = await supabase.rpc('inspection_finalization_preflight', {
         p_tenant_id: tenantId, p_inspection_id: inspection.id,
@@ -809,6 +792,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
       if (preflight.error) throw preflight.error;
       if ((preflight.data || []).length) {
         setPreflightIssues(preflight.data);
+        setActiveTab('report');
         return;
       }
 
@@ -827,7 +811,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
       if (finalized.error) throw finalized.error;
       setInspection((current) => ({ ...current, ...finalized.data }));
       setSummary(finalSummary);
-      setSummaryStatus(summaryStatus === 'edited' ? 'edited' : 'accepted');
+      setSummaryStatus(latest?.summary_status || summaryStatus);
       await generateReportPdf({ skipReviewCheck: true });
       await fetchChildRows(inspection.id, inspection.revision || 1);
       toast({ title: 'Inspection finalized', description: 'The reviewed customer PDF is ready to download. No email was sent.' });
@@ -964,30 +948,38 @@ export default function InspectionEditor({ forceNew = false } = {}) {
   const publicQuoteLink = linkedQuote?.public_token ? `/quotes/${linkedQuote.public_token}` : null;
   const currentRevision = inspection?.revision || 1;
   const activePhotos = photos.filter((photo) => photo?.is_voided !== true);
-  const failedPhotoCount = activePhotos.filter((photo) => photo.upload_state === 'failed').length;
   const readyPhotoIds = new Set(activePhotos.filter((photo) => photo.upload_state === 'complete').map((photo) => photo.id));
-  const analyzedPhotoIds = new Set(aiSuggestions.filter((row) => readyPhotoIds.has(row.photo_id)).map((row) => row.photo_id));
-  const unanalyzedPhotoCount = [...readyPhotoIds].filter((photoId) => !analyzedPhotoIds.has(photoId)).length;
-  const pendingAiCount = aiSuggestions.filter((row) => row.status === 'pending').length;
   const reviewed = Boolean(inspection?.reviewed_at && inspection?.reviewed_revision === currentRevision);
   const currentReport = latestReport?.inspection_revision === currentRevision ? latestReport : null;
-  const reportBlockers = [
-    failedPhotoCount ? `${failedPhotoCount} photo upload${failedPhotoCount === 1 ? '' : 's'} failed` : '',
-    unanalyzedPhotoCount ? `${unanalyzedPhotoCount} ready photo${unanalyzedPhotoCount === 1 ? '' : 's'} still need AI analysis` : '',
-    pendingAiCount ? `${pendingAiCount} AI suggestion${pendingAiCount === 1 ? '' : 's'} need technician decisions` : '',
-    !reviewed ? 'Current revision has not been reviewed and finalized' : '',
-  ].filter(Boolean);
+  const preflightContext = {
+    findings,
+    recommendations: recs,
+    aiSuggestions,
+    photos: activePhotos,
+  };
+  const preflightModel = buildPreflightBlockerModel(preflightIssues, preflightContext);
+  const highlightedFindingIds = new Set(preflightModel.highlights.findingIds);
+  const highlightedPhotoIds = preflightModel.highlights.photoIds;
+  const highlightedRecommendationIds = new Set(preflightModel.highlights.recommendationIds);
+  const reportBlockers = preflightModel.groups.map((group) => `${group.count} ${group.title}`);
   const reportState = reportError
     ? 'Failed - retry available'
     : reportGenerating
       ? 'Generating PDF'
       : currentReport
         ? 'PDF ready'
-        : reviewed
+        : reviewed && !preflightModel.groups.length
           ? 'Ready to generate'
-          : pendingAiCount || unanalyzedPhotoCount
-            ? 'AI incomplete'
+          : preflightModel.groups.length
+            ? 'Fix blockers to finalize'
             : 'Technician review required';
+
+  const navigatePreflightGroup = (group) => {
+    if (group?.tab) setActiveTab(group.tab);
+    window.setTimeout(() => {
+      scrollToInspectionTarget(group?.target, group?.findingIds?.[0] || group?.photoIds?.[0] || group?.recommendationIds?.[0] || '');
+    }, 50);
+  };
 
   if (loading) {
     return (
@@ -1048,7 +1040,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
             </Button>
 
             {statusLabel(inspection?.status) === 'draft' ? (
-              <Button onClick={reviewAndFinalize} disabled={saving} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
+              <Button onClick={async () => { setActiveTab('report'); await reviewAndFinalize(); }} disabled={saving} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                 Review & Finalize
               </Button>
@@ -1156,13 +1148,22 @@ export default function InspectionEditor({ forceNew = false } = {}) {
           </CardContent>
         </Card>
       ) : (
-        <Tabs defaultValue="findings" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="findings">Findings</TabsTrigger>
-            <TabsTrigger value="photos">Photos</TabsTrigger>
-            <TabsTrigger value="recommendations">Recommendations</TabsTrigger>
-            <TabsTrigger value="report">Report</TabsTrigger>
+        <Tabs
+          value={activeTab}
+          onValueChange={async (value) => {
+            setActiveTab(value);
+            if (value === 'report' && inspection?.id) {
+              try { await refreshPreflight(inspection.id); } catch { /* Keep last known blockers visible. */ }
+            }
+          }}
+          className="space-y-4"
+        >
+          <TabsList className="flex h-auto w-full max-w-full justify-start overflow-x-auto">
+            <TabsTrigger value="overview" className="shrink-0">Overview</TabsTrigger>
+            <TabsTrigger value="findings" className="shrink-0">Findings</TabsTrigger>
+            <TabsTrigger value="photos" className="shrink-0">Photos</TabsTrigger>
+            <TabsTrigger value="recommendations" className="shrink-0">Recommendations</TabsTrigger>
+            <TabsTrigger value="report" className="shrink-0">Report</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
@@ -1200,42 +1201,40 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Summary</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <Label>Inspection Summary</Label>
-                    <Textarea
-                      value={summary}
-                      onChange={(e) => { setSummary(e.target.value); setSummaryStatus('edited'); }}
-                      placeholder="Brief summary a customer can read..."
-                      className="min-h-28"
-                      disabled={saving || statusLabel(inspection?.status) !== 'draft'}
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <Button type="button" size="sm" variant="outline" onClick={regenerateSummary}>Regenerate summary</Button>
-                      <Button type="button" size="sm" onClick={() => setSummaryStatus('accepted')} disabled={!summary}>Accept summary</Button>
-                      <Badge variant="outline" className="capitalize">{summaryStatus}</Badge>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Disclaimer</Label>
+              <div className="space-y-4">
+                <InspectionFindingsNarrativeCard
+                  tenantId={tenantId}
+                  inspection={inspection}
+                  findings={findings}
+                  photos={photos}
+                  suggestions={aiSuggestions}
+                  locked={saving || statusLabel(inspection?.status) !== 'draft'}
+                  userId={user?.id || null}
+                  onChanged={async () => {
+                    if (!inspection?.id) return;
+                    await fetchInspection(inspection.id);
+                    await fetchChildRows(inspection.id, inspection.revision || 1);
+                  }}
+                />
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Disclaimer</CardTitle>
+                  </CardHeader>
+                  <CardContent>
                     <Textarea
                       value={disclaimer}
                       onChange={(e) => setDisclaimer(e.target.value)}
                       className="min-h-24"
                       disabled={saving || statusLabel(inspection?.status) !== 'draft'}
                     />
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </TabsContent>
 
           <TabsContent value="findings">
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div id="inspection-findings" className="grid gap-4 lg:grid-cols-2">
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Add Finding</CardTitle>
@@ -1330,7 +1329,12 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                     </div>
                   ) : (
                     findings.map((f) => (
-                      <div key={f.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                      <div
+                        key={f.id}
+                        id={`inspection-finding-${f.id}`}
+                        data-finding-id={f.id}
+                        className={`rounded-xl border bg-white p-4 ${highlightedFindingIds.has(f.id) ? 'border-rose-500 ring-2 ring-rose-200' : 'border-slate-200'}`}
+                      >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="font-semibold text-slate-900 truncate">{f.title}</div>
@@ -1338,6 +1342,13 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                               {f.severity ? <Badge variant="secondary" className="text-[11px] capitalize">{String(f.severity)}</Badge> : null}
                               {f.category ? <Badge variant="outline" className="text-[11px] capitalize">{String(f.category).replaceAll('_', ' ')}</Badge> : null}
                               {f.is_customer_visible === false ? <Badge variant="outline" className="text-[11px] border-slate-300 text-slate-600">Internal</Badge> : null}
+                              {isManualCondition(f) ? (
+                                <Badge variant="outline" className="text-[11px] capitalize">
+                                  {(f.condition_status || 'draft').replaceAll('_', ' ')}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[11px]">AI-backed</Badge>
+                              )}
                               <Badge variant="outline" className="text-[11px]">{photos.filter((p) => p.finding_id === f.id).length} photos</Badge>
                             </div>
                           </div>
@@ -1370,6 +1381,15 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                             <div className="text-slate-600 whitespace-pre-wrap">{f.recommended_action}</div>
                           </div>
                         ) : null}
+                        <ManualConditionReviewControls
+                          tenantId={tenantId}
+                          finding={f}
+                          locked={saving || statusLabel(inspection?.status) !== 'draft'}
+                          onChanged={async () => {
+                            await fetchChildRows(inspection.id, inspection.revision || 1);
+                            await fetchInspection(inspection.id);
+                          }}
+                        />
                       </div>
                     ))
                   )}
@@ -1379,17 +1399,20 @@ export default function InspectionEditor({ forceNew = false } = {}) {
           </TabsContent>
 
           <TabsContent value="photos">
-            <InspectionAiReviewPanel
-              tenantId={tenantId}
-              inspectionId={inspection.id}
-              revision={inspection.revision || 1}
-              locked={statusLabel(inspection?.status) !== 'draft'}
-              photos={photos}
-              onChanged={async () => {
-                await fetchInspection(inspection.id);
-                await fetchChildRows(inspection.id, inspection.revision || 1);
-              }}
-            />
+            <div id="inspection-ai-review">
+              <InspectionAiReviewPanel
+                tenantId={tenantId}
+                inspectionId={inspection.id}
+                revision={inspection.revision || 1}
+                locked={statusLabel(inspection?.status) !== 'draft'}
+                photos={photos}
+                onChanged={async () => {
+                  await fetchInspection(inspection.id);
+                  await fetchChildRows(inspection.id, inspection.revision || 1);
+                  try { await refreshPreflight(inspection.id); } catch { /* keep prior blockers */ }
+                }}
+              />
+            </div>
             <div className="grid gap-4 lg:grid-cols-2">
               <Card>
                 <CardHeader>
@@ -1491,7 +1514,12 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                     </div>
                   ) : (
                     photos.map((p) => (
-                      <div key={p.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                      <div
+                        key={p.id}
+                        id={`inspection-photo-meta-${p.id}`}
+                        data-photo-id={p.id}
+                        className={`rounded-xl border bg-white p-4 ${highlightedPhotoIds.includes(p.id) || (p.finding_id && highlightedFindingIds.has(p.finding_id)) ? 'border-rose-500 ring-2 ring-rose-200' : 'border-slate-200'}`}
+                      >
                         <div className="flex flex-col gap-3 sm:flex-row">
                           <div className="h-28 w-full sm:w-40 rounded-lg bg-slate-100 overflow-hidden flex items-center justify-center">
                             {p.signed_url ? (
@@ -1578,7 +1606,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
           </TabsContent>
 
           <TabsContent value="recommendations">
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div id="inspection-recommendations" className="grid gap-4 lg:grid-cols-2">
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Add Recommendation</CardTitle>
@@ -1669,7 +1697,13 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                     </div>
                   ) : (
                     recs.map((r) => (
-                      <div key={r.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                      <div
+                        key={r.id}
+                        id={`inspection-recommendation-${r.id}`}
+                        data-recommendation-id={r.id}
+                        data-finding-id={r.finding_id || undefined}
+                        className={`rounded-xl border bg-white p-4 ${highlightedRecommendationIds.has(r.id) || (r.finding_id && highlightedFindingIds.has(r.finding_id)) ? 'border-rose-500 ring-2 ring-rose-200' : 'border-slate-200'}`}
+                      >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="font-semibold text-slate-900 truncate">{r.title}</div>
@@ -1697,7 +1731,7 @@ export default function InspectionEditor({ forceNew = false } = {}) {
           </TabsContent>
 
           <TabsContent value="report">
-            <Card>
+            <Card id="inspection-report">
               <CardHeader>
                 <CardTitle className="text-base">Customer Report</CardTitle>
               </CardHeader>
@@ -1705,10 +1739,14 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                 <div className={`rounded-xl border p-4 ${reportError ? 'border-rose-200 bg-rose-50' : currentReport ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
                   <div className="font-semibold text-slate-900">Status: {reportState}</div>
                   {currentReport ? <div className="mt-1 text-xs">Current report version: {currentReport.report_version}</div> : null}
-                  {reportBlockers.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">{reportBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul> : null}
                   {reportError ? <div className="mt-2 text-xs text-rose-800">{reportError}</div> : null}
+                  {!reviewed ? <div className="mt-2 text-xs text-slate-600">Path: Fix blockers → Review & Finalize → Generate PDF → Download/Send</div> : null}
                 </div>
-                {preflightIssues.length ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950"><div className="font-semibold">Resolve before finalizing</div><ul className="mt-2 space-y-2">{preflightIssues.map((issue, index) => <li key={`${issue.code}-${index}`}><div>{issue.message}</div><div className="text-xs font-medium">Action: {issue.action || 'Review the affected report content'}</div></li>)}</ul></div> : null}
+                <InspectionPreflightBlockers
+                  issues={preflightIssues}
+                  context={preflightContext}
+                  onNavigate={navigatePreflightGroup}
+                />
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   <div className="rounded-lg border p-3"><div className="text-xs text-slate-500">Ready photos</div><b>{readyPhotoIds.size}/{activePhotos.length}</b></div>
                   <div className="rounded-lg border p-3"><div className="text-xs text-slate-500">Retake recommended</div><b>{activePhotos.filter((photo) => ['retake_recommended', 'kept_with_warning'].includes(photo.quality_status)).length}</b></div>
@@ -1716,8 +1754,8 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                   <div className="rounded-lg border p-3"><div className="text-xs text-slate-500">Internal findings</div><b>{findings.filter((finding) => finding.is_customer_visible === false).length}</b></div>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-3">
-                  <Button onClick={reviewAndFinalize} disabled={saving || reportGenerating} className="min-h-12 gap-2 bg-emerald-600 hover:bg-emerald-700">Review & Finalize</Button>
-                  <Button onClick={() => generateReportPdf()} disabled={reportGenerating || reportBlockers.length > 0} className="hidden gap-2 bg-blue-600 hover:bg-blue-700 sm:flex">
+                  <Button onClick={async () => { setActiveTab('report'); await reviewAndFinalize(); }} disabled={saving || reportGenerating} className="min-h-12 gap-2 bg-emerald-600 hover:bg-emerald-700">Review & Finalize</Button>
+                  <Button onClick={() => generateReportPdf()} disabled={reportGenerating || !reviewed || reportBlockers.length > 0} className="gap-2 bg-blue-600 hover:bg-blue-700">
                     {reportGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}Generate PDF
                   </Button>
                   <Button variant="outline" onClick={downloadStoredReport} disabled={!currentReport?.file_path}>Download PDF</Button>

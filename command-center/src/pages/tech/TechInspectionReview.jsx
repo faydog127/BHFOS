@@ -13,6 +13,14 @@ import { mediaQueue } from '@/lib/offlineInspectionMediaQueue';
 import TechSendQuoteDialog from '@/components/tech/TechSendQuoteDialog';
 import InspectionAiReviewPanel from '@/components/tech/InspectionAiReviewPanel';
 import InspectionDeliveryPanel from '@/components/tech/InspectionDeliveryPanel';
+import InspectionFindingsNarrativeCard from '@/components/tech/InspectionFindingsNarrativeCard';
+import ManualConditionReviewControls, { isManualCondition } from '@/components/tech/ManualConditionReviewControls';
+import InspectionPreflightBlockers from '@/components/tech/InspectionPreflightBlockers';
+import {
+  buildPreflightBlockerModel,
+  scrollToInspectionTarget,
+} from '@/lib/inspectionPreflightBlockers';
+import { narrativeNeedsReview } from '@/lib/inspectionFindingsNarrative';
 
 const asText = (v) => (typeof v === 'string' ? v.trim() : '');
 const statusText = (v) => asText(v).toLowerCase() || 'draft';
@@ -29,6 +37,7 @@ export default function TechInspectionReview() {
   const [findings, setFindings] = useState([]);
   const [recs, setRecs] = useState([]);
   const [photos, setPhotos] = useState([]);
+  const [aiSuggestions, setAiSuggestions] = useState([]);
   const [queueItems, setQueueItems] = useState([]);
   const [quote, setQuote] = useState(null);
   const [quoteItems, setQuoteItems] = useState([]);
@@ -52,6 +61,8 @@ export default function TechInspectionReview() {
           technician_id,
           title,
           summary,
+          summary_status,
+          summary_conditions_fingerprint,
           updated_at,
           reviewed_at,
           reviewed_revision,
@@ -97,20 +108,25 @@ export default function TechInspectionReview() {
         setQuoteItems([]);
       }
 
-      const [findingRes, recRes, photoRes] = await Promise.all([
+      const [findingRes, recRes, photoRes, aiRes] = await Promise.all([
         supabase
           .from('inspection_findings')
-          .select('id, title, is_customer_visible')
+          .select('id, title, description, is_customer_visible, source_ai_suggestion_id, severity, category, condition_status')
           .eq('tenant_id', tenantId)
           .eq('inspection_id', inspectionId),
         supabase
           .from('inspection_recommendations')
-          .select('id, title, is_customer_visible')
+          .select('id, title, is_customer_visible, finding_id')
           .eq('tenant_id', tenantId)
           .eq('inspection_id', inspectionId),
         supabase
           .from('inspection_photos')
-          .select('id, caption, is_voided')
+          .select('id, caption, is_voided, finding_id, upload_state')
+          .eq('tenant_id', tenantId)
+          .eq('inspection_id', inspectionId),
+        supabase
+          .from('inspection_ai_suggestions')
+          .select('id, photo_id, status, suggestion_type, suggestion_version')
           .eq('tenant_id', tenantId)
           .eq('inspection_id', inspectionId),
       ]);
@@ -118,10 +134,12 @@ export default function TechInspectionReview() {
       if (findingRes.error) throw findingRes.error;
       if (recRes.error) throw recRes.error;
       if (photoRes.error) throw photoRes.error;
+      if (aiRes.error) throw aiRes.error;
 
       setFindings(findingRes.data || []);
       setRecs(recRes.data || []);
       setPhotos(photoRes.data || []);
+      setAiSuggestions(aiRes.data || []);
 
       const localQueue = await mediaQueue.list({ tenantId, inspectionId });
       setQueueItems(localQueue);
@@ -163,6 +181,11 @@ export default function TechInspectionReview() {
     };
   }, [findings, photos, queueItems, recs]);
 
+  const manualFindings = useMemo(
+    () => (findings || []).filter((finding) => isManualCondition(finding)),
+    [findings],
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16 text-slate-500">
@@ -193,23 +216,27 @@ export default function TechInspectionReview() {
   const status = statusText(inspection.status);
   const locked = status !== 'draft';
   const isReviewed = Boolean(inspection.reviewed_at && inspection.reviewed_revision === (inspection.revision || 1));
+  const preflightContext = {
+    findings,
+    recommendations: recs,
+    aiSuggestions,
+    photos,
+  };
+  const preflightModel = buildPreflightBlockerModel(preflightIssues, preflightContext);
+  const navigatePreflightGroup = (group) => {
+    const hit = scrollToInspectionTarget(
+      group?.target,
+      group?.photoIds?.[0] || group?.findingIds?.[0] || group?.recommendationIds?.[0] || '',
+    );
+    if (!hit) scrollToInspectionTarget('ai_review');
+  };
 
   const finalizeInspection = async () => {
     setSaving(true);
     setPreflightIssues([]);
     try {
-      const visibleFindings = findings.filter((finding) => finding.is_customer_visible !== false);
-      const visibleRecs = recs.filter((recommendation) => recommendation.is_customer_visible !== false);
-      const generatedSummary = inspection.summary || [
-        visibleFindings.length ? `The inspection documented ${visibleFindings.length} technician-approved condition${visibleFindings.length === 1 ? '' : 's'}: ${visibleFindings.map((finding) => finding.title).join('; ')}.` : '',
-        visibleRecs.length ? `Recommended next steps include ${visibleRecs.map((recommendation) => recommendation.title).join('; ')}.` : '',
-      ].filter(Boolean).join(' ');
-      if (generatedSummary && !inspection.summary) {
-        const update = await supabase.from('inspections').update({
-          summary: generatedSummary, summary_status: 'accepted', summary_source_revision: inspection.revision || 1,
-          summary_reviewed_at: new Date().toISOString(), summary_reviewed_by: user?.id || null,
-        }).eq('tenant_id', tenantId).eq('id', inspectionId);
-        if (update.error) throw update.error;
+      if (!asText(inspection.summary) || narrativeNeedsReview(inspection.summary_status)) {
+        throw new Error('Generate and accept the Findings narrative before finalizing.');
       }
       const preflight = await supabase.rpc('inspection_finalization_preflight', { p_tenant_id: tenantId, p_inspection_id: inspectionId });
       if (preflight.error) throw preflight.error;
@@ -299,7 +326,13 @@ export default function TechInspectionReview() {
             </div>
           ) : null}
 
-          {preflightIssues.length ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><div className="font-semibold">Resolve before finalizing</div>{preflightIssues.map((issue) => <div key={issue.code} className="mt-2"><div>{issue.message}</div><div className="text-xs font-medium">Action: {issue.action}</div></div>)}</div> : null}
+          {preflightIssues.length ? (
+            <InspectionPreflightBlockers
+              issues={preflightIssues}
+              context={preflightContext}
+              onNavigate={navigatePreflightGroup}
+            />
+          ) : null}
           <div className="grid grid-cols-2 gap-2">
             <Button asChild size="lg" variant="outline" className="w-full">
               <Link to={`../inspections/${inspectionId}`}>Continue Capture</Link>
@@ -318,13 +351,56 @@ export default function TechInspectionReview() {
         </CardContent>
       </Card>
 
-      <InspectionAiReviewPanel
+      <InspectionFindingsNarrativeCard
         tenantId={tenantId}
-        inspectionId={inspectionId}
-        revision={inspection.revision || 1}
-        locked={locked}
+        inspection={inspection}
+        findings={findings}
+        photos={photos}
+        suggestions={aiSuggestions}
+        locked={locked || saving}
+        compact
+        userId={user?.id || null}
         onChanged={load}
       />
+
+      {manualFindings.length ? (
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Manual conditions</CardTitle>
+            <p className="text-xs text-slate-500">
+              Approve only conditions that should support the Findings narrative. AI photo packages are reviewed separately below.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {manualFindings.map((finding) => (
+              <div key={finding.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="font-semibold text-slate-900">{finding.title}</div>
+                {finding.description ? (
+                  <p className="mt-1 text-sm text-slate-600 whitespace-pre-wrap">{finding.description}</p>
+                ) : null}
+                <ManualConditionReviewControls
+                  tenantId={tenantId}
+                  finding={finding}
+                  locked={locked || saving}
+                  compact
+                  onChanged={load}
+                />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <div id="inspection-ai-review">
+        <InspectionAiReviewPanel
+          tenantId={tenantId}
+          inspectionId={inspectionId}
+          revision={inspection.revision || 1}
+          locked={locked}
+          photos={photos}
+          onChanged={load}
+        />
+      </div>
 
       <Button variant="outline" asChild className="w-full"><Link to={`/${tenantId}/crm/inspections/${inspectionId}/report`}>Open full report preview</Link></Button>
 

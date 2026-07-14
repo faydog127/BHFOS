@@ -29,35 +29,57 @@ const asNullableString = (value: unknown) => {
 
 const normalize = (value: unknown) => asString(value).toLowerCase();
 
-const inspectionScopeLanguage = (inspection: Record<string, unknown>, findings: Array<Record<string, unknown>>) => {
-  const categories = findings.map((row) => normalize(row.category));
+const inspectionScopeLanguage = (inspection: Record<string, unknown>) => {
   const signals = [
+    asString(inspection.inspection_type),
     asString(inspection.title),
-    ...findings.flatMap((row) => [asString(row.category), asString(row.title)]),
+    asString(inspection.summary),
   ].join(' ').toLowerCase();
 
-  if (categories.some((category) => category === 'air_duct' || category === 'air duct')) {
+  if (signals.includes('air_duct') || signals.includes('air duct') || signals.includes('hvac') || signals.includes('coil') || signals.includes('blower') || signals.includes('duct')) {
     return {
       scope: 'Visible and readily accessible HVAC and air-distribution components documented during the scheduled inspection.',
       exclusions: 'Concealed ductwork, sealed equipment, destructive access, engineering analysis, code compliance, and performance testing not expressly recorded are outside this report.',
     };
   }
-  if (signals.includes('dryer') || signals.includes('vent')) {
+  if (signals.includes('dryer')) {
     return {
       scope: 'Visible and readily accessible portions of the dryer-vent system documented during the scheduled inspection.',
       exclusions: 'Concealed duct sections, inaccessible terminations, destructive access, appliance diagnosis, and airflow testing not expressly recorded are outside this report.',
-    };
-  }
-  if (signals.includes('coil') || signals.includes('blower') || signals.includes('duct') || signals.includes('hvac')) {
-    return {
-      scope: 'Visible and readily accessible HVAC and air-distribution components documented during the scheduled inspection.',
-      exclusions: 'Concealed ductwork, sealed equipment, destructive access, engineering analysis, code compliance, and performance testing not expressly recorded are outside this report.',
     };
   }
   return {
     scope: 'Visible and readily accessible conditions within the agreed inspection scope on the date shown.',
     exclusions: 'Concealed, inaccessible, obstructed, unsafe, or uninspected areas and destructive testing are outside this report.',
   };
+};
+
+/** Customer-safe evidence: non-voided, successfully uploaded photos only. */
+const isEligibleReportPhoto = (row: Record<string, unknown>) => {
+  if ((row as any)?.is_voided === true) return false;
+  const uploadState = normalize((row as any)?.upload_state);
+  if (uploadState === 'failed' || uploadState === 'pending') return false;
+  // Empty upload_state kept for older/local records.
+  return !uploadState || uploadState === 'complete';
+};
+
+/**
+ * Phase E: exactly one inspection-level Service Recommendation
+ * (finding_id null + customer-visible). First match only — no duplicates.
+ */
+const selectServiceRecommendation = (recommendations: Array<Record<string, unknown>>) => {
+  const matches = (recommendations || []).filter((row) => {
+    if ((row as any)?.is_customer_visible !== true) return false;
+    const findingId = (row as any)?.finding_id;
+    return findingId === null || findingId === undefined || findingId === '';
+  });
+  return matches[0] || null;
+};
+
+const photoTimingLabel = (photo: Record<string, unknown>) => {
+  if (photo.is_before === true) return 'Before';
+  if (photo.is_before === false) return 'After';
+  return '';
 };
 
 const customerEvidenceCaption = (value: unknown) => {
@@ -99,32 +121,62 @@ const downloadStorageObjectAsDataUrl = async (bucketId: string, objectPath: stri
   return `data:${contentType};base64,${b64}`;
 };
 
+const isLocalUrl = (url: string) => /127\.0\.0\.1|localhost/i.test(url);
+
+/** Embed logo as data URL so PDFShift (remote) can render it even when LOGO_URL is local-only. */
+const resolveReportLogoSrc = async () => {
+  const publicFallback =
+    asString(Deno.env.get('EMAIL_LOGO_URL')) ||
+    // Same public brand asset used by the app header on dark backgrounds.
+    'https://wwyxohjnyqnegzbxtuxs.supabase.co/storage/v1/object/public/vent-guys-images/logo_blackBG.png';
+
+  const storageCandidates = ['logo_blackBG.png', 'Logo_noBG.png', 'Version-02.png'];
+  for (const objectPath of storageCandidates) {
+    try {
+      return await downloadStorageObjectAsDataUrl('vent-guys-images', objectPath, 'image/png');
+    } catch {
+      // Local bucket may be empty; keep trying public/env URLs.
+    }
+  }
+
+  const remoteCandidates = [publicFallback, LOGO_URL].filter((url, index, all) => {
+    const value = asString(url);
+    return Boolean(value) && !isLocalUrl(value) && all.indexOf(url) === index;
+  });
+
+  for (const url of remoteCandidates) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (!bytes.length) continue;
+      const contentType = res.headers.get('content-type') || 'image/png';
+      return `data:${contentType};base64,${base64EncodeBytes(bytes)}`;
+    } catch {
+      // Try next candidate.
+    }
+  }
+
+  return '';
+};
+
 const buildInspectionHtml = async (params: {
   tenantId: string;
   inspection: Record<string, unknown>;
   lead: Record<string, unknown> | null;
   job: Record<string, unknown> | null;
-  quote: Record<string, unknown> | null;
   technician: Record<string, unknown> | null;
-  findings: Array<Record<string, unknown>>;
-  recommendations: Array<Record<string, unknown>>;
+  serviceRecommendation: Record<string, unknown> | null;
   photos: Array<Record<string, unknown>>;
   reportVersion: number;
 }) => {
   const inspection = params.inspection;
   const lead = params.lead || {};
   const job = params.job || {};
-  const quote = params.quote || {};
   const technician = params.technician || {};
-  const findings = (params.findings || []).filter((row) => (row as any)?.is_customer_visible === true);
-  const recommendations = (params.recommendations || []).filter((row) => (row as any)?.is_customer_visible === true);
-  // Only include non-voided photos that are fully uploaded.
-  // Allow empty upload_state for backwards compatibility in older/local environments.
-  const photos = (params.photos || []).filter((row) => {
-    if ((row as any)?.is_voided === true) return false;
-    const uploadState = normalize((row as any)?.upload_state);
-    return !uploadState || uploadState === 'complete';
-  });
+  const serviceRecommendation = params.serviceRecommendation;
+  // Eligible customer evidence only (voided/failed/pending excluded upstream and here).
+  const photos = (params.photos || []).filter(isEligibleReportPhoto);
 
   const customerName =
     asString(lead.company) ||
@@ -139,29 +191,8 @@ const buildInspectionHtml = async (params: {
   const summary = asString(inspection.summary);
   const reportIdentifier = `INS-${asString(inspection.id).slice(0, 8).toUpperCase()}-R${Number((inspection as any).revision || 1)}`;
   const reviewedAt = formatDate((inspection as any).reviewed_at);
-  const severityRank: Record<string, number> = { critical: 4, high: 3, moderate: 2, medium: 2, low: 1, informational: 0 };
-  const topSeverity = findings.reduce((highest, row) => {
-    const severity = normalize(row.severity) || 'informational';
-    return (severityRank[severity] ?? 0) > (severityRank[highest] ?? 0) ? severity : highest;
-  }, 'informational');
-  const condition = findings.length === 0
-    ? 'No Approved Deficiencies Recorded'
-    : ['critical', 'high'].includes(topSeverity)
-      ? 'Action Recommended'
-      : topSeverity === 'informational'
-        ? 'Observations Documented'
-        : 'Maintenance Recommended';
   const customDisclaimer = asString(inspection.disclaimer_text);
-  const scopeLanguage = inspectionScopeLanguage(inspection, findings);
-
-  const photosByFinding = new Map<string, Array<Record<string, unknown>>>();
-  photos.forEach((photo) => {
-    const findingId = asNullableString(photo.finding_id);
-    if (!findingId) return;
-    const existing = photosByFinding.get(findingId) || [];
-    existing.push(photo);
-    photosByFinding.set(findingId, existing);
-  });
+  const scopeLanguage = inspectionScopeLanguage(inspection);
 
   // Embed a limited number of photos to avoid huge PDFs.
   const MAX_PHOTOS = 24;
@@ -175,15 +206,15 @@ const buildInspectionHtml = async (params: {
       const dataUrl = await downloadStorageObjectAsDataUrl(bucketId, objectPath, asNullableString(photo.content_type));
       embeddedMap.set(asString(photo.id), dataUrl);
     } catch {
-      // Skip broken images but still include the record in text.
+      // Skip broken images but still include the caption row.
     }
   }
 
-  const renderPhotoGrid = (rows: Array<Record<string, unknown>>) => {
-    if (!rows.length) return '';
-    const cards = rows.map((photo) => {
+  const evidenceHtml = (() => {
+    if (!photosToEmbed.length) return '';
+    const cards = photosToEmbed.map((photo) => {
       const caption = escapeHtml(customerEvidenceCaption(photo.caption));
-      const flag = photo.is_before === true ? 'Before' : photo.is_before === false ? 'After' : '';
+      const flag = photoTimingLabel(photo);
       const flagHtml = flag ? `<div class="flag">${escapeHtml(flag)}</div>` : '';
       const imgSrc = embeddedMap.get(asString(photo.id));
       const imgHtml = imgSrc
@@ -200,49 +231,28 @@ const buildInspectionHtml = async (params: {
         </div>
       `;
     }).join('');
-
     return `<div class="photoGrid">${cards}</div>`;
-  };
+  })();
 
-  const findingsHtml = findings.map((finding, idx) => {
-    const id = asString(finding.id);
-    const title = escapeHtml(asString(finding.title) || `Finding ${idx + 1}`);
-    const severity = escapeHtml(asString(finding.severity));
-    const category = escapeHtml(asString(finding.category).replaceAll('_', ' '));
-    const description = escapeHtml(asString(finding.description));
-    const recommended = escapeHtml(asString(finding.recommended_action));
+  const findingsHtml = summary
+    ? `<div class="findingsNarrative"><div class="body">${escapeHtml(summary)}</div></div>`
+    : ''; // Historical records without summary: omit section body rather than listing internal findings.
 
-    const metaBits = [severity && `Severity: ${severity}`, category && `Category: ${category}`].filter(Boolean);
-  const metaHtml = metaBits.length ? `<div class="meta">${metaBits.join(' - ')}</div>` : '';
-    const descHtml = description ? `<div class="body">${description}</div>` : '';
-    const recHtml = recommended ? `<div class="rec"><strong>Recommended:</strong> ${recommended}</div>` : '';
-    const photoRows = photosByFinding.get(id) || [];
-
+  const recHtml = serviceRecommendation ? (() => {
+    const title = escapeHtml(asString(serviceRecommendation.title) || 'Service Recommendation');
+    const desc = escapeHtml(asString(serviceRecommendation.description));
     return `
-      <div class="finding">
-        <div class="findingTitle">${title}</div>
-        ${metaHtml}
-        ${descHtml}
-        ${recHtml}
+      <div class="recItem">
+        <div class="recTitle">${title}</div>
+        ${desc ? `<div class="body">${desc}</div>` : ''}
       </div>
-      ${photoRows.length ? `<div class="evidenceGroup"><div class="evidenceTitle">Evidence for ${title}</div>${renderPhotoGrid(photoRows)}</div>` : ''}
     `;
-  }).join('');
+  })() : '';
 
-  const recsHtml = recommendations.map((r) => {
-        const title = escapeHtml(asString(r.title) || 'Recommendation');
-        const priority = escapeHtml(asString(r.priority) || 'normal');
-        const desc = escapeHtml(asString(r.description));
-        return `
-          <div class="recItem">
-            <div class="recTitle">${title}</div>
-            <div class="meta">Recommendation priority: ${priority}</div>
-            ${desc ? `<div class="body">${desc}</div>` : ''}
-          </div>
-        `;
-      }).join('');
-
-  const logoHtml = LOGO_URL ? `<img class="logo" src="${escapeHtml(LOGO_URL)}" alt="logo" />` : '';
+  const logoSrc = await resolveReportLogoSrc();
+  const logoHtml = logoSrc
+    ? `<img class="logo" src="${logoSrc}" alt="The Vent Guys" />`
+    : '';
 
   return `<!doctype html>
   <html>
@@ -265,10 +275,10 @@ const buildInspectionHtml = async (params: {
         .header:before { content:""; position:absolute; left:-46px; top:-58px; width:170px; height:230px; background:rgba(181,32,37,.82); transform:rotate(18deg); }
         .headerRow { display:flex; align-items:center; justify-content:space-between; gap: 16px; }
         .headerRow > * { position:relative; z-index:1; }
-        .logo { height: 58px; width: auto; }
-        .eyebrow { font-size:9px; font-weight:800; letter-spacing:.22em; text-transform:uppercase; color:#dbeafe; margin-bottom:5px; }
-        .title { font-size: 24px; font-weight: 900; margin: 0; }
-        .sub { font-size: 12px; opacity: 0.9; margin-top: 4px; line-height: 1.35; }
+        .logo { height: 64px; width: auto; max-width: 170px; object-fit: contain; display:block; }
+        .brand { font-size: 28px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; margin: 0 0 6px; color: #fff; line-height: 1.05; }
+        .title { font-size: 15px; font-weight: 700; margin: 0; color: #dbeafe; }
+        .sub { font-size: 12px; opacity: 0.9; margin-top: 6px; line-height: 1.35; color:#e2e8f0; }
         .content { padding: 13px 0 0; }
         .documentBar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:9px; font-size:10px; color:#475569; }
         .customerCopy { padding:3px 8px; border:1px solid var(--border); border-radius:999px; font-weight:800; color:#0b1b4a; }
@@ -279,15 +289,10 @@ const buildInspectionHtml = async (params: {
         .value { margin-top: 5px; font-size: 13px; color: #0f172a; }
         .section { margin-top: 15px; }
         .sectionTitle { font-size: 15px; color: #0b1b4a; font-weight: 800; margin: 0 0 8px; padding-bottom:6px; border-bottom:1px solid var(--border); break-after:avoid-page; }
-        .status { border:1px solid var(--border); border-radius:12px; padding:12px 14px; background:#fff; break-inside:avoid; }
-        .statusValue { font-size:18px; font-weight:900; color:#0b1b4a; margin:3px 0 6px; }
-        .finding { border: 1px solid var(--border); border-left:4px solid var(--red); border-radius: 11px; padding: 11px 13px; margin-bottom: 7px; break-inside:avoid; page-break-inside:avoid; }
-        .findingTitle { font-size: 14px; font-weight: 900; margin: 0 0 6px 0; }
-        .meta { font-size: 12px; color: #475569; margin-bottom: 6px; }
-        .body { font-size: 13px; color: #0f172a; white-space: pre-wrap; margin-bottom: 6px; }
-        .rec { font-size: 12px; color: #0f172a; white-space: pre-wrap; margin-top: 6px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 9px; padding: 8px 9px; }
-        .evidenceGroup { margin: 6px 0 12px; break-inside:auto; page-break-inside:auto; }
-        .evidenceTitle { font-size:11px; font-weight:800; color:#334155; margin:0 0 6px; break-after:avoid; }
+        .findingsNarrative { border: 1px solid var(--border); border-left:4px solid var(--red); border-radius: 11px; padding: 12px 14px; background:#fff; }
+        .body { font-size: 13px; color: #0f172a; white-space: pre-wrap; line-height:1.45; }
+        .recItem { border:1px solid var(--border); border-left:5px solid #3b82f6; background:var(--bg); border-radius:12px; padding:14px 16px; break-inside:avoid; }
+        .recTitle { font-size: 15px; font-weight: 900; color:#0b1b4a; margin:0 0 8px; }
         .photoGrid { display:grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .photoCard { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; break-inside:avoid; page-break-inside:avoid; }
         .imgShell { position: relative; background: #f1f5f9; height: 155px; display:flex; align-items:center; justify-content:center; }
@@ -295,14 +300,12 @@ const buildInspectionHtml = async (params: {
         .imgFallback { font-size: 12px; color: #64748b; }
         .flag { position:absolute; left: 10px; top: 10px; background: rgba(15,23,42,0.85); color:#fff; padding: 4px 8px; border-radius: 999px; font-size: 11px; }
         .photoCaption { padding: 7px 8px; font-size: 10px; color: #334155; line-height:1.35; }
-        .muted { font-size: 13px; color: #64748b; }
-        .next { border:1px solid var(--border); border-left:5px solid #3b82f6; background:var(--bg); border-radius:12px; padding:14px 16px; }
         .limits { border:1px solid var(--border); border-radius:11px; padding:11px 13px; color:var(--muted); font-size:10px; line-height:1.45; background:#f8fafc; }
         .limits p { margin:0 0 6px; }
         .limits p:last-child { margin-bottom:0; }
         .footer { margin-top: 15px; border-top: 1px solid var(--border); padding-top: 9px; font-size: 9px; color: #64748b; line-height:1.45; display:flex; justify-content:space-between; gap:16px; }
         @media screen and (max-width:720px) { .grid,.photoGrid { grid-template-columns:1fr; } }
-        @media print { html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;} .finding,.photoCard,.status,.card,.limits,.next{break-inside:avoid;page-break-inside:avoid;} }
+        @media print { html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;} .findingsNarrative,.photoCard,.card,.limits,.recItem{break-inside:avoid;page-break-inside:avoid;} }
       </style>
     </head>
     <body>
@@ -310,13 +313,13 @@ const buildInspectionHtml = async (params: {
         <div class="header">
           <div class="headerRow">
             <div>
-              <div class="eyebrow">The Vent Guys</div>
+              <div class="brand">The Vent Guys</div>
               <div class="title">Customer Inspection Report</div>
               <div class="sub">${escapeHtml(BUSINESS_ADDRESS_LINE1)} | ${escapeHtml(BUSINESS_ADDRESS_LINE2)}<br />
                 ${escapeHtml(BUSINESS_PHONE_DISPLAY)} | ${escapeHtml(BUSINESS_EMAIL)}
               </div>
             </div>
-            <div>${logoHtml}</div>
+            <div class="logoWrap">${logoHtml}</div>
           </div>
         </div>
         <div class="content">
@@ -339,31 +342,32 @@ const buildInspectionHtml = async (params: {
               <div class="value">${escapeHtml(techName)}</div>
             </div>
             <div class="card">
-              <div class="label">Technician Review</div>
-              <div class="value">${reviewedAt ? escapeHtml(reviewedAt) : 'Not reviewed'}</div>
+              <div class="label">Reviewed</div>
+              <div class="value">${reviewedAt ? escapeHtml(reviewedAt) : 'Not recorded'}</div>
             </div>
             ${workOrder ? `<div class="card"><div class="label">Work Order</div><div class="value">${escapeHtml(workOrder)}</div></div>` : ''}
           </div>
 
-          <div class="section"><div class="sectionTitle">System Status Summary</div><div class="status"><div class="label">Overall Condition</div><div class="statusValue">${escapeHtml(condition)}</div><div class="body">${escapeHtml(summary || 'The approved findings below summarize visible conditions documented during this inspection.')}</div></div></div>
-
-          <div class="section">
-            <div class="sectionTitle">Technician-Approved Findings</div>
-            ${findingsHtml || `<div class="muted">No customer-approved findings recorded.</div>`}
-          </div>
-
-          ${recommendations.length ? `<div class="section">
-            <div class="sectionTitle">Recommendations</div>
-            ${recsHtml}
-            <div class="muted" style="margin-top:8px;">Recommendations describe potential corrective actions. Proposed work and authoritative pricing, if requested, are provided separately in a quote.</div>
+          ${summary ? `<div class="section">
+            <div class="sectionTitle">Findings</div>
+            ${findingsHtml}
           </div>` : ''}
 
-          <div class="section"><div class="sectionTitle">Next Step</div><div class="next">Contact The Vent Guys to discuss the approved findings and recommended corrective action. Any proposed scope and pricing will be issued as a separate quote.</div></div>
-          <div class="section"><div class="sectionTitle">Important Information, Scope, and Limitations</div><div class="limits">
+          ${evidenceHtml ? `<div class="section">
+            <div class="sectionTitle">Supporting Evidence</div>
+            ${evidenceHtml}
+          </div>` : ''}
+
+          ${serviceRecommendation ? `<div class="section">
+            <div class="sectionTitle">Service Recommendation</div>
+            ${recHtml}
+          </div>` : ''}
+
+          <div class="section"><div class="sectionTitle">Important Notes</div><div class="limits">
             <p><strong>Inspection scope.</strong> ${escapeHtml(scopeLanguage.scope)}</p>
             <p><strong>Limitations.</strong> ${escapeHtml(scopeLanguage.exclusions)} Conditions may exist that were not visible or reasonably discoverable at the time of inspection.</p>
             <p><strong>Report purpose.</strong> This is a point-in-time, non-invasive informational report. It is not a warranty, guarantee, insurance policy, engineering analysis, code-compliance certification, or environmental assessment. Photographs are representative and may not show every observed area.</p>
-            <p><strong>Separate estimate.</strong> Recommendations do not authorize work or establish final pricing. Proposed scope, authoritative pricing, and customer authorization are provided only in a separate estimate.</p>
+            <p><strong>Separate estimate.</strong> This Service Recommendation does not authorize work or establish final pricing. Proposed scope, authoritative pricing, and customer authorization are provided only in a separate estimate.</p>
             ${customDisclaimer ? `<p><strong>Additional inspection note.</strong> ${escapeHtml(customDisclaimer)}</p>` : ''}
           </div></div>
           <div class="footer"><div><strong>The Vent Guys</strong><br />${escapeHtml(BUSINESS_ADDRESS_LINE1)}, ${escapeHtml(BUSINESS_ADDRESS_LINE2)}</div><div>${escapeHtml(BUSINESS_PHONE_DISPLAY)}<br />${escapeHtml(BUSINESS_EMAIL)}</div></div>
@@ -443,15 +447,20 @@ const jpegDimensions = (bytes: Uint8Array) => {
   return null;
 };
 
-const loadFallbackPdfImages = async (photos: Array<Record<string, unknown>>): Promise<PdfImage[]> => {
-  const eligible = photos.filter((row) => {
-    if ((row as any)?.is_voided === true) return false;
-    const uploadState = normalize((row as any)?.upload_state);
-    return !uploadState || uploadState === 'complete';
-  }).slice(0, 24);
-
+const loadFallbackPdfImages = async (photos: Array<Record<string, unknown>>): Promise<{
+  images: PdfImage[];
+  captions: string[];
+}> => {
+  const eligible = photos.filter(isEligibleReportPhoto).slice(0, 24);
+  const captions: string[] = [];
   const images: PdfImage[] = [];
+
   for (const photo of eligible) {
+    const timing = photoTimingLabel(photo);
+    const baseCaption = customerEvidenceCaption(photo.caption);
+    const caption = timing ? `${timing}: ${baseCaption}` : baseCaption;
+    captions.push(caption);
+
     const bucketId = asString(photo.bucket_id) || 'inspection-photos';
     const objectPath = asString(photo.object_path);
     if (!objectPath) continue;
@@ -465,13 +474,13 @@ const loadFallbackPdfImages = async (photos: Array<Record<string, unknown>>): Pr
         bytes,
         width: dimensions.width,
         height: dimensions.height,
-        caption: customerEvidenceCaption(photo.caption),
+        caption,
       });
     } catch {
-      // Keep the report usable if an individual local image cannot be downloaded or decoded.
+      // Caption still included even when the local image cannot be decoded.
     }
   }
-  return images;
+  return { images, captions };
 };
 
 const buildPdfDocument = (pages: PdfPage[]): Uint8Array => {
@@ -561,14 +570,13 @@ const buildLocalInspectionPdf = (params: {
   serviceAddress: string;
   workOrder: string;
   summary: string;
-  findings: Array<Record<string, unknown>>;
-  recommendations: Array<Record<string, unknown>>;
+  serviceRecommendation: Record<string, unknown> | null;
   photos: PdfImage[];
+  evidenceCaptions: string[];
   disclaimer: string;
   reportIdentifier: string;
   reportVersion: number;
   reviewedAt: string;
-  overallCondition: string;
 }) => {
   const pages: PdfPage[] = [];
   let current: PdfPage = { lines: [], images: [] };
@@ -579,7 +587,7 @@ const buildLocalInspectionPdf = (params: {
     pages.push(current);
     y = 742;
 
-    current.lines.push({ text: continued ? 'Premium Inspection Report (continued)' : 'Premium Inspection Report', x: 50, y, size: 18, font: 'F2' });
+    current.lines.push({ text: continued ? 'Customer Inspection Report (continued)' : 'Customer Inspection Report', x: 50, y, size: 18, font: 'F2' });
     y -= 24;
 
     current.lines.push({ text: 'The Vent Guys', x: 50, y, size: 11, font: 'F2' });
@@ -604,77 +612,54 @@ const buildLocalInspectionPdf = (params: {
   if (params.workOrder) pushLine(`Work Order: ${params.workOrder}`, 'F1', 10);
   if (params.serviceAddress) pushLine(`Address: ${params.serviceAddress}`, 'F1', 10);
   pushLine(`Report: ${params.reportIdentifier} | Version ${params.reportVersion}`, 'F1', 10);
-  pushLine(`Technician Review: ${params.reviewedAt ? `${params.technicianName} - ${params.reviewedAt}` : 'Not reviewed'}`, 'F1', 10);
-  pushLine(`Overall Condition: ${params.overallCondition}`, 'F2', 11);
+  if (params.reviewedAt) pushLine(`Reviewed: ${params.reviewedAt}`, 'F1', 10);
   y -= 6;
 
   if (params.summary) {
-    pushLine('Executive Summary', 'F2', 12);
+    pushLine('Findings', 'F2', 12);
     wrapText(params.summary, 92).forEach((line) => pushLine(line, 'F1', 10));
     y -= 6;
   }
 
-  pushLine('Technician-Approved Findings', 'F2', 12);
-  if (!params.findings.length) {
-    pushLine('No findings recorded.', 'F1', 10);
-  } else {
-    params.findings.forEach((finding, idx) => {
-      const title = asString(finding.title) || `Finding ${idx + 1}`;
-      const severity = asString(finding.severity);
-      const category = asString(finding.category);
-      const desc = asString(finding.description);
-      const descLines = wrapText(desc, 92).slice(0, 6);
-      const rec = asString(finding.recommended_action);
-      const recLines = wrapText(rec, 92).slice(0, 6);
-      const requiredHeight = 22 + (descLines.length * 14) + (rec ? 16 + (recLines.length * 14) : 0);
-      if (y - requiredHeight < 60) startPage(true);
-      pushLine(`- ${title}${severity ? ` [${severity}]` : ''}${category ? ` (${category})` : ''}`, 'F2', 10);
-      if (descLines.length) pushLine('Observation:', 'F1', 10, 14);
-      descLines.forEach((line) => pushLine(line, 'F1', 10, 14));
-      if (rec) {
-        pushLine('Recommended:', 'F1', 10, 14);
-        recLines.forEach((line) => pushLine(line, 'F1', 10, 14));
-      }
-      y -= 4;
+  if (params.evidenceCaptions.length || params.photos.length) {
+    if (y < 120) startPage(true);
+    pushLine('Supporting Evidence', 'F2', 12);
+    // Always list captions so evidence remains present even when JPEG decode fails locally.
+    params.evidenceCaptions.forEach((caption) => {
+      wrapText(`• ${caption}`, 92).forEach((line) => pushLine(line, 'F1', 10));
     });
+    y -= 4;
   }
 
-  y -= 6;
-  if (y < 180) startPage(true);
-  pushLine('Recommendations', 'F2', 12);
-  if (!params.recommendations.length) {
-    pushLine('No recommendations recorded.', 'F1', 10);
-  } else {
-    params.recommendations.forEach((rec) => {
-      const title = asString(rec.title) || 'Recommendation';
-      const desc = asString(rec.description);
-      const descLines = wrapText(desc, 92).slice(0, 6);
-      if (y - (20 + descLines.length * 14) < 60) startPage(true);
-      pushLine(`- ${title}`, 'F2', 10);
-      descLines.forEach((line) => pushLine(line, 'F1', 10, 14));
-    });
+  if (params.serviceRecommendation) {
+    if (y < 120) startPage(true);
+    pushLine('Service Recommendation', 'F2', 12);
+    const title = asString(params.serviceRecommendation.title) || 'Service Recommendation';
+    const desc = asString(params.serviceRecommendation.description);
+    pushLine(title, 'F2', 10);
+    wrapText(desc, 92).slice(0, 10).forEach((line) => pushLine(line, 'F1', 10, 14));
+    y -= 6;
   }
 
-  y -= 6;
-  if (y < 160) startPage(true);
-  pushLine('Next Step', 'F2', 12);
-  wrapText('Contact The Vent Guys to discuss recommended corrective action. Proposed work and pricing are provided separately in a quote.', 92).forEach((line) => pushLine(line, 'F1', 10));
-  y -= 6;
-  pushLine('Limitations and Disclaimer', 'F2', 12);
-  wrapText(params.disclaimer || '', 92).slice(0, 8).forEach((line) => pushLine(line, 'F1', 10));
+  if (y < 140) startPage(true);
+  pushLine('Important Notes', 'F2', 12);
+  wrapText(
+    params.disclaimer ||
+      'This Service Recommendation does not authorize work or establish final pricing. Proposed scope, authoritative pricing, and customer authorization are provided only in a separate estimate.',
+    92,
+  ).slice(0, 10).forEach((line) => pushLine(line, 'F1', 10));
 
   if (params.photos.length) {
     y -= 10;
     const firstPagePhotos = y >= 300 ? params.photos.slice(0, 2) : [];
     if (firstPagePhotos.length) {
-      pushLine('Photo Evidence', 'F2', 12);
       const boxWidth = 246;
       const boxHeight = 170;
       const imageY = y - boxHeight;
       firstPagePhotos.forEach((photo, index) => {
         const x = index === 0 ? 50 : 316;
         current.images.push({ ...photo, x, y: imageY, boxWidth, boxHeight });
-        current.lines.push({ text: photo.caption.slice(0, 40), x, y: imageY - 16, size: 9, font: 'F1' });
+        current.lines.push({ text: photo.caption.slice(0, 42), x, y: imageY - 16, size: 9, font: 'F1' });
       });
     }
 
@@ -682,7 +667,7 @@ const buildLocalInspectionPdf = (params: {
     for (let offset = 0; offset < remaining.length; offset += 6) {
       current = { lines: [], images: [] };
       pages.push(current);
-      current.lines.push({ text: 'Premium Inspection Report - Approved Evidence', x: 50, y: 742, size: 18, font: 'F2' });
+      current.lines.push({ text: 'Customer Inspection Report - Supporting Evidence', x: 50, y: 742, size: 16, font: 'F2' });
       current.lines.push({ text: 'The Vent Guys', x: 50, y: 718, size: 11, font: 'F2' });
       const pagePhotos = remaining.slice(offset, offset + 6);
       pagePhotos.forEach((photo, index) => {
@@ -691,7 +676,7 @@ const buildLocalInspectionPdf = (params: {
         const x = column === 0 ? 50 : 316;
         const imageY = 518 - (row * 220);
         current.images.push({ ...photo, x, y: imageY, boxWidth: 246, boxHeight: 170 });
-        current.lines.push({ text: photo.caption.slice(0, 40), x, y: imageY - 16, size: 9, font: 'F1' });
+        current.lines.push({ text: photo.caption.slice(0, 42), x, y: imageY - 16, size: 9, font: 'F1' });
       });
     }
   }
@@ -734,29 +719,19 @@ Deno.serve(async (req) => {
     if (inspectionError) return json({ error: inspectionError.message }, 500);
     if (!inspection) return json({ error: 'Inspection not found' }, 404);
 
-    const [leadRes, jobRes, quoteRes, techRes, findingsRes, recRes, photosRes] = await Promise.all([
+    const [leadRes, jobRes, techRes, recRes, photosRes] = await Promise.all([
       inspection.lead_id
         ? supabaseAdmin.from('leads').select('*').eq('tenant_id', tenantId).eq('id', inspection.lead_id).maybeSingle()
         : Promise.resolve({ data: null, error: null }),
       inspection.job_id
         ? supabaseAdmin.from('jobs').select('*').eq('tenant_id', tenantId).eq('id', inspection.job_id).maybeSingle()
         : Promise.resolve({ data: null, error: null }),
-      inspection.quote_id
-        ? supabaseAdmin.from('quotes').select('id, quote_number, status, total_amount').eq('tenant_id', tenantId).eq('id', inspection.quote_id).maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
       inspection.technician_id
         ? supabaseAdmin.from('technicians').select('*').eq('id', inspection.technician_id).maybeSingle()
         : Promise.resolve({ data: null, error: null }),
       supabaseAdmin
-        .from('inspection_findings')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .eq('inspection_id', inspectionId)
-        .order('sort_order', { ascending: true })
-        .order('created_at', { ascending: true }),
-      supabaseAdmin
         .from('inspection_recommendations')
-        .select('*')
+        .select('id, title, description, finding_id, is_customer_visible, created_at')
         .eq('tenant_id', tenantId)
         .eq('inspection_id', inspectionId)
         .order('created_at', { ascending: true }),
@@ -770,15 +745,11 @@ Deno.serve(async (req) => {
 
     const lead = leadRes.data as Record<string, unknown> | null;
     const job = jobRes.data as Record<string, unknown> | null;
-    const quote = quoteRes.data as Record<string, unknown> | null;
     const technician = techRes.data as Record<string, unknown> | null;
-    const findings = (findingsRes.data || []) as Array<Record<string, unknown>>;
     const recommendations = (recRes.data || []) as Array<Record<string, unknown>>;
     const photos = (photosRes.data || []) as Array<Record<string, unknown>>;
-    const approvedFindings = findings.filter((row) => (row as any).is_customer_visible === true);
-    const approvedRecommendations = recommendations.filter((row) => (row as any).is_customer_visible === true);
-    const approvedFindingIds = new Set(approvedFindings.map((row) => asString(row.id)).filter(Boolean));
-    const approvedPhotos = photos.filter((row) => approvedFindingIds.has(asString(row.finding_id)));
+    const serviceRecommendation = selectServiceRecommendation(recommendations);
+    const eligiblePhotos = photos.filter(isEligibleReportPhoto);
     const inspectionRevision = Number.isFinite(Number((inspection as any).revision)) ? Number((inspection as any).revision) : 1;
     const { data: lastReport } = await supabaseAdmin.from('inspection_reports').select('report_version')
       .eq('tenant_id', tenantId).eq('inspection_id', inspectionId).eq('inspection_revision', inspectionRevision)
@@ -796,11 +767,9 @@ Deno.serve(async (req) => {
         inspection,
         lead,
         job,
-        quote,
         technician,
-        findings,
-        recommendations,
-        photos,
+        serviceRecommendation,
+        photos: eligiblePhotos,
         reportVersion: nextVersion,
       });
 
@@ -826,18 +795,11 @@ Deno.serve(async (req) => {
       const inspectedOn = formatDate((inspection as any).completed_at || (inspection as any).started_at || (inspection as any).created_at);
       const techName = asString(technician?.full_name) || 'The Vent Guys Technician';
       const summary = asString((inspection as any).summary);
+      const scopeLanguage = inspectionScopeLanguage(inspection as Record<string, unknown>);
       const disclaimer = asString((inspection as any).disclaimer_text) ||
-        'This report reflects visible conditions at the time of inspection. Hidden conditions may exist.';
+        `${scopeLanguage.scope} ${scopeLanguage.exclusions} This Service Recommendation does not authorize work or establish final pricing. Proposed scope, authoritative pricing, and customer authorization are provided only in a separate estimate.`;
 
-      const fallbackPhotos = await loadFallbackPdfImages(approvedPhotos);
-      const fallbackSeverityRank: Record<string, number> = { critical: 4, high: 3, moderate: 2, medium: 2, low: 1, informational: 0 };
-      const fallbackTopSeverity = approvedFindings.reduce((highest, row) => {
-        const severity = normalize(row.severity) || 'informational';
-        return (fallbackSeverityRank[severity] ?? 0) > (fallbackSeverityRank[highest] ?? 0) ? severity : highest;
-      }, 'informational');
-      const overallCondition = approvedFindings.length === 0 ? 'No Approved Deficiencies Recorded'
-        : ['critical', 'high'].includes(fallbackTopSeverity) ? 'Action Recommended'
-          : fallbackTopSeverity === 'informational' ? 'Observations Documented' : 'Maintenance Recommended';
+      const fallbackEvidence = await loadFallbackPdfImages(eligiblePhotos);
       pdfBytes = buildLocalInspectionPdf({
         customerName,
         inspectedOn,
@@ -845,14 +807,13 @@ Deno.serve(async (req) => {
         serviceAddress,
         workOrder,
         summary,
-        findings: approvedFindings,
-        recommendations: approvedRecommendations,
-        photos: fallbackPhotos,
+        serviceRecommendation,
+        photos: fallbackEvidence.images,
+        evidenceCaptions: fallbackEvidence.captions,
         disclaimer,
         reportIdentifier,
         reportVersion: nextVersion,
         reviewedAt: formatDate((inspection as any).reviewed_at),
-        overallCondition,
       });
     }
 
@@ -892,10 +853,11 @@ Deno.serve(async (req) => {
           metadata: {
             renderer_used: rendererUsed,
             renderer_error: rendererError,
-            photos_count: approvedPhotos.length,
-            findings_count: approvedFindings.length,
-            recommendations_count: approvedRecommendations.length,
+            photos_count: eligiblePhotos.length,
+            findings_narrative: Boolean(asString((inspection as any).summary)),
+            service_recommendation_count: serviceRecommendation ? 1 : 0,
             premium_reference: '730-scott-before-condition-report',
+            report_contract: 'phase_e_findings_plus_one_service_recommendation',
           },
         })
         .select('*')
@@ -939,9 +901,9 @@ Deno.serve(async (req) => {
         inspection_id: inspectionId,
         renderer_used: rendererUsed,
         renderer_error: rendererError,
-        findings_count: approvedFindings.length,
-        photos_count: approvedPhotos.length,
-        recommendations_count: approvedRecommendations.length,
+        findings_narrative: Boolean(asString((inspection as any).summary)),
+        photos_count: eligiblePhotos.length,
+        service_recommendation_count: serviceRecommendation ? 1 : 0,
         stored_file_path: storedFilePath,
         stored_file_hash: storedFileHash,
       },

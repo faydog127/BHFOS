@@ -113,12 +113,14 @@ test('mobile capture and one-decision review share the Phase 5 contract', async 
       return result.data?.map((row) => row.status).sort().join(',');
     }).toBe('accepted,accepted');
     const finding = await admin.from('inspection_findings').select('*').eq('inspection_id', created.inspectionId).single();
-    const recommendation = await admin.from('inspection_recommendations').select('*').eq('inspection_id', created.inspectionId).single();
-    const updatedPhoto = await admin.from('inspection_photos').select('caption').eq('id', created.photoIds[0]).single();
-    expect(finding.data.is_customer_visible).toBe(true);
+    const recommendation = await admin.from('inspection_recommendations').select('*').eq('inspection_id', created.inspectionId);
+    const updatedPhoto = await admin.from('inspection_photos').select('caption, finding_id').eq('id', created.photoIds[0]).single();
+    expect(finding.data.is_customer_visible).toBe(false);
     expect(finding.data.title).toBe('Moderate lint accumulation');
+    expect(finding.data.recommended_action).toBe('Complete dryer vent cleaning');
     expect(updatedPhoto.data.caption).toBe('Lint visible along the lower duct surface.');
-    expect(recommendation.data.title).toBe('Complete dryer vent cleaning');
+    expect(updatedPhoto.data.finding_id).toBe(finding.data.id);
+    expect(recommendation.data || []).toHaveLength(0);
   } finally {
     if (created.inspectionId) await admin.from('inspections').delete().eq('id', created.inspectionId);
     if (created.leadId) await admin.from('leads').delete().eq('id', created.leadId);
