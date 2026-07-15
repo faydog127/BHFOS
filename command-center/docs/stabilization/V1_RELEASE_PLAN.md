@@ -49,6 +49,8 @@ Priority order (unless new P0 outage):
 | Production verification | Synthetic lead create/delete |
 | Stop conditions | Touches billing or quote triggers |
 
+**Status:** In progress on `stabilize/r2-intake-clarity` — see `R2_INTAKE_CLARITY_PLAN.md`. B-018 accepted/deferred.
+
 ---
 
 ## Release R3 — Scheduling for operations (incl. phone)

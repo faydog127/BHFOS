@@ -1,4 +1,8 @@
 import { supabase } from '@/lib/customSupabaseClient';
+import {
+  buildLeadIntakeInsertPayload,
+  describeLeadIntakeDbError,
+} from '@/lib/leadIntakeContract';
 
 const DEFAULT_OPERATING_HOURS = {
   monday: { isOpen: true, start: '09:00', end: '17:00' },
@@ -27,14 +31,6 @@ const isMissingColumnError = (error) =>
   error?.code === '42703' ||
   /column .* does not exist/i.test(error?.message || '') ||
   /could not find the '.*' column/i.test(error?.message || '');
-
-const getMissingColumnName = (error) => {
-  const message = error?.message || '';
-  const postgresMatch = message.match(/column "([^"]+)"/i);
-  if (postgresMatch) return postgresMatch[1];
-  const cacheMatch = message.match(/could not find the '([^']+)' column/i);
-  return cacheMatch ? cacheMatch[1] : null;
-};
 
 const normalizeSettings = (row) => ({
   ...DEFAULT_BOOKING_SETTINGS,
@@ -198,35 +194,24 @@ export const appointmentService = {
   },
 
   async createCustomer(payload, tenantId) {
-    const insertPayload = {
-      tenant_id: tenantId,
-      first_name: payload.first_name,
-      last_name: payload.last_name,
-      email: payload.email || null,
-      phone: payload.phone || null,
-      company: payload.company || null,
-      service: payload.service || null,
-      source: payload.source || 'appointment_scheduler',
-      status: payload.status || 'new',
-      pipeline_stage: payload.pipeline_stage || 'new',
-      created_at: new Date().toISOString(),
-    };
-
-    let { data, error } = await supabase.from('leads').insert(insertPayload).select().single();
-
-    if (error && isMissingColumnError(error) && getMissingColumnName(error) === 'pipeline_stage') {
-      const fallbackPayload = {
-        ...insertPayload,
-        stage: insertPayload.pipeline_stage,
-      };
-      delete fallbackPayload.pipeline_stage;
-
-      const fallback = await supabase.from('leads').insert(fallbackPayload).select().single();
-      data = fallback.data;
-      error = fallback.error;
+    let insertPayload;
+    try {
+      insertPayload = buildLeadIntakeInsertPayload(payload, {
+        tenantId,
+        source: payload?.source || 'appointment_scheduler',
+        status: payload?.status || 'new',
+        pipeline_stage: payload?.pipeline_stage || 'new',
+        service: payload?.service || null,
+      });
+    } catch (validationError) {
+      throw new Error(describeLeadIntakeDbError(validationError));
     }
 
-    if (error) throw error;
+    const { data, error } = await supabase.from('leads').insert(insertPayload).select().single();
+
+    if (error) {
+      throw new Error(describeLeadIntakeDbError(error));
+    }
     return data;
   },
 

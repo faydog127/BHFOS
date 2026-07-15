@@ -107,7 +107,7 @@ Disposition meanings:
 | Smallest fix | Document + enforce single intake checklist: required phone/name/address fields; stop inventing property rows |
 | Test | Field customer step + CRM lead create smoke |
 | Release | R2 |
-| Disposition | **Fix in V1** (process + UI clarity; not schema redesign) |
+| Disposition | **Fixed in V1** (`leadIntakeContract.js`; CRM / field / scheduler / `createCustomer`) |
 
 ### B-007 — Quote-accept → job reliability / duplicate events
 
@@ -224,7 +224,7 @@ Disposition meanings:
 | Evidence | `Leads.jsx` / `appointmentService` retry without missing columns |
 | Smallest fix | Explicit required-column contract; fail loud in UI |
 | Release | R2 |
-| Disposition | **Fix in V1** |
+| Disposition | **Fixed in V1** (create paths fail loud via `describeLeadIntakeDbError`; no silent strip) |
 
 ### B-016 — Appointment ↔ job schedule dual write confusion
 
@@ -257,7 +257,7 @@ Disposition meanings:
 | Evidence | Routed but absent from `BHFSidebar` |
 | Smallest fix | Add nav item **or** merge into Leads UX — choose one |
 | Release | R2 |
-| Disposition | **Accept in V1** unless intake release needs it |
+| Disposition | **Accepted in V1** (deferred; not required for intake clarity) |
 
 ### B-019 — Follow-up task surface weak
 

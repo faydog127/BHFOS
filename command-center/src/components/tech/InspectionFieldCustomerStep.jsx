@@ -11,6 +11,11 @@ import {
   normalizeLeadRecord,
   resolveServiceAddress,
 } from '@/lib/inspectionFieldAddress';
+import {
+  assertLeadIntakeValid,
+  describeLeadIntakeDbError,
+  formatLeadIntakeErrors,
+} from '@/lib/leadIntakeContract';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -255,22 +260,30 @@ export default function InspectionFieldCustomerStep({
 
   const createAndLink = async ({ force = false } = {}) => {
     if (locked) return;
-    if (!asText(form.first_name) && !asText(form.last_name) && !asText(form.company)) {
-      toast({
-        variant: 'destructive',
-        title: 'Name required',
-        description: 'Add a first name, last name, or company.',
-      });
-      return;
-    }
+
+    // Field reports need a complete structured address (street + city + state + ZIP).
     if (!asText(form.address1) || !asText(form.city) || !asText(form.state) || !asText(form.zip)) {
       toast({
         variant: 'destructive',
-        title: 'Service address required',
-        description: 'Address, city, state, and ZIP are required for the report.',
+        title: 'Missing required info',
+        description: 'Enter street, city, state, and ZIP so the service address is saved on the customer.',
       });
       return;
     }
+
+    let validation;
+    try {
+      validation = assertLeadIntakeValid(form);
+    } catch (validationError) {
+      toast({
+        variant: 'destructive',
+        title: 'Missing required info',
+        description: formatLeadIntakeErrors({ errors: validationError.errors }) || validationError.message,
+      });
+      return;
+    }
+
+    const serviceAddress = validation.normalized.address;
 
     setSaving(true);
     try {
@@ -282,41 +295,25 @@ export default function InspectionFieldCustomerStep({
         }
       }
 
+      // Single insert with address on the lead — do not invent properties rows.
       const created = await appointmentService.createCustomer(
         {
-          first_name: asText(form.first_name) || null,
-          last_name: asText(form.last_name) || null,
-          company: asText(form.company) || null,
-          phone: formatPhoneNumber(form.phone) || null,
-          email: asText(form.email) || null,
+          first_name: validation.normalized.first_name,
+          last_name: validation.normalized.last_name,
+          company: validation.normalized.company,
+          phone: validation.normalized.phone,
+          email: validation.normalized.email,
+          address: serviceAddress,
           source: 'field_inspection',
           status: 'new',
         },
         tenantId,
       );
 
-      const serviceAddress = composeAddressFromParts(form);
-
-      // Production public.properties uses bigint ids + address_line_1 and cannot be
-      // linked through leads.property_id (uuid). Persist freeform address on the lead only.
-      const leadPatch = {
-        address: serviceAddress || null,
-        property_formatted_address: serviceAddress || null,
-        updated_at: new Date().toISOString(),
-      };
-
-      const addressUpdate = await supabase
-        .from('leads')
-        .update(leadPatch)
-        .eq('tenant_id', tenantId)
-        .eq('id', created.id);
-      if (addressUpdate.error) {
-        console.warn('Lead address patch skipped:', addressUpdate.error.message);
-      }
-
       const linkedLeadRow = {
         ...created,
-        ...leadPatch,
+        address: created.address || serviceAddress,
+        property_formatted_address: created.property_formatted_address || serviceAddress,
         property: null,
       };
 
@@ -338,7 +335,7 @@ export default function InspectionFieldCustomerStep({
       toast({
         variant: 'destructive',
         title: 'Could not add lead',
-        description: error?.message || 'Lead creation failed.',
+        description: describeLeadIntakeDbError(error),
       });
     } finally {
       setSaving(false);
@@ -507,8 +504,8 @@ export default function InspectionFieldCustomerStep({
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label>Phone</Label>
-                <Input className="min-h-11" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} disabled={saving} />
+                <Label>Phone (required)</Label>
+                <Input className="min-h-11" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: formatPhoneNumber(e.target.value) }))} disabled={saving} />
               </div>
               <div className="space-y-1">
                 <Label>Email (optional)</Label>
