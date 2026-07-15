@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
 
@@ -22,9 +22,13 @@ import { LEAD_FIELD_SELECT, resolveServiceAddress } from '@/lib/inspectionFieldA
 import InspectionServiceRecommendationPicker from '@/components/tech/InspectionServiceRecommendationPicker';
 import {
   buildPreflightBlockerModel,
-  scrollToInspectionTarget,
+  listLocalEvidenceIssues,
+  mergePreflightIssues,
+  scrollToInspectionTargetWhenReady,
 } from '@/lib/inspectionPreflightBlockers';
 import { narrativeNeedsReview } from '@/lib/inspectionFindingsNarrative';
+
+const HIGHLIGHT_HOLD_MS = 4000;
 
 const asText = (v) => (typeof v === 'string' ? v.trim() : '');
 const statusText = (v) => asText(v).toLowerCase() || 'draft';
@@ -58,10 +62,44 @@ export default function TechInspectionReview() {
   const [resendRequested, setResendRequested] = useState(false);
   const [preflightIssues, setPreflightIssues] = useState([]);
   const [highlightFindingId, setHighlightFindingId] = useState('');
+  const highlightHoldUntilRef = useRef(0);
+  const highlightClearTimerRef = useRef(null);
 
-  const load = async () => {
+  const holdFindingHighlight = (findingId, holdMs = HIGHLIGHT_HOLD_MS) => {
+    if (!findingId) return;
+    if (highlightClearTimerRef.current) {
+      window.clearTimeout(highlightClearTimerRef.current);
+      highlightClearTimerRef.current = null;
+    }
+    setHighlightFindingId(findingId);
+    highlightHoldUntilRef.current = Date.now() + holdMs;
+    highlightClearTimerRef.current = window.setTimeout(() => {
+      setHighlightFindingId((current) => (current === findingId ? '' : current));
+      highlightClearTimerRef.current = null;
+    }, holdMs);
+  };
+
+  const clearFindingHighlight = (findingId = '', { force = false } = {}) => {
+    const remaining = highlightHoldUntilRef.current - Date.now();
+    if (!force && remaining > 0 && findingId) {
+      if (highlightClearTimerRef.current) window.clearTimeout(highlightClearTimerRef.current);
+      highlightClearTimerRef.current = window.setTimeout(() => {
+        setHighlightFindingId((current) => (!findingId || current === findingId ? '' : current));
+        highlightClearTimerRef.current = null;
+      }, remaining);
+      return;
+    }
+    highlightHoldUntilRef.current = 0;
+    if (highlightClearTimerRef.current) {
+      window.clearTimeout(highlightClearTimerRef.current);
+      highlightClearTimerRef.current = null;
+    }
+    setHighlightFindingId((current) => (!findingId || current === findingId ? '' : current));
+  };
+
+  const load = async ({ quiet = false } = {}) => {
     if (!inspectionId) return;
-    setLoading(true);
+    if (!quiet) setLoading(true);
     try {
       const { data, error } = await supabase
         .from('inspections')
@@ -163,7 +201,7 @@ export default function TechInspectionReview() {
       console.error(err);
       toast({ variant: 'destructive', title: 'Load failed', description: err?.message || 'Could not load review.' });
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   };
 
@@ -171,6 +209,10 @@ export default function TechInspectionReview() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspectionId, tenantId]);
+
+  useEffect(() => () => {
+    if (highlightClearTimerRef.current) window.clearTimeout(highlightClearTimerRef.current);
+  }, []);
 
   const computed = useMemo(() => {
     const unresolved = (queueItems || []).filter((q) => ['queued', 'uploading', 'failed'].includes(q.status)).length;
@@ -261,7 +303,11 @@ export default function TechInspectionReview() {
   const localAddressIssue = (!serviceAddressReady || !inspection.lead_id)
     ? [{ code: 'SERVICE_ADDRESS_REQUIRED', message: 'A service address is required for this report.' }]
     : [];
-  const combinedIssues = [...localAddressIssue, ...(preflightIssues || [])];
+  const localEvidenceIssues = listLocalEvidenceIssues(findings, photos);
+  const combinedIssues = mergePreflightIssues(
+    [...localAddressIssue, ...localEvidenceIssues],
+    preflightIssues || [],
+  );
   const preflightContext = {
     findings,
     recommendations: recs,
@@ -272,6 +318,7 @@ export default function TechInspectionReview() {
   const highlightedFindingIds = new Set([
     ...preflightModel.highlights.findingIds,
     highlightFindingId,
+    ...localEvidenceIssues.map((issue) => issue.finding_id),
   ].filter(Boolean));
 
   const navigatePreflightGroup = (group) => {
@@ -283,11 +330,8 @@ export default function TechInspectionReview() {
       setSearchParams({ step: group.step }, { replace: true });
     }
     const itemId = group?.findingIds?.[0] || group?.photoIds?.[0] || group?.recommendationIds?.[0] || '';
-    if (group?.findingIds?.[0]) setHighlightFindingId(group.findingIds[0]);
-    window.setTimeout(() => {
-      const hit = scrollToInspectionTarget(group?.target, itemId);
-      if (!hit) scrollToInspectionTarget(group?.target || 'findings');
-    }, 50);
+    if (group?.findingIds?.[0]) holdFindingHighlight(group.findingIds[0]);
+    scrollToInspectionTargetWhenReady(group?.target || 'findings', itemId);
   };
 
   const linkPhotoToFinding = async (findingId, photoId) => {
@@ -301,8 +345,12 @@ export default function TechInspectionReview() {
         .eq('id', photoId);
       if (error) throw error;
       toast({ title: 'Photo linked' });
-      setHighlightFindingId('');
-      await load();
+      // Quiet refresh keeps the finding mounted so warning/highlight clear in place.
+      await load({ quiet: true });
+      setPreflightIssues((current) => (current || []).filter((issue) => !(
+        issue?.code === 'FINDING_WITHOUT_EVIDENCE' && issue?.finding_id === findingId
+      )));
+      clearFindingHighlight(findingId, { force: true });
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -380,6 +428,13 @@ export default function TechInspectionReview() {
 
       {currentStep === 'findings' ? (
         <>
+          {localEvidenceIssues.length ? (
+            <InspectionPreflightBlockers
+              issues={localEvidenceIssues}
+              context={preflightContext}
+              onNavigate={navigatePreflightGroup}
+            />
+          ) : null}
           <div id="inspection-findings" className="space-y-3">
             {manualFindings.length ? (
               <Card className="border-slate-200 shadow-sm">
@@ -399,6 +454,8 @@ export default function TechInspectionReview() {
                         key={finding.id}
                         id={`inspection-finding-${finding.id}`}
                         data-finding-id={finding.id}
+                        data-testid={`inspection-finding-${finding.id}`}
+                        data-highlighted={highlighted ? 'true' : 'false'}
                         className={`rounded-xl border bg-white p-4 ${highlighted ? 'border-rose-500 ring-2 ring-rose-200' : 'border-slate-200'}`}
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -409,11 +466,16 @@ export default function TechInspectionReview() {
                           <p className="mt-1 text-sm text-slate-600 whitespace-pre-wrap">{finding.description}</p>
                         ) : null}
                         {needsPhoto ? (
-                          <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-950">
+                          <div
+                            className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-950"
+                            data-testid={`finding-needs-photo-${finding.id}`}
+                            role="alert"
+                          >
                             This finding needs a photo.
                             <div className="mt-2">
                               <LabelledPhotoPicker
                                 photos={availablePhotos}
+                                findingId={finding.id}
                                 disabled={locked || saving}
                                 onSelect={(photoId) => linkPhotoToFinding(finding.id, photoId)}
                               />
@@ -423,6 +485,7 @@ export default function TechInspectionReview() {
                           <div className="mt-3">
                             <LabelledPhotoPicker
                               photos={availablePhotos}
+                              findingId={finding.id}
                               disabled={locked || saving}
                               onSelect={(photoId) => linkPhotoToFinding(finding.id, photoId)}
                               label="Add or select photo"
@@ -434,7 +497,7 @@ export default function TechInspectionReview() {
                           finding={finding}
                           locked={locked || saving}
                           compact
-                          onChanged={load}
+                          onChanged={() => load({ quiet: true })}
                         />
                       </div>
                     );
@@ -450,7 +513,7 @@ export default function TechInspectionReview() {
                 revision={inspection.revision || 1}
                 locked={locked}
                 photos={photos}
-                onChanged={load}
+                onChanged={() => load({ quiet: true })}
               />
             </div>
           </div>
@@ -470,7 +533,7 @@ export default function TechInspectionReview() {
             inspectionId={inspectionId}
             recommendations={recs}
             locked={locked || saving}
-            onChanged={load}
+            onChanged={() => load({ quiet: true })}
           />
           <div className="sticky bottom-0 z-10 border-t border-slate-200 bg-white/95 p-3 backdrop-blur">
             <Button asChild size="lg" className="w-full min-h-12 bg-blue-600 hover:bg-blue-700">
@@ -565,10 +628,10 @@ export default function TechInspectionReview() {
             locked={locked || saving}
             compact
             userId={user?.id || null}
-            onChanged={load}
+            onChanged={() => load({ quiet: true })}
           />
 
-          <InspectionDeliveryPanel tenantId={tenantId} inspection={inspection} quote={quote} onChanged={load}
+          <InspectionDeliveryPanel tenantId={tenantId} inspection={inspection} quote={quote} onChanged={() => load({ quiet: true })}
             onSendQuote={(options) => { setResendRequested(Boolean(options?.intentionalResend)); setSendQuoteOpen(true); }} />
         </>
       ) : null}
@@ -588,12 +651,16 @@ export default function TechInspectionReview() {
   );
 }
 
-function LabelledPhotoPicker({ photos, onSelect, disabled, label = 'Add or select photo' }) {
+function LabelledPhotoPicker({ photos, onSelect, disabled, label = 'Add or select photo', findingId = '' }) {
   return (
-    <div className="space-y-1">
+    <div className="space-y-1" data-testid={findingId ? `photo-picker-${findingId}` : 'photo-picker'}>
       <div className="text-xs font-medium text-slate-600">{label}</div>
       <Select disabled={disabled || !photos?.length} onValueChange={onSelect}>
-        <SelectTrigger className="min-h-11">
+        <SelectTrigger
+          className="min-h-11"
+          aria-label={label}
+          data-testid={findingId ? `add-or-select-photo-${findingId}` : 'add-or-select-photo'}
+        >
           <SelectValue placeholder={photos?.length ? 'Select a photo' : 'No photos uploaded yet'} />
         </SelectTrigger>
         <SelectContent>

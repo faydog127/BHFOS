@@ -129,6 +129,7 @@ export default function InspectionAiReviewPanel({ tenantId, inspectionId, revisi
           const choices = recommendationChoices(content);
           const selected = selectedRecommendations[photo.id] || choices[0] || '';
           const reviewed = latestRows.length > 0 && !pending;
+          const decisionStatus = asText(findingSuggestion?.status).toLowerCase() || 'pending';
           return (
             <article
               key={photo.id}
@@ -150,23 +151,54 @@ export default function InspectionAiReviewPanel({ tenantId, inspectionId, revisi
               <div className="mt-3 hidden grid-cols-2 gap-3 text-sm md:grid"><div><b>Observation</b><p>{asText(content.description)}</p></div><div><b>Uncertainty</b><p>{asText(content.uncertainty)}</p></div><div><b>Category</b><p>{asText(content.category)}</p></div><div><b>Evidence usability</b><p>{asText(content.evidence_usability)}</p></div><div><b>Model/version</b><p>{findingSuggestion?.model} / {findingSuggestion?.prompt_version}</p></div><div><b>Narrative</b><p>{asText(suggestionContent(narrativeSuggestion).narrative)}</p></div></div>
               <details className="mt-3 rounded-lg border p-3 text-sm md:hidden"><summary className="font-medium">View details</summary><p className="mt-2"><b>Observation:</b> {asText(content.description)}</p><p className="mt-2"><b>Uncertainty:</b> {asText(content.uncertainty)}</p><p className="mt-2"><b>Evidence:</b> {asText(content.evidence_usability)}</p></details>
               {!latestRows.length && photo.upload_state === 'complete' ? <Button className="mt-3 min-h-11" onClick={() => analyze(photo.id)} disabled={Boolean(busyPhotoId)}>Analyze photo</Button> : null}
-              {pending ? (
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  <Button className="min-h-11" onClick={() => reviewPackage(photo, findingSuggestion, 'accept')} data-testid="finding-keep">
-                    <Check className="mr-1 h-4 w-4" />Keep
-                  </Button>
-                  <Button variant="outline" className="min-h-11" onClick={() => reviewPackage(photo, findingSuggestion, 'edit')} data-testid="finding-edit">
-                    <Pencil className="mr-1 h-4 w-4" />Edit
-                  </Button>
-                  <Button variant="destructive" className="min-h-11" onClick={() => reviewPackage(photo, findingSuggestion, 'reject')} data-testid="finding-remove">
-                    <X className="mr-1 h-4 w-4" />Remove
-                  </Button>
+              {findingSuggestion && !locked ? (
+                <div className="mt-4 space-y-2" data-testid="ai-finding-decision-controls" data-suggestion-id={findingSuggestion.id} data-decision-status={decisionStatus}>
+                  {reviewed ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className="text-[11px]">
+                        {decisionStatus === 'rejected' || decisionStatus === 'irrelevant'
+                          ? 'Removed'
+                          : decisionStatus === 'edited'
+                            ? 'Edited'
+                            : 'Kept'}
+                      </Badge>
+                      <Badge variant="outline" className="text-[11px]">Internal condition</Badge>
+                    </div>
+                  ) : null}
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      className="min-h-11"
+                      variant={decisionStatus === 'accepted' ? 'default' : 'outline'}
+                      onClick={() => reviewPackage(photo, findingSuggestion, 'accept')}
+                      disabled={Boolean(busyPhotoId)}
+                      data-testid="finding-keep"
+                    >
+                      <Check className="mr-1 h-4 w-4" />Keep
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="min-h-11"
+                      onClick={() => reviewPackage(photo, findingSuggestion, 'edit')}
+                      disabled={Boolean(busyPhotoId)}
+                      data-testid="finding-edit"
+                    >
+                      <Pencil className="mr-1 h-4 w-4" />Edit
+                    </Button>
+                    <Button
+                      variant={decisionStatus === 'rejected' || decisionStatus === 'irrelevant' ? 'destructive' : 'outline'}
+                      className="min-h-11"
+                      onClick={() => reviewPackage(photo, findingSuggestion, 'reject')}
+                      disabled={Boolean(busyPhotoId)}
+                      data-testid="finding-remove"
+                    >
+                      <X className="mr-1 h-4 w-4" />Remove
+                    </Button>
+                  </div>
                 </div>
               ) : null}
               {reviewed ? (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Badge variant="outline" className="text-[11px]">Internal condition</Badge>
-                  <Button size="sm" variant="outline" onClick={() => analyze(photo.id, true)}>
+                  <Button size="sm" variant="outline" onClick={() => analyze(photo.id, true)} disabled={Boolean(busyPhotoId) || locked}>
                     <RefreshCw className="mr-1 h-4 w-4" />Retry analysis
                   </Button>
                 </div>

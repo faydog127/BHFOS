@@ -75,6 +75,61 @@ const CATEGORY_META = {
 
 const unique = (values) => [...new Set((values || []).filter(Boolean))];
 
+const asText = (value) => (typeof value === 'string' ? value.trim() : '');
+
+const activePhotoCountForFinding = (findingId, photos = []) =>
+  (photos || []).filter((photo) => (
+    photo?.finding_id === findingId
+    && photo?.is_voided !== true
+    && asText(photo?.upload_state).toLowerCase() !== 'failed'
+  )).length;
+
+/**
+ * Client-side evidence blockers for report-included findings.
+ * Kept manuals (and other customer-visible kept findings) need a linked photo.
+ * Used for immediate warning/highlight without waiting on finalize RPC.
+ */
+export const listLocalEvidenceIssues = (findings = [], photos = []) => {
+  const excluded = new Set(['draft', 'rejected', 'voided', 'not_relevant']);
+  return (Array.isArray(findings) ? findings : [])
+    .filter((finding) => {
+      if (!finding?.id) return false;
+      const status = asText(finding.condition_status).toLowerCase() || 'draft';
+      const isManual = !finding.source_ai_suggestion_id;
+      const keptManual = isManual && status === 'approved';
+      const keptCustomerVisible = finding.is_customer_visible === true
+        && !excluded.has(status)
+        && status !== '';
+      if (!keptManual && !(keptCustomerVisible && status === 'approved')) return false;
+      return activePhotoCountForFinding(finding.id, photos) === 0;
+    })
+    .map((finding) => ({
+      code: 'FINDING_WITHOUT_EVIDENCE',
+      finding_id: finding.id,
+      message: 'This finding needs a photo.',
+    }));
+};
+
+export const mergePreflightIssues = (localIssues = [], remoteIssues = []) => {
+  const merged = [];
+  const seen = new Set();
+  [...(Array.isArray(localIssues) ? localIssues : []), ...(Array.isArray(remoteIssues) ? remoteIssues : [])]
+    .forEach((issue) => {
+      if (!issue?.code) return;
+      const key = [
+        issue.code,
+        issue.finding_id || '',
+        issue.photo_id || '',
+        issue.recommendation_id || '',
+        (Array.isArray(issue.finding_ids) ? issue.finding_ids.join(',') : ''),
+      ].join('|');
+      if (seen.has(key)) return;
+      seen.add(key);
+      merged.push(issue);
+    });
+  return merged;
+};
+
 const collectFindingIds = (issue) => unique([
   issue?.finding_id,
   issue?.conflicting_finding_id,
@@ -211,7 +266,7 @@ export const buildPreflightBlockerModel = (issues, context = {}) => {
   };
 };
 
-export const scrollToInspectionTarget = (target, itemId = '') => {
+export const resolveInspectionTargetId = (target, itemId = '') => {
   if (typeof document === 'undefined') return null;
 
   // Never scroll/highlight a voided photo target — it is hidden on mobile AI review.
@@ -219,12 +274,7 @@ export const scrollToInspectionTarget = (target, itemId = '') => {
     const meta = document.getElementById(`inspection-photo-meta-${itemId}`);
     const voidedBadge = meta?.closest('[data-photo-voided="true"]');
     if (voidedBadge || meta?.dataset?.voided === 'true') {
-      const fallback = document.getElementById('inspection-ai-review');
-      if (fallback) {
-        fallback.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        return fallback;
-      }
-      return null;
+      return 'inspection-ai-review';
     }
   }
 
@@ -243,11 +293,36 @@ export const scrollToInspectionTarget = (target, itemId = '') => {
   ].filter(Boolean);
 
   for (const id of candidates) {
-    const node = document.getElementById(id);
-    if (node) {
-      node.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return id;
-    }
+    if (document.getElementById(id)) return id;
   }
   return null;
+};
+
+export const scrollToInspectionTarget = (target, itemId = '') => {
+  if (typeof document === 'undefined') return null;
+  const id = resolveInspectionTargetId(target, itemId);
+  if (!id) return null;
+  const node = document.getElementById(id);
+  if (!node) return null;
+  node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  return id;
+};
+
+/** Retry scroll until the deterministic target mounts (step changes / quiet reloads). */
+export const scrollToInspectionTargetWhenReady = (target, itemId = '', options = {}) => {
+  if (typeof document === 'undefined') return Promise.resolve(null);
+  const attempts = Array.isArray(options.delaysMs) ? options.delaysMs : [0, 50, 150, 350, 700];
+  return new Promise((resolve) => {
+    let index = 0;
+    const tryScroll = () => {
+      const hit = scrollToInspectionTarget(target, itemId);
+      if (hit || index >= attempts.length - 1) {
+        resolve(hit);
+        return;
+      }
+      index += 1;
+      window.setTimeout(tryScroll, Math.max(0, attempts[index] - (attempts[index - 1] || 0)));
+    };
+    tryScroll();
+  });
 };
