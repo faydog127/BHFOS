@@ -7,6 +7,10 @@ import { Calendar as CalendarIcon, Check, ChevronsUpDown, Loader2, Plus, UserPlu
 import { appointmentService } from '@/services/appointmentService';
 import { getTenantId } from '@/lib/tenantUtils';
 import { formatPhoneNumber } from '@/lib/formUtils';
+import {
+  assertLeadIntakeValid,
+  formatLeadIntakeErrors,
+} from '@/lib/leadIntakeContract';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -123,6 +127,7 @@ const AppointmentScheduler = () => {
     email: '',
     phone: '',
     company: '',
+    address: '',
   });
   const [formData, setFormData] = useState({
     lead_id: '',
@@ -227,11 +232,13 @@ const AppointmentScheduler = () => {
   }, [customers, prefilledLeadId]);
 
   const handleCreateCustomer = async () => {
-    if (!newCustomer.first_name.trim() && !newCustomer.last_name.trim() && !newCustomer.company.trim()) {
+    try {
+      assertLeadIntakeValid(newCustomer);
+    } catch (validationError) {
       toast({
         variant: 'destructive',
-        title: 'Customer name required',
-        description: 'Add at least a first name, last name, or company before saving.',
+        title: 'Missing required info',
+        description: formatLeadIntakeErrors({ errors: validationError.errors }) || validationError.message,
       });
       return;
     }
@@ -242,13 +249,18 @@ const AppointmentScheduler = () => {
         {
           ...newCustomer,
           phone: formatPhoneNumber(newCustomer.phone),
+          address: newCustomer.address,
           source: 'appointment_scheduler',
         },
         tenantId,
       );
 
       setCustomers((prev) => sortCustomers([created, ...prev.filter((entry) => entry.id !== created.id)]));
-      setFormData((prev) => ({ ...prev, lead_id: created.id }));
+      setFormData((prev) => ({
+        ...prev,
+        lead_id: created.id,
+        service_address: prev.service_address || created.address || newCustomer.address,
+      }));
       setCustomerDialogOpen(false);
       setCustomerPickerOpen(false);
       setNewCustomer({
@@ -257,6 +269,7 @@ const AppointmentScheduler = () => {
         email: '',
         phone: '',
         company: '',
+        address: '',
       });
 
       toast({
@@ -426,6 +439,15 @@ const AppointmentScheduler = () => {
                   }
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-customer-address">Service address</Label>
+              <Input
+                id="new-customer-address"
+                value={newCustomer.address}
+                onChange={(event) => setNewCustomer((prev) => ({ ...prev, address: event.target.value }))}
+                placeholder="Street, city, state, ZIP"
+              />
             </div>
           </div>
           <DialogFooter>

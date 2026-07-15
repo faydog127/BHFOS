@@ -62,6 +62,12 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { formatPhoneNumber } from '@/lib/formUtils';
+import {
+  assertLeadIntakeValid,
+  buildLeadIntakeInsertPayload,
+  describeLeadIntakeDbError,
+  formatLeadIntakeErrors,
+} from '@/lib/leadIntakeContract';
 
 const PIPELINE_STAGES = [
   { value: 'new', label: 'New' },
@@ -140,6 +146,7 @@ const Leads = () => {
     lastName: '',
     email: '',
     phone: '',
+    address: '',
     service: '',
     persona: 'homeowner',
     pipelineStage: 'new',
@@ -782,51 +789,70 @@ const Leads = () => {
   const handleAddSave = async () => {
      setIsSaving(true);
      try {
-         const nowIso = new Date().toISOString();
          const pipelineStage = normalizeStageValue(addFormData.pipelineStage || 'new') || 'new';
-         let payload = {
-             first_name: addFormData.firstName,
-             last_name: addFormData.lastName,
-             email: addFormData.email,
+         let validation;
+         try {
+           validation = assertLeadIntakeValid({
+             firstName: addFormData.firstName,
+             lastName: addFormData.lastName,
              phone: addFormData.phone,
+             email: addFormData.email,
+             address: addFormData.address,
+           });
+         } catch (validationError) {
+           toast({
+             variant: 'destructive',
+             title: 'Missing required info',
+             description: formatLeadIntakeErrors({ errors: validationError.errors }) || validationError.message,
+           });
+           return;
+         }
+
+         const payload = buildLeadIntakeInsertPayload(
+           {
+             ...validation.normalized,
              service: addFormData.service,
+             source: 'crm_leads',
+           },
+           {
+             tenantId,
              pipeline_stage: pipelineStage,
              status: mapStageToStatus(pipelineStage),
-             preferred_document_delivery:
-               normalizePreferredDocumentDelivery(addFormData.preferredDocumentDelivery) === 'auto'
-                 ? null
-                 : normalizePreferredDocumentDelivery(addFormData.preferredDocumentDelivery),
-             sms_consent: addFormData.smsConsent === true,
-             sms_opt_out: addFormData.smsOptOut === true,
-             updated_at: nowIso,
-             created_at: nowIso,
-             is_test_data: isTrainingMode,
-             tenant_id: tenantId // Explicitly setting tenant_id
-         };
+             service: addFormData.service || null,
+             source: 'crm_leads',
+             extras: {
+               preferred_document_delivery:
+                 normalizePreferredDocumentDelivery(addFormData.preferredDocumentDelivery) === 'auto'
+                   ? null
+                   : normalizePreferredDocumentDelivery(addFormData.preferredDocumentDelivery),
+               sms_consent: addFormData.smsConsent === true,
+               sms_opt_out: addFormData.smsOptOut === true,
+               is_test_data: isTrainingMode,
+             },
+           },
+         );
 
-         let { error } = await supabase.from('leads').insert(payload);
-         if (error && isMissingColumnError(error)) {
-           payload = { ...payload };
-           const missingColumn = getMissingColumnName(error);
-           if (missingColumn === 'preferred_document_delivery') delete payload.preferred_document_delivery;
-           if (missingColumn === 'sms_consent') delete payload.sms_consent;
-           if (missingColumn === 'sms_opt_out') delete payload.sms_opt_out;
-           if (missingColumn === 'pipeline_stage') {
-             payload.stage = payload.pipeline_stage;
-             delete payload.pipeline_stage;
-           }
-           if (missingColumn === 'tenant_id') {
-             delete payload.tenant_id;
-           }
-           const retry = await supabase.from('leads').insert(payload);
-           error = retry.error;
-         }
+         // R2: no silent column-stripping retries on create — fail loud instead.
+         const { error } = await supabase.from('leads').insert(payload);
          if (error) throw error;
          toast({ title: "Success", description: "Lead created." });
          setIsAddModalOpen(false);
+         setAddFormData((prev) => ({
+           ...prev,
+           firstName: '',
+           lastName: '',
+           email: '',
+           phone: '',
+           address: '',
+           service: '',
+         }));
          fetchLeads();
      } catch(e) {
-         toast({ variant: "destructive", title: "Error", description: e.message });
+         toast({
+           variant: 'destructive',
+           title: 'Could not create lead',
+           description: describeLeadIntakeDbError(e),
+         });
      } finally {
          setIsSaving(false);
      }
@@ -879,6 +905,15 @@ const Leads = () => {
                         </div>
                         <div className="space-y-2"><Label>Email</Label><Input value={addFormData.email} onChange={e => setAddFormData({...addFormData, email: e.target.value})} /></div>
                         <div className="space-y-2"><Label>Phone</Label><Input value={addFormData.phone} onChange={e => setAddFormData({...addFormData, phone: formatPhoneNumber(e.target.value)})} /></div>
+                        <div className="space-y-2">
+                          <Label>Service address</Label>
+                          <Input
+                            value={addFormData.address}
+                            onChange={(e) => setAddFormData({ ...addFormData, address: e.target.value })}
+                            placeholder="Street, city, state, ZIP"
+                          />
+                          <p className="text-xs text-muted-foreground">Required. Saved on the customer record (not a separate property).</p>
+                        </div>
                         <div className="space-y-2">
                              <Label>Document Delivery</Label>
                              <Select value={addFormData.preferredDocumentDelivery} onValueChange={(v) => setAddFormData({...addFormData, preferredDocumentDelivery: v})}>

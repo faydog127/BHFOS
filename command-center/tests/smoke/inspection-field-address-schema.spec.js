@@ -209,10 +209,10 @@ test('composeAddressFromParts builds freeform text from form input without parsi
 
 test('new-lead flow persists freeform lead address and does not write invalid properties.address1', async () => {
   const customerStep = readSource('src/components/tech/InspectionFieldCustomerStep.jsx');
-  const leadPatchBlock = customerStep.match(/const leadPatch = \{[\s\S]*?\n\s*\};/);
-  expect(leadPatchBlock?.[0] || '').toMatch(/address:\s*serviceAddress/);
-  expect(leadPatchBlock?.[0] || '').not.toMatch(/\baddress1\s*:/);
-  expect(customerStep).not.toMatch(/\.insert\(\{[\s\S]*address1:/);
   expect(customerStep).toContain('appointmentService.createCustomer');
+  expect(customerStep).toContain('assertLeadIntakeValid');
+  expect(customerStep).toMatch(/address:\s*serviceAddress/);
+  expect(customerStep).not.toMatch(/\.from\(\s*['"]properties['"]\s*\)\s*\.insert/);
+  expect(customerStep).not.toMatch(/\.insert\(\{[\s\S]*address1:/);
   expect(customerStep).toMatch(/source:\s*'field_inspection'/);
 });

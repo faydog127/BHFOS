@@ -38,7 +38,7 @@ Scores are evidence-based. Where production proof is thin, scores stay conservat
 | Test coverage | 2 | Older UAT; not CI-gated |
 | Production confidence | 3 | Daily use assumed; not re-proven in this package |
 
-**Status: NEEDS WORK** — clarify required fields (R2).
+**Status: IN PROGRESS (R2)** — shared intake contract (name/phone/address); loud create failures.
 
 ---
 
