@@ -36,16 +36,17 @@ const inspectionScopeLanguage = (inspection: Record<string, unknown>) => {
     asString(inspection.summary),
   ].join(' ').toLowerCase();
 
-  if (signals.includes('air_duct') || signals.includes('air duct') || signals.includes('hvac') || signals.includes('coil') || signals.includes('blower') || signals.includes('duct')) {
-    return {
-      scope: 'Visible and readily accessible HVAC and air-distribution components documented during the scheduled inspection.',
-      exclusions: 'Concealed ductwork, sealed equipment, destructive access, engineering analysis, code compliance, and performance testing not expressly recorded are outside this report.',
-    };
-  }
+  // Dryer-vent must win before generic "duct" matching.
   if (signals.includes('dryer')) {
     return {
       scope: 'Visible and readily accessible portions of the dryer-vent system documented during the scheduled inspection.',
       exclusions: 'Concealed duct sections, inaccessible terminations, destructive access, appliance diagnosis, and airflow testing not expressly recorded are outside this report.',
+    };
+  }
+  if (signals.includes('air_duct') || signals.includes('air duct') || signals.includes('hvac') || signals.includes('coil') || signals.includes('blower') || signals.includes('duct')) {
+    return {
+      scope: 'Visible and readily accessible HVAC and air-distribution components documented during the scheduled inspection.',
+      exclusions: 'Concealed ductwork, sealed equipment, destructive access, engineering analysis, code compliance, and performance testing not expressly recorded are outside this report.',
     };
   }
   return {
@@ -83,7 +84,15 @@ const photoTimingLabel = (photo: Record<string, unknown>) => {
 };
 
 const customerEvidenceCaption = (value: unknown) => {
-  const caption = asString(value).replace(/^.*?\bevidence\s+\d+\s*:\s*/i, '').trim();
+  let caption = asString(value).replace(/^.*?\bevidence\s+\d+\s*:\s*/i, '').trim();
+  if (!caption) return 'Inspection evidence';
+  // Drop common speculative AI boilerplate from customer-facing captions only.
+  caption = caption
+    .replace(/\b(possibly|likely|appears to be|appears|uncertain|confidence[:\s]+\w+)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const words = caption.split(/\s+/).filter(Boolean);
+  if (words.length > 12) caption = `${words.slice(0, 12).join(' ')}`;
   if (!caption) return 'Inspection evidence';
   return caption.charAt(0).toUpperCase() + caption.slice(1);
 };
@@ -94,6 +103,18 @@ const leadAddress = (lead: Record<string, unknown>) => {
   const cityLine = [asString(lead.city), asString(lead.state), asString(lead.zip)].filter(Boolean).join(' ');
   return [asString(lead.address1), asString(lead.address2), cityLine].filter(Boolean).join(', ');
 };
+
+const resolveServiceAddress = (
+  inspection: Record<string, unknown>,
+  job: Record<string, unknown> | null | undefined,
+  lead: Record<string, unknown> | null | undefined,
+) => (
+  asString((inspection as any).service_address) ||
+  asString(job?.service_address) ||
+  leadAddress(lead || {}) ||
+  asString((job as any)?.address) ||
+  ''
+);
 
 const formatDate = (value: unknown) => {
   const raw = asNullableString(value);
@@ -185,7 +206,7 @@ const buildInspectionHtml = async (params: {
     'Customer';
 
   const workOrder = asString(job.work_order_number) || asString(job.job_number) || '';
-  const serviceAddress = asString((inspection as any).service_address) || asString(job.service_address) || leadAddress(lead);
+  const serviceAddress = resolveServiceAddress(inspection, job, lead);
   const inspectedOn = formatDate(inspection.completed_at || inspection.started_at || inspection.created_at);
   const techName = asString(technician.full_name) || 'The Vent Guys Technician';
   const summary = asString(inspection.summary);
@@ -788,10 +809,11 @@ Deno.serve(async (req) => {
         asString(lead?.email) ||
         'Customer';
       const workOrder = asString(job?.work_order_number) || asString(job?.job_number) || '';
-      const serviceAddress =
-        asString((inspection as any).service_address) ||
-        asString(job?.service_address) ||
-        leadAddress(lead || {});
+      const serviceAddress = resolveServiceAddress(
+        inspection as Record<string, unknown>,
+        job as Record<string, unknown> | null,
+        lead as Record<string, unknown> | null,
+      );
       const inspectedOn = formatDate((inspection as any).completed_at || (inspection as any).started_at || (inspection as any).created_at);
       const techName = asString(technician?.full_name) || 'The Vent Guys Technician';
       const summary = asString((inspection as any).summary);

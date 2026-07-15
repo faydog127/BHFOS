@@ -16,18 +16,20 @@ test('groups preflight issues by type with counts and plain-English labels', asy
 
   expect(groups).toHaveLength(3);
   const missingEvidence = groups.find((group) => group.key === 'missing_evidence');
-  expect(missingEvidence.title).toBe('Findings missing evidence');
+  expect(missingEvidence.title).toBe('This finding needs a photo');
   expect(missingEvidence.count).toBe(2);
   expect(missingEvidence.findingIds.sort()).toEqual(['f1', 'f2']);
-  expect(missingEvidence.actionLabel).toBe('Open affected findings');
+  expect(missingEvidence.actionLabel).toBe('Add or select photo');
   expect(missingEvidence.tab).toBe('findings');
+  expect(missingEvidence.step).toBe('findings');
 
   const contradictory = groups.find((group) => group.key === 'contradictory_findings');
   expect(contradictory.count).toBe(1);
   expect(contradictory.findingIds.sort()).toEqual(['f3', 'f4']);
 
   const summary = groups.find((group) => group.key === 'summary_required');
-  expect(summary.actionLabel).toBe('Edit summary');
+  expect(summary.actionLabel).toBe('Review summary');
+  expect(summary.title).toBe('Review the Findings summary');
   expect(summary.tab).toBe('overview');
 });
 
@@ -61,8 +63,8 @@ test('enriches recommendation and AI blockers from loaded local rows', async () 
   expect(model.highlights.findingIds).toEqual(['f-missing']);
   expect(model.highlights.photoIds).toEqual(['p1']);
   expect(model.groups.map((group) => group.title)).toEqual([
-    'Service recommendation required',
-    'Photos need a technician decision',
+    'Select a Service Recommendation',
+    'Review this photo',
   ]);
 });
 
@@ -70,6 +72,6 @@ test('does not invent generic review-affected-content actions', async () => {
   const groups = groupPreflightBlockers([
     { code: 'NO_CUSTOMER_FINDINGS', message: 'No findings are approved for the customer report.', action: 'Review finding' },
   ]);
-  expect(groups[0].actionLabel).toBe('Review findings and photo decisions');
+  expect(groups[0].actionLabel).toBe('Review findings');
   expect(groups[0].actionLabel.toLowerCase()).not.toContain('affected report content');
 });
