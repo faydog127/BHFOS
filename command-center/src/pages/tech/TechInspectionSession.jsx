@@ -21,7 +21,11 @@ import {
 import { assessInspectionPhotoQuality } from '@/lib/inspectionPhotoQuality';
 import { normalizeInspectionStatus } from '@/lib/inspectionStatus';
 import InspectionFieldStepper, { stepHref } from '@/components/tech/InspectionFieldStepper';
-import { LEAD_FIELD_SELECT, resolveServiceAddress } from '@/lib/inspectionFieldAddress';
+import {
+  LEAD_FIELD_SELECT,
+  hydrateLeadsWithProperties,
+  resolveServiceAddress,
+} from '@/lib/inspectionFieldAddress';
 import InspectionFieldCustomerStep from '@/components/tech/InspectionFieldCustomerStep';
 
 const PHOTO_BUCKET = 'inspection-photos';
@@ -115,9 +119,11 @@ export default function TechInspectionSession() {
       if (error) throw error;
       if (!data) throw new Error('Inspection not found.');
 
+      const rawLead = Array.isArray(data.lead) ? data.lead[0] : data.lead;
+      const hydratedLead = await hydrateLeadsWithProperties(supabase, tenantId, rawLead);
       const normalized = {
         ...data,
-        lead: Array.isArray(data.lead) ? data.lead[0] : data.lead,
+        lead: hydratedLead,
         job: Array.isArray(data.job) ? data.job[0] : data.job,
         technician: Array.isArray(data.technician) ? data.technician[0] : data.technician,
       };
