@@ -155,9 +155,9 @@ test('inspection safe helper contract remains unchanged for field selects', asyn
   expect(helper).toContain('isNumericPropertyId');
 });
 
-test('technician assignment selectors are untouched by R1A', async () => {
+test('technician assignment selectors remain out of R1A property scope', async () => {
   const jobs = read('src/pages/crm/Jobs.jsx');
-  // R1B territory — must still be present unchanged in this PR
-  expect(jobs).toContain('value={tech.user_id}');
+  // R1B owns technician identity; R1A must not reintroduce property embeds there.
+  expect(jobs).not.toMatch(/property\s*:\s*property_id\s*\(/);
   expect(jobs).toContain('resolveTechnicianSelection');
 });

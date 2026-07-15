@@ -37,6 +37,11 @@ import {
   toDate,
 } from '@/lib/dispatchRules';
 import { formatPhoneNumber } from '@/lib/formUtils';
+import {
+  resolveTechnicianDisplayName,
+  resolveTechnicianSelectValue,
+  TECHNICIAN_ROSTER_SELECT,
+} from '@/lib/technicianIdentity';
 import { cn } from '@/lib/utils';
 import {
   formatOperationalStageLabel,
@@ -212,21 +217,12 @@ const statusLabel = (value) =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
 
-const getTechnicianDisplayName = (technicians, technicianId) => {
-  if (!technicianId) return 'Unassigned';
-  const technician = technicians.find((entry) =>
-    [entry.dispatch_id, entry.user_id, entry.id].filter(Boolean).includes(technicianId),
-  );
-  return technician?.full_name || 'Unassigned';
-};
+const getTechnicianDisplayName = (technicians, technicianId) =>
+  resolveTechnicianDisplayName({ technicians, value: technicianId });
 
-const resolveTechnicianSelection = (technicians, technicianId) => {
-  if (!technicianId) return 'unassigned';
-  const technician = technicians.find((entry) =>
-    [entry.dispatch_id, entry.user_id, entry.id].filter(Boolean).includes(technicianId),
-  );
-  return technician?.dispatch_id || 'unassigned';
-};
+// Assignment selects/forms always use technicians.id (roster FK target).
+const resolveTechnicianSelection = (technicians, technicianId) =>
+  resolveTechnicianSelectValue({ technicians, value: technicianId });
 
 const MetricCard = ({ icon: Icon, label, value, tone = 'slate', detail }) => (
   <Card
@@ -698,19 +694,16 @@ export default function Schedule() {
         await Promise.all([
           supabase
             .from('technicians')
-            .select('id, user_id, full_name, is_active')
+            .select(TECHNICIAN_ROSTER_SELECT)
             .order('full_name', { ascending: true }),
           workOrderBoardService.fetchWorkOrders(tenantId),
         ]);
 
       if (techniciansError && !isMissingRelationError(techniciansError)) throw techniciansError;
 
-      const technicianRows = ((techniciansError ? [] : techniciansData) || [])
-        .filter((tech) => tech?.is_active !== false)
-        .map((tech) => ({
-          ...tech,
-          dispatch_id: tech.user_id || tech.id,
-        }));
+      const technicianRows = ((techniciansError ? [] : techniciansData) || []).filter(
+        (tech) => tech?.is_active !== false,
+      );
 
       setTechnicians(technicianRows);
       setWorkOrders(
@@ -1431,7 +1424,7 @@ export default function Schedule() {
                               <SelectContent>
                                 <SelectItem value="unassigned">Unassigned</SelectItem>
                                 {technicians.map((technician) => (
-                                  <SelectItem key={technician.id} value={technician.dispatch_id}>
+                                  <SelectItem key={technician.id} value={technician.id}>
                                     {technician.full_name}
                                   </SelectItem>
                                 ))}

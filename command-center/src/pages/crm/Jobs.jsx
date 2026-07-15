@@ -29,6 +29,11 @@ import AddressAutocomplete from '@/components/AddressAutocomplete';
 import { formatPhoneNumber } from '@/lib/formUtils';
 import { resolveLeadDelivery } from '@/lib/documentDelivery';
 import {
+  resolveTechnicianDisplayName,
+  resolveTechnicianSelectValue,
+  TECHNICIAN_ROSTER_SELECT,
+} from '@/lib/technicianIdentity';
+import {
   PAYMENT_TERM_OPTIONS,
   formatOperationalStageLabel,
   formatPaymentTermsLabel,
@@ -152,17 +157,12 @@ const Jobs = () => {
     return 'all';
   };
 
-  const getTechnicianName = (technicianId) => {
-    if (!technicianId) return 'Unassigned';
-    const technician = technicians.find((t) => t.user_id === technicianId || t.id === technicianId);
-    return technician?.full_name || 'Unassigned';
-  };
+  const getTechnicianName = (technicianId) =>
+    resolveTechnicianDisplayName({ technicians, value: technicianId });
 
-  const resolveTechnicianSelection = (technicianId) => {
-    if (!technicianId) return 'unassigned';
-    const technician = technicians.find((t) => t.user_id === technicianId || t.id === technicianId);
-    return technician?.user_id || 'unassigned';
-  };
+  // Assignment selects/forms always use technicians.id (roster FK target).
+  const resolveTechnicianSelection = (technicianId) =>
+    resolveTechnicianSelectValue({ technicians, value: technicianId });
 
   const toDatetimeLocal = (value) => {
     if (!value) return '';
@@ -296,7 +296,7 @@ const Jobs = () => {
     try {
       const { data, error } = await supabase
         .from('technicians')
-        .select('id, user_id, full_name')
+        .select(TECHNICIAN_ROSTER_SELECT)
         .eq('is_active', true)
         .order('full_name', { ascending: true });
       if (error) throw error;
@@ -994,7 +994,7 @@ const Jobs = () => {
                     <SelectContent>
                       <SelectItem value="unassigned">Unassigned</SelectItem>
                       {assignableTechnicians.map((tech) => (
-                        <SelectItem key={tech.id} value={tech.user_id}>
+                        <SelectItem key={tech.id} value={tech.id}>
                           {tech.full_name}
                         </SelectItem>
                       ))}
@@ -1158,7 +1158,7 @@ const Jobs = () => {
                 <SelectContent>
                   <SelectItem value="unassigned">Unassigned</SelectItem>
                   {assignableTechnicians.map((tech) => (
-                    <SelectItem key={tech.id} value={tech.user_id}>
+                    <SelectItem key={tech.id} value={tech.id}>
                       {tech.full_name}
                     </SelectItem>
                   ))}
