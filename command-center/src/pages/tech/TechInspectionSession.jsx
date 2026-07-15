@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Camera, CheckCircle2, Loader2, RefreshCw, UploadCloud } from 'lucide-react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Camera, CheckCircle2, ImagePlus, Loader2, RefreshCw, UploadCloud } from 'lucide-react';
 
 import { supabase } from '@/lib/customSupabaseClient';
 import { getTenantId } from '@/lib/tenantUtils';
@@ -20,6 +20,8 @@ import {
 } from '@/lib/inspectionPhotoPipeline';
 import { assessInspectionPhotoQuality } from '@/lib/inspectionPhotoQuality';
 import { normalizeInspectionStatus } from '@/lib/inspectionStatus';
+import InspectionFieldStepper, { stepHref } from '@/components/tech/InspectionFieldStepper';
+import InspectionFieldCustomerStep from '@/components/tech/InspectionFieldCustomerStep';
 
 const PHOTO_BUCKET = 'inspection-photos';
 
@@ -31,13 +33,31 @@ const getCustomerName = (lead) =>
   asText(lead?.email) ||
   'Customer';
 
+const queueStatusLabel = (item) => {
+  const status = asText(item?.status).toLowerCase();
+  const stage = asText(item?.stage).toLowerCase();
+  if (status === 'failed' || stage === 'failed') return 'Failed';
+  if (status === 'uploading' || stage === 'uploading') return 'Uploading';
+  if (status === 'complete' || status === 'uploaded' || stage === 'complete') return 'Uploaded';
+  if (stage === 'processing' || stage === 'normalize' || stage === 'converting') return 'Processing';
+  return 'Waiting to upload';
+};
+
+const evidenceLabelValue = (isBefore) => {
+  if (isBefore === true) return 'before';
+  if (isBefore === false) return 'after';
+  return 'observed';
+};
+
 export default function TechInspectionSession() {
   const tenantId = getTenantId();
   const { inspectionId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useSupabaseAuth();
   const { toast } = useToast();
 
-  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const libraryInputRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
   const [inspection, setInspection] = useState(null);
@@ -83,7 +103,7 @@ export default function TechInspectionSession() {
         .select(
           `
           *,
-          lead:leads(id, first_name, last_name, company, email, phone),
+          lead:leads(id, first_name, last_name, company, email, phone, address1, address2, city, state, zip, property_id, contact_id),
           job:jobs(id, work_order_number, service_address),
           technician:technicians(id, full_name)
         `,
@@ -315,9 +335,31 @@ export default function TechInspectionSession() {
 
   const customer = getCustomerName(inspection?.lead || null);
   const status = normalizedStatus;
+  const serviceAddressReady = Boolean(
+    asText(inspection?.service_address) ||
+    asText(inspection?.job?.service_address) ||
+    asText(inspection?.lead?.address1),
+  );
+  const customerReady = Boolean(inspection?.lead_id) && serviceAddressReady;
+  const photosReady = photos.some((photo) => photo && photo.is_voided !== true);
+  const requestedStep = asText(searchParams.get('step')).toLowerCase();
+  const currentStep = ['customer', 'photos'].includes(requestedStep)
+    ? requestedStep
+    : (customerReady ? 'photos' : 'customer');
+  const completionByStep = {
+    customer: customerReady,
+    photos: photosReady,
+    findings: false,
+    recommendation: false,
+    finish: false,
+  };
+
+  const goToStep = (stepId) => {
+    setSearchParams({ step: stepId }, { replace: true });
+  };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-24">
       <div className="flex items-center justify-between gap-3">
         <Button variant="outline" asChild className="gap-2">
           <Link to="../queue">
@@ -333,6 +375,24 @@ export default function TechInspectionSession() {
         </div>
       </div>
 
+      <InspectionFieldStepper
+        inspectionId={inspectionId}
+        currentStep={currentStep}
+        completionByStep={completionByStep}
+      />
+
+      {currentStep === 'customer' ? (
+        <InspectionFieldCustomerStep
+          tenantId={tenantId}
+          inspection={inspection}
+          locked={locked}
+          onLinked={(next) => setInspection(next)}
+          onContinue={() => goToStep('photos')}
+        />
+      ) : null}
+
+      {currentStep === 'photos' ? (
+        <>
       {syncState.syncing ? (
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="py-3 text-sm text-amber-900 flex items-center justify-between gap-3">
@@ -363,36 +423,69 @@ export default function TechInspectionSession() {
               Refresh
             </Button>
             <Button asChild className="gap-2 bg-blue-600 hover:bg-blue-700">
-              <Link to={`../inspections/${inspectionId}/review`}>
+              <Link to={stepHref(inspectionId, 'findings')}>
                 <CheckCircle2 className="h-4 w-4" />
-                Review
+                Findings
               </Link>
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
+          {!customerReady ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+              Add a customer and service address first.
+              <Button type="button" variant="outline" className="mt-2 min-h-11 w-full" onClick={() => goToStep('customer')}>
+                Open Customer step
+              </Button>
+            </div>
+          ) : null}
           <div className="grid gap-2 sm:grid-cols-2">
             <Button
               size="lg"
-              className="w-full bg-blue-600 hover:bg-blue-700 gap-2"
-              onClick={() => fileInputRef.current?.click()}
+              className="w-full min-h-12 bg-blue-600 hover:bg-blue-700 gap-2"
+              onClick={() => cameraInputRef.current?.click()}
               disabled={locked}
+              data-testid="take-photo-button"
             >
               <Camera className="h-5 w-5" />
-              Capture Photo
+              Take Photo
             </Button>
-            <Button size="lg" variant="outline" className="w-full" onClick={createFinding} disabled={locked}>
-              + Finding
+            <Button
+              size="lg"
+              variant="outline"
+              className="w-full min-h-12 gap-2"
+              onClick={() => libraryInputRef.current?.click()}
+              disabled={locked}
+              data-testid="choose-from-library-button"
+            >
+              <ImagePlus className="h-5 w-5" />
+              Choose From Library
             </Button>
           </div>
+          <Button size="lg" variant="outline" className="w-full min-h-11" onClick={createFinding} disabled={locked}>
+            + Finding
+          </Button>
 
           <input
-            ref={fileInputRef}
+            ref={cameraInputRef}
             type="file"
             accept={INSPECTION_IMAGE_ACCEPT}
             capture="environment"
+            className="hidden"
+            data-testid="camera-file-input"
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              e.target.value = '';
+              enqueueFiles(files).catch(() => null);
+            }}
+          />
+          <input
+            ref={libraryInputRef}
+            type="file"
+            accept={INSPECTION_IMAGE_ACCEPT}
             multiple
             className="hidden"
+            data-testid="library-file-input"
             onChange={(e) => {
               const files = Array.from(e.target.files || []);
               e.target.value = '';
@@ -418,12 +511,23 @@ export default function TechInspectionSession() {
                   <div className="min-w-0">
                     <div className="text-sm font-semibold truncate">{q.file_name || 'Photo'}</div>
                     <div className="text-xs text-slate-500">
-                      {q.stage || q.status}
+                      {queueStatusLabel(q)}
                       {q.error ? ` • ${q.error}` : ''}
                     </div>
                   </div>
-                  <Badge variant="outline">{q.status}</Badge>
+                  <Badge variant="outline">{queueStatusLabel(q)}</Badge>
                 </div>
+                {q.status === 'failed' ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11 w-full"
+                    onClick={() => flushUploads()}
+                    disabled={uploading || !canFulfillUploads}
+                  >
+                    Try again
+                  </Button>
+                ) : null}
                 <div
                   className="h-2 overflow-hidden rounded-full bg-slate-100"
                   role="progressbar"
@@ -457,9 +561,9 @@ export default function TechInspectionSession() {
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Before/After</Label>
+                    <Label className="text-xs">Evidence label</Label>
                     <Select
-                      value={q.is_before === true ? 'before' : q.is_before === false ? 'after' : 'unspecified'}
+                      value={evidenceLabelValue(q.is_before)}
                       onValueChange={(value) => updateQueueItem(q.id, { is_before: value === 'before' ? true : value === 'after' ? false : null })}
                       disabled={locked}
                     >
@@ -467,7 +571,7 @@ export default function TechInspectionSession() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="unspecified">Unspecified</SelectItem>
+                        <SelectItem value="observed">Observed</SelectItem>
                         <SelectItem value="before">Before</SelectItem>
                         <SelectItem value="after">After</SelectItem>
                       </SelectContent>
@@ -475,11 +579,11 @@ export default function TechInspectionSession() {
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Caption</Label>
+                  <Label className="text-xs">Note</Label>
                   <Input
                     value={q.caption || ''}
                     onChange={(e) => updateQueueItem(q.id, { caption: e.target.value })}
-                    placeholder="Short caption (optional)"
+                    placeholder="Short note (optional)"
                     disabled={locked}
                   />
                 </div>
@@ -503,11 +607,9 @@ export default function TechInspectionSession() {
               .filter((p) => p && p.is_voided !== true)
               .map((p) => (
                 <div key={p.id} className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
-                  {asText(p.upload_state).toLowerCase() && asText(p.upload_state).toLowerCase() !== 'complete' ? (
-                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 w-fit">
-                      {String(p.upload_state).toLowerCase()}
-                    </Badge>
-                  ) : null}
+                  <Badge variant="outline" className="w-fit">
+                    {asText(p.upload_state).toLowerCase() === 'complete' || !asText(p.upload_state) ? 'Uploaded' : 'Processing'}
+                  </Badge>
                   {p.signed_url ? (
                     <img src={p.signed_url} alt={p.caption || p.file_name || 'photo'} className="w-full rounded-lg border border-slate-200" />
                   ) : (
@@ -535,9 +637,9 @@ export default function TechInspectionSession() {
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Before/After</Label>
+                      <Label className="text-xs">Evidence label</Label>
                       <Select
-                        value={p.is_before === true ? 'before' : p.is_before === false ? 'after' : 'unspecified'}
+                        value={evidenceLabelValue(p.is_before)}
                         onValueChange={(value) => updateServerPhoto(p.id, { is_before: value === 'before' ? true : value === 'after' ? false : null })}
                         disabled={locked}
                       >
@@ -545,7 +647,7 @@ export default function TechInspectionSession() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="unspecified">Unspecified</SelectItem>
+                          <SelectItem value="observed">Observed</SelectItem>
                           <SelectItem value="before">Before</SelectItem>
                           <SelectItem value="after">After</SelectItem>
                         </SelectContent>
@@ -553,11 +655,11 @@ export default function TechInspectionSession() {
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Caption</Label>
+                    <Label className="text-xs">Note</Label>
                     <Input
                       value={p.caption || ''}
                       onChange={(e) => updateServerPhoto(p.id, { caption: e.target.value })}
-                      placeholder="Short caption (recommended)"
+                      placeholder="Short note (optional)"
                       disabled={locked}
                     />
                   </div>
@@ -566,6 +668,14 @@ export default function TechInspectionSession() {
           )}
         </CardContent>
       </Card>
+
+      <div className="sticky bottom-0 z-10 -mx-1 border-t border-slate-200 bg-white/95 p-3 backdrop-blur">
+        <Button asChild size="lg" className="w-full min-h-12 bg-blue-600 hover:bg-blue-700">
+          <Link to={stepHref(inspectionId, 'findings')}>Continue to Findings</Link>
+        </Button>
+      </div>
+        </>
+      ) : null}
     </div>
   );
 }
