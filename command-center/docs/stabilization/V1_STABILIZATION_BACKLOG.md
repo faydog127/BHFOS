@@ -29,7 +29,7 @@ Disposition meanings:
 | Test | `inspection-field-address-schema.spec.js` + prod smoke with UUID `property_id` |
 | Production risk | High if any path reintroduces embeds |
 | Recommended release | R1 (integrity) for structural decision; accept fallback until then |
-| Disposition | **Accept in V1** (fallback) + **Fix in V1** (ban remaining embeds) |
+| Disposition | **Accept in V1** (opaque `property_id` + address fallbacks) — embed ban **done** (R1A) + guarded (R1C) |
 
 ### B-002 — Payment / invoice property embed still assumes broken FK
 
@@ -46,7 +46,7 @@ Disposition meanings:
 | Test | Focused paymentService select contract test + public pay smoke |
 | Production risk | Medium–high on address-dependent payment screens |
 | Recommended release | R1 |
-| Disposition | **Fix in V1** |
+| Disposition | **Fixed in V1** (R1A removed embeds; R1C guards recurrence) |
 
 ### B-003 — Tenant isolation / money-writer regressions (watch)
 
@@ -213,7 +213,7 @@ Disposition meanings:
 | Evidence | Superseded `unify_technician_id_on_user_id` vs phase1.5 FK to `technicians.id` |
 | Smallest fix | Docs + fix drifting tests/fixtures |
 | Release | R1 |
-| Disposition | **Fix in V1** |
+| Disposition | **Fixed in V1** (R1B roster-id writes; R1C guards + helper contracts) |
 
 ### B-015 — Customer intake workarounds (column fallback inserts)
 

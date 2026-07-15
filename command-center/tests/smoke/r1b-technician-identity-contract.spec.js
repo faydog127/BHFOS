@@ -11,21 +11,15 @@ import {
   resolveTechnicianSelectValue,
   TECHNICIAN_ROSTER_SELECT,
 } from '../../src/lib/technicianIdentity.js';
+import {
+  formatOffenders,
+  scanIdentityRelationshipGuards,
+} from '../../tools/identity-relationship-guards.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, '../..');
-const srcRoot = path.join(root, 'src');
 
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
-
-const walkJsFiles = (dir, out = []) => {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) walkJsFiles(full, out);
-    else if (/\.(js|jsx)$/.test(entry.name)) out.push(full);
-  }
-  return out;
-};
 
 const TECH_ROSTER_ID = '11111111-1111-4111-8111-111111111111';
 const TECH_USER_ID = '22222222-2222-4222-8222-222222222222';
@@ -122,52 +116,18 @@ test('InspectionEditor assignment control uses technicians.id', async () => {
 });
 
 test('active assignment controls never store technicians.user_id as option value', async () => {
-  const activeAssignmentFiles = [
-    'src/pages/crm/Jobs.jsx',
-    'src/pages/crm/Schedule.jsx',
-    'src/pages/crm/appointments/AppointmentScheduler.jsx',
-    'src/pages/crm/inspections/InspectionEditor.jsx',
-  ];
-  const offenders = [];
-  for (const relativePath of activeAssignmentFiles) {
-    const source = read(relativePath);
-    const lines = source.split(/\r?\n/);
-    lines.forEach((line, idx) => {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('//') || trimmed.startsWith('*')) return;
-      if (/SelectItem[^>]*(value=\{tech\.user_id\}|value=\{technician\.user_id\}|value=\{technician\.dispatch_id\})/.test(line)) {
-        offenders.push(`${relativePath}:${idx + 1}`);
-      }
-      if (/dispatch_id\s*:\s*tech\.user_id/.test(line)) {
-        offenders.push(`${relativePath}:${idx + 1}:dispatch_id`);
-      }
-    });
-  }
-  expect(offenders, offenders.join('\n')).toEqual([]);
+  // Canonical walk lives in R1C tools/identity-relationship-guards.mjs
+  const result = scanIdentityRelationshipGuards({ root });
+  const techOffenders = result.offenders.filter((o) => o.domain === 'technician');
+  expect(techOffenders, formatOffenders(techOffenders)).toEqual([]);
 });
 
 test('active src does not compare auth.uid/user.id directly to assignment technician_id filters', async () => {
-  const files = walkJsFiles(path.join(srcRoot, 'pages'));
-  const offenders = [];
-  const banned = [
-    /\.eq\(\s*['"]technician_id['"]\s*,\s*user\.id\s*\)/,
-    /\.eq\(\s*['"]technician_id['"]\s*,\s*user\?\.id\s*\)/,
-    /\.eq\(\s*['"]technician_id['"]\s*,\s*authUserId\s*\)/,
-  ];
-  for (const file of files) {
-    const source = fs.readFileSync(file, 'utf8');
-    const relative = path.relative(root, file);
-    // Orphan demo page documents the bad pattern in a comment; ignore comment-only lines.
-    const lines = source.split(/\r?\n/);
-    lines.forEach((line, idx) => {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) return;
-      if (banned.some((re) => re.test(line))) {
-        offenders.push(`${relative}:${idx + 1}`);
-      }
-    });
-  }
-  expect(offenders, offenders.join('\n')).toEqual([]);
+  const result = scanIdentityRelationshipGuards({ root });
+  const filterOffenders = result.offenders.filter(
+    (o) => o.ruleId === 'filter_technician_id_by_user_id',
+  );
+  expect(filterOffenders, formatOffenders(filterOffenders)).toEqual([]);
 });
 
 test('money-loop / estimate modules are untouched by R1B identity changes', async () => {
