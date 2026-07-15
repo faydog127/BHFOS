@@ -1,9 +1,10 @@
 # R1 — Identity & Relationship Safety Plan
 
-**Status:** R1A deployed; R1B implementation on `stabilize/r1b-technician-identity`  
-**Base tip (R1B):** `6d398e7c8104b4717ed07c71cb82a6608adc0bc1`  
+**Status:** R1A + R1B deployed; R1C guards on `stabilize/r1c-identity-relationship-guards`  
+**Base tip (R1C):** `ccffa4376238444a48347f52e8bd5e8058704507`  
 **R1A merge tip:** `6d398e7c8104b4717ed07c71cb82a6608adc0bc1`  
-**R1B worktree:** `F:\Dev\BHFOS-stabilize-r1b-technician`  
+**R1B merge tip:** `ccffa4376238444a48347f52e8bd5e8058704507`  
+**R1C worktree:** `F:\Dev\BHFOS-stabilize-r1c-guards`  
 **Dirty tree `F:\Dev\BHFOS`:** not used  
 **Backlog seeds:** B-001, B-002, B-011, B-014 (and related embed/identity items)
 
@@ -370,9 +371,9 @@ If production probe shows `jobs.technician_id` still contains many `user_id` val
 
 ---
 
-## Most dangerous active code path
+## Most dangerous active code path (historical — fixed)
 
-**`paymentService.getInvoiceByToken`** — customer-facing payment load embeds broken lead→properties relationship with non-existent `address1` columns. Closely followed by **`Jobs.jsx` / `Schedule.jsx` writing `technicians.user_id` into `jobs.technician_id`** against an FK to `technicians.id`.
+Previously: **`paymentService` property embeds** and **`Jobs.jsx` / `Schedule.jsx` writing `technicians.user_id`**. Both fixed in R1A/R1B. Recurrence is blocked by R1C `tools/identity-relationship-guards.mjs` + CI `identity_contracts`.
 
 ---
 
@@ -417,8 +418,60 @@ If production probe shows `jobs.technician_id` still contains many `user_id` val
 
 - Add DB FK from `technicians.user_id` → `auth.users` if desired
 - Remount/fix orphaned `TechDashboard.jsx` / `TechSchedule.jsx` in scheduling UX work
-- Broader R1C static guard consolidation
 - Any historical data repair (not needed today)
+- Unified CRM property entity (V2)
+
+---
+
+## 16. R1C enforcement (final contracts)
+
+### Final R1A property contract
+
+| Rule | Enforcement |
+| --- | --- |
+| Never join `leads.property_id` → `properties.id` | Banned embeds in source walk |
+| `leads.property_id` is opaque legacy data | Docs + helpers |
+| Address via snapshots / safe fallbacks | `resolveLegacyServiceAddress` / `resolveServiceAddress` |
+| Hydration failure must not crash workflows | `hydrateLeadsWithProperties` try/catch + helper tests |
+
+**Approved helpers:** `src/lib/inspectionFieldAddress.js`  
+(`LEAD_FIELD_SELECT`, `LEAD_ADDRESS_SELECT`, `hydrateLeadsWithProperties`, `resolveLegacyServiceAddress`)
+
+### Final R1B technician contract
+
+| Rule | Enforcement |
+| --- | --- |
+| Auth user → `technicians.user_id` → `technicians.id` | Helper + TechQueue/TechJobDetail patterns |
+| Assignment columns store `technicians.id` only | Banned `user_id` SelectItem / writes / filters |
+| Display may tolerate legacy `user_id` | `resolveTechnicianDisplayName` / `findTechnicianByAnyId` |
+
+**Approved helpers:** `src/lib/technicianIdentity.js`  
+(`TECHNICIAN_ROSTER_SELECT`, `resolveTechnicianSelectValue`, `resolveLoggedInTechnicianRosterId`)
+
+### R1C enforcement mechanism
+
+| Mechanism | Command / location |
+| --- | --- |
+| Source-walk CLI | `npm run guard:identity` → `tools/identity-relationship-guards.mjs` |
+| Helper unit contracts | `npm run test:identity-helpers` → `tests/unit/r1c-helper-contracts.test.mjs` |
+| Playwright wrappers | `tests/smoke/r1c-identity-relationship-guards.spec.js` (+ R1A/R1B reuse scanner) |
+| CI | `.github/workflows/ci.yml` job `identity_contracts` |
+| Full local suite | `npm run test:identity-contracts` |
+
+### Forbidden patterns (summary)
+
+**Property:** `property:property_id(`, `properties!fk_leads_property`, `properties!fk_invoices_property`, `properties(address1`  
+**Technician:** `value={tech.user_id}`, `dispatch_id: tech.user_id`, `technician_id: tech.user_id`, `.eq('technician_id', user.id)`, `tech.user_id \|\| tech.id`
+
+Comments and approved helper files are allowlisted to avoid false positives.
+
+### Known accepted limitations
+
+- One production roster row may lack `user_id` (cannot log in; assignment by roster id still works)
+- `technicians.user_id` has unique index but no FK to `auth.users`
+- Orphaned `TechDashboard` / `TechSchedule` remain unrouted
+- Edge Functions pass through `technician_id` (FK rejects bad ids; UI writers are guarded)
+- `review:gate` remains review-artifact governance (not identity scanning); identity runs in CI
 
 ---
 
@@ -427,7 +480,7 @@ If production probe shows `jobs.technician_id` still contains many `user_id` val
 | Action | Status |
 | --- | --- |
 | R1A | Deployed |
-| R1B implementation | In progress on `stabilize/r1b-technician-identity` |
-| Deployment | Frontend-only after merge + checks |
+| R1B | Deployed (`ccffa437…`) |
+| R1C | Guards on `stabilize/r1c-identity-relationship-guards` (PR only — no deploy required) |
 | Production data repair | None |
 | Migration | None |

@@ -9,46 +9,25 @@ import {
   resolveLegacyServiceAddress,
   resolveServiceAddress,
 } from '../../src/lib/inspectionFieldAddress.js';
+import {
+  formatOffenders,
+  scanIdentityRelationshipGuards,
+} from '../../tools/identity-relationship-guards.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, '../..');
-const srcRoot = path.join(root, 'src');
 
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
-
-const walkJsFiles = (dir, out = []) => {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) walkJsFiles(full, out);
-    else if (/\.(js|jsx)$/.test(entry.name)) out.push(full);
-  }
-  return out;
-};
 
 const BANNED_EMBED = /property\s*:\s*property_id\s*\(/;
 const BANNED_FK_LEAD = /properties!fk_leads_property/;
 const BANNED_FK_INVOICE = /properties!fk_invoices_property/;
-const BANNED_JOBS_PROPERTIES = /properties\s*\(\s*address1/;
 
 test('active src never uses banned lead/property PostgREST embeds', async () => {
-  const files = walkJsFiles(srcRoot);
-  const offenders = [];
-  for (const file of files) {
-    const source = fs.readFileSync(file, 'utf8');
-    // Allow comments that mention the banned pattern only if not actual select syntax.
-    const lines = source.split(/\r?\n/);
-    lines.forEach((line, idx) => {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) return;
-      if (BANNED_EMBED.test(line) || BANNED_FK_LEAD.test(line) || BANNED_FK_INVOICE.test(line)) {
-        offenders.push(`${path.relative(root, file)}:${idx + 1}`);
-      }
-      if (BANNED_JOBS_PROPERTIES.test(line) && !trimmed.startsWith('//')) {
-        offenders.push(`${path.relative(root, file)}:${idx + 1}:jobs-properties-address1`);
-      }
-    });
-  }
-  expect(offenders, offenders.join('\n')).toEqual([]);
+  // Canonical walk lives in R1C tools/identity-relationship-guards.mjs
+  const result = scanIdentityRelationshipGuards({ root });
+  const propertyOffenders = result.offenders.filter((o) => o.domain === 'property');
+  expect(propertyOffenders, formatOffenders(propertyOffenders)).toEqual([]);
 });
 
 test('paymentService does not use unsafe property embeds and resolves address fallbacks', async () => {
