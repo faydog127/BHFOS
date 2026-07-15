@@ -297,32 +297,13 @@ export default function InspectionFieldCustomerStep({
 
       const serviceAddress = composeAddressFromParts(form);
 
-      // Structured address lives on properties (production schema).
-      let propertyId = null;
-      const propertyInsert = await supabase
-        .from('properties')
-        .insert({
-          tenant_id: tenantId,
-          address1: asText(form.address1) || null,
-          address2: asText(form.address2) || null,
-          city: asText(form.city) || null,
-          state: asText(form.state) || null,
-          zip: asText(form.zip) || null,
-        })
-        .select('id, address1, address2, city, state, zip')
-        .single();
-      if (propertyInsert.error) {
-        console.warn('Property create skipped:', propertyInsert.error.message);
-      } else {
-        propertyId = propertyInsert.data?.id || null;
-      }
-
-      // Freeform lead address + optional property link only (no leads.address1/city/…).
+      // Production public.properties uses bigint ids + address_line_1 and cannot be
+      // linked through leads.property_id (uuid). Persist freeform address on the lead only.
       const leadPatch = {
         address: serviceAddress || null,
+        property_formatted_address: serviceAddress || null,
         updated_at: new Date().toISOString(),
       };
-      if (propertyId) leadPatch.property_id = propertyId;
 
       const addressUpdate = await supabase
         .from('leads')
@@ -336,13 +317,13 @@ export default function InspectionFieldCustomerStep({
       const linkedLeadRow = {
         ...created,
         ...leadPatch,
-        property: propertyInsert.data || null,
+        property: null,
       };
 
       await linkSelection({
         leadId: created.id,
         jobId: null,
-        propertyId,
+        propertyId: null,
         contactId: created.contact_id || null,
         address: serviceAddress,
         lead: linkedLeadRow,
