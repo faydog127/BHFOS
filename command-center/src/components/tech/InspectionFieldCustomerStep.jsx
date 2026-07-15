@@ -4,6 +4,11 @@ import { Loader2, Search, UserPlus } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { appointmentService } from '@/services/appointmentService';
 import { formatPhoneNumber } from '@/lib/formUtils';
+import {
+  LEAD_FIELD_SELECT,
+  composeAddressFromParts,
+  resolveServiceAddress,
+} from '@/lib/inspectionFieldAddress';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,11 +25,10 @@ const leadDisplayName = (lead) =>
   asText(lead?.email) ||
   'Customer';
 
-const formatLeadAddress = (lead) => {
-  const direct = asText(lead?.address) || asText(lead?.service_address);
-  if (direct) return direct;
-  const cityLine = [asText(lead?.city), asText(lead?.state), asText(lead?.zip)].filter(Boolean).join(' ');
-  return [asText(lead?.address1), asText(lead?.address2), cityLine].filter(Boolean).join(', ');
+const normalizeLead = (lead) => {
+  if (!lead) return null;
+  const property = Array.isArray(lead.property) ? lead.property[0] : lead.property;
+  return { ...lead, property: property || null };
 };
 
 const emptyLeadForm = () => ({
@@ -62,11 +66,14 @@ export default function InspectionFieldCustomerStep({
   const [saving, setSaving] = useState(false);
   const [addressDraft, setAddressDraft] = useState('');
 
-  const linkedName = leadDisplayName(inspection?.lead);
-  const linkedAddress =
-    asText(inspection?.service_address) ||
-    asText(inspection?.job?.service_address) ||
-    formatLeadAddress(inspection?.lead);
+  const linkedLead = normalizeLead(inspection?.lead);
+  const linkedName = leadDisplayName(linkedLead);
+  const linkedAddress = resolveServiceAddress({
+    property: linkedLead?.property,
+    inspectionServiceAddress: inspection?.service_address,
+    jobServiceAddress: inspection?.job?.service_address,
+    lead: linkedLead,
+  });
 
   useEffect(() => {
     setAddressDraft(linkedAddress || '');
@@ -86,9 +93,9 @@ export default function InspectionFieldCustomerStep({
       const [leadRes, jobRes] = await Promise.all([
         supabase
           .from('leads')
-          .select('id, first_name, last_name, company, email, phone, address1, address2, city, state, zip, property_id, contact_id')
+          .select(LEAD_FIELD_SELECT)
           .eq('tenant_id', tenantId)
-          .or(`first_name.ilike."${like}",last_name.ilike."${like}",company.ilike."${like}",email.ilike."${like}",phone.ilike."${like}",address1.ilike."${like}"`)
+          .or(`first_name.ilike."${like}",last_name.ilike."${like}",company.ilike."${like}",email.ilike."${like}",phone.ilike."${like}",address.ilike."${like}"`)
           .order('created_at', { ascending: false })
           .limit(20),
         supabase
@@ -103,30 +110,33 @@ export default function InspectionFieldCustomerStep({
       if (leadRes.error) throw leadRes.error;
       if (jobRes.error) throw jobRes.error;
 
-      const leadRows = (leadRes.data || []).map((lead) => ({
-        key: `lead-${lead.id}`,
-        type: 'Lead',
-        leadId: lead.id,
-        jobId: null,
-        propertyId: lead.property_id || null,
-        contactId: lead.contact_id || null,
-        name: leadDisplayName(lead),
-        phone: asText(lead.phone),
-        email: asText(lead.email),
-        address: formatLeadAddress(lead),
-        lead,
-      }));
+      const leadRows = (leadRes.data || []).map((raw) => {
+        const lead = normalizeLead(raw);
+        return {
+          key: `lead-${lead.id}`,
+          type: 'Lead',
+          leadId: lead.id,
+          jobId: null,
+          propertyId: lead.property_id || lead.property?.id || null,
+          contactId: lead.contact_id || null,
+          name: leadDisplayName(lead),
+          phone: asText(lead.phone),
+          email: asText(lead.email),
+          address: resolveServiceAddress({ property: lead.property, lead }),
+          lead,
+        };
+      });
 
       const jobLeadIds = [...new Set((jobRes.data || []).map((job) => job.lead_id).filter(Boolean))];
       let jobLeads = [];
       if (jobLeadIds.length) {
         const { data, error } = await supabase
           .from('leads')
-          .select('id, first_name, last_name, company, email, phone, address1, address2, city, state, zip, property_id, contact_id')
+          .select(LEAD_FIELD_SELECT)
           .eq('tenant_id', tenantId)
           .in('id', jobLeadIds);
         if (error) throw error;
-        jobLeads = data || [];
+        jobLeads = (data || []).map(normalizeLead);
       }
       const leadById = new Map(jobLeads.map((row) => [row.id, row]));
 
@@ -137,21 +147,20 @@ export default function InspectionFieldCustomerStep({
           type: 'Property',
           leadId: job.lead_id || null,
           jobId: job.id,
-          propertyId: lead?.property_id || null,
+          propertyId: lead?.property_id || lead?.property?.id || null,
           contactId: lead?.contact_id || null,
           name: lead ? leadDisplayName(lead) : (job.work_order_number || 'Job'),
           phone: asText(lead?.phone),
           email: asText(lead?.email),
-          address: asText(job.service_address),
+          address: asText(job.service_address) || resolveServiceAddress({ property: lead?.property, lead }),
           lead,
         };
       });
 
-      // Prefer explicit lead hits, then job/address hits not already represented.
       const seenLeads = new Set(leadRows.map((row) => row.leadId));
       const merged = [
         ...leadRows.map((row) => ({ ...row, type: row.lead?.company ? 'Customer' : 'Lead' })),
-        ...jobRows.filter((row) => row.leadId && !seenLeads.has(row.leadId) ? true : Boolean(row.address)),
+        ...jobRows.filter((row) => (row.leadId && !seenLeads.has(row.leadId) ? true : Boolean(row.address))),
       ];
       setResults(merged.slice(0, 30));
     } catch (error) {
@@ -178,14 +187,21 @@ export default function InspectionFieldCustomerStep({
     if (!inspection?.id || locked || !leadId) return;
     setSaving(true);
     try {
-      const serviceAddress = asText(address) || formatLeadAddress(lead) || null;
+      const normalizedLead = normalizeLead(lead);
+      const serviceAddress = asText(address)
+        || resolveServiceAddress({
+          property: normalizedLead?.property,
+          jobServiceAddress: inspection?.job?.service_address,
+          lead: normalizedLead,
+        })
+        || null;
       const { data, error } = await supabase
         .from('inspections')
         .update({
           lead_id: leadId,
           job_id: jobId || inspection.job_id || null,
-          property_id: propertyId || lead?.property_id || null,
-          contact_id: contactId || lead?.contact_id || null,
+          property_id: propertyId || normalizedLead?.property_id || normalizedLead?.property?.id || null,
+          contact_id: contactId || normalizedLead?.contact_id || null,
           service_address: serviceAddress,
           updated_at: new Date().toISOString(),
         })
@@ -193,14 +209,14 @@ export default function InspectionFieldCustomerStep({
         .eq('id', inspection.id)
         .select(`
           *,
-          lead:leads(id, first_name, last_name, company, email, phone, address1, address2, city, state, zip, property_id, contact_id),
+          lead:leads(${LEAD_FIELD_SELECT}),
           job:jobs(id, work_order_number, service_address)
         `)
         .single();
       if (error) throw error;
       const normalized = {
         ...data,
-        lead: Array.isArray(data.lead) ? data.lead[0] : data.lead,
+        lead: normalizeLead(Array.isArray(data.lead) ? data.lead[0] : data.lead),
         job: Array.isArray(data.job) ? data.job[0] : data.job,
       };
       toast({ title: 'Customer linked', description: 'Service address saved on this inspection.' });
@@ -223,19 +239,20 @@ export default function InspectionFieldCustomerStep({
     if (phone) filters.push(`phone.ilike.%${phone.replace(/\D/g, '').slice(-10)}%`);
     if (email) filters.push(`email.ilike.${email}`);
     if (asText(form.last_name)) filters.push(`last_name.ilike.%${asText(form.last_name)}%`);
-    if (asText(form.address1)) filters.push(`address1.ilike.%${asText(form.address1)}%`);
+    const freeform = composeAddressFromParts(form);
+    if (freeform) filters.push(`address.ilike.%${asText(form.address1) || freeform}%`);
     if (!filters.length) {
       setDuplicates([]);
       return [];
     }
     const { data, error } = await supabase
       .from('leads')
-      .select('id, first_name, last_name, company, email, phone, address1, address2, city, state, zip, property_id, contact_id')
+      .select(LEAD_FIELD_SELECT)
       .eq('tenant_id', tenantId)
       .or(filters.join(','))
       .limit(8);
     if (error) throw error;
-    const rows = data || [];
+    const rows = (data || []).map(normalizeLead);
     setDuplicates(rows);
     return rows;
   };
@@ -282,39 +299,57 @@ export default function InspectionFieldCustomerStep({
         tenantId,
       );
 
-      const serviceAddress = [
-        asText(form.address1),
-        asText(form.address2),
-        [asText(form.city), asText(form.state), asText(form.zip)].filter(Boolean).join(' '),
-      ].filter(Boolean).join(', ');
+      const serviceAddress = composeAddressFromParts(form);
 
-      // Best-effort address fields on the lead when columns exist.
-      const addressPatch = {
-        address1: asText(form.address1) || null,
-        address2: asText(form.address2) || null,
-        city: asText(form.city) || null,
-        state: asText(form.state) || null,
-        zip: asText(form.zip) || null,
-        notes: asText(form.notes) || null,
+      // Structured address lives on properties (production schema).
+      let propertyId = null;
+      const propertyInsert = await supabase
+        .from('properties')
+        .insert({
+          tenant_id: tenantId,
+          address1: asText(form.address1) || null,
+          address2: asText(form.address2) || null,
+          city: asText(form.city) || null,
+          state: asText(form.state) || null,
+          zip: asText(form.zip) || null,
+        })
+        .select('id, address1, address2, city, state, zip')
+        .single();
+      if (propertyInsert.error) {
+        console.warn('Property create skipped:', propertyInsert.error.message);
+      } else {
+        propertyId = propertyInsert.data?.id || null;
+      }
+
+      // Freeform lead address + optional property link only (no leads.address1/city/…).
+      const leadPatch = {
+        address: serviceAddress || null,
         updated_at: new Date().toISOString(),
       };
+      if (propertyId) leadPatch.property_id = propertyId;
+
       const addressUpdate = await supabase
         .from('leads')
-        .update(addressPatch)
+        .update(leadPatch)
         .eq('tenant_id', tenantId)
         .eq('id', created.id);
       if (addressUpdate.error) {
-        // Column drift should not block inspection linking; service_address is authoritative on inspection.
         console.warn('Lead address patch skipped:', addressUpdate.error.message);
       }
+
+      const linkedLeadRow = {
+        ...created,
+        ...leadPatch,
+        property: propertyInsert.data || null,
+      };
 
       await linkSelection({
         leadId: created.id,
         jobId: null,
-        propertyId: created.property_id || null,
+        propertyId,
         contactId: created.contact_id || null,
         address: serviceAddress,
-        lead: { ...created, ...addressPatch },
+        lead: linkedLeadRow,
       });
 
       setShowAdd(false);
@@ -347,14 +382,14 @@ export default function InspectionFieldCustomerStep({
         .eq('id', inspection.id)
         .select(`
           *,
-          lead:leads(id, first_name, last_name, company, email, phone, address1, address2, city, state, zip, property_id, contact_id),
+          lead:leads(${LEAD_FIELD_SELECT}),
           job:jobs(id, work_order_number, service_address)
         `)
         .single();
       if (error) throw error;
       const normalized = {
         ...data,
-        lead: Array.isArray(data.lead) ? data.lead[0] : data.lead,
+        lead: normalizeLead(Array.isArray(data.lead) ? data.lead[0] : data.lead),
         job: Array.isArray(data.job) ? data.job[0] : data.job,
       };
       toast({ title: 'Address saved' });
@@ -386,7 +421,7 @@ export default function InspectionFieldCustomerStep({
         {hasLink ? (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950">
             <div className="font-semibold">{linkedName}</div>
-            <div className="mt-1 text-xs">{linkedAddress || 'No service address on file'}</div>
+            <div className="mt-1 text-xs">{linkedAddress || 'No service address on file — add one below'}</div>
             <div className="mt-3 space-y-2">
               <Label className="text-xs">Service address</Label>
               <Input
@@ -526,6 +561,7 @@ export default function InspectionFieldCustomerStep({
             <div className="space-y-1">
               <Label>Note (optional)</Label>
               <Textarea value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} disabled={saving} className="min-h-20" />
+              <p className="text-[11px] text-slate-500">Notes stay on this form only; they are not written to the lead record.</p>
             </div>
 
             {duplicates.length ? (
@@ -540,9 +576,9 @@ export default function InspectionFieldCustomerStep({
                     onClick={() => linkSelection({
                       leadId: lead.id,
                       jobId: null,
-                      propertyId: lead.property_id || null,
+                      propertyId: lead.property_id || lead.property?.id || null,
                       contactId: lead.contact_id || null,
-                      address: formatLeadAddress(lead),
+                      address: resolveServiceAddress({ property: lead.property, lead }),
                       lead,
                     }).then(() => {
                       setShowAdd(false);
@@ -551,7 +587,9 @@ export default function InspectionFieldCustomerStep({
                     })}
                   >
                     <div className="font-medium">{leadDisplayName(lead)}</div>
-                    <div className="text-xs text-slate-600">{[lead.phone, lead.email, formatLeadAddress(lead)].filter(Boolean).join(' • ')}</div>
+                    <div className="text-xs text-slate-600">
+                      {[lead.phone, lead.email, resolveServiceAddress({ property: lead.property, lead })].filter(Boolean).join(' • ')}
+                    </div>
                   </button>
                 ))}
                 <Button type="button" variant="outline" className="min-h-11 w-full" onClick={() => createAndLink({ force: true })} disabled={saving}>

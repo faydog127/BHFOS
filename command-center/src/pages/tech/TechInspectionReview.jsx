@@ -18,6 +18,7 @@ import InspectionFindingsNarrativeCard from '@/components/tech/InspectionFinding
 import ManualConditionReviewControls, { isManualCondition, manualConditionStatus } from '@/components/tech/ManualConditionReviewControls';
 import InspectionPreflightBlockers from '@/components/tech/InspectionPreflightBlockers';
 import InspectionFieldStepper, { stepHref } from '@/components/tech/InspectionFieldStepper';
+import { LEAD_FIELD_SELECT, resolveServiceAddress } from '@/lib/inspectionFieldAddress';
 import InspectionServiceRecommendationPicker from '@/components/tech/InspectionServiceRecommendationPicker';
 import {
   buildPreflightBlockerModel,
@@ -81,7 +82,7 @@ export default function TechInspectionReview() {
           updated_at,
           reviewed_at,
           reviewed_revision,
-          lead:leads(first_name,last_name,company,email,phone,address1,address2,city,state,zip),
+          lead:leads(${LEAD_FIELD_SELECT}),
           job:jobs(work_order_number, service_address)
         `,
         )
@@ -232,9 +233,14 @@ export default function TechInspectionReview() {
   const locked = status !== 'draft';
   const isReviewed = Boolean(inspection.reviewed_at && inspection.reviewed_revision === (inspection.revision || 1));
   const serviceAddressReady = Boolean(
-    asText(inspection.service_address) ||
-    asText(inspection?.job?.service_address) ||
-    asText(inspection?.lead?.address1),
+    resolveServiceAddress({
+      property: Array.isArray(inspection?.lead?.property)
+        ? inspection.lead.property[0]
+        : inspection?.lead?.property,
+      inspectionServiceAddress: inspection.service_address,
+      jobServiceAddress: inspection?.job?.service_address,
+      lead: inspection?.lead,
+    }),
   );
   const customerReady = Boolean(inspection.lead_id) && serviceAddressReady;
   const photosReady = photos.some((photo) => photo && photo.is_voided !== true);

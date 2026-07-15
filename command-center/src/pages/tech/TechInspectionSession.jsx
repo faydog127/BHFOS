@@ -21,6 +21,7 @@ import {
 import { assessInspectionPhotoQuality } from '@/lib/inspectionPhotoQuality';
 import { normalizeInspectionStatus } from '@/lib/inspectionStatus';
 import InspectionFieldStepper, { stepHref } from '@/components/tech/InspectionFieldStepper';
+import { LEAD_FIELD_SELECT, resolveServiceAddress } from '@/lib/inspectionFieldAddress';
 import InspectionFieldCustomerStep from '@/components/tech/InspectionFieldCustomerStep';
 
 const PHOTO_BUCKET = 'inspection-photos';
@@ -103,7 +104,7 @@ export default function TechInspectionSession() {
         .select(
           `
           *,
-          lead:leads(id, first_name, last_name, company, email, phone, address1, address2, city, state, zip, property_id, contact_id),
+          lead:leads(${LEAD_FIELD_SELECT}),
           job:jobs(id, work_order_number, service_address),
           technician:technicians(id, full_name)
         `,
@@ -336,9 +337,14 @@ export default function TechInspectionSession() {
   const customer = getCustomerName(inspection?.lead || null);
   const status = normalizedStatus;
   const serviceAddressReady = Boolean(
-    asText(inspection?.service_address) ||
-    asText(inspection?.job?.service_address) ||
-    asText(inspection?.lead?.address1),
+    resolveServiceAddress({
+      property: Array.isArray(inspection?.lead?.property)
+        ? inspection.lead.property[0]
+        : inspection?.lead?.property,
+      inspectionServiceAddress: inspection?.service_address,
+      jobServiceAddress: inspection?.job?.service_address,
+      lead: inspection?.lead,
+    }),
   );
   const customerReady = Boolean(inspection?.lead_id) && serviceAddressReady;
   const photosReady = photos.some((photo) => photo && photo.is_voided !== true);
