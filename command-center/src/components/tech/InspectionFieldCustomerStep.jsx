@@ -7,6 +7,8 @@ import { formatPhoneNumber } from '@/lib/formUtils';
 import {
   LEAD_FIELD_SELECT,
   composeAddressFromParts,
+  hydrateLeadsWithProperties,
+  normalizeLeadRecord,
   resolveServiceAddress,
 } from '@/lib/inspectionFieldAddress';
 import { useToast } from '@/components/ui/use-toast';
@@ -24,12 +26,6 @@ const leadDisplayName = (lead) =>
   `${asText(lead?.first_name)} ${asText(lead?.last_name)}`.trim() ||
   asText(lead?.email) ||
   'Customer';
-
-const normalizeLead = (lead) => {
-  if (!lead) return null;
-  const property = Array.isArray(lead.property) ? lead.property[0] : lead.property;
-  return { ...lead, property: property || null };
-};
 
 const emptyLeadForm = () => ({
   first_name: '',
@@ -66,7 +62,7 @@ export default function InspectionFieldCustomerStep({
   const [saving, setSaving] = useState(false);
   const [addressDraft, setAddressDraft] = useState('');
 
-  const linkedLead = normalizeLead(inspection?.lead);
+  const linkedLead = normalizeLeadRecord(inspection?.lead);
   const linkedName = leadDisplayName(linkedLead);
   const linkedAddress = resolveServiceAddress({
     property: linkedLead?.property,
@@ -110,22 +106,20 @@ export default function InspectionFieldCustomerStep({
       if (leadRes.error) throw leadRes.error;
       if (jobRes.error) throw jobRes.error;
 
-      const leadRows = (leadRes.data || []).map((raw) => {
-        const lead = normalizeLead(raw);
-        return {
-          key: `lead-${lead.id}`,
-          type: 'Lead',
-          leadId: lead.id,
-          jobId: null,
-          propertyId: lead.property_id || lead.property?.id || null,
-          contactId: lead.contact_id || null,
-          name: leadDisplayName(lead),
-          phone: asText(lead.phone),
-          email: asText(lead.email),
-          address: resolveServiceAddress({ property: lead.property, lead }),
-          lead,
-        };
-      });
+      const hydratedLeads = await hydrateLeadsWithProperties(supabase, tenantId, leadRes.data || []);
+      const leadRows = hydratedLeads.map((lead) => ({
+        key: `lead-${lead.id}`,
+        type: 'Lead',
+        leadId: lead.id,
+        jobId: null,
+        propertyId: lead.property_id || lead.property?.id || null,
+        contactId: lead.contact_id || null,
+        name: leadDisplayName(lead),
+        phone: asText(lead.phone),
+        email: asText(lead.email),
+        address: resolveServiceAddress({ property: lead.property, lead }),
+        lead,
+      }));
 
       const jobLeadIds = [...new Set((jobRes.data || []).map((job) => job.lead_id).filter(Boolean))];
       let jobLeads = [];
@@ -136,7 +130,7 @@ export default function InspectionFieldCustomerStep({
           .eq('tenant_id', tenantId)
           .in('id', jobLeadIds);
         if (error) throw error;
-        jobLeads = (data || []).map(normalizeLead);
+        jobLeads = await hydrateLeadsWithProperties(supabase, tenantId, data || []);
       }
       const leadById = new Map(jobLeads.map((row) => [row.id, row]));
 
@@ -187,7 +181,7 @@ export default function InspectionFieldCustomerStep({
     if (!inspection?.id || locked || !leadId) return;
     setSaving(true);
     try {
-      const normalizedLead = normalizeLead(lead);
+      const normalizedLead = normalizeLeadRecord(lead);
       const serviceAddress = asText(address)
         || resolveServiceAddress({
           property: normalizedLead?.property,
@@ -214,9 +208,11 @@ export default function InspectionFieldCustomerStep({
         `)
         .single();
       if (error) throw error;
+      const rawLead = Array.isArray(data.lead) ? data.lead[0] : data.lead;
+      const hydratedLead = await hydrateLeadsWithProperties(supabase, tenantId, rawLead);
       const normalized = {
         ...data,
-        lead: normalizeLead(Array.isArray(data.lead) ? data.lead[0] : data.lead),
+        lead: hydratedLead,
         job: Array.isArray(data.job) ? data.job[0] : data.job,
       };
       toast({ title: 'Customer linked', description: 'Service address saved on this inspection.' });
@@ -252,7 +248,7 @@ export default function InspectionFieldCustomerStep({
       .or(filters.join(','))
       .limit(8);
     if (error) throw error;
-    const rows = (data || []).map(normalizeLead);
+    const rows = await hydrateLeadsWithProperties(supabase, tenantId, data || []);
     setDuplicates(rows);
     return rows;
   };
@@ -387,9 +383,11 @@ export default function InspectionFieldCustomerStep({
         `)
         .single();
       if (error) throw error;
+      const rawLead = Array.isArray(data.lead) ? data.lead[0] : data.lead;
+      const hydratedLead = await hydrateLeadsWithProperties(supabase, tenantId, rawLead);
       const normalized = {
         ...data,
-        lead: normalizeLead(Array.isArray(data.lead) ? data.lead[0] : data.lead),
+        lead: hydratedLead,
         job: Array.isArray(data.job) ? data.job[0] : data.job,
       };
       toast({ title: 'Address saved' });

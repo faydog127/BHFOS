@@ -18,7 +18,11 @@ import InspectionFindingsNarrativeCard from '@/components/tech/InspectionFinding
 import ManualConditionReviewControls, { isManualCondition, manualConditionStatus } from '@/components/tech/ManualConditionReviewControls';
 import InspectionPreflightBlockers from '@/components/tech/InspectionPreflightBlockers';
 import InspectionFieldStepper, { stepHref } from '@/components/tech/InspectionFieldStepper';
-import { LEAD_FIELD_SELECT, resolveServiceAddress } from '@/lib/inspectionFieldAddress';
+import {
+  LEAD_FIELD_SELECT,
+  hydrateLeadsWithProperties,
+  resolveServiceAddress,
+} from '@/lib/inspectionFieldAddress';
 import InspectionServiceRecommendationPicker from '@/components/tech/InspectionServiceRecommendationPicker';
 import {
   buildPreflightBlockerModel,
@@ -130,9 +134,11 @@ export default function TechInspectionReview() {
       if (error) throw error;
       if (!data) throw new Error('Inspection not found.');
 
+      const rawLead = Array.isArray(data.lead) ? data.lead[0] : data.lead;
+      const hydratedLead = await hydrateLeadsWithProperties(supabase, tenantId, rawLead);
       const normalized = {
         ...data,
-        lead: Array.isArray(data.lead) ? data.lead[0] : data.lead,
+        lead: hydratedLead,
         job: Array.isArray(data.job) ? data.job[0] : data.job,
       };
       setInspection(normalized);

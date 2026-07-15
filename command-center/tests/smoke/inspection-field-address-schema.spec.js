@@ -5,8 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
 import {
   LEAD_FIELD_SELECT,
+  PROPERTY_FIELD_SELECT,
   composeAddressFromParts,
   formatPropertyAddress,
+  hydrateLeadsWithProperties,
+  normalizeLeadRecord,
   resolveServiceAddress,
 } from '../../src/lib/inspectionFieldAddress.js';
 
@@ -23,25 +26,20 @@ const TECH_SOURCES = [
   'src/lib/inspectionFieldAddress.js',
 ];
 
-const leadSelectTopLevelColumns = (select) => {
-  // Strip nested property embeds so we only inspect top-level lead columns.
-  const withoutPropertyEmbed = String(select).replace(/property:property_id\([^)]*\)/g, '');
-  return withoutPropertyEmbed;
-};
-
 test('technician sources never select or write invalid lead address columns', async () => {
   for (const relativePath of TECH_SOURCES) {
     const source = readSource(relativePath);
-    const leadTopLevel = leadSelectTopLevelColumns(source);
-    expect(leadTopLevel, relativePath).not.toMatch(/leads\([^)]*\baddress1\b/);
-    expect(leadTopLevel, relativePath).not.toMatch(/leads\([^)]*\baddress2\b/);
+    // Nested PostgREST embed syntax — not comments that merely mention the pattern.
+    expect(source, relativePath).not.toMatch(/property\s*:\s*property_id\s*\(/);
+    expect(source, relativePath).not.toMatch(/leads\([^)]*\baddress1\b/);
+    expect(source, relativePath).not.toMatch(/leads\([^)]*\baddress2\b/);
     if (relativePath.includes('TechInspection') || relativePath.includes('InspectionFieldCustomer')) {
       expect(source).toContain('LEAD_FIELD_SELECT');
+      expect(source).toContain('hydrateLeadsWithProperties');
     }
   }
 
   const customerStep = readSource('src/components/tech/InspectionFieldCustomerStep.jsx');
-  // Lead patch must write freeform address only (plus property_id), never structured lead cols.
   const leadPatchBlock = customerStep.match(/const leadPatch = \{[\s\S]*?\n\s*\};/);
   expect(leadPatchBlock?.[0] || '').toMatch(/address:\s*serviceAddress/);
   expect(leadPatchBlock?.[0] || '').not.toMatch(/\baddress1\s*:/);
@@ -49,14 +47,76 @@ test('technician sources never select or write invalid lead address columns', as
   expect(customerStep).toContain("from('properties')");
   expect(customerStep).toContain('appointmentService.createCustomer');
 
-  const topLevel = leadSelectTopLevelColumns(LEAD_FIELD_SELECT);
   expect(LEAD_FIELD_SELECT).toMatch(/(^|,)\s*address\s*(,|$)/);
-  expect(LEAD_FIELD_SELECT).toContain('property:property_id');
-  expect(LEAD_FIELD_SELECT).toMatch(/property:property_id\([^)]*address1/);
-  expect(topLevel).not.toMatch(/\baddress1\b/);
-  expect(topLevel).not.toMatch(/\bcity\b/);
-  expect(topLevel).not.toMatch(/\bstate\b/);
-  expect(topLevel).not.toMatch(/\bzip\b/);
+  expect(LEAD_FIELD_SELECT).toContain('property_id');
+  expect(LEAD_FIELD_SELECT).not.toMatch(/property\s*:\s*property_id/);
+  expect(LEAD_FIELD_SELECT).not.toMatch(/\baddress1\b/);
+  expect(LEAD_FIELD_SELECT).not.toMatch(/\bcity\b/);
+  expect(PROPERTY_FIELD_SELECT).toMatch(/\baddress1\b/);
+});
+
+test('hydrateLeadsWithProperties loads properties via separate query', async () => {
+  const calls = [];
+  const client = {
+    from(table) {
+      calls.push(table);
+      return {
+        select(columns) {
+          calls.push(columns);
+          return {
+            in(column, ids) {
+              calls.push({ column, ids });
+              return {
+                eq() {
+                  return Promise.resolve({
+                    data: [
+                      {
+                        id: 'prop-1',
+                        address1: '201 Secondary Property Rd',
+                        address2: null,
+                        city: 'Titusville',
+                        state: 'FL',
+                        zip: '32780',
+                      },
+                    ],
+                    error: null,
+                  });
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+
+  const withProperty = await hydrateLeadsWithProperties(client, 'tvg', [
+    { id: 'lead-1', property_id: 'prop-1', address: 'FALLBACK LEAD ADDRESS ONLY' },
+    { id: 'lead-2', property_id: null, address: '101 Lead Only Lane' },
+  ]);
+
+  expect(calls[0]).toBe('properties');
+  expect(calls[1]).toBe(PROPERTY_FIELD_SELECT);
+  expect(withProperty[0].property.address1).toBe('201 Secondary Property Rd');
+  expect(resolveServiceAddress({ lead: withProperty[0] })).toMatch(/201 Secondary Property Rd/);
+  expect(resolveServiceAddress({ lead: withProperty[0] })).not.toMatch(/FALLBACK LEAD ADDRESS ONLY/);
+  expect(withProperty[1].property).toBeNull();
+  expect(resolveServiceAddress({ lead: withProperty[1] })).toBe('101 Lead Only Lane');
+});
+
+test('lead without property_id still loads and uses leads.address', async () => {
+  const client = {
+    from() {
+      throw new Error('properties query should not run when no property_id values exist');
+    },
+  };
+  const lead = await hydrateLeadsWithProperties(client, 'tvg', {
+    id: 'lead-3',
+    property_id: null,
+    address: '101 Test Airflow Lane, Titusville, FL 32780',
+  });
+  expect(normalizeLeadRecord(lead).property).toBeNull();
+  expect(resolveServiceAddress({ lead })).toContain('101 Test Airflow Lane');
 });
 
 test('resolveServiceAddress priority: property → inspection/job → leads.address', async () => {
@@ -111,27 +171,6 @@ test('resolveServiceAddress priority: property → inspection/job → leads.addr
       lead: { address: '' },
     }),
   ).toBe('');
-});
-
-test('existing lead with leads.address loads without structured lead columns', async () => {
-  const lead = { id: 'lead-1', address: '101 Test Airflow Lane, Titusville, FL 32780', property: null };
-  const resolved = resolveServiceAddress({ lead });
-  expect(resolved).toContain('101 Test Airflow Lane');
-  expect(lead).not.toHaveProperty('address1');
-});
-
-test('linked property structured address takes precedence over leads.address', async () => {
-  const lead = {
-    address: 'FALLBACK LEAD ADDRESS ONLY',
-    property: {
-      address1: '201 Secondary Property Rd',
-      city: 'Titusville',
-      state: 'FL',
-      zip: '32780',
-    },
-  };
-  expect(resolveServiceAddress({ lead })).toMatch(/201 Secondary Property Rd/);
-  expect(resolveServiceAddress({ lead })).not.toMatch(/FALLBACK LEAD ADDRESS ONLY/);
 });
 
 test('composeAddressFromParts builds freeform text from form input without parsing leads.address', async () => {
