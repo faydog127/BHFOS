@@ -31,8 +31,7 @@ const TechDashboard = () => {
             .from('jobs')
             .select(`
                 *,
-                leads (first_name, last_name, phone, health_risk_flags),
-                properties (address1, city, zip, gate_code)
+                leads (first_name, last_name, phone, health_risk_flags, address, property_formatted_address)
             `)
             .in('status', ['scheduled', 'in_progress'])
             .order('scheduled_start', { ascending: true });
@@ -102,11 +101,12 @@ const TechDashboard = () => {
                                         <div className="flex items-start text-sm">
                                             <MapPin className="h-4 w-4 text-gray-400 mr-2 mt-0.5" />
                                             <div>
-                                                <p className="text-gray-800">{job.properties?.address1}</p>
-                                                <p className="text-gray-500">{job.properties?.city}, {job.properties?.zip}</p>
-                                                {job.properties?.gate_code && (
-                                                    <p className="text-xs font-mono bg-gray-100 inline-block px-1 rounded mt-1">Gate: {job.properties.gate_code}</p>
-                                                )}
+                                                <p className="text-gray-800">
+                                                  {job.service_address
+                                                    || job.leads?.property_formatted_address
+                                                    || job.leads?.address
+                                                    || 'No address on file'}
+                                                </p>
                                             </div>
                                         </div>
                                         

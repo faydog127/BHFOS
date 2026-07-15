@@ -124,4 +124,42 @@ export const resolveServiceAddress = ({
   return asText(lead?.address) || '';
 };
 
+/**
+ * CRM / invoice / job address resolution that never depends on PostgREST
+ * lead→properties embeds.
+ *
+ * Priority:
+ *   a. snapshot / formatted address already on the record
+ *   b. job or invoice service_address
+ *   c. leads.property_formatted_address
+ *   d. leads.address
+ *   e. empty
+ */
+export const resolveLegacyServiceAddress = ({
+  snapshotAddress = '',
+  serviceAddress = '',
+  lead = null,
+  property = null,
+} = {}) => {
+  const snapshot = asText(snapshotAddress);
+  if (snapshot) return snapshot;
+
+  const fromService = asText(serviceAddress);
+  if (fromService) return fromService;
+
+  const attached =
+    property || (Array.isArray(lead?.property) ? lead.property[0] : lead?.property) || null;
+  const fromProperty = formatPropertyAddress(attached);
+  if (fromProperty) return fromProperty;
+
+  const fromFormatted = asText(lead?.property_formatted_address);
+  if (fromFormatted) return fromFormatted;
+
+  return asText(lead?.address) || '';
+};
+
+/** Lead columns safe for CRM selects — no nested property embeds. */
+export const LEAD_ADDRESS_SELECT =
+  'id, first_name, last_name, company, email, phone, address, property_id, property_formatted_address, contact_id';
+
 export const leadHasUsableAddress = (lead) => Boolean(resolveServiceAddress({ lead }));
