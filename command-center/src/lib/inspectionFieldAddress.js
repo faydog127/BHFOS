@@ -2,24 +2,28 @@
  * Production-safe address helpers for the technician inspection field flow.
  *
  * Lead freeform address: leads.address
- * Structured address: properties.address1/address2/city/state/zip via property_id
+ * Denormalized property text on the lead: leads.property_formatted_address
  *
- * Do not read or write leads.address1/address2/city/state/zip — those columns
- * do not exist in production.
- *
- * Do not use nested PostgREST relationship embeds from leads onto properties.
- * Production does not expose a leads→properties FK relationship in the schema cache.
- * Load properties with a separate query and attach in application code.
+ * Important production facts:
+ * - Do not use nested PostgREST relationship embeds from leads onto properties.
+ * - public.properties.id is bigint (marketing/scouting table).
+ * - leads.property_id is uuid and is NOT a resolvable FK to public.properties.
+ * - Never let a failed properties lookup block inspection load.
  */
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '');
 
 /** Lead columns that exist in production. No nested relationship embeds. */
 export const LEAD_FIELD_SELECT =
-  'id, first_name, last_name, company, email, phone, address, property_id, contact_id';
+  'id, first_name, last_name, company, email, phone, address, property_id, property_formatted_address, contact_id';
 
-/** Property columns used for structured service addresses. */
-export const PROPERTY_FIELD_SELECT = 'id, address1, address2, city, state, zip';
+/**
+ * Columns for public.properties when a numeric id is present.
+ * Production uses address_line_1 (not address1/address2).
+ */
+export const PROPERTY_FIELD_SELECT = 'id, address_line_1, city, state, zip';
+
+const isNumericPropertyId = (value) => /^\d+$/.test(String(value ?? '').trim());
 
 export const normalizeLeadRecord = (lead) => {
   if (!lead) return null;
@@ -28,44 +32,50 @@ export const normalizeLeadRecord = (lead) => {
 };
 
 /**
- * Load properties by id and attach them onto lead rows as `property`.
- * Uses an explicit properties query — not a PostgREST relationship embed.
+ * Optionally attach a properties row for numeric property ids only.
+ * UUID leads.property_id values are left unresolved (no throw).
  */
-export const hydrateLeadsWithProperties = async (client, tenantId, leadsInput) => {
+export const hydrateLeadsWithProperties = async (client, _tenantId, leadsInput) => {
   const inputWasArray = Array.isArray(leadsInput);
   const leads = (inputWasArray ? leadsInput : [leadsInput])
     .filter(Boolean)
     .map(normalizeLeadRecord);
   if (!leads.length) return inputWasArray ? [] : null;
 
-  const propertyIds = [...new Set(leads.map((lead) => lead.property_id).filter(Boolean))];
+  const propertyIds = [
+    ...new Set(leads.map((lead) => lead.property_id).filter(isNumericPropertyId)),
+  ];
   if (!propertyIds.length) return inputWasArray ? leads : leads[0];
 
-  let query = client
-    .from('properties')
-    .select(PROPERTY_FIELD_SELECT)
-    .in('id', propertyIds);
-  if (tenantId) query = query.eq('tenant_id', tenantId);
+  try {
+    const { data, error } = await client
+      .from('properties')
+      .select(PROPERTY_FIELD_SELECT)
+      .in('id', propertyIds);
+    if (error) throw error;
 
-  const { data, error } = await query;
-  if (error) throw error;
-
-  const byId = new Map((data || []).map((row) => [row.id, row]));
-  const hydrated = leads.map((lead) => ({
-    ...lead,
-    property: (lead.property_id && byId.get(lead.property_id)) || lead.property || null,
-  }));
-  return inputWasArray ? hydrated : hydrated[0];
+    const byId = new Map((data || []).map((row) => [String(row.id), row]));
+    const hydrated = leads.map((lead) => ({
+      ...lead,
+      property:
+        (lead.property_id && byId.get(String(lead.property_id))) || lead.property || null,
+    }));
+    return inputWasArray ? hydrated : hydrated[0];
+  } catch (error) {
+    // Never block technician inspection load on properties lookup mismatch.
+    console.warn('Property hydrate skipped:', error?.message || error);
+    return inputWasArray ? leads : leads[0];
+  }
 };
 
 export const formatPropertyAddress = (property) => {
   if (!property || typeof property !== 'object') return '';
+  const line1 = asText(property.address_line_1 || property.address1);
+  const line2 = asText(property.address_line_2 || property.address2);
   const cityLine = [asText(property.city), asText(property.state), asText(property.zip)]
     .filter(Boolean)
     .join(' ');
-  return [asText(property.address1), asText(property.address2), cityLine]
-    .filter(Boolean)
-    .join(', ');
+  return [line1, line2, cityLine].filter(Boolean).join(', ');
 };
 
 /**
@@ -86,7 +96,7 @@ export const composeAddressFromParts = ({
 /**
  * Resolve the display/report service address.
  * Priority:
- *   a. linked property structured address
+ *   a. attached property structured address OR leads.property_formatted_address
  *   b. inspection / job service address already in context
  *   c. leads.address
  *   d. empty
@@ -97,10 +107,13 @@ export const resolveServiceAddress = ({
   jobServiceAddress = '',
   lead = null,
 } = {}) => {
-  const fromProperty = formatPropertyAddress(
-    property || (Array.isArray(lead?.property) ? lead.property[0] : lead?.property) || null,
-  );
+  const attached =
+    property || (Array.isArray(lead?.property) ? lead.property[0] : lead?.property) || null;
+  const fromProperty = formatPropertyAddress(attached);
   if (fromProperty) return fromProperty;
+
+  const fromFormatted = asText(lead?.property_formatted_address);
+  if (fromFormatted) return fromFormatted;
 
   const fromInspection = asText(inspectionServiceAddress);
   if (fromInspection) return fromInspection;
