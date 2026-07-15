@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Link, Outlet, useLocation, useParams } from 'react-router-dom';
-import { ClipboardList, Home, LogOut } from 'lucide-react';
+import { CalendarDays, ClipboardList, Home, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
@@ -9,6 +9,7 @@ import { tenantPath } from '@/lib/tenantUtils';
 
 const navItems = [
   { id: 'queue', label: 'Queue', icon: ClipboardList, path: '/tech/queue' },
+  { id: 'schedule', label: 'Schedule', icon: CalendarDays, path: '/tech/schedule' },
   { id: 'home', label: 'CRM', icon: Home, path: '/crm/dashboard' },
 ];
 
@@ -20,6 +21,7 @@ export default function TechLayout() {
   const pageLabel = useMemo(() => {
     const path = String(location.pathname || '').toLowerCase();
     if (path.includes('/tech/queue')) return 'Queue';
+    if (path.includes('/tech/schedule')) return 'Schedule';
     if (path.includes('/tech/jobs/')) return 'Job';
     if (path.includes('/tech/inspections/')) return 'Inspection';
     return 'Tech';
@@ -47,10 +49,16 @@ export default function TechLayout() {
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto grid max-w-3xl grid-cols-2 gap-2 px-3 py-2">
+        <div className="mx-auto grid max-w-3xl grid-cols-3 gap-2 px-3 py-2">
           {navItems.map((item) => {
             const href = tenantPath(item.path, tenantId);
-            const isActive = String(location.pathname || '').toLowerCase().includes(item.path);
+            const pathLower = String(location.pathname || '').toLowerCase();
+            const isActive =
+              item.id === 'schedule'
+                ? pathLower.includes('/tech/schedule')
+                : item.id === 'queue'
+                  ? pathLower.includes('/tech/queue')
+                  : pathLower.includes(item.path);
             return (
               <Link
                 key={item.id}

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
-import { getTenantId } from '@/lib/tenantUtils';
+import { getTenantId, tenantPath } from '@/lib/tenantUtils';
 import {
   normalizeJobStatus,
   normalizePaymentStatus,
@@ -33,6 +33,12 @@ import {
   resolveTechnicianSelectValue,
   TECHNICIAN_ROSTER_SELECT,
 } from '@/lib/technicianIdentity';
+import {
+  JOB_SCHEDULE_LINKED_MESSAGE,
+  fetchLinkedAppointmentForJob,
+  isJobScheduleLockedByAppointment,
+  omitLockedScheduleFields,
+} from '@/lib/jobAppointmentSchedule';
 import {
   PAYMENT_TERM_OPTIONS,
   formatOperationalStageLabel,
@@ -87,8 +93,12 @@ const Jobs = () => {
   const [recordTechnicianId, setRecordTechnicianId] = useState('unassigned');
   const [recordServiceAddress, setRecordServiceAddress] = useState('');
   const [recordPaymentTerms, setRecordPaymentTerms] = useState('NET_7');
+  const [recordLinkedAppointment, setRecordLinkedAppointment] = useState(null);
+  const [scheduleLinkedAppointment, setScheduleLinkedAppointment] = useState(null);
 
   const tenantId = getTenantId();
+  const recordScheduleLocked = isJobScheduleLockedByAppointment(recordLinkedAppointment);
+  const scheduleLocked = isJobScheduleLockedByAppointment(scheduleLinkedAppointment);
   const asText = (value) => (typeof value === 'string' ? value.trim() : '');
   const asTracking = (value) => asText(value).toUpperCase();
   const formatPhoneDisplay = (value) => {
@@ -491,7 +501,7 @@ const Jobs = () => {
     setPaymentModalOpen(true);
   };
 
-  const openRecordModal = (job) => {
+  const openRecordModal = async (job) => {
     setRecordJob(job);
     setRecordStart(toDatetimeLocal(job?.scheduled_start));
     setRecordTechnicianId(resolveTechnicianSelection(job?.technician_id));
@@ -499,7 +509,20 @@ const Jobs = () => {
     setRecordPaymentTerms(
       normalizeWorkOrderPaymentTerms(job?.payment_terms) || 'NET_7',
     );
+    setRecordLinkedAppointment(null);
     setRecordModalOpen(true);
+    try {
+      const linked = await fetchLinkedAppointmentForJob(supabase, {
+        tenantId,
+        jobId: job?.id,
+      });
+      setRecordLinkedAppointment(linked);
+      if (linked?.scheduled_start) {
+        setRecordStart(toDatetimeLocal(linked.scheduled_start));
+      }
+    } catch (error) {
+      console.warn('Linked appointment lookup skipped:', error?.message || error);
+    }
   };
 
   const getScheduledDurationMinutes = (job) => {
@@ -514,14 +537,18 @@ const Jobs = () => {
     if (!recordJob?.id) return;
 
     const trimmedAddress = recordServiceAddress.trim();
-    const payload = {
+    let payload = {
       service_address: trimmedAddress || null,
       technician_id: recordTechnicianId === 'unassigned' ? null : recordTechnicianId,
       payment_terms: recordPaymentTerms,
       updated_at: new Date().toISOString(),
     };
 
-    if (recordStart) {
+    if (recordScheduleLocked) {
+      payload = omitLockedScheduleFields(payload);
+      payload.payment_terms = recordPaymentTerms;
+      payload.updated_at = new Date().toISOString();
+    } else if (recordStart) {
       const start = new Date(recordStart);
       if (Number.isNaN(start.getTime())) {
         toast({ variant: 'destructive', title: 'Invalid date', description: 'Please enter a valid scheduled start.' });
@@ -569,7 +596,7 @@ const Jobs = () => {
     }
   };
 
-  const openScheduleModal = (job) => {
+  const openScheduleModal = async (job) => {
     setRecordModalOpen(false);
     setScheduleJob(job);
     setScheduleStart(toDatetimeLocal(job.scheduled_start));
@@ -583,10 +610,45 @@ const Jobs = () => {
     }
     setScheduleAddress(job.service_address || '');
     setScheduleTechnicianId(resolveTechnicianSelection(job.technician_id));
+    setScheduleLinkedAppointment(null);
     setScheduleModalOpen(true);
+    try {
+      const linked = await fetchLinkedAppointmentForJob(supabase, {
+        tenantId,
+        jobId: job?.id,
+      });
+      setScheduleLinkedAppointment(linked);
+      if (linked?.scheduled_start) {
+        setScheduleStart(toDatetimeLocal(linked.scheduled_start));
+        if (linked.scheduled_end) {
+          const start = new Date(linked.scheduled_start).getTime();
+          const end = new Date(linked.scheduled_end).getTime();
+          if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+            setScheduleDuration(String(Math.max(30, Math.round((end - start) / 60000))));
+          }
+        }
+        if (linked.technician_id) {
+          setScheduleTechnicianId(resolveTechnicianSelection(linked.technician_id));
+        }
+        if (linked.service_address) {
+          setScheduleAddress(linked.service_address);
+        }
+      }
+    } catch (error) {
+      console.warn('Linked appointment lookup skipped:', error?.message || error);
+    }
   };
 
   const handleScheduleSubmit = async () => {
+    if (scheduleLocked) {
+      toast({
+        variant: 'destructive',
+        title: 'Edit on Calendar',
+        description: JOB_SCHEDULE_LINKED_MESSAGE,
+      });
+      return;
+    }
+
     if (!scheduleJob || !scheduleStart) {
       toast({ variant: 'destructive', title: 'Missing schedule', description: 'Start date/time is required.' });
       return;
@@ -971,13 +1033,23 @@ const Jobs = () => {
                   </div>
                 </div>
 
+                {recordScheduleLocked ? (
+                  <div className="md:col-span-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    <p className="font-medium">Schedule locked to Calendar</p>
+                    <p className="mt-1 text-amber-800">{JOB_SCHEDULE_LINKED_MESSAGE}</p>
+                    <Button asChild variant="outline" size="sm" className="mt-2">
+                      <Link to={tenantPath('/crm/calendar', tenantId)}>Open Calendar</Link>
+                    </Button>
+                  </div>
+                ) : null}
+
                 <div className="space-y-2">
                   <Label>Scheduled Start</Label>
                   <Input
                     type="datetime-local"
                     value={recordStart}
                     onChange={(e) => setRecordStart(e.target.value)}
-                    disabled={processingId === recordJob.id}
+                    disabled={processingId === recordJob.id || recordScheduleLocked}
                   />
                 </div>
 
@@ -986,7 +1058,7 @@ const Jobs = () => {
                   <Select
                     value={recordTechnicianId}
                     onValueChange={setRecordTechnicianId}
-                    disabled={processingId === recordJob.id}
+                    disabled={processingId === recordJob.id || recordScheduleLocked}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Unassigned" />
@@ -1010,7 +1082,7 @@ const Jobs = () => {
                     onChange={(e) => setRecordServiceAddress(e.target.value)}
                     onAddressSelect={(addressData) => setRecordServiceAddress(formatSelectedAddress(addressData))}
                     placeholder="Street, City, State ZIP"
-                    disabled={processingId === recordJob.id}
+                    disabled={processingId === recordJob.id || recordScheduleLocked}
                   />
                 </div>
 
@@ -1131,12 +1203,22 @@ const Jobs = () => {
               <div className="text-slate-600">{scheduleJob?.leads?.first_name} {scheduleJob?.leads?.last_name}</div>
               <div className="text-slate-500">{formatPhoneDisplay(scheduleJob?.leads?.phone)}</div>
             </div>
+            {scheduleLocked ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="font-medium">Schedule locked to Calendar</p>
+                <p className="mt-1 text-amber-800">{JOB_SCHEDULE_LINKED_MESSAGE}</p>
+                <Button asChild variant="outline" size="sm" className="mt-2">
+                  <Link to={tenantPath('/crm/calendar', tenantId)}>Open Calendar</Link>
+                </Button>
+              </div>
+            ) : null}
             <div className="space-y-2">
               <Label>Start Date & Time</Label>
               <Input
                 type="datetime-local"
                 value={scheduleStart}
                 onChange={(e) => setScheduleStart(e.target.value)}
+                disabled={scheduleLocked}
               />
             </div>
             <div className="space-y-2">
@@ -1147,11 +1229,12 @@ const Jobs = () => {
                 step="15"
                 value={scheduleDuration}
                 onChange={(e) => setScheduleDuration(e.target.value)}
+                disabled={scheduleLocked}
               />
             </div>
             <div className="space-y-2">
               <Label>Technician (optional)</Label>
-                  <Select value={scheduleTechnicianId} onValueChange={setScheduleTechnicianId}>
+                  <Select value={scheduleTechnicianId} onValueChange={setScheduleTechnicianId} disabled={scheduleLocked}>
                 <SelectTrigger>
                   <SelectValue placeholder="Unassigned" />
                 </SelectTrigger>
@@ -1173,6 +1256,7 @@ const Jobs = () => {
                 onChange={(e) => setScheduleAddress(e.target.value)}
                 onAddressSelect={(addressData) => setScheduleAddress(formatSelectedAddress(addressData))}
                 placeholder="Street, City, State ZIP"
+                disabled={scheduleLocked}
               />
             </div>
           </div>
@@ -1180,7 +1264,10 @@ const Jobs = () => {
             <Button variant="outline" onClick={() => setScheduleModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleScheduleSubmit} disabled={!scheduleStart || processingId === scheduleJob?.id}>
+            <Button
+              onClick={handleScheduleSubmit}
+              disabled={scheduleLocked || !scheduleStart || processingId === scheduleJob?.id}
+            >
               {processingId === scheduleJob?.id ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
               Confirm Schedule
             </Button>

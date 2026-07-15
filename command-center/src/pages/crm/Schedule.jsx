@@ -46,7 +46,13 @@ import { cn } from '@/lib/utils';
 import {
   formatOperationalStageLabel,
 } from '@/lib/workOrderOperational';
-import { getTenantId } from '@/lib/tenantUtils';
+import { getTenantId, tenantPath } from '@/lib/tenantUtils';
+import {
+  JOB_SCHEDULE_LINKED_MESSAGE,
+  fetchLinkedAppointmentForJob,
+  isJobScheduleLockedByAppointment,
+  omitLockedScheduleFields,
+} from '@/lib/jobAppointmentSchedule';
 import { jobService } from '@/services/jobService';
 import { workOrderBoardService } from '@/services/workOrderBoardService';
 
@@ -682,6 +688,9 @@ export default function Schedule() {
   const [dispatchService, setDispatchService] = useState('');
   const [dispatchStatus, setDispatchStatus] = useState('unscheduled');
   const [dispatchErrors, setDispatchErrors] = useState({});
+  const [linkedAppointment, setLinkedAppointment] = useState(null);
+
+  const scheduleLocked = isJobScheduleLockedByAppointment(linkedAppointment);
 
   const hydrateBoard = async ({ showPageSpinner = false } = {}) => {
     if (!tenantId) return;
@@ -832,6 +841,7 @@ export default function Schedule() {
       setDispatchService('');
       setDispatchStatus('unscheduled');
       setDispatchErrors({});
+      setLinkedAppointment(null);
       return;
     }
 
@@ -842,6 +852,7 @@ export default function Schedule() {
     setDispatchService(selectedJobDispatchService);
     setDispatchStatus(selectedJobDispatchStatus);
     setDispatchErrors({});
+    setLinkedAppointment(null);
   }, [
     selectedJobResetKey,
     selectedJobDispatchAddress,
@@ -851,6 +862,49 @@ export default function Schedule() {
     selectedJobDispatchStatus,
     selectedJobDispatchTechnicianId,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadLinked = async () => {
+      if (!selectedJob?.id) {
+        setLinkedAppointment(null);
+        return;
+      }
+      try {
+        const linked = await fetchLinkedAppointmentForJob(supabase, {
+          tenantId,
+          jobId: selectedJob.id,
+        });
+        if (cancelled) return;
+        setLinkedAppointment(linked);
+        if (linked?.scheduled_start) {
+          setDispatchStart(toDatetimeLocal(linked.scheduled_start));
+          if (linked.scheduled_end) {
+            const start = new Date(linked.scheduled_start).getTime();
+            const end = new Date(linked.scheduled_end).getTime();
+            if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+              setDispatchDuration(String(Math.max(30, Math.round((end - start) / 60000))));
+            }
+          }
+          if (linked.technician_id) {
+            setDispatchTechnicianId(resolveTechnicianSelection(technicians, linked.technician_id));
+          }
+          if (linked.service_address) {
+            setDispatchAddress(linked.service_address);
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Linked appointment lookup skipped:', error?.message || error);
+          setLinkedAppointment(null);
+        }
+      }
+    };
+    loadLinked();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedJob?.id, tenantId, technicians]);
 
   const handlePrimaryAction = async () => {
     if (!selectedJob || !selectedPrimaryAction) return;
@@ -931,35 +985,41 @@ export default function Schedule() {
     const trimmedService = dispatchService.trim();
     const nextStatus = normalizeStatus(dispatchStatus || selectedJob.status);
     const mustHaveStart =
-      ['unscheduled', 'pending_schedule'].includes(selectedJob.dispatch_status) || Boolean(dispatchStart);
+      !scheduleLocked &&
+      (['unscheduled', 'pending_schedule'].includes(selectedJob.dispatch_status) || Boolean(dispatchStart));
     const addressValidation = getDispatchAddressValidation(trimmedAddress);
     const nextErrors = {};
 
-    if (!trimmedAddress) {
-      nextErrors.address = 'Street, city, and state are required before dispatch.';
-    } else if (!addressValidation.hasDispatchableAddress) {
-      nextErrors.address = 'Enter a dispatchable address with street, city, and state.';
+    if (!scheduleLocked) {
+      if (!trimmedAddress) {
+        nextErrors.address = 'Street, city, and state are required before dispatch.';
+      } else if (!addressValidation.hasDispatchableAddress) {
+        nextErrors.address = 'Enter a dispatchable address with street, city, and state.';
+      }
     }
 
     if (!trimmedService) {
       nextErrors.service = 'Set the service or scope before saving dispatch.';
     }
 
-    if (selectedPrimaryAction?.key === 'assign_technician' && dispatchTechnicianId === 'unassigned') {
-      nextErrors.technician = technicians.length
-        ? 'Choose a technician before assigning this work order.'
-        : 'No active technicians are available to assign.';
-    } else if (selectedPrimaryAction?.key === 'assign_technician' && technicians.length === 0) {
-      nextErrors.technician = 'No active technicians are available to assign.';
-    }
-
-    if (mustHaveStart && !dispatchStart) {
-      nextErrors.start = 'Select the service date and time before saving dispatch.';
-    }
-
     const duration = Number(dispatchDuration);
-    if (!Number.isFinite(duration) || duration <= 0) {
-      nextErrors.duration = 'Dispatch duration must be greater than 0 minutes.';
+
+    if (!scheduleLocked) {
+      if (selectedPrimaryAction?.key === 'assign_technician' && dispatchTechnicianId === 'unassigned') {
+        nextErrors.technician = technicians.length
+          ? 'Choose a technician before assigning this work order.'
+          : 'No active technicians are available to assign.';
+      } else if (selectedPrimaryAction?.key === 'assign_technician' && technicians.length === 0) {
+        nextErrors.technician = 'No active technicians are available to assign.';
+      }
+
+      if (mustHaveStart && !dispatchStart) {
+        nextErrors.start = 'Select the service date and time before saving dispatch.';
+      }
+
+      if (!Number.isFinite(duration) || duration <= 0) {
+        nextErrors.duration = 'Dispatch duration must be greater than 0 minutes.';
+      }
     }
 
     setDispatchErrors(nextErrors);
@@ -1009,14 +1069,19 @@ export default function Schedule() {
       return;
     }
 
-    const payload = {
+    let payload = {
       service_address: trimmedAddress,
       technician_id: dispatchTechnicianId === 'unassigned' ? null : dispatchTechnicianId,
       status: nextStatus,
       updated_at: new Date().toISOString(),
     };
 
-    if (dispatchStart) {
+    if (scheduleLocked) {
+      // Appointment owns schedule fields — only allow status/service updates here.
+      payload = omitLockedScheduleFields(payload);
+      payload.status = nextStatus;
+      payload.updated_at = new Date().toISOString();
+    } else if (dispatchStart) {
       const start = new Date(dispatchStart);
       if (Number.isNaN(start.getTime())) {
         toast({
@@ -1331,6 +1396,16 @@ export default function Schedule() {
                           Dispatch Setup
                         </div>
 
+                        {scheduleLocked ? (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                            <p className="font-medium">Schedule locked to Calendar</p>
+                            <p className="mt-1 text-amber-800">{JOB_SCHEDULE_LINKED_MESSAGE}</p>
+                            <Button asChild variant="outline" size="sm" className="mt-2">
+                              <Link to={tenantPath('/crm/calendar', tenantId)}>Open Calendar</Link>
+                            </Button>
+                          </div>
+                        ) : null}
+
                         <div className="space-y-2">
                           <Label htmlFor="dispatch-service-input">Service / Scope</Label>
                             <Input
@@ -1380,7 +1455,7 @@ export default function Schedule() {
                               setDispatchStart(event.target.value);
                               setDispatchErrors((prev) => ({ ...prev, start: null }));
                             }}
-                            disabled={processingId === selectedJob.id}
+                            disabled={processingId === selectedJob.id || scheduleLocked}
                           />
                           {dispatchErrors.start ? (
                             <p className="text-sm text-red-600">{dispatchErrors.start}</p>
@@ -1401,7 +1476,7 @@ export default function Schedule() {
                                 setDispatchDuration(event.target.value);
                                 setDispatchErrors((prev) => ({ ...prev, duration: null }));
                               }}
-                              disabled={processingId === selectedJob.id}
+                              disabled={processingId === selectedJob.id || scheduleLocked}
                             />
                             {dispatchErrors.duration ? (
                               <p className="text-sm text-red-600">{dispatchErrors.duration}</p>
@@ -1416,7 +1491,7 @@ export default function Schedule() {
                                 setDispatchTechnicianId(value);
                                 setDispatchErrors((prev) => ({ ...prev, technician: null }));
                               }}
-                              disabled={processingId === selectedJob.id}
+                              disabled={processingId === selectedJob.id || scheduleLocked}
                             >
                               <SelectTrigger id="dispatch-technician-select" aria-label="Dispatch Technician">
                                 <SelectValue placeholder="Unassigned" />
@@ -1455,7 +1530,7 @@ export default function Schedule() {
                             }}
                             className={dispatchErrors.address ? 'border-red-300 focus-visible:ring-red-300' : ''}
                             placeholder="Street, City, State ZIP"
-                            disabled={processingId === selectedJob.id}
+                            disabled={processingId === selectedJob.id || scheduleLocked}
                           />
                           {dispatchErrors.address ? (
                             <p className="text-sm text-red-600">{dispatchErrors.address}</p>

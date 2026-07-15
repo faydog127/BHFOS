@@ -94,7 +94,7 @@ Disposition meanings:
 | Smallest fix | Mount read-only tech schedule **or** improve queue date navigation — no CRM rewrite |
 | Test | Mobile tech route smoke |
 | Release | R3 |
-| Disposition | **Fix in V1** |
+| Disposition | **Fixed in V1** (`/tech/schedule` mounted; multi-day read-only schedule) |
 
 ### B-006 — Lead / customer / property intake ambiguity
 
@@ -235,7 +235,7 @@ Disposition meanings:
 | Evidence | Packet 008 sync trigger; both surfaces editable historically |
 | Smallest fix | UI: edit appointments only; jobs schedule read-only when linked |
 | Release | R3 |
-| Disposition | **Fix in V1** |
+| Disposition | **Fixed in V1** (Jobs + Dispatch lock schedule when `appointments.job_id` set; note: app still rarely sets `job_id`) |
 
 ### B-017 — Tracked `tmp/` tenant / ledger artifacts noise
 

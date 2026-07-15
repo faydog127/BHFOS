@@ -113,7 +113,7 @@ Scores are evidence-based. Where production proof is thin, scores stay conservat
 | Test coverage | 2 | Local schedule/dispatch UAT |
 | Production confidence | 2 | Phone scheduling friction called out by founder objectives |
 
-**Status: NEEDS WORK** — weakest mobile surface → R3.
+**Status: IN PROGRESS (R3)** — tech Schedule route mounted; linked appointment locks job schedule edits.
 
 ---
 
