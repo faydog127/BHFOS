@@ -67,8 +67,10 @@ export default function ManualConditionReviewControls({
   return (
     <div className={`mt-3 space-y-2 ${compact ? '' : ''}`}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Manual condition</span>
-        <Badge variant="outline" className="capitalize text-[11px]">{label}</Badge>
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Manual finding</span>
+        <Badge variant="outline" className="capitalize text-[11px]">
+          {status === 'approved' ? 'Kept' : status === 'rejected' || status === 'not_relevant' ? 'Removed' : label}
+        </Badge>
       </div>
       <div className={`grid gap-2 ${compact ? 'grid-cols-1' : 'sm:grid-cols-3'}`}>
         <Button
@@ -78,31 +80,60 @@ export default function ManualConditionReviewControls({
           variant={status === 'approved' ? 'default' : 'outline'}
           disabled={locked || Boolean(busy) || status === 'approved'}
           onClick={() => setStatus('approved')}
+          data-testid="manual-finding-keep"
         >
           {busy === 'approved' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Approve
+          Keep
         </Button>
         <Button
           type="button"
           size={compact ? 'default' : 'sm'}
           className={compact ? 'min-h-11' : undefined}
-          variant={status === 'rejected' ? 'destructive' : 'outline'}
-          disabled={locked || Boolean(busy) || status === 'rejected'}
+          variant="outline"
+          disabled={locked || Boolean(busy)}
+          onClick={async () => {
+            const next = window.prompt('Edit finding description:', asText(finding?.description) || asText(finding?.title));
+            if (next === null) return;
+            setBusy('edit');
+            try {
+              const { error } = await supabase
+                .from('inspection_findings')
+                .update({
+                  description: next.trim(),
+                  condition_status: 'approved',
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('tenant_id', tenantId)
+                .eq('id', finding.id);
+              if (error) throw error;
+              toast({ title: 'Finding updated', description: 'Edited wording saved and kept for the report.' });
+              await onChanged?.('approved');
+            } catch (error) {
+              toast({
+                variant: 'destructive',
+                title: 'Edit failed',
+                description: error?.message || 'Could not update finding.',
+              });
+            } finally {
+              setBusy('');
+            }
+          }}
+          data-testid="manual-finding-edit"
+        >
+          {busy === 'edit' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          Edit
+        </Button>
+        <Button
+          type="button"
+          size={compact ? 'default' : 'sm'}
+          className={compact ? 'min-h-11' : undefined}
+          variant={status === 'rejected' || status === 'not_relevant' ? 'destructive' : 'outline'}
+          disabled={locked || Boolean(busy) || status === 'rejected' || status === 'not_relevant'}
           onClick={() => setStatus('rejected')}
+          data-testid="manual-finding-remove"
         >
           {busy === 'rejected' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Reject
-        </Button>
-        <Button
-          type="button"
-          size={compact ? 'default' : 'sm'}
-          className={compact ? 'min-h-11' : undefined}
-          variant={status === 'not_relevant' ? 'secondary' : 'outline'}
-          disabled={locked || Boolean(busy) || status === 'not_relevant'}
-          onClick={() => setStatus('not_relevant')}
-        >
-          {busy === 'not_relevant' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Not relevant
+          Remove
         </Button>
       </div>
     </div>

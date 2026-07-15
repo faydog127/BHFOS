@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Bot, Check, CircleOff, Loader2, Pencil, RefreshCw, X } from 'lucide-react';
+import { Bot, Check, Loader2, Pencil, RefreshCw, X } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -110,13 +110,13 @@ export default function InspectionAiReviewPanel({ tenantId, inspectionId, revisi
   return (
     <Card className="border-sky-200 shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between gap-3">
-        <div><CardTitle className="flex items-center gap-2 text-base"><Bot className="h-4 w-4" />Photo review</CardTitle><p className="mt-1 text-xs text-slate-500">One technician decision approves or excludes the complete photo package.</p></div>
+        <div><CardTitle className="flex items-center gap-2 text-base"><Bot className="h-4 w-4" />Findings from photos</CardTitle><p className="mt-1 text-xs text-slate-500">Keep, edit, or remove each suggested observation. Photo quality Retake/Keep stays separate.</p></div>
         <Button size="sm" variant="outline" onClick={() => analyze()} disabled={Boolean(busyPhotoId) || locked || !eligibleCount}>
           {busyPhotoId === 'all' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}Analyze ready photos
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="rounded-lg bg-sky-50 p-3 text-xs text-sky-900">Advisory only. Accept/Edit stores an internal structured condition linked to this photo. Customer Findings narrative and the single Service Recommendation are separate steps. Pricing stays in Estimates.</p>
+        <p className="rounded-lg bg-sky-50 p-3 text-xs text-sky-900">Advisory only. Keep or Edit stores an internal observation linked to this photo for the Findings summary. Pricing stays in Estimates.</p>
         {errorText ? <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">{errorText}</div> : null}
         {activePhotos.map((photo) => {
           const photoRows = rowsByPhoto.get(photo.id) || [];
@@ -130,11 +130,16 @@ export default function InspectionAiReviewPanel({ tenantId, inspectionId, revisi
           const selected = selectedRecommendations[photo.id] || choices[0] || '';
           const reviewed = latestRows.length > 0 && !pending;
           return (
-            <article key={photo.id} className="rounded-xl border border-slate-200 bg-white p-4">
+            <article
+              key={photo.id}
+              id={`inspection-photo-${photo.id}`}
+              data-photo-id={photo.id}
+              className="rounded-xl border border-slate-200 bg-white p-4"
+            >
               <div className="flex gap-3">
                 <div className="h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-slate-100">{photo.signed_url ? <img src={photo.signed_url} alt={photo.caption || 'Inspection evidence'} className="h-full w-full object-contain" /> : null}</div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap gap-2"><Badge>{photo.is_before === true ? 'Before' : photo.is_before === false ? 'After' : 'Unspecified'}</Badge><Badge variant="outline">{reviewed ? 'Reviewed' : version ? 'Decision needed' : 'Not analyzed'}</Badge>{version ? <Badge variant="outline">v{version}</Badge> : null}</div>
+                  <div className="flex flex-wrap gap-2"><Badge>{photo.is_before === true ? 'Before' : photo.is_before === false ? 'After' : 'Observed'}</Badge><Badge variant="outline">{reviewed ? 'Reviewed' : version ? 'Needs decision' : 'Not analyzed'}</Badge></div>
                   <h3 className="mt-2 font-semibold text-slate-900">{asText(content.title) || photo.caption || photo.file_name}</h3>
                   <p className="mt-1 text-sm text-slate-600">{asText(content.customer_caption) || 'Caption will appear after analysis.'}</p>
                   <p className="mt-1 text-xs text-slate-500">Confidence: {asText(content.confidence) || 'not stated'}</p>
@@ -145,7 +150,19 @@ export default function InspectionAiReviewPanel({ tenantId, inspectionId, revisi
               <div className="mt-3 hidden grid-cols-2 gap-3 text-sm md:grid"><div><b>Observation</b><p>{asText(content.description)}</p></div><div><b>Uncertainty</b><p>{asText(content.uncertainty)}</p></div><div><b>Category</b><p>{asText(content.category)}</p></div><div><b>Evidence usability</b><p>{asText(content.evidence_usability)}</p></div><div><b>Model/version</b><p>{findingSuggestion?.model} / {findingSuggestion?.prompt_version}</p></div><div><b>Narrative</b><p>{asText(suggestionContent(narrativeSuggestion).narrative)}</p></div></div>
               <details className="mt-3 rounded-lg border p-3 text-sm md:hidden"><summary className="font-medium">View details</summary><p className="mt-2"><b>Observation:</b> {asText(content.description)}</p><p className="mt-2"><b>Uncertainty:</b> {asText(content.uncertainty)}</p><p className="mt-2"><b>Evidence:</b> {asText(content.evidence_usability)}</p></details>
               {!latestRows.length && photo.upload_state === 'complete' ? <Button className="mt-3 min-h-11" onClick={() => analyze(photo.id)} disabled={Boolean(busyPhotoId)}>Analyze photo</Button> : null}
-              {pending ? <div className="mt-4 grid grid-cols-2 gap-2 sm:flex"><Button className="min-h-11" onClick={() => reviewPackage(photo, findingSuggestion, 'accept')}><Check className="mr-1 h-4 w-4" />Accept</Button><Button variant="outline" className="min-h-11" onClick={() => reviewPackage(photo, findingSuggestion, 'edit')}><Pencil className="mr-1 h-4 w-4" />Edit</Button><Button variant="destructive" className="min-h-11" onClick={() => reviewPackage(photo, findingSuggestion, 'reject')}><X className="mr-1 h-4 w-4" />Reject</Button><Button variant="outline" className="min-h-11" onClick={() => reviewPackage(photo, findingSuggestion, 'irrelevant')}><CircleOff className="mr-1 h-4 w-4" />Not relevant</Button></div> : null}
+              {pending ? (
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <Button className="min-h-11" onClick={() => reviewPackage(photo, findingSuggestion, 'accept')} data-testid="finding-keep">
+                    <Check className="mr-1 h-4 w-4" />Keep
+                  </Button>
+                  <Button variant="outline" className="min-h-11" onClick={() => reviewPackage(photo, findingSuggestion, 'edit')} data-testid="finding-edit">
+                    <Pencil className="mr-1 h-4 w-4" />Edit
+                  </Button>
+                  <Button variant="destructive" className="min-h-11" onClick={() => reviewPackage(photo, findingSuggestion, 'reject')} data-testid="finding-remove">
+                    <X className="mr-1 h-4 w-4" />Remove
+                  </Button>
+                </div>
+              ) : null}
               {reviewed ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Badge variant="outline" className="text-[11px]">Internal condition</Badge>
