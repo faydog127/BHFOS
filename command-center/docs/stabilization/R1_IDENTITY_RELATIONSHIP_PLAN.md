@@ -1,9 +1,9 @@
 # R1 — Identity & Relationship Safety Plan
 
-**Status:** R1A implementation in progress on `stabilize/r1a-property-relationship-safety`  
-**Base tip:** `b3d2599d2ba3c4f994a7e1ed8254496df4913fa2`  
-**Worktree used for audit:** `F:\Dev\BHFOS-stabilize-r1-plan` (detached `origin/main`)  
-**R1A worktree:** `F:\Dev\BHFOS-stabilize-r1a-property`  
+**Status:** R1A deployed; R1B implementation on `stabilize/r1b-technician-identity`  
+**Base tip (R1B):** `6d398e7c8104b4717ed07c71cb82a6608adc0bc1`  
+**R1A merge tip:** `6d398e7c8104b4717ed07c71cb82a6608adc0bc1`  
+**R1B worktree:** `F:\Dev\BHFOS-stabilize-r1b-technician`  
 **Dirty tree `F:\Dev\BHFOS`:** not used  
 **Backlog seeds:** B-001, B-002, B-011, B-014 (and related embed/identity items)
 
@@ -123,8 +123,8 @@ technicians.id  ←→  jobs.technician_id
 | `AppointmentScheduler.jsx` | Select writes `tech.id` | **SAFE** |
 | `InspectionEditor.jsx` | Assigns technician roster id | **SAFE** (verify create payload) |
 | `inspection-report-pdf` | Loads technician by `eq('id', inspection.technician_id)` | **SAFE** |
-| **`Jobs.jsx`** | SelectItem `value={tech.user_id}`; `resolveTechnicianSelection` returns `user_id`; writes that to `jobs.technician_id` | **UNSAFE** — FK / silent mis-assign |
-| **`Schedule.jsx` (dispatch)** | Sets `dispatch_id: tech.user_id \|\| tech.id`; writes `technician_id: dispatchTechnicianId` | **UNSAFE** — same |
+| **`Jobs.jsx`** | SelectItem `value={tech.id}`; selection helper returns roster id via `technicianIdentity` | **CORRECT** (R1B) |
+| **`Schedule.jsx` (dispatch)** | SelectItem `value={technician.id}`; no `dispatch_id` alias | **CORRECT** (R1B) |
 | `TechDashboard.jsx` comment | Mentions filter by userId | Orphaned; misleading |
 
 ### Edge functions
@@ -376,10 +376,58 @@ If production probe shows `jobs.technician_id` still contains many `user_id` val
 
 ---
 
+## 15. R1B production verification (2026-07-15, read-only)
+
+| Question | Evidence | Result |
+| --- | --- | --- |
+| `jobs.technician_id` FK target | `jobs_technician_id_fkey` → `technicians.id` | **PASS** |
+| `appointments.technician_id` FK target | `appointments_technician_id_fkey` → `technicians.id` | **PASS** |
+| `inspections.technician_id` FK target | `inspections_technician_id_fkey` → `technicians.id` | **PASS** |
+| Column types | uuid for assignment columns + `technicians.id` / `user_id` | **PASS** |
+| Jobs rows storing `user_id` instead of roster id | 0 of 6 assigned jobs | **PASS** |
+| Appointments rows storing `user_id` | 0 assigned appointments | **PASS** |
+| Inspections rows storing `user_id` | 0 of 10 assigned inspections | **PASS** |
+| Orphan assignment ids (no roster match) | 0 | **PASS** |
+| Duplicate `technicians.user_id` | 0 groups | **PASS** |
+| Roster rows missing `user_id` | 1 of 2 (cannot log in as tech; not an assignment FK violation) | **REPORT** |
+| `technicians.user_id` FK to `auth.users` | Unique index present; no FK constraint in `pg_constraint` | **REPORT** (auth linkage by convention + unique index) |
+
+**Bad-row / repair need:** None for assignment columns. No data repair and no migration in R1B.
+
+### R1B code paths corrected
+
+| Path | Before | After |
+| --- | --- | --- |
+| `Jobs.jsx` SelectItem / selection helper | wrote/preferred `technicians.user_id` | writes `technicians.id` via `technicianIdentity` |
+| `Schedule.jsx` dispatch_id / SelectItem | preferred `user_id \|\| id` | roster id only; `dispatch_id` removed |
+| Shared helper | absent | `src/lib/technicianIdentity.js` |
+
+### Already correct (unchanged)
+
+- `TechQueue.jsx` / `TechJobDetail.jsx` — auth → `user_id` → filter by `technicians.id`
+- `AppointmentScheduler.jsx` / `InspectionEditor.jsx` — SelectItem `tech.id`
+- `inspection-report-pdf` — loads technician by roster id
+
+### Guardrails added
+
+- `tests/smoke/r1b-technician-identity-contract.spec.js`
+- R1A smoke no longer preserves the old `value={tech.user_id}` expectation
+
+### V2 / later deferrals (unchanged)
+
+- Add DB FK from `technicians.user_id` → `auth.users` if desired
+- Remount/fix orphaned `TechDashboard.jsx` / `TechSchedule.jsx` in scheduling UX work
+- Broader R1C static guard consolidation
+- Any historical data repair (not needed today)
+
+---
+
 ## Change control
 
 | Action | Status |
 | --- | --- |
-| Implementation | **Not started** — awaiting explicit approval |
-| Deployment | None |
-| Production modification | None |
+| R1A | Deployed |
+| R1B implementation | In progress on `stabilize/r1b-technician-identity` |
+| Deployment | Frontend-only after merge + checks |
+| Production data repair | None |
+| Migration | None |
