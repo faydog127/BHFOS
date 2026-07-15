@@ -53,8 +53,10 @@ export default function AuditInspector() {
           created_at,
           notes,
           is_test_data,
-          contact:contacts!leads_contact_id_fkey(first_name, last_name, email),
-          property:properties(address1, city, state)
+          address,
+          property_formatted_address,
+          property_id,
+          contact:contacts!leads_contact_id_fkey(first_name, last_name, email)
         `)
         .order('created_at', { ascending: false });
       
@@ -350,17 +352,14 @@ export default function AuditInspector() {
                             )}
                           </TableCell>
                           <TableCell>
-                            {lead.property ? (
+                            {(lead.property_formatted_address || lead.address) ? (
                               <div className="text-sm">
                                 <div className="font-medium text-slate-700">
-                                  {lead.property.address1}
-                                </div>
-                                <div className="text-xs text-slate-500">
-                                  {lead.property.city}, {lead.property.state}
+                                  {lead.property_formatted_address || lead.address}
                                 </div>
                               </div>
                             ) : (
-                              <span className="text-xs text-slate-400 italic">No linked property</span>
+                              <span className="text-xs text-slate-400 italic">No address on file</span>
                             )}
                           </TableCell>
                           <TableCell>

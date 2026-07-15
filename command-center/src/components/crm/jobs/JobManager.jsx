@@ -23,8 +23,7 @@ const JobManager = () => {
             .from('jobs')
             .select(`
                 *,
-                leads (first_name, last_name, email),
-                properties (address1, city)
+                leads (first_name, last_name, email, address, property_formatted_address)
             `)
             .order('scheduled_start', { ascending: false });
         
@@ -136,7 +135,12 @@ const JobManager = () => {
                                             <div className="text-xs text-muted-foreground">{job.leads?.email}</div>
                                         </TableCell>
                                         <TableCell>{job.scheduled_start ? format(new Date(job.scheduled_start), 'MMM d, h:mm a') : 'Unscheduled'}</TableCell>
-                                        <TableCell>{job.properties?.address1}</TableCell>
+                                        <TableCell>
+                                          {job.service_address
+                                            || job.leads?.property_formatted_address
+                                            || job.leads?.address
+                                            || 'No address on file'}
+                                        </TableCell>
                                         <TableCell>{getStatusBadge(job.status)}</TableCell>
                                         <TableCell>{getPaymentBadge(job.payment_status)}</TableCell>
                                         <TableCell className="text-right font-medium">${job.total_amount?.toLocaleString()}</TableCell>

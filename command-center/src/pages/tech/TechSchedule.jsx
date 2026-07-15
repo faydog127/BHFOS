@@ -41,8 +41,7 @@ const TechSchedule = () => {
                 .from('jobs')
                 .select(`
                     *,
-                    leads ( first_name, last_name, phone ),
-                    properties ( address1, city, zip )
+                    leads ( first_name, last_name, phone, address, property_formatted_address )
                 `)
                 .eq('technician_id', techData.id)
                 .gte('scheduled_start', start)
@@ -129,8 +128,10 @@ const TechSchedule = () => {
                                     <div className="flex items-start">
                                         <MapPin className="h-4 w-4 mr-2 mt-0.5 text-slate-400 shrink-0" />
                                         <span>
-                                            {job.properties?.address1}<br/>
-                                            {job.properties?.city}, {job.properties?.zip}
+                                            {job.service_address
+                                              || job.leads?.property_formatted_address
+                                              || job.leads?.address
+                                              || 'No address on file'}
                                         </span>
                                     </div>
                                     <div className="flex items-center">

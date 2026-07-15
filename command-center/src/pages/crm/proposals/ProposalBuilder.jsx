@@ -35,6 +35,9 @@ import { Badge } from '@/components/ui/badge';
 import AddressAutocomplete from '@/components/AddressAutocomplete';
 import { formatPhoneNumber } from '@/lib/formUtils';
 import {
+  resolveLegacyServiceAddress,
+} from '@/lib/inspectionFieldAddress';
+import {
   getDeliveryPreferenceLabel,
   resolveLeadDelivery,
 } from '@/lib/documentDelivery';
@@ -207,9 +210,9 @@ const insertQuoteItemsWithSchemaFallback = async (items) => {
 };
 
 const fetchLeadsWithFallback = async (tenantId) => {
+  // Never nest PostgREST property embeds from leads — production has no leads→properties FK.
   const selectVariants = [
-    '*, contact:contacts!leads_contact_id_fkey(preferred_contact_method), property:property_id(address1,address2,city,state,zip)',
-    '*, property:property_id(address1,address2,city,state,zip)',
+    '*, contact:contacts!leads_contact_id_fkey(preferred_contact_method)',
     '*',
   ];
 
@@ -234,18 +237,12 @@ const fetchLeadsWithFallback = async (tenantId) => {
 
 const formatLeadServiceAddress = (lead) => {
   if (!lead) return '';
-  const property = Array.isArray(lead.property) ? lead.property[0] : lead.property;
-  if (!property || typeof property !== 'object') return '';
-  return [
-    property.address1,
-    property.address2,
-    property.city,
-    property.state,
-    property.zip,
-  ]
-    .map((part) => normalizeAddress(part))
-    .filter(Boolean)
-    .join(', ');
+  return normalizeAddress(
+    resolveLegacyServiceAddress({
+      snapshotAddress: lead.property_formatted_address || '',
+      lead,
+    }),
+  );
 };
 
 const formatSelectedAddress = (addressData) => {

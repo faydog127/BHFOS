@@ -43,7 +43,7 @@ const JobCompletion = () => {
         try {
             const { data, error } = await supabase
                 .from('jobs')
-                .select('*, leads(*), properties(*)')
+                .select('*, leads(id, first_name, last_name, email, address, property_formatted_address)')
                 .eq('id', jobId)
                 .single();
 
@@ -88,7 +88,10 @@ const JobCompletion = () => {
             if (emailCustomer && job.leads?.email) {
                 const emailHtml = generateHygieneReportEmail({
                     customerName: job.leads.first_name,
-                    serviceAddress: job.properties?.address1 || 'Your Address',
+                    serviceAddress: job.service_address
+                      || job.leads?.property_formatted_address
+                      || job.leads?.address
+                      || 'Your Address',
                     serviceDate: new Date().toLocaleDateString(),
                     technicianName: 'The Vent Guys Tech',
                     findings: findings,
