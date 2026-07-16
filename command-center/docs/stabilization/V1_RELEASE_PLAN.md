@@ -66,6 +66,8 @@ Priority order (unless new P0 outage):
 | Production verification | Synthetic appointment + tech login |
 | Stop conditions | Rewrites work order board |
 
+**Status:** In progress on `stabilize/r3-scheduling-operations` — see `R3_SCHEDULING_OPERATIONS_PLAN.md`.
+
 ---
 
 ## Release R4 — Estimate → job reliability

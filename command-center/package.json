@@ -17,6 +17,8 @@
     "test:identity-contracts": "npm run guard:identity && npm run test:identity-helpers && playwright test tests/smoke/r1a-property-relationship-safety.spec.js tests/smoke/r1b-technician-identity-contract.spec.js tests/smoke/r1c-identity-relationship-guards.spec.js tests/smoke/inspection-field-address-schema.spec.js",
     "test:intake-helpers": "node --test tests/unit/r2-lead-intake-contract.test.mjs",
     "test:intake-contracts": "npm run test:intake-helpers && playwright test tests/smoke/r2-intake-clarity.spec.js tests/smoke/inspection-field-address-schema.spec.js",
+    "test:scheduling-helpers": "node --test tests/unit/r3-job-appointment-schedule.test.mjs",
+    "test:scheduling-contracts": "npm run test:scheduling-helpers && playwright test tests/smoke/r3-scheduling-operations.spec.js",
     "verify:live-secrets": "node tools/scan-live-for-secrets.mjs https://app.bhfos.com",
     "validate:document-system": "node scripts/validate-document-system.mjs",
     "check:customer-doc-encoding": "node scripts/check-customer-doc-encoding.mjs",
