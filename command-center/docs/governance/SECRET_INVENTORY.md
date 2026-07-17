@@ -61,17 +61,19 @@
 
 ## Planned / authorized I2 Production Diagnostics identities (names only)
 
-> No secret values. B2A Founder authorization (2026-07-17): GitHub App issue
-> authorized; Hostinger **not** provisioned; Supabase capability verification
-> only (no token until G2.3B-B2B).
+> No secret values. **G2.3B-B2C** (Cursor integration): GitHub machine-PAT for
+> Diagnostics MCP authorized for issue into Diagnostics secret env only.
+> Hostinger blocked. Supabase adapter implemented; **no** Supabase credential.
 
 | Name | Owning system | Purpose | Environment | Expected storage | Responsible role | Rotation requirement | Revocation method | Verified? | Notes (non-sensitive) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `I2_GITHUB_DIAGNOSTICS_APP` | GitHub | Read-only PR/check/workflow/branch-protection diagnostics via dedicated App | production (ops) | Secret store (App private key / installation credentials) | Production Diagnostics (I2) | Cadence + immediate revoke on suspicion | Disable App installation; revoke credentials | unverified | **B2A authorized.** Dedicated GitHub App on `faydog127/BHFOS` only. Permissions: Metadata/Contents/Actions/PRs/Commit statuses read; Administration read for branch-protection/rulesets only. **Deployments read omitted** (not demonstrated necessary). No founder-personal identity. Not yet issued. |
-| `I2_GITHUB_DIAGNOSTICS_TOKEN` | GitHub | (legacy planned name) | production (ops) | Secret store | Production Diagnostics (I2) | — | — | unverified | **Superseded for B2A** by App identity above. Machine-PAT fallback not authorized under B2A. |
-| `I2_HOSTINGER_DIAGNOSTICS_TOKEN` | Hostinger | — | production (ops) | — | — | — | — | **READ_ONLY_CAPABILITY_UNAVAILABLE** | **B2A: do not create.** No API token, collaborator, shared-admin, or founder-personal account for I2. Future packet only if provider read-only role independently demonstrated. |
-| `I2_SUPABASE_DIAGNOSTICS_TOKEN` | Supabase | (legacy planned name) | production (ops) | — | — | — | — | unverified | **Not authorized for issue.** Replaced by OAuth2 path pending B2B. |
-| `I2_SUPABASE_OAUTH_DIAGNOSTICS_TOKEN` | Supabase | Management API diagnostics (OAuth2 fine-grained) | production (ops) | Secret store | Production Diagnostics (I2) | Short-lived access + revoke app auth | Revoke OAuth app authorization | unverified | **No token issued.** Capability verification complete — see `SUPABASE_I2_CAPABILITY_VERIFICATION.md`. Awaiting G2.3B-B2B Founder option A/B/C. PAT / Dashboard Read-Only / service-role prohibited. |
+| `I2_GITHUB_MCP_DIAGNOSTICS_PAT` | GitHub | Official GitHub MCP read-only for Production Diagnostics | production-diagnostics (Cursor env) | Diagnostics secret store → process env `GITHUB_PERSONAL_ACCESS_TOKEN` only | Production Diagnostics (I2) | ≤90 days + immediate revoke | Revoke fine-grained PAT; remove Diagnostics env secret | unverified | **B2C authorized.** Machine-owned fine-grained PAT; `faydog127/BHFOS` only; Metadata/Contents/Actions/PRs/Commit statuses read; Administration read for branch-protection/rulesets. `GITHUB_READ_ONLY=1`; toolsets `context,repos,pull_requests,actions`. Not founder-personal. Not in global Cursor config. Not yet issued. |
+| `I2_GITHUB_DIAGNOSTICS_APP` | GitHub | — | — | — | — | — | — | unverified | **Superseded by B2C** (Cursor GitHub MCP requires PAT). Do not issue. |
+| `I2_GITHUB_DIAGNOSTICS_TOKEN` | GitHub | — | — | — | — | — | — | unverified | Legacy name; use `I2_GITHUB_MCP_DIAGNOSTICS_PAT`. |
+| `I2_HOSTINGER_DIAGNOSTICS_TOKEN` | Hostinger | — | — | — | — | — | — | **READ_ONLY_CAPABILITY_UNAVAILABLE** | **Do not create in G2.3B.** Reserved for G2.3C Production Operator + mutation-gated deploy CLI only. |
+| `I2_SUPABASE_DIAGNOSTICS_TOKEN` | Supabase | — | — | — | — | — | — | unverified | Legacy; not issued. |
+| `I2_SUPABASE_OAUTH_DIAGNOSTICS_TOKEN` | Supabase | — | — | — | — | — | — | unverified | Option-A-as-final superseded; adapter-first. |
+| `SUPABASE_DIAGNOSTICS_ADAPTER_TOKEN` | Supabase | Internal credential for bounded adapter only | production-diagnostics (adapter process) | Diagnostics secret store; **not** agent-visible | Production Diagnostics adapter | Cadence + revoke | Revoke token; stop adapter | unverified | **Not issued under B2C.** Requires separate Founder Decision Packet after AG review of adapter. |
 
 ## Handling rules (binding)
 

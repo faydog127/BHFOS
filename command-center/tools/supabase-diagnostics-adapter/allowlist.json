@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "management_api_base": "https://api.supabase.com",
+  "documentation_verified_at": "2026-07-17",
+  "notes": [
+    "Candidates verified against official Management API docs. Migration list omitted (partner-gated / unproven for this account). Bounded logs deferred until separate auth defines fixed queries without agent SQL.",
+    "Health endpoint GET /v1/projects/{ref}/health verified in official docs (2026-07-17)."
+  ],
+  "allowed_path_prefixes": [
+    "/v1/projects/{ref}"
+  ],
+  "operations": {
+    "project_status": {
+      "status": "allowed",
+      "method": "GET",
+      "pathTemplate": "/v1/projects/{ref}",
+      "docs": "https://supabase.com/docs/reference/api/v1-get-project",
+      "permission_hint": "projects:read / projects_read"
+    },
+    "project_health": {
+      "status": "allowed",
+      "method": "GET",
+      "pathTemplate": "/v1/projects/{ref}/health",
+      "docs": "https://supabase.com/docs/reference/api/v1-get-project-health",
+      "permission_hint": "projects:read",
+      "note": "Verified path in official docs; included as non-sensitive health metadata only"
+    },
+    "edge_function_inventory": {
+      "status": "allowed",
+      "method": "GET",
+      "pathTemplate": "/v1/projects/{ref}/functions",
+      "docs": "https://supabase.com/docs/reference/api/v1-list-all-functions",
+      "permission_hint": "edge_functions_read",
+      "note": "List/metadata only. Adapter MUST NOT call /functions/{slug}/body"
+    },
+    "migration_list": {
+      "status": "unavailable",
+      "method": "GET",
+      "pathTemplate": "/v1/projects/{ref}/database/migrations",
+      "reason": "Official docs mark partner-gated; treat unavailable until account-level capability proven",
+      "permission_hint": "database_migrations_read"
+    },
+    "bounded_logs": {
+      "status": "deferred",
+      "method": "GET",
+      "pathTemplate": "/v1/projects/{ref}/analytics/endpoints/logs",
+      "reason": "Requires separate Founder auth; adapter must never accept agent-provided SQL",
+      "permission_hint": "analytics_logs_read"
+    }
+  },
+  "prohibited_path_substrings": [
+    "/body",
+    "/secrets",
+    "/api-keys",
+    "/database/query",
+    "execute-sql",
+    "sql=",
+    "/config/",
+    "/deploy",
+    "edge_functions_secrets"
+  ]
+}

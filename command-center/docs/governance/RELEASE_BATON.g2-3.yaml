@@ -1,75 +1,64 @@
 ---
 # Release Baton — BHFOS Operating Model v2.2
 #
-# One Baton for the G2.3 production-readiness program, reused across phases
-# (G2.3A..G2.3E) per the umbrella brief. Machine-readable, credential-free
-# release-state artifact recording verified references and the current handoff.
-#
 # AUTHORITATIVE SOURCES: GitHub and CI remain authoritative for live PR and
-# check state. This Baton records verified references and current handoff, not a
-# competing source of truth.
-#
-# CONTENT RULES: NO credentials, NO secrets, NO customer data, NO copied logs,
-# NO screenshots. MAINTENANCE: agent-maintained; the founder never edits it.
+# check state. CONTENT RULES: NO credentials, NO secrets, NO customer data.
 
 release_id: "G2.3"
 current_phase: "G2.3B-B2C"
 governance_version: "v2.2"
 risk_tier: "Tier 3"
-status: "awaiting_founder_authorization_b2c"
-current_owner: "Program Orchestrator"
+status: "in_progress"
+current_owner: "V1 Builder"
 release_brief_path: "command-center/docs/stabilization/releases/G2.3B-B2_BRIEF.md"
 umbrella_brief_path: "command-center/docs/stabilization/releases/G2.3_BRIEF.md"
-parent_brief_path: "command-center/docs/stabilization/releases/G2.3B_BRIEF.md"
 decision_packet_path: "command-center/docs/governance/decisions/G2.3B-B2C_DECISION_PACKET.md"
-capability_verification_path: "command-center/docs/governance/SUPABASE_I2_CAPABILITY_VERIFICATION.md"
+role_isolation_path: "command-center/docs/governance/CURSOR_ROLE_ISOLATION.md"
 
 completed_phase: "G2.3B-B1"
 completed_phase_status: "complete"
-g2_3a_pr_number: 52
-g2_3a_approved_head_sha: "27606714a73f663121962ae03dd1e603964d2f72"
 g2_3a_merge_sha: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"
 g2_3b_b1_pr_number: 53
 g2_3b_b1_approved_head_sha: "07d647399936a40525554d78ca6a466de67424d1"
 g2_3b_b1_merge_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
 base_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
 
-pr_number: 53
-approved_head_sha: "07d647399936a40525554d78ca6a466de67424d1"
-head_sha: "07d647399936a40525554d78ca6a466de67424d1"
-merge_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
+pr_number: null
+approved_head_sha: ""
+head_sha: ""
+merge_sha: ""
 
-check_status: "green"
-architecture_guard_status: "B1_APPROVE_FOR_FINAL_DECISION_PACKET; B2A_in_progress; B2B_packet_prepared"
+check_status: "unknown"
+architecture_guard_status: "required_after_b2c_pr"
 uat_status: "NOT_APPLICABLE"
 
-owner_checkpoint: "g2-3b-b2c_cursor_integration_packet_awaiting_founder"
+owner_checkpoint: "g2-3b-b2c_implementation_authorized"
 
-merge_authorization: "granted (Founder G2.3B-B1 Authorized Merge: PR #53 @ 07d647399936a40525554d78ca6a466de67424d1)"
+merge_authorization: "none"
 deployment_authorization: "none"
 migration_authorization: "none"
 production_test_authorization: "none"
 production_access_authorization: "none"
-b2_credential_authorization: "none (B2A App path superseded by B2C GitHub MCP PAT plan; B2B Option A not final; awaiting B2C Founder auth)"
-b2b_supabase_issue_authorization: "none (superseded — adapter-first; no token until adapter auth)"
-b2c_cursor_integration_authorization: "none"
-implementation_authorization: "none"
+b2c_cursor_integration_authorization: "granted (Founder G2.3B-B2C: GitHub MCP Diagnostics + adapter repo impl + role isolation; no Supabase/Hostinger credential; no B3-E)"
+supabase_credential_authorization: "none"
+hostinger_credential_authorization: "none"
+implementation_authorization: "granted (B2C repository implementation, validation, PR, AG review)"
 
 deployment_status: "not_performed"
 migration_status: "not_performed"
 production_action_status: "none"
 
 hostinger_i2_status: "READ_ONLY_CAPABILITY_UNAVAILABLE"
-github_i2_status: "plan_superseded_to_mcp_machine_pat_awaiting_b2c_auth"
-supabase_i2_status: "adapter_design_required_no_token"
+github_i2_status: "mcp_integration_implemented_pat_pending_founder_issue"
+supabase_i2_status: "adapter_implemented_no_credential"
 
 rollback_point: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
 
 blockers:
-  - "B2C Decision Packet awaiting Founder authorization (Cursor-usable integrations)"
-  - "Hostinger I2: READ_ONLY_CAPABILITY_UNAVAILABLE (deferred to G2.3C Operator)"
-  - "Supabase: adapter design + AG/Founder auth required before any credential"
-  - "Six G2.3B reconciliation items remain open until B4"
+  - "Founder must create machine GitHub identity + fine-grained PAT into Diagnostics secret env (unavoidable)"
+  - "Hostinger I2: READ_ONLY_CAPABILITY_UNAVAILABLE"
+  - "Supabase credential: separate Decision Packet after AG on adapter"
+  - "B2C implementation PR not yet opened / AG not yet run"
 
-next_phase: "Founder authorization of G2.3B-B2C Decision Packet"
-next_owner: "Founder (authorization)"
+next_phase: "Complete B2C PR + isolation tests; Founder issues GitHub PAT; AG review; merge auth"
+next_owner: "V1 Builder → Founder (PAT) → Architecture Guard → Founder (merge)"
