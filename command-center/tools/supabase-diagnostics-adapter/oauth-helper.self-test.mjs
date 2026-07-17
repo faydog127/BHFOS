@@ -23,6 +23,10 @@ import {
   REDIRECT_URI,
   CALLBACK_PATH,
   OAuthHelperError,
+  buildBrowserLaunchSpec,
+  extractUrlFromBrowserLaunchSpec,
+  authorizeUrlParamPresence,
+  defectiveCmdStartTruncatesAtAmpersand,
 } from './oauth-helper.mjs';
 
 function pass(results, test, ok, detail) {
@@ -239,12 +243,132 @@ export async function runSelfTests() {
   wipeTransient(bag);
   pass(results, 'wipe_transient', Object.keys(bag).length === 0);
 
+  // --- Windows browser launch: ampersand-safe delivery (no URL printed) ---
+  const winState = generateState();
+  const winPkce = generatePkce();
+  const winClientId = 'win-test-client-id-not-a-secret';
+  const winUrl = buildAuthorizeUrl({
+    clientId: winClientId,
+    state: winState,
+    codeChallenge: winPkce.challenge,
+  });
+  const defective = defectiveCmdStartTruncatesAtAmpersand(winUrl);
+  pass(
+    results,
+    'windows_defective_cmd_truncates_ampersand',
+    defective.truncated && defective.firstSegmentHasOnlyResponseType
+  );
+
+  const captured = [];
+  const winSpec = buildBrowserLaunchSpec(winUrl, 'win32');
+  // Simulate launcher handoff: spawn receives intact argv; extract URL for presence checks only
+  captured.push({ command: winSpec.command, args: winSpec.args });
+  const delivered = extractUrlFromBrowserLaunchSpec(winSpec);
+  const presence = authorizeUrlParamPresence(delivered);
+  pass(
+    results,
+    'windows_launcher_delivers_full_authorize_url',
+    delivered === winUrl &&
+      presence.responseTypeCode &&
+      presence.clientIdPresent &&
+      presence.redirectUriPresent &&
+      presence.statePresent &&
+      presence.codeChallengePresent &&
+      presence.codeChallengeMethodS256 &&
+      presence.ampersandCount >= 4
+  );
+  pass(
+    results,
+    'windows_launcher_uses_powershell_not_cmd_start',
+    winSpec.command === 'powershell.exe' &&
+      winSpec.args.includes('-Command') &&
+      String(winSpec.args[winSpec.args.indexOf('-Command') + 1]).startsWith(
+        'Start-Process -FilePath'
+      ) &&
+      !captured.some((c) => c.command === 'cmd' || c.command === 'cmd.exe')
+  );
+
+  // Runtime parameter binding on Windows PowerShell 5.x (no browser navigation):
+  // Get-Command Start-Process must expose -FilePath; must NOT require -LiteralPath.
+  if (process.platform === 'win32') {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const probe = spawnSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          "(Get-Command Start-Process).Parameters.ContainsKey('FilePath') -and -not (Get-Command Start-Process).Parameters.ContainsKey('LiteralPath')",
+        ],
+        { encoding: 'utf8', windowsHide: true }
+      );
+      const out = String(probe.stdout || '').trim().toLowerCase();
+      pass(
+        results,
+        'windows_powershell_start_process_filepath_param',
+        probe.status === 0 && out === 'true'
+      );
+      // Validate -Command parsing accepts FilePath with ampersands (WhatIf / dry syntax check)
+      const ampProbe = spawnSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `[void][scriptblock]::Create("Start-Process -FilePath '${delivered.replace(/'/g, "''")}'"); 'ok'`,
+        ],
+        { encoding: 'utf8', windowsHide: true }
+      );
+      pass(
+        results,
+        'windows_powershell_ampersand_filepath_command_parses',
+        ampProbe.status === 0 && String(ampProbe.stdout || '').includes('ok') &&
+          !String(ampProbe.stderr || '').includes('LiteralPath')
+      );
+    } catch (e) {
+      pass(results, 'windows_powershell_start_process_filepath_param', false, String(e.message || e));
+      pass(results, 'windows_powershell_ampersand_filepath_command_parses', false);
+    }
+  } else {
+    pass(results, 'windows_powershell_start_process_filepath_param', true, 'skipped_non_windows');
+    pass(results, 'windows_powershell_ampersand_filepath_command_parses', true, 'skipped_non_windows');
+  }
+  pass(
+    results,
+    'windows_launcher_pkce_verifier_not_in_launch_args',
+    !JSON.stringify(winSpec.args).includes(winPkce.verifier)
+  );
+
+  // Presence-only result object must not embed raw state / challenge values
+  const presenceDump = JSON.stringify(presence);
+  pass(
+    results,
+    'windows_presence_checks_omit_param_values',
+    !presenceDump.includes(winState) &&
+      !presenceDump.includes(winPkce.challenge) &&
+      !presenceDump.includes(winPkce.verifier)
+  );
+
   // --- stdout/stderr scan of this test module's status strings ---
   const combined = results.map((r) => JSON.stringify(r)).join('\n') + '\n' + status;
   pass(
     results,
     'no_token_values_in_stdout_stderr',
     !combined.includes(access) && !combined.includes(refresh)
+  );
+  // Self-test public JSON must not include state / PKCE verifier / full authorize URL
+  const publicDump = JSON.stringify({
+    ok: true,
+    failed: results.filter((r) => !r.pass).map((r) => r.test),
+  });
+  pass(
+    results,
+    'no_state_or_pkce_verifier_in_public_self_test_json',
+    !publicDump.includes(winState) &&
+      !publicDump.includes(winPkce.verifier) &&
+      !publicDump.includes('code_challenge=') &&
+      !combined.includes(winPkce.verifier)
   );
 
   const failed = results.filter((r) => !r.pass);

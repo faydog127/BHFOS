@@ -37,18 +37,18 @@ import {
   formatStatusResult,
   redactSecrets,
   parseEnvFile,
+  buildBrowserLaunchSpec,
 } from './oauth-helper.mjs';
 import { runSelfTests } from './oauth-helper.self-test.mjs';
 
-function openBrowser(url) {
-  const platform = process.platform;
-  if (platform === 'win32') {
-    spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' });
-  } else if (platform === 'darwin') {
-    spawn('open', [url], { detached: true, stdio: 'ignore' });
-  } else {
-    spawn('xdg-open', [url], { detached: true, stdio: 'ignore' });
-  }
+/**
+ * Open the system browser without printing the URL (contains state / PKCE).
+ * Windows uses PowerShell Start-Process so cmd.exe cannot split on `&`.
+ */
+export function openBrowser(url, { spawnFn = spawn, platform = process.platform } = {}) {
+  const spec = buildBrowserLaunchSpec(url, platform);
+  spawnFn(spec.command, spec.args, spec.options);
+  return spec;
 }
 
 function waitForCallback({ expectedState, timeoutMs = 5 * 60 * 1000 }) {
