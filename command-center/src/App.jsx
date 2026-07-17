@@ -7,6 +7,12 @@ import SelectTenant from '@/pages/SelectTenant';
 import { Loader2 } from 'lucide-react';
 import TenantGuard from '@/components/TenantGuard';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import {
+  OAUTH_CALLBACK_MAX_WAIT_MS,
+  readOAuthErrorFromUrl,
+  resolveOAuthCallbackNavigation,
+  urlHasOAuthCallbackParams,
+} from '@/lib/oauthCallbackGate';
 
 import Login from '@/pages/Login';
 import Contact from '@/pages/Contact';
@@ -125,17 +131,19 @@ const RootGate = () => {
   const navigate = useNavigate();
   const { session, loading } = useSupabaseAuth();
   const [showTimeoutUI, setShowTimeoutUI] = useState(false);
+  const [oauthWaitStartedAt, setOauthWaitStartedAt] = useState(null);
+  const [oauthWaitTick, setOauthWaitTick] = useState(0);
+  const [oauthFailMessage, setOauthFailMessage] = useState(null);
 
-  const hasOAuthParams = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    return (
-      params.has('code') ||
-      params.has('access_token') ||
-      params.has('refresh_token') ||
-      params.has('error') ||
-      params.has('error_description')
-    );
-  }, [location.search]);
+  const hasOAuthParams = useMemo(
+    () => urlHasOAuthCallbackParams(location.search, location.hash),
+    [location.search, location.hash]
+  );
+
+  const { oauthError, oauthErrorDescription } = useMemo(
+    () => readOAuthErrorFromUrl(location.search, location.hash),
+    [location.search, location.hash]
+  );
 
   useEffect(() => {
     if (!loading) {
@@ -149,6 +157,21 @@ const RootGate = () => {
 
     return () => clearTimeout(timer);
   }, [loading]);
+
+  // Keep waiting while PKCE exchange can still complete — do not drop ?code=.
+  useEffect(() => {
+    if (!hasOAuthParams || session || oauthError) {
+      setOauthWaitStartedAt(null);
+      return undefined;
+    }
+    if (oauthWaitStartedAt == null) {
+      setOauthWaitStartedAt(Date.now());
+    }
+    const timer = setInterval(() => {
+      setOauthWaitTick((tick) => tick + 1);
+    }, 500);
+    return () => clearInterval(timer);
+  }, [hasOAuthParams, session, oauthError, oauthWaitStartedAt]);
 
   useEffect(() => {
     if (loading) return;
@@ -169,27 +192,51 @@ const RootGate = () => {
       }
     };
 
-    if (hasOAuthParams) {
-      // OAuth redirect landed here (origin-only). Wait for Supabase to hydrate a session,
-      // then forward to the intended post-login route.
-      if (session) {
-        const redirect = safeGetRedirect();
-        safeClearRedirect();
-        navigate(redirect || `/${getTenantFromStorage()}/crm`, { replace: true });
-      } else {
-        // Auth failed or was cancelled; return to tenant selection.
-        navigate('/select-tenant', { replace: true });
-      }
+    const waitedMs =
+      hasOAuthParams && oauthWaitStartedAt != null
+        ? Date.now() - oauthWaitStartedAt
+        : 0;
+
+    const decision = resolveOAuthCallbackNavigation({
+      hasOAuthParams,
+      session,
+      oauthError,
+      oauthErrorDescription,
+      waitedMs,
+      maxWaitMs: OAUTH_CALLBACK_MAX_WAIT_MS,
+      postLoginRedirect: safeGetRedirect(),
+      tenantFallback: getTenantFromStorage(),
+    });
+
+    if (decision.action === 'wait') {
+      setOauthFailMessage(null);
       return;
     }
 
-    // Normal root visits: if we have a session, go to the last tenant CRM; otherwise select-tenant.
-    if (session) {
-      navigate(`/${getTenantFromStorage()}/crm`, { replace: true });
-    } else {
-      navigate('/select-tenant', { replace: true });
+    if (decision.action === 'fail') {
+      // Stay on this screen so we do not silently dump the user on select-tenant.
+      // Offer an explicit path back to login (email/password still works on phone).
+      setOauthFailMessage(decision.message || 'Sign-in did not complete.');
+      return;
     }
-  }, [hasOAuthParams, loading, navigate, session]);
+
+    if (decision.action === 'navigate' && decision.to) {
+      if (decision.clearPostLoginRedirect) {
+        safeClearRedirect();
+      }
+      setOauthFailMessage(null);
+      navigate(decision.to, { replace: decision.replace !== false });
+    }
+  }, [
+    hasOAuthParams,
+    loading,
+    navigate,
+    session,
+    oauthError,
+    oauthErrorDescription,
+    oauthWaitStartedAt,
+    oauthWaitTick,
+  ]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
@@ -197,7 +244,19 @@ const RootGate = () => {
       <p className="text-slate-500 text-sm">
         {hasOAuthParams ? 'Completing sign-in…' : 'Loading…'}
       </p>
-      {showTimeoutUI && (
+      {oauthFailMessage && (
+        <div className="mt-4 flex max-w-sm flex-col items-center gap-2 px-4 text-center">
+          <p className="text-xs text-red-600">{oauthFailMessage}</p>
+          <button
+            type="button"
+            className="text-xs font-medium text-blue-700 underline underline-offset-2"
+            onClick={() => navigate(`/${getTenantFromStorage()}/login`, { replace: true })}
+          >
+            Back to Login
+          </button>
+        </div>
+      )}
+      {showTimeoutUI && !oauthFailMessage && (
         <div className="mt-4 flex flex-col items-center gap-2 px-4 text-center">
           <p className="text-xs text-slate-500">Still loading your session.</p>
           <div className="flex items-center gap-3">
