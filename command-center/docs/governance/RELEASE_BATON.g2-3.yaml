@@ -12,18 +12,18 @@
 # CONTENT RULES: NO credentials, NO secrets, NO customer data, NO copied logs,
 # NO screenshots. MAINTENANCE: agent-maintained; the founder never edits it.
 
-release_id: "G2.3"                   # program-level Baton, reused across phases
-current_phase: "G2.3B-B2"            # I2 identity and credential provisioning
+release_id: "G2.3"
+current_phase: "G2.3B-B2A"
 governance_version: "v2.2"
-risk_tier: "Tier 3"                  # B2 credential/identity provisioning
-status: "awaiting_founder_authorization_corrected_packet"
+risk_tier: "Tier 3"
+status: "in_progress"
 current_owner: "Program Orchestrator"
 release_brief_path: "command-center/docs/stabilization/releases/G2.3B-B2_BRIEF.md"
 umbrella_brief_path: "command-center/docs/stabilization/releases/G2.3_BRIEF.md"
 parent_brief_path: "command-center/docs/stabilization/releases/G2.3B_BRIEF.md"
-decision_packet_path: "command-center/docs/governance/decisions/G2.3B-B2_DECISION_PACKET.md"
+decision_packet_path: "command-center/docs/governance/decisions/G2.3B-B2B_DECISION_PACKET.md"
+capability_verification_path: "command-center/docs/governance/SUPABASE_I2_CAPABILITY_VERIFICATION.md"
 
-# --- Completed phases (verified) ---
 completed_phase: "G2.3B-B1"
 completed_phase_status: "complete"
 g2_3a_pr_number: 52
@@ -32,41 +32,43 @@ g2_3a_merge_sha: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"
 g2_3b_b1_pr_number: 53
 g2_3b_b1_approved_head_sha: "07d647399936a40525554d78ca6a466de67424d1"
 g2_3b_b1_merge_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
-base_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"  # origin/main after B1 merge
+base_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
 
-# Live B1 PR/check/SHA (closed)
 pr_number: 53
 approved_head_sha: "07d647399936a40525554d78ca6a466de67424d1"
 head_sha: "07d647399936a40525554d78ca6a466de67424d1"
 merge_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
 
-check_status: "green"                # lint, identity_contracts, build, ledger_lock SUCCESS at merge
-architecture_guard_status: "B1_APPROVE_FOR_FINAL_DECISION_PACKET; B2_corrected_packet_AG_pending"
+check_status: "green"
+architecture_guard_status: "B1_APPROVE_FOR_FINAL_DECISION_PACKET; B2A_in_progress; B2B_packet_prepared"
 uat_status: "NOT_APPLICABLE"
 
-owner_checkpoint: "g2-3b-b2_prior_packet_void_corrected_packet_awaiting_founder"
+owner_checkpoint: "g2-3b-b2a_authorized_github_pending_issue_hostinger_blocked_supabase_verify_done"
 
-# Authorizations — recording never creates authority
 merge_authorization: "granted (Founder G2.3B-B1 Authorized Merge: PR #53 @ 07d647399936a40525554d78ca6a466de67424d1)"
 deployment_authorization: "none"
 migration_authorization: "none"
 production_test_authorization: "none"
 production_access_authorization: "none"
-b2_credential_authorization: "none (prior three-system packet VOID — do not execute; corrected Decision Packet awaiting Founder authorization)"
+b2_credential_authorization: "granted-B2A (GitHub App only; Hostinger none; Supabase verify-only — prior equivalent-controls packet VOID)"
+b2b_supabase_issue_authorization: "none (Decision Packet G2.3B-B2B awaiting Founder)"
 implementation_authorization: "none"
 
-# Operational outcomes for current phase
 deployment_status: "not_performed"
 migration_status: "not_performed"
 production_action_status: "none"
 
+hostinger_i2_status: "READ_ONLY_CAPABILITY_UNAVAILABLE"
+github_i2_status: "authorized_not_yet_issued"
+supabase_i2_status: "capability_verified_no_token_issued"
+
 rollback_point: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
 
 blockers:
-  - "Prior G2.3B-B2 three-system packet VOID (unsafe equivalent-controls assumption)"
-  - "Hostinger I2: READ_ONLY_CAPABILITY_UNAVAILABLE / UNVERIFIED — no provisioning"
-  - "Supabase I2: gated on proven fine-grained Management API permission↔endpoint allowlist"
-  - "Six G2.3B reconciliation items remain open until B4 (do not block corrected B2 entry)"
+  - "GitHub I2 App authorized but not yet issued (requires App create/install + secret-store)"
+  - "Hostinger I2: READ_ONLY_CAPABILITY_UNAVAILABLE"
+  - "Supabase I2: awaiting Founder G2.3B-B2B Decision Packet (Option A/B/C)"
+  - "Six G2.3B reconciliation items remain open until B4"
 
-next_phase: "G2.3B-B2 Founder authorization of corrected Decision Packet"
-next_owner: "Founder (authorization)"
+next_phase: "Issue GitHub I2 App under B2A; Founder decides G2.3B-B2B Supabase option"
+next_owner: "Founder (GitHub App secret-store + B2B authorization) / Program Orchestrator"

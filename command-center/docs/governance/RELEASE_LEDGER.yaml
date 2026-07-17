@@ -66,3 +66,27 @@ entries:
     rollback_point: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"
     completion_status: "merged_repository_only"
     notes: "G2.3B-B1 closed. PR #53 merge commit 9cd1084aeeaa3a72936fc7abdc4317804af4208c equals origin/main at B1 closeout. Delivered: DIAGNOSTICS_ACCESS.md, RECONCILIATION_G2-3B.md, DIAGNOSTICS_RUNBOOK.md, EXECUTE_SQL_REVIEW.md, I2_PROVISIONING_CHECKLIST.md, I2_REVOCATION_CHECKLIST.md, DIAGNOSTICS_EVIDENCE.template.md, names-only planned I2 inventory rows. Confirmed non-actions: no credential provisioning, no production access, no live diagnostics, no deployment, no migration, no execute-sql, no external mutation. B2–B5 remain separately authorized Tier 3 work."
+
+  - release_id: "G2.3B-B2A"
+    governance_version: "v2.2"
+    risk_tier: "Tier 3"
+    phase: "I2 split authorization — GitHub App; Hostinger blocked; Supabase verify-only"
+    pr: null
+    approved_head_sha: ""
+    merge_sha: ""
+    deployed_sha: ""
+    environment: ""
+    migration_state: "none"
+    authorization_references:
+      b2a: "granted-by-Founder (GitHub dedicated App only; Hostinger READ_ONLY_CAPABILITY_UNAVAILABLE; Supabase capability verification only — no Supabase token)"
+      prior_b2_packet: "VOID (equivalent-controls assumption unsafe)"
+      b2b_supabase_issue: "none"
+      deployment: "none"
+      migration: "none"
+    production_actions: []
+    verification_result: "Hostinger recorded READ_ONLY_CAPABILITY_UNAVAILABLE; Supabase capability verification documented (OAuth2 fine-grained only; PAT prohibited; edge_functions_read includes body; analytics_logs_read includes sensitive logs); GitHub App authorized not yet issued; no secret values in repo"
+    architecture_guard_status: "pending_for_github_issue_and_b2b"
+    uat_status: "NOT_APPLICABLE"
+    rollback_point: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
+    completion_status: "open"
+    notes: "B2A in progress. No Hostinger identity. No Supabase token. GitHub App issue pending secret-store mechanics. G2.3B-B2B Decision Packet prepared for Founder Option A/B/C."

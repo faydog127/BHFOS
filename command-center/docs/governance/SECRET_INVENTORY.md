@@ -59,18 +59,19 @@
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Stripe | Payments + webhook verification | backend | Supabase secret store (backend only) | Founder | Documented cadence + immediate revoke | Revoke/rotate in Stripe dashboard | unknown | Financial. Backend-only. Routine testing uses synthetic simulation, never live charges. |
 | `GOOGLE_MAPS_API_KEY` | Google | Server-side places/geocoding | backend | Supabase secret store (backend only) | Founder | Per Google key policy | Revoke/rotate in Google Cloud console | unknown | Distinct from the client `VITE_GOOGLE_MAPS_API_KEY`. |
 
-## Planned I2 Production Diagnostics identities (names only — not provisioned in B1)
+## Planned / authorized I2 Production Diagnostics identities (names only)
 
-> These rows are **planned** under G2.3B-B1. They must remain `unverified` until
-> G2.3B-B2 provisions them under a separate Founder authorization. **No values
-> are stored in this repository.** Do not use founder-personal, shared-admin, or
-> service-role credentials as I2.
+> No secret values. B2A Founder authorization (2026-07-17): GitHub App issue
+> authorized; Hostinger **not** provisioned; Supabase capability verification
+> only (no token until G2.3B-B2B).
 
 | Name | Owning system | Purpose | Environment | Expected storage | Responsible role | Rotation requirement | Revocation method | Verified? | Notes (non-sensitive) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `I2_GITHUB_DIAGNOSTICS_TOKEN` | GitHub | Read-only PR/check/workflow/branch-protection diagnostics | production (ops) | Secret store | Production Diagnostics (I2) | Cadence + immediate revoke on suspicion | Revoke PAT / disable App | unverified | Planned fine-grained PAT or GitHub App. Read scopes only per `DIAGNOSTICS_ACCESS.md`. Not provisioned in B1. |
-| `I2_HOSTINGER_DIAGNOSTICS_TOKEN` | Hostinger | Read-only deployment history/status/logs/version | production (ops) | Secret store | Production Diagnostics (I2) | Cadence + immediate revoke on suspicion | Revoke token / remove role | unverified | Planned read-only token or role. Platform read-API support **unknown** until B2. Not provisioned in B1. |
-| `I2_SUPABASE_DIAGNOSTICS_TOKEN` | Supabase | Read-only logs, schema/migration metadata, function inventory | production (ops) | Secret store | Production Diagnostics (I2) | Cadence + immediate revoke on suspicion | Revoke token / demote member | unverified | Planned read-only identity. **Must not** be the service-role key. Not provisioned in B1. |
+| `I2_GITHUB_DIAGNOSTICS_APP` | GitHub | Read-only PR/check/workflow/branch-protection diagnostics via dedicated App | production (ops) | Secret store (App private key / installation credentials) | Production Diagnostics (I2) | Cadence + immediate revoke on suspicion | Disable App installation; revoke credentials | unverified | **B2A authorized.** Dedicated GitHub App on `faydog127/BHFOS` only. Permissions: Metadata/Contents/Actions/PRs/Commit statuses read; Administration read for branch-protection/rulesets only. **Deployments read omitted** (not demonstrated necessary). No founder-personal identity. Not yet issued. |
+| `I2_GITHUB_DIAGNOSTICS_TOKEN` | GitHub | (legacy planned name) | production (ops) | Secret store | Production Diagnostics (I2) | — | — | unverified | **Superseded for B2A** by App identity above. Machine-PAT fallback not authorized under B2A. |
+| `I2_HOSTINGER_DIAGNOSTICS_TOKEN` | Hostinger | — | production (ops) | — | — | — | — | **READ_ONLY_CAPABILITY_UNAVAILABLE** | **B2A: do not create.** No API token, collaborator, shared-admin, or founder-personal account for I2. Future packet only if provider read-only role independently demonstrated. |
+| `I2_SUPABASE_DIAGNOSTICS_TOKEN` | Supabase | (legacy planned name) | production (ops) | — | — | — | — | unverified | **Not authorized for issue.** Replaced by OAuth2 path pending B2B. |
+| `I2_SUPABASE_OAUTH_DIAGNOSTICS_TOKEN` | Supabase | Management API diagnostics (OAuth2 fine-grained) | production (ops) | Secret store | Production Diagnostics (I2) | Short-lived access + revoke app auth | Revoke OAuth app authorization | unverified | **No token issued.** Capability verification complete — see `SUPABASE_I2_CAPABILITY_VERIFICATION.md`. Awaiting G2.3B-B2B Founder option A/B/C. PAT / Dashboard Read-Only / service-role prohibited. |
 
 ## Handling rules (binding)
 
