@@ -1,0 +1,35 @@
+---
+# Release Ledger (template) — BHFOS Operating Model v2.2
+#
+# Structured, persistent, append-only record of releases, merges, deployments,
+# migrations, and production actions. Serves as the "what happened" source of
+# truth so evidence is not requested from the founder repeatedly.
+#
+# MAINTENANCE: agent-maintained. The founder never edits this file.
+#
+# CONTENT RULES (must hold): NO credentials, NO secrets, NO customer data, NO
+# copied logs, NO screenshots, NO sensitive production values. Reference logs and
+# evidence by location/id, never by pasted content.
+#
+# USAGE: append one entry per release under `entries`. Do not rewrite history.
+
+entries:
+  - release_id: ""                   # stable release identifier (matches the Baton)
+    governance_version: "v2.2"       # governance version pinned at planning time
+    risk_tier: ""                    # Tier 1 | Tier 2 | Tier 3
+    pr: null                         # GitHub PR number
+    approved_head_sha: ""            # exact approved head SHA
+    merge_sha: ""                    # resulting merge commit SHA (empty until merged)
+    deployed_sha: ""                 # SHA confirmed running in the environment (empty if not deployed)
+    environment: ""                  # target environment identity (e.g. "production"); empty if none
+    migration_state: "none"          # none | not_required | authorized | applied | verified
+    authorization_references:        # references to the human authorizations relied upon (no secrets)
+      merge: "none"                  # none | granted-by-<authority> on <date/ref>
+      deployment: "none"
+      migration: "none"
+      production_test: "none"
+    production_actions: []           # list of authorized production actions taken
+                                     #   example item: { action: "", role: "", authorization: "", result: "", at: "" }
+    verification_result: ""          # SOURCE-ONLY | DEPLOYED | REACHABLE | USABLE | NOT_APPLICABLE
+    rollback_point: ""               # recorded known-good state for rollback
+    completion_status: "open"        # open | completed | rolled_back | halted

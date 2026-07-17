@@ -1,0 +1,48 @@
+---
+# Release Baton (template) — BHFOS Operating Model v2.2
+#
+# One Baton per active release. Machine-readable, credential-free release-state
+# artifact. It records verified references and the current handoff state so work
+# is not relayed through the founder or copied between chats.
+#
+# AUTHORITATIVE SOURCES: GitHub and CI remain authoritative for live PR and check
+# state. The Baton records the verified references and current handoff, not a
+# competing source of truth.
+#
+# CONTENT RULES (must hold): NO credentials, NO secrets, NO customer data, NO
+# copied logs, NO screenshots, NO free-form sensitive production details.
+#
+# MAINTENANCE: agent-maintained. The founder never edits this file.
+#
+# FIELD OWNERSHIP: each field lists the role that updates it (owner: ...).
+
+release_id: ""                       # owner: Orchestrator — stable release identifier (e.g. "G2.2")
+governance_version: "v2.2"           # owner: Orchestrator — pinned at planning time; do not silently re-govern in flight
+risk_tier: ""                        # owner: Orchestrator — one of: Tier 1 | Tier 2 | Tier 3
+status: "planning"                   # owner: current_owner — planning | in_progress | in_review | awaiting_owner | authorized | merged | deployed | closed | halted
+current_owner: "Orchestrator"        # owner: current_owner — exactly one active coordinating role at a time
+release_brief_path: ""               # owner: Orchestrator — repo path to the approved brief
+
+pr_number: null                      # owner: Builder — GitHub PR number (GitHub authoritative)
+base_sha: ""                         # owner: Builder — verified base origin/main SHA
+head_sha: ""                         # owner: Builder — exact approved head SHA (authorization invalid if this changes)
+
+check_status: "unknown"              # owner: Release Agent — required GitHub checks: unknown | pending | green | failed (CI authoritative)
+architecture_guard_status: "not_started"  # owner: Architecture Guard — not_started | APPROVE_FOR_INDEPENDENT_UAT | CHANGES_REQUIRED | AUDIT_INSUFFICIENT | not_required
+uat_status: "not_started"            # owner: Independent UAT — not_started | PASS | FAIL | PARTIAL | BLOCKED | UNVERIFIED | NOT_APPLICABLE | OWNER_CONFIRMATION_REQUIRED
+
+owner_checkpoint: "pending"          # owner: Founder (recorded by coordinator) — pending | complete | not_required
+
+# Authorizations — each is granted by the Founder/Human Decider and only recorded
+# here by the coordinating agent. Recording an authorization never creates one.
+merge_authorization: "none"          # owner: Founder (recorded by Release Agent) — none | granted (names exact PR + head_sha)
+deployment_authorization: "none"     # owner: Founder (recorded by coordinator) — none | granted (separate from merge)
+migration_authorization: "none"      # owner: Founder (recorded by coordinator) — none | granted (separate, written)
+production_test_authorization: "none"  # owner: Founder (recorded by coordinator) — none | granted (enables controlled production UAT)
+
+rollback_point: ""                   # owner: Release Agent / Production Operator — recorded before any production change (e.g. known-good SHA)
+
+blockers: []                         # owner: any active role — list of open blockers, including Founder Burden stop conditions
+                                     #   example item: { id: "", raised_by: "", description: "", routed_to: "" }
+
+next_owner: ""                       # owner: current_owner — the role receiving the next handoff
