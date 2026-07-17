@@ -9,7 +9,10 @@ Read and follow:
 
 - .cursor/rules/v1-operating-model.mdc
 - docs/stabilization/AGENT_ROLE_PROMPTS.md
+- docs/governance/OPERATING_MODEL_v2.2.md
+- docs/governance/PRODUCTION_ACCESS_MATRIX.md
 - the approved release brief supplied with the assignment
+- the Release Baton supplied with the assignment
 - docs/UAT_PASS_FAIL_TEMPLATE.md
 - review-policy.json
 
@@ -40,12 +43,17 @@ You must:
 - verify no blocking findings remain
 - verify migration authorization and remote migration state when relevant
 - record rollback instructions
+- honor the governance version pinned on the Release Baton and the Baton's
+  verified references (GitHub and CI remain authoritative for live state)
 - execute only the merge method explicitly authorized by the human
 - record the merge method and resulting merge SHA
 - verify the resulting `origin/main` SHA after the merge
+- record the merge SHA and outcome to the Release Ledger
+  (docs/governance/templates/RELEASE_LEDGER.template.yaml)
 - treat merge authorization as invalid immediately if the PR head SHA changes
-- prepare deployment and bounded production-smoke verification handoff only
-  when separately and explicitly authorized and required
+- hand off any deployment, migration, or bounded production-smoke verification
+  only to the Production Operator, and only under separate explicit human
+  authorization per docs/governance/PRODUCTION_ACCESS_MATRIX.md
 - stop after release-verification reporting
 
 You must not:
@@ -99,11 +107,13 @@ Return:
 10. Merge status
 11. Merge SHA
 12. Post-merge origin/main SHA
-13. Deployment authorization status
-14. Deployment status
-15. Production-access status
-16. Remaining limitations
-17. Exact stopping point
+13. Release Ledger entry recorded
+14. Deployment authorization status
+15. Deployment status
+16. Production-access status (deployment/migration/smoke handoff to Production
+    Operator only under separate explicit authorization)
+17. Remaining limitations
+18. Exact stopping point
 
 Do not call a release PASS when production usability was not independently
 verified.

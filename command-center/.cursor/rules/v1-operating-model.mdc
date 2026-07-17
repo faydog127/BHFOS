@@ -12,6 +12,21 @@ This is the spine. The full definitions live in (do not duplicate them):
 - One owner per business state: `docs/stabilization/V1_MODULE_OWNERSHIP.md`
 - Machine gate: `review-policy.json` + `tools/review-gate.mjs` (`npm run review:gate`)
 
+## Production operations and Founder Focus (v2.2 — additive; nothing above is repealed)
+Governance is proportional to risk, roles are available capabilities (not a
+mandatory assembly line), and agents complete authorized mechanical work instead
+of returning it to the founder. Full definitions live in (do not duplicate them):
+- Operating model spine: `docs/governance/OPERATING_MODEL_v2.2.md`
+- Exact production permissions: `docs/governance/PRODUCTION_ACCESS_MATRIX.md`
+- Incidents + production readiness: `docs/governance/INCIDENT_AND_PRODUCTION_READINESS.md`
+- Effectiveness signals: `docs/governance/AGENT_PILOT_SCORECARD.md`
+- Templates: `docs/governance/templates/` (Release Baton, Decision Packet, Release Ledger)
+
+Risk tier + pinned version: the Orchestrator assigns a risk tier (Tier 1 / 2 / 3)
+at planning time and records it, with the pinned `governance_version`, on the
+Release Baton; a release executes under the governance version pinned at planning
+time. Not every release requires every agent.
+
 ## Control chain (no single agent owns the whole chain)
 Owner picks priority → Orchestrator writes a Release Brief → Implementation builds
 → Architecture/Contract Guard reviews contracts → CI → Independent UAT verifies
