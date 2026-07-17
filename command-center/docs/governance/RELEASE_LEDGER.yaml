@@ -44,24 +44,76 @@ entries:
     governance_version: "v2.2"
     risk_tier: "Tier 1"              # repository-only preparation; B2–B5 Tier 3 not authorized
     phase: "Read-Only Production Diagnostics — Repository Preparation and Access Specification"
-    pr: null                         # pending until GitHub authoritative
-    approved_head_sha: ""            # pending
-    merge_sha: ""                    # empty until merged (merge NOT authorized by B1 implementation packet)
+    pr: 53
+    approved_head_sha: "07d647399936a40525554d78ca6a466de67424d1"
+    merge_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
     deployed_sha: ""                 # none — no deployment
     environment: ""                  # none — no production access
     migration_state: "none"
     authorization_references:
       implementation: "granted-by-Founder via G2.3B Decision Packet (B1 repository scope only: implement specs, validate, open PR, obtain Architecture Guard review)"
-      merge: "none"
+      architecture_guard: "APPROVE_FOR_FINAL_DECISION_PACKET (exact head 07d647399936a40525554d78ca6a466de67424d1)"
+      merge: "granted-by-Founder via G2.3B-B1 Authorized Merge (exact PR #53 @ 07d647399936a40525554d78ca6a466de67424d1)"
       b2_credentials: "none"
       production_access: "none"
       deployment: "none"
       migration: "none"
       production_test: "none"
     production_actions: []           # empty — no production action
-    verification_result: "SOURCE-ONLY repository specifications in progress; no credentials; no production access; no data access; no external mutation; Independent workflow UAT NOT_APPLICABLE"
-    architecture_guard_status: "not_started"  # REQUIRED before any B1 merge authorization
+    verification_result: "merged_repository_only; required checks green (lint, identity_contracts, build, ledger_lock); Architecture Guard APPROVE_FOR_FINAL_DECISION_PACKET; B1 diagnostics specs landed on main; no credentials; no production access; UAT NOT_APPLICABLE"
+    architecture_guard_status: "APPROVE_FOR_FINAL_DECISION_PACKET"
     uat_status: "NOT_APPLICABLE"
     rollback_point: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"
+    completion_status: "merged_repository_only"
+    notes: "G2.3B-B1 closed. PR #53 merge commit 9cd1084aeeaa3a72936fc7abdc4317804af4208c equals origin/main at B1 closeout. Delivered: DIAGNOSTICS_ACCESS.md, RECONCILIATION_G2-3B.md, DIAGNOSTICS_RUNBOOK.md, EXECUTE_SQL_REVIEW.md, I2_PROVISIONING_CHECKLIST.md, I2_REVOCATION_CHECKLIST.md, DIAGNOSTICS_EVIDENCE.template.md, names-only planned I2 inventory rows. Confirmed non-actions: no credential provisioning, no production access, no live diagnostics, no deployment, no migration, no execute-sql, no external mutation. B2–B5 remain separately authorized Tier 3 work."
+
+  - release_id: "G2.3B-B2A"
+    governance_version: "v2.2"
+    risk_tier: "Tier 3"
+    phase: "I2 split authorization — GitHub App; Hostinger blocked; Supabase verify-only"
+    pr: null
+    approved_head_sha: ""
+    merge_sha: ""
+    deployed_sha: ""
+    environment: ""
+    migration_state: "none"
+    authorization_references:
+      b2a: "granted-by-Founder (GitHub dedicated App only; Hostinger READ_ONLY_CAPABILITY_UNAVAILABLE; Supabase capability verification only — no Supabase token)"
+      prior_b2_packet: "VOID (equivalent-controls assumption unsafe)"
+      b2b_supabase_issue: "none"
+      deployment: "none"
+      migration: "none"
+    production_actions: []
+    verification_result: "Hostinger recorded READ_ONLY_CAPABILITY_UNAVAILABLE; Supabase capability verification documented (OAuth2 fine-grained only; PAT prohibited; edge_functions_read includes body; analytics_logs_read includes sensitive logs); GitHub App authorized not yet issued; no secret values in repo"
+    architecture_guard_status: "pending_for_github_issue_and_b2b"
+    uat_status: "NOT_APPLICABLE"
+    rollback_point: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
     completion_status: "open"
-    notes: "G2.3B-B1 implements diagnostics access specs, reconciliation scaffold, runbook, execute-sql review checklist, I2 provisioning/revocation checklists, evidence template, and names-only planned I2 inventory rows. Does not provision credentials, access production, inspect logs, deploy, migrate, invoke execute-sql, or mutate external systems. B2–B5 remain separately authorized Tier 3 work."
+    notes: "B2A historical. Superseded for GitHub by B2C MCP PAT plan. Hostinger status retained. Supabase verify evidence retained; credential path is adapter-first under B2C."
+
+  - release_id: "G2.3B-B2C"
+    governance_version: "v2.2"
+    risk_tier: "Tier 3"
+    phase: "Cursor Account Integration — GitHub App Diagnostics; Supabase adapter (no cred); role isolation"
+    pr: 54
+    approved_head_sha: ""
+    merge_sha: ""
+    deployed_sha: ""
+    environment: "production-diagnostics (Cursor) — GitHub App secrets attested; no Hostinger/Supabase cred"
+    migration_state: "none"
+    authorization_references:
+      b2c: "granted-by-Founder"
+      b2c_app: "granted-by-Founder + provisioning complete (App BHFOS I2 Diagnostics; install faydog127/BHFOS only; five read permissions; Administration none)"
+      github_secrets_attestation: "founder_attested_present (I2_GITHUB_APP_ID, I2_GITHUB_APP_INSTALLATION_ID, private key) — values not recorded"
+      supabase_credential: "none"
+      hostinger_credential: "none"
+      merge: "none"
+      deployment: "none"
+      migration: "none"
+    production_actions: []
+    verification_result: "repo self-tests pass (role isolation, adapter, launcher self-test); Orchestrator shell correctly lacks Diagnostics secrets; live installation-token mint deferred to Diagnostics env; AG required before merge"
+    architecture_guard_status: "required"
+    uat_status: "NOT_APPLICABLE"
+    rollback_point: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
+    completion_status: "open"
+    notes: "GitHub App provisioned per B2C-App ceiling. PAT/collaborator not used. Issue #55 deferred. Hostinger READ_ONLY_CAPABILITY_UNAVAILABLE. Supabase adapter present without credential. PR #54 merge not authorized under App provisioning packet."

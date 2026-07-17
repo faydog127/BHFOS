@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "github-i2-diagnostics": {
+      "command": "node",
+      "args": [
+        "tools/github-diagnostics-launcher/launch-mcp.mjs"
+      ],
+      "env": {
+        "GITHUB_READ_ONLY": "1",
+        "GITHUB_TOOLSETS": "context,repos,pull_requests,actions",
+        "GITHUB_APP_ID": "${env:I2_GITHUB_APP_ID}",
+        "GITHUB_APP_INSTALLATION_ID": "${env:I2_GITHUB_APP_INSTALLATION_ID}",
+        "GITHUB_APP_PRIVATE_KEY_PATH": "${env:I2_GITHUB_APP_PRIVATE_KEY_PATH}"
+      }
+    }
+  }
+}

@@ -1,66 +1,45 @@
 ---
 # Release Baton — BHFOS Operating Model v2.2
-#
-# One Baton for the G2.3 production-readiness program, reused across phases
-# (G2.3A..G2.3E) per the umbrella brief. Machine-readable, credential-free
-# release-state artifact recording verified references and the current handoff.
-#
-# AUTHORITATIVE SOURCES: GitHub and CI remain authoritative for live PR and
-# check state. This Baton records verified references and current handoff, not a
-# competing source of truth.
-#
-# CONTENT RULES: NO credentials, NO secrets, NO customer data, NO copied logs,
-# NO screenshots. MAINTENANCE: agent-maintained; the founder never edits it.
 
-release_id: "G2.3"                   # program-level Baton, reused across phases
-current_phase: "G2.3B-B1"            # repository preparation and access specification
+release_id: "G2.3"
+current_phase: "G2.3B-B2C-App"
 governance_version: "v2.2"
-risk_tier: "Tier 1"                  # B1 repository-only; B2–B5 are Tier 3 and not authorized here
-status: "in_progress"                # B1 implementation in progress
-current_owner: "V1 Builder"
-release_brief_path: "command-center/docs/stabilization/releases/G2.3B_BRIEF.md"
-umbrella_brief_path: "command-center/docs/stabilization/releases/G2.3_BRIEF.md"
-decision_packet_path: "command-center/docs/governance/decisions/G2.3B_DECISION_PACKET.md"
+risk_tier: "Tier 3"
+status: "in_progress"
+current_owner: "V1 Builder → Architecture Guard"
+decision_packet_path: "command-center/docs/governance/decisions/G2.3B-B2C-App_DECISION_PACKET.md"
+founder_steps_path: "command-center/docs/governance/cursor-environments/production-diagnostics/GITHUB_APP_FOUNDER_STEPS.md"
 
-# --- G2.3A closeout (verified; historical) ---
-completed_phase: "G2.3A"
-completed_phase_status: "complete"
-# G2.3A PR/SHA fields retained for handoff continuity. Do not invent B1 PR/head
-# until GitHub is authoritative.
-g2_3a_pr_number: 52
-g2_3a_approved_head_sha: "27606714a73f663121962ae03dd1e603964d2f72"
-g2_3a_merge_sha: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"
-base_sha: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"  # origin/main at B1 start (G2.3A merge)
-
-# Live B1 PR/check/SHA — pending until GitHub authoritative
-pr_number: null
-approved_head_sha: ""
+completed_phase: "G2.3B-B1"
+g2_3b_b1_merge_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
+base_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
+pr_number: 54
 head_sha: ""
-merge_sha: ""
 
-check_status: "unknown"              # GitHub/CI authoritative once B1 PR exists
-architecture_guard_status: "not_started"  # REQUIRED for B1 before merge authorization
-uat_status: "NOT_APPLICABLE"         # no deployed application workflow changes in B1
+check_status: "unknown"
+architecture_guard_status: "required_before_merge"
+owner_checkpoint: "g2-3b-b2c_app_provisioned_awaiting_ag_and_merge_packet"
 
-owner_checkpoint: "g2-3b-b1_implementation_authorized"
+b2c_app_authorization: "granted + Founder provisioning complete (attested)"
+github_app_name: "BHFOS I2 Diagnostics"
+github_app_install_scope: "faydog127/BHFOS only"
+github_app_permissions: "Metadata/Contents/Actions/Pull requests/Commit statuses read; Administration none; org/account none; user auth disabled; webhook inactive"
+github_app_secrets_attestation: "I2_GITHUB_APP_ID, I2_GITHUB_APP_INSTALLATION_ID, private key — founder_attested_present in Diagnostics secret env only"
+merge_authorization: "none"
+supabase_credential_authorization: "none"
+hostinger_credential_authorization: "none"
 
-# Authorizations — recording never creates authority
-merge_authorization: "none"          # B1 merge requires later exact PR + head SHA packet
-deployment_authorization: "none"
-migration_authorization: "none"
-production_test_authorization: "none"
-production_access_authorization: "none"
-b2_credential_authorization: "none"
-implementation_authorization: "granted (G2.3B Decision Packet: B1 repository scope only — implement, validate, open PR, obtain Architecture Guard review)"
+github_i2_status: "app_provisioned_launcher_ready_live_mint_requires_diagnostics_env"
+hostinger_i2_status: "READ_ONLY_CAPABILITY_UNAVAILABLE"
+supabase_i2_status: "adapter_implemented_no_credential"
+repo_visibility_flag: "PUBLIC — issue #55 deferred"
+issue_55_status: "deferred_until_g2_3_v1_operational"
 
-# Operational outcomes for current phase
-deployment_status: "not_performed"
-migration_status: "not_performed"
-production_action_status: "none"
+blockers:
+  - "Architecture Guard review of PR #54 required before merge Decision Packet"
+  - "Live installation-token mint / MCP connect only in Diagnostics env (secrets not in Orchestrator shell — expected)"
+  - "Hostinger I2: READ_ONLY_CAPABILITY_UNAVAILABLE"
+  - "Supabase credential: separate packet after adapter AG"
 
-rollback_point: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"  # pre-B1-merge main; clean git revert of B1 PR
-
-blockers: []
-
-next_phase: "G2.3B-B1 Architecture Guard review after PR"
+next_phase: "AG review PR #54 → Founder merge authorization (separate packet)"
 next_owner: "Architecture Guard"
