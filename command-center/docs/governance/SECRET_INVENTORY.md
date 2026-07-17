@@ -59,6 +59,19 @@
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Stripe | Payments + webhook verification | backend | Supabase secret store (backend only) | Founder | Documented cadence + immediate revoke | Revoke/rotate in Stripe dashboard | unknown | Financial. Backend-only. Routine testing uses synthetic simulation, never live charges. |
 | `GOOGLE_MAPS_API_KEY` | Google | Server-side places/geocoding | backend | Supabase secret store (backend only) | Founder | Per Google key policy | Revoke/rotate in Google Cloud console | unknown | Distinct from the client `VITE_GOOGLE_MAPS_API_KEY`. |
 
+## Planned I2 Production Diagnostics identities (names only — not provisioned in B1)
+
+> These rows are **planned** under G2.3B-B1. They must remain `unverified` until
+> G2.3B-B2 provisions them under a separate Founder authorization. **No values
+> are stored in this repository.** Do not use founder-personal, shared-admin, or
+> service-role credentials as I2.
+
+| Name | Owning system | Purpose | Environment | Expected storage | Responsible role | Rotation requirement | Revocation method | Verified? | Notes (non-sensitive) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `I2_GITHUB_DIAGNOSTICS_TOKEN` | GitHub | Read-only PR/check/workflow/branch-protection diagnostics | production (ops) | Secret store | Production Diagnostics (I2) | Cadence + immediate revoke on suspicion | Revoke PAT / disable App | unverified | Planned fine-grained PAT or GitHub App. Read scopes only per `DIAGNOSTICS_ACCESS.md`. Not provisioned in B1. |
+| `I2_HOSTINGER_DIAGNOSTICS_TOKEN` | Hostinger | Read-only deployment history/status/logs/version | production (ops) | Secret store | Production Diagnostics (I2) | Cadence + immediate revoke on suspicion | Revoke token / remove role | unverified | Planned read-only token or role. Platform read-API support **unknown** until B2. Not provisioned in B1. |
+| `I2_SUPABASE_DIAGNOSTICS_TOKEN` | Supabase | Read-only logs, schema/migration metadata, function inventory | production (ops) | Secret store | Production Diagnostics (I2) | Cadence + immediate revoke on suspicion | Revoke token / demote member | unverified | Planned read-only identity. **Must not** be the service-role key. Not provisioned in B1. |
+
 ## Handling rules (binding)
 
 1. Values are stored only in a secret store or a gitignored local `.env`, never
@@ -67,5 +80,6 @@
    environment and masks it in output.
 3. Service-role and financial keys are backend-only and must never reach the
    frontend bundle (enforced by the `VITE_` allowlist and the `dist` secret scan).
-4. Unknown/unverified items are scheduled for confirmation in the G2.3B read-only
-   diagnostics phase; they are never guessed here.
+4. Unknown/unverified items are confirmed in later G2.3B phases under separate
+   authorization; they are never guessed here.
+5. I2 planned rows above remain unverified until B2; B1 does not provision them.

@@ -13,48 +13,54 @@
 # NO screenshots. MAINTENANCE: agent-maintained; the founder never edits it.
 
 release_id: "G2.3"                   # program-level Baton, reused across phases
-current_phase: "G2.3B"               # next phase after G2.3A closeout
+current_phase: "G2.3B-B1"            # repository preparation and access specification
 governance_version: "v2.2"
-risk_tier: "Tier 1"                  # G2.3B-B1 planning/repo prep only; B2–B5 provisioning is Tier 3 (see G2.3B brief)
-status: "awaiting_owner"             # G2.3A complete; G2.3B Decision Packet awaiting founder authorization
-current_owner: "V1 Orchestrator"
+risk_tier: "Tier 1"                  # B1 repository-only; B2–B5 are Tier 3 and not authorized here
+status: "in_progress"                # B1 implementation in progress
+current_owner: "V1 Builder"
 release_brief_path: "command-center/docs/stabilization/releases/G2.3B_BRIEF.md"
 umbrella_brief_path: "command-center/docs/stabilization/releases/G2.3_BRIEF.md"
 decision_packet_path: "command-center/docs/governance/decisions/G2.3B_DECISION_PACKET.md"
 
-# --- G2.3A closeout (verified) ---
-# Prior phase status recorded here for handoff continuity; Ledger holds the
-# append-only historical entry.
+# --- G2.3A closeout (verified; historical) ---
 completed_phase: "G2.3A"
 completed_phase_status: "complete"
-pr_number: 52
-base_sha: "bea39abf9a1a6c9cd42a47e40bac8f90ebc9cba9"  # pre-merge main / G2.3A rollback point
-approved_head_sha: "27606714a73f663121962ae03dd1e603964d2f72"
-head_sha: "27606714a73f663121962ae03dd1e603964d2f72"
-merge_sha: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"
+# G2.3A PR/SHA fields retained for handoff continuity. Do not invent B1 PR/head
+# until GitHub is authoritative.
+g2_3a_pr_number: 52
+g2_3a_approved_head_sha: "27606714a73f663121962ae03dd1e603964d2f72"
+g2_3a_merge_sha: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"
+base_sha: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"  # origin/main at B1 start (G2.3A merge)
 
-check_status: "green"                # lint, identity_contracts, build, ledger_lock — GitHub/CI authoritative
-architecture_guard_status: "APPROVE_FOR_FINAL_DECISION_PACKET"
-uat_status: "NOT_APPLICABLE"         # no deployed application workflow changes in G2.3A
+# Live B1 PR/check/SHA — pending until GitHub authoritative
+pr_number: null
+approved_head_sha: ""
+head_sha: ""
+merge_sha: ""
 
-owner_checkpoint: "g2-3a_merge_authorized_and_completed"
+check_status: "unknown"              # GitHub/CI authoritative once B1 PR exists
+architecture_guard_status: "not_started"  # REQUIRED for B1 before merge authorization
+uat_status: "NOT_APPLICABLE"         # no deployed application workflow changes in B1
 
-# Authorizations — granted only by the Founder/Human Decider and merely recorded
-# here. Recording an authorization never creates one.
-merge_authorization: "completed"     # G2.3A PR #52 merged under exact head-SHA authorization
+owner_checkpoint: "g2-3b-b1_implementation_authorized"
+
+# Authorizations — recording never creates authority
+merge_authorization: "none"          # B1 merge requires later exact PR + head SHA packet
 deployment_authorization: "none"
 migration_authorization: "none"
 production_test_authorization: "none"
-implementation_authorization: "completed (G2.3A Decision Packet + merge authorization)"
+production_access_authorization: "none"
+b2_credential_authorization: "none"
+implementation_authorization: "granted (G2.3B Decision Packet: B1 repository scope only — implement, validate, open PR, obtain Architecture Guard review)"
 
-# Post-merge operational outcomes (G2.3A)
+# Operational outcomes for current phase
 deployment_status: "not_performed"
 migration_status: "not_performed"
 production_action_status: "none"
 
-rollback_point: "bea39abf9a1a6c9cd42a47e40bac8f90ebc9cba9"
+rollback_point: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"  # pre-B1-merge main; clean git revert of B1 PR
 
 blockers: []
 
-next_phase: "G2.3B planning"
-next_owner: "V1 Orchestrator"
+next_phase: "G2.3B-B1 Architecture Guard review after PR"
+next_owner: "Architecture Guard"

@@ -39,3 +39,29 @@ entries:
     rollback_point: "bea39abf9a1a6c9cd42a47e40bac8f90ebc9cba9"
     completion_status: "merged_repository_only"
     notes: "G2.3A closed. PR #52 merge commit b218c70db5dbeb33a5b9d19dab941e4273a6507f equals origin/main at closeout. Repository foundations only: build identity + build-info, Hostinger deploy tooling (committed, not executed; dry-run default), DEPLOYMENT.md, secret inventory (names-only), migration verifier, synthetic-data registry structure, health probe, branch-protection verifier, Baton, Ledger. Confirmed non-actions: no deployment, no production access, no credential provisioning, no migration, no external configuration mutation, no production-data action, no financial action, no communication."
+
+  - release_id: "G2.3B-B1"
+    governance_version: "v2.2"
+    risk_tier: "Tier 1"              # repository-only preparation; B2–B5 Tier 3 not authorized
+    phase: "Read-Only Production Diagnostics — Repository Preparation and Access Specification"
+    pr: null                         # pending until GitHub authoritative
+    approved_head_sha: ""            # pending
+    merge_sha: ""                    # empty until merged (merge NOT authorized by B1 implementation packet)
+    deployed_sha: ""                 # none — no deployment
+    environment: ""                  # none — no production access
+    migration_state: "none"
+    authorization_references:
+      implementation: "granted-by-Founder via G2.3B Decision Packet (B1 repository scope only: implement specs, validate, open PR, obtain Architecture Guard review)"
+      merge: "none"
+      b2_credentials: "none"
+      production_access: "none"
+      deployment: "none"
+      migration: "none"
+      production_test: "none"
+    production_actions: []           # empty — no production action
+    verification_result: "SOURCE-ONLY repository specifications in progress; no credentials; no production access; no data access; no external mutation; Independent workflow UAT NOT_APPLICABLE"
+    architecture_guard_status: "not_started"  # REQUIRED before any B1 merge authorization
+    uat_status: "NOT_APPLICABLE"
+    rollback_point: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"
+    completion_status: "open"
+    notes: "G2.3B-B1 implements diagnostics access specs, reconciliation scaffold, runbook, execute-sql review checklist, I2 provisioning/revocation checklists, evidence template, and names-only planned I2 inventory rows. Does not provision credentials, access production, inspect logs, deploy, migrate, invoke execute-sql, or mutate external systems. B2–B5 remain separately authorized Tier 3 work."
