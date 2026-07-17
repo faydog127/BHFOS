@@ -28,8 +28,10 @@ npm run test:supabase-diagnostics-adapter
 
 ## Credential issuance
 
-Requires Founder Decision Packet **G2.3B-B2D** (corrected) after Architecture Guard
-`APPROVE_FOR_FINAL_DECISION_PACKET`. Inventory names (values never in repo):
+Requires Founder Decision Packet **G2.3B-B2D Option A** after Architecture Guard
+approval of the corrected packet **and** the protected OAuth helper.
+
+Inventory names (values never in repo):
 
 - `I2_SUPABASE_OAUTH_CLIENT_ID`
 - `I2_SUPABASE_OAUTH_CLIENT_SECRET` (if issued)
@@ -37,5 +39,17 @@ Requires Founder Decision Packet **G2.3B-B2D** (corrected) after Architecture Gu
 - `I2_SUPABASE_OAUTH_REFRESH_TOKEN`
 - `I2_SUPABASE_OAUTH_TOKEN_EXPIRY`
 - `SUPABASE_DIAGNOSTICS_PROJECT_REF` (= `wwyxohjnyqnegzbxtuxs`)
+- `I2_DIAGNOSTICS_SECRET_ENV_FILE` (path to durable Diagnostics env file)
+
+### Protected OAuth helper
+
+```bash
+npm run test:supabase-oauth-helper
+node tools/supabase-diagnostics-adapter/oauth-authorize.mjs
+```
+
+Founder creates the OAuth app + places client id/secret in Diagnostics env, then
+runs the helper once and approves the browser consent screen. The helper never
+prints token values.
 
 Legacy `SUPABASE_DIAGNOSTICS_ADAPTER_TOKEN` is **retired** — do not issue.

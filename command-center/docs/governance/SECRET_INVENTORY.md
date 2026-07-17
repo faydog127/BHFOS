@@ -82,6 +82,7 @@
 | `I2_SUPABASE_OAUTH_REFRESH_TOKEN` | Supabase | Refresh token for access-token rotation | production-diagnostics (adapter) | Diagnostics adapter secret env only | Production Diagnostics adapter | Rotate with re-auth | Revoke app auth; clear env | unverified | **Not issued.** Never agent-visible. |
 | `I2_SUPABASE_OAUTH_TOKEN_EXPIRY` | Supabase | Access-token expiry reference | production-diagnostics (adapter) | Diagnostics adapter env only | Production Diagnostics adapter | Update on refresh | Clear with tokens | unverified | **Not issued.** Metadata; still Diagnostics-env only. |
 | `SUPABASE_DIAGNOSTICS_PROJECT_REF` | Supabase | Fixed production project ref for adapter lock | production-diagnostics (adapter) | Diagnostics adapter env only | Production Diagnostics adapter | n/a | Clear env | unverified | Must equal `wwyxohjnyqnegzbxtuxs`. Adapter isolation — **not** proof of token-level project scope. |
+| `I2_DIAGNOSTICS_SECRET_ENV_FILE` | Local | Absolute path to durable Diagnostics env file | production-diagnostics | Path only (file is gitignored) | Production Diagnostics | n/a | Delete path env; shred file | unverified | Required by protected OAuth helper for durable token writes. Path only in docs — never commit file contents. |
 
 ## Handling rules (binding)
 

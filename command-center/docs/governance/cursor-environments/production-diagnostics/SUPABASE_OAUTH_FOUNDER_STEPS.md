@@ -2,85 +2,72 @@
 
 > Binding ceiling from Founder **G2.3B-B2D Option A** authorization.
 > **No secret values** belong in this file, chat, or repository.
-> Store credential values **only** in the Production Diagnostics adapter secret
-> environment under the inventory names below.
+>
+> OAuth code exchange is performed by the **protected local helper** — the Founder
+> does **not** construct URLs, run PKCE, capture codes, or copy tokens.
 
 **Authorized scope only:** Dashboard **Projects** → **Read** (wire `projects:read`).  
-**Project ref (adapter lock):** `wwyxohjnyqnegzbxtuxs`  
-**Residual risk:** Token-level single-project isolation is **not** proven; adapter enforces the ref lock.
+**Project ref (adapter lock):** `wwyxohjnyqnegzbxtuxs`
 
 ---
 
-## A. Create the OAuth application
+## A. Create the OAuth application (Dashboard only)
 
-1. Sign in to the **Founder** Supabase account (the account that owns production project `wwyxohjnyqnegzbxtuxs`).
-2. Open the **organization** that owns that production project.
-3. Go to **Organization Settings → OAuth Apps**.
-4. Click **Add application**.
-
-### Required fields (exact)
-
-| Field | Exact value / choice |
-| --- | --- |
-| **Name** | `BHFOS I2 Diagnostics` |
-| **Website / Homepage** (if prompted) | `https://github.com/faydog127/BHFOS` |
-| **Redirect URI** | `http://127.0.0.1:8765/oauth/callback` |
-| **Scopes** | Enable **only** **Projects** → **Read** |
-
-### Scopes — select only this
-
-| Dashboard category | Type |
-| --- | --- |
-| **Projects** | **Read** |
-
-**Do not enable** Auth, Database, Domains, Edge Functions, Environment, Organizations, Rest, Secrets, Storage, Analytics, or any **Write** scope.
-
-5. Click **Confirm** / **Create**.
-
-### Immediately after create (still in Dashboard)
-
-6. Copy **Client ID** into the Diagnostics adapter secret environment as `I2_SUPABASE_OAUTH_CLIENT_ID` only.  
-   **Do not** paste it into chat, Markdown, or the repository.
-7. If the Dashboard shows a **Client Secret**, copy it once into Diagnostics as `I2_SUPABASE_OAUTH_CLIENT_SECRET` only.  
-   If the platform does not issue a client secret for this app type, leave that name unset.
-8. Set `SUPABASE_DIAGNOSTICS_PROJECT_REF` in Diagnostics to exactly: `wwyxohjnyqnegzbxtuxs`
+1. Sign in as the **Founder** Supabase account that owns project `wwyxohjnyqnegzbxtuxs`.
+2. Open that project’s **organization** → **Organization Settings → OAuth Apps**.
+3. Click **Add application**.
+4. Set:
+   - **Name:** `BHFOS I2 Diagnostics`
+   - **Website** (if asked): `https://github.com/faydog127/BHFOS`
+   - **Redirect URI:** `http://127.0.0.1:8765/oauth/callback`
+   - **Scopes:** **Projects → Read** only (nothing else)
+5. Confirm / create.
 
 ---
 
-## B. Authorize with the Founder account
+## B. Place Client ID / secret in Diagnostics secret store only
 
-1. Keep a local listener ready on `http://127.0.0.1:8765/oauth/callback` (any local one-shot callback you control that can show the redirected URL’s `code` query parameter **only to you on that machine**).
-2. In the browser (Founder account), open the authorize URL:
-
-   `https://api.supabase.com/v1/oauth/authorize?response_type=code&client_id=<CLIENT_ID>&redirect_uri=http%3A%2F%2F127.0.0.1%3A8765%2Foauth%2Fcallback`
-
-   Replace `<CLIENT_ID>` with the Client ID from step A6 (locally — do not send it to chat).
-3. When prompted, authorize **only** as the Founder account for the organization that owns `wwyxohjnyqnegzbxtuxs`.
-4. After redirect, exchange the authorization `code` for tokens via  
-   `POST https://api.supabase.com/v1/oauth/token`  
-   (`grant_type=authorization_code`, same `redirect_uri`, Basic auth with client id + secret if issued, PKCE if you used it).
-5. Store results **only** in the Diagnostics adapter secret environment:
-   - `I2_SUPABASE_OAUTH_ACCESS_TOKEN`
-   - `I2_SUPABASE_OAUTH_REFRESH_TOKEN`
-   - `I2_SUPABASE_OAUTH_TOKEN_EXPIRY` (from the token response expiry / `expires_in`)
-
-**Do not** paste authorization codes, tokens, or secrets into chat, Cursor, Markdown, Baton, Ledger, or the repository.
+1. Create or open the Diagnostics durable env file (gitignored; outside chat/repo).
+2. Set environment variable `I2_DIAGNOSTICS_SECRET_ENV_FILE` to that file’s absolute path
+   (Diagnostics shell / profile only).
+3. Put into that file / Diagnostics env (values never pasted into chat):
+   - `I2_SUPABASE_OAUTH_CLIENT_ID`
+   - `I2_SUPABASE_OAUTH_CLIENT_SECRET` (only if the Dashboard issued one)
+   - `SUPABASE_DIAGNOSTICS_PROJECT_REF=wwyxohjnyqnegzbxtuxs`
+4. Optional (only if needed for consent pre-select): `I2_SUPABASE_OAUTH_ORGANIZATION_SLUG`
 
 ---
 
-## C. Confirm storage names (values never in repo)
+## C. Run the protected helper (one command)
 
-| Inventory name | Required? |
-| --- | --- |
-| `I2_SUPABASE_OAUTH_CLIENT_ID` | Yes |
-| `I2_SUPABASE_OAUTH_CLIENT_SECRET` | Only if issued |
-| `I2_SUPABASE_OAUTH_ACCESS_TOKEN` | Yes (after authorize) |
-| `I2_SUPABASE_OAUTH_REFRESH_TOKEN` | Yes (after authorize) |
-| `I2_SUPABASE_OAUTH_TOKEN_EXPIRY` | Yes (after authorize) |
-| `SUPABASE_DIAGNOSTICS_PROJECT_REF` | Yes = `wwyxohjnyqnegzbxtuxs` |
+From a Production Diagnostics shell with the secret env loaded:
+
+```bash
+cd command-center
+node tools/supabase-diagnostics-adapter/oauth-authorize.mjs
+```
+
+The helper will:
+
+- bind `127.0.0.1:8765`
+- open the browser consent screen
+- exchange the code
+- write `I2_SUPABASE_OAUTH_ACCESS_TOKEN`, `I2_SUPABASE_OAUTH_REFRESH_TOKEN`, and
+  `I2_SUPABASE_OAUTH_TOKEN_EXPIRY` into the Diagnostics secret env file
+- print **names/status only** (never token values)
 
 ---
 
-## D. Explicit non-actions
+## D. Approve the browser consent screen
 
-Do **not**: grant any other OAuth scope; use PAT; add Dashboard Read-Only member; use service-role; put secrets in chat/repo; expose tokens to the Cursor agent outside the adapter; run B3 live verification under this packet; provision Hostinger; deploy; migrate; mutate production.
+When the browser opens, approve as the Founder for the organization that owns
+`wwyxohjnyqnegzbxtuxs`. Then confirm the helper printed status lines including
+`OAuth authorization: completed` and `token values: not displayed`.
+
+---
+
+## E. Explicit non-actions
+
+Do **not**: grant any other OAuth scope; manually craft authorize URLs; copy codes
+or tokens; use PAT / Dashboard Read-Only / service-role; paste secrets into chat;
+run B3 under this packet; provision Hostinger.
