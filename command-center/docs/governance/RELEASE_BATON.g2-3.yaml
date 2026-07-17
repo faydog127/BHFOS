@@ -16,8 +16,8 @@ release_id: "G2.3"                   # program-level Baton, reused across phases
 current_phase: "G2.3B-B2"            # I2 identity and credential provisioning
 governance_version: "v2.2"
 risk_tier: "Tier 3"                  # B2 credential/identity provisioning
-status: "awaiting_founder_authorization"
-current_owner: "Program Orchestrator"
+status: "authorized_awaiting_architecture_guard_then_provisioning"
+current_owner: "Architecture Guard"
 release_brief_path: "command-center/docs/stabilization/releases/G2.3B-B2_BRIEF.md"
 umbrella_brief_path: "command-center/docs/stabilization/releases/G2.3_BRIEF.md"
 parent_brief_path: "command-center/docs/stabilization/releases/G2.3B_BRIEF.md"
@@ -41,10 +41,10 @@ head_sha: "07d647399936a40525554d78ca6a466de67424d1"
 merge_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
 
 check_status: "green"                # lint, identity_contracts, build, ledger_lock SUCCESS at merge
-architecture_guard_status: "APPROVE_FOR_FINAL_DECISION_PACKET"  # B1 exact head 07d6473…
+architecture_guard_status: "B1_APPROVE_FOR_FINAL_DECISION_PACKET; B2_access_review_pending"
 uat_status: "NOT_APPLICABLE"
 
-owner_checkpoint: "g2-3b-b1_merged_awaiting_b2_authorization"
+owner_checkpoint: "g2-3b-b2_founder_authorized_ag_review_pending"
 
 # Authorizations — recording never creates authority
 merge_authorization: "granted (Founder G2.3B-B1 Authorized Merge: PR #53 @ 07d647399936a40525554d78ca6a466de67424d1)"
@@ -52,7 +52,7 @@ deployment_authorization: "none"
 migration_authorization: "none"
 production_test_authorization: "none"
 production_access_authorization: "none"
-b2_credential_authorization: "none"  # Decision Packet prepared; Founder auth pending
+b2_credential_authorization: "granted (Founder returned G2.3B-B2 Decision Packet authorization sentence; provisioning not started; AG access review required before issue)"
 implementation_authorization: "none"  # B2 is provisioning, not Builder repo implementation
 
 # Operational outcomes for current phase
@@ -63,8 +63,8 @@ production_action_status: "none"
 rollback_point: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
 
 blockers:
-  - "I2 credentials not provisioned (B2 pending Founder authorization)"
+  - "I2 credentials not yet issued (B2 Founder-authorized; Architecture Guard access review then provisioning)"
   - "Six G2.3B reconciliation items remain open until B4 (do not block B2 entry)"
 
-next_phase: "G2.3B-B2 Founder authorization then exact I2 provisioning"
-next_owner: "Founder (authorization) → Production Diagnostics / Founder (provisioning actor)"
+next_phase: "G2.3B-B2 Architecture Guard access review → exact I2 provisioning"
+next_owner: "Architecture Guard → Founder/delegated operator (provisioning actor)"
