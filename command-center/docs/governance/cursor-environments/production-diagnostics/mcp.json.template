@@ -1,23 +1,16 @@
 {
   "mcpServers": {
     "github-i2-diagnostics": {
-      "command": "docker",
+      "command": "node",
       "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e",
-        "GITHUB_PERSONAL_ACCESS_TOKEN",
-        "-e",
-        "GITHUB_READ_ONLY",
-        "-e",
-        "GITHUB_TOOLSETS",
-        "ghcr.io/github/github-mcp-server"
+        "tools/github-diagnostics-launcher/launch-mcp.mjs"
       ],
       "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "${env:GITHUB_PERSONAL_ACCESS_TOKEN}",
         "GITHUB_READ_ONLY": "1",
-        "GITHUB_TOOLSETS": "context,repos,pull_requests,actions"
+        "GITHUB_TOOLSETS": "context,repos,pull_requests,actions",
+        "GITHUB_APP_ID": "${env:I2_GITHUB_APP_ID}",
+        "GITHUB_APP_INSTALLATION_ID": "${env:I2_GITHUB_APP_INSTALLATION_ID}",
+        "GITHUB_APP_PRIVATE_KEY_PATH": "${env:I2_GITHUB_APP_PRIVATE_KEY_PATH}"
       }
     }
   }

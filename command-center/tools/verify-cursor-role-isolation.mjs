@@ -23,6 +23,7 @@ const ROLES = [
 const DIAG_SECRET_MARKERS = [
   'GITHUB_PERSONAL_ACCESS_TOKEN',
   'I2_GITHUB_MCP',
+  'I2_GITHUB_APP_',
   'github-i2-diagnostics',
   'SUPABASE_DIAGNOSTICS_ADAPTER_TOKEN',
 ];
@@ -51,6 +52,8 @@ function main() {
     if (role === 'production-diagnostics') {
       const hasGithub = Boolean(t.json.mcpServers?.['github-i2-diagnostics']);
       const env = t.json.mcpServers?.['github-i2-diagnostics']?.env || {};
+      const args = t.json.mcpServers?.['github-i2-diagnostics']?.args || [];
+      const usesLauncher = args.some((a) => String(a).includes('github-diagnostics-launcher'));
       const readOnly =
         env.GITHUB_READ_ONLY === '1' ||
         String(t.text).includes('GITHUB_READ_ONLY');
@@ -61,11 +64,18 @@ function main() {
         toolsets.includes('actions') &&
         !toolsets.includes('all');
       results.push({ test: 'diagnostics_has_github_mcp', pass: hasGithub });
+      results.push({ test: 'diagnostics_uses_app_launcher', pass: usesLauncher });
       results.push({ test: 'diagnostics_read_only', pass: readOnly });
       results.push({ test: 'diagnostics_restricted_toolsets', pass: restricted });
       results.push({
-        test: 'diagnostics_uses_env_placeholder',
-        pass: String(env.GITHUB_PERSONAL_ACCESS_TOKEN || '').includes('${env:'),
+        test: 'diagnostics_uses_env_placeholders',
+        pass:
+          String(env.GITHUB_APP_ID || '').includes('${env:') &&
+          String(env.GITHUB_APP_INSTALLATION_ID || '').includes('${env:'),
+      });
+      results.push({
+        test: 'diagnostics_no_inline_pat_env',
+        pass: !Object.prototype.hasOwnProperty.call(env, 'GITHUB_PERSONAL_ACCESS_TOKEN'),
       });
     } else {
       for (const marker of DIAG_SECRET_MARKERS) {

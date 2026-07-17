@@ -67,9 +67,11 @@
 
 | Name | Owning system | Purpose | Environment | Expected storage | Responsible role | Rotation requirement | Revocation method | Verified? | Notes (non-sensitive) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `I2_GITHUB_MCP_DIAGNOSTICS_PAT` | GitHub | Official GitHub MCP read-only for Production Diagnostics | production-diagnostics (Cursor env) | Diagnostics secret store → process env `GITHUB_PERSONAL_ACCESS_TOKEN` only | Production Diagnostics (I2) | ≤90 days + immediate revoke | Revoke fine-grained PAT; remove Diagnostics env secret | unverified | **B2C authorized.** Machine-owned fine-grained PAT; `faydog127/BHFOS` only; Metadata/Contents/Actions/PRs/Commit statuses read; Administration read for branch-protection/rulesets. `GITHUB_READ_ONLY=1`; toolsets `context,repos,pull_requests,actions`. Not founder-personal. Not in global Cursor config. Not yet issued. |
-| `I2_GITHUB_DIAGNOSTICS_APP` | GitHub | — | — | — | — | — | — | unverified | **Superseded by B2C** (Cursor GitHub MCP requires PAT). Do not issue. |
-| `I2_GITHUB_DIAGNOSTICS_TOKEN` | GitHub | — | — | — | — | — | — | unverified | Legacy name; use `I2_GITHUB_MCP_DIAGNOSTICS_PAT`. |
+| `I2_GITHUB_APP_ID` | GitHub | Diagnostics GitHub App id | production-diagnostics | Diagnostics secret store | Production Diagnostics (I2) | n/a (id) | Disable/uninstall App | unverified | **B2C-App path.** Private App, founder-owned interim, install only on `faydog127/BHFOS`. |
+| `I2_GITHUB_APP_INSTALLATION_ID` | GitHub | Installation id for BHFOS | production-diagnostics | Diagnostics secret store | Production Diagnostics (I2) | n/a (id) | Uninstall App | unverified | Installation scoped to one repo. |
+| `I2_GITHUB_APP_PRIVATE_KEY` / path | GitHub | App private key for installation JWT | production-diagnostics | Diagnostics secret store / key file path | Production Diagnostics launcher only | Rotate App key on suspicion | Delete key; generate new; disable App | unverified | **Never** in repo/chat/MCP global. Launcher mints short-lived installation tokens only. |
+| `I2_GITHUB_MCP_DIAGNOSTICS_PAT` | GitHub | — | — | — | — | — | — | unverified | **Rejected** (CHANGES_REQUIRED). Do not issue. |
+| `I2_GITHUB_DIAGNOSTICS_APP` | GitHub | (legacy name) | — | — | — | — | — | unverified | Replaced by `I2_GITHUB_APP_*` inventory names. |
 | `I2_HOSTINGER_DIAGNOSTICS_TOKEN` | Hostinger | — | — | — | — | — | — | **READ_ONLY_CAPABILITY_UNAVAILABLE** | **Do not create in G2.3B.** Reserved for G2.3C Production Operator + mutation-gated deploy CLI only. |
 | `I2_SUPABASE_DIAGNOSTICS_TOKEN` | Supabase | — | — | — | — | — | — | unverified | Legacy; not issued. |
 | `I2_SUPABASE_OAUTH_DIAGNOSTICS_TOKEN` | Supabase | — | — | — | — | — | — | unverified | Option-A-as-final superseded; adapter-first. |

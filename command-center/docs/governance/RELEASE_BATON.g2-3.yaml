@@ -1,66 +1,37 @@
 ---
 # Release Baton — BHFOS Operating Model v2.2
-#
-# AUTHORITATIVE SOURCES: GitHub and CI remain authoritative for live PR and
-# check state. CONTENT RULES: NO credentials, NO secrets, NO customer data.
 
 release_id: "G2.3"
-current_phase: "G2.3B-B2C"
+current_phase: "G2.3B-B2C-App"
 governance_version: "v2.2"
 risk_tier: "Tier 3"
-status: "blocked_changes_required"
+status: "awaiting_founder_authorization_github_app"
 current_owner: "Program Orchestrator"
-release_brief_path: "command-center/docs/stabilization/releases/G2.3B-B2_BRIEF.md"
-umbrella_brief_path: "command-center/docs/stabilization/releases/G2.3_BRIEF.md"
-decision_packet_path: "command-center/docs/governance/decisions/G2.3B-B2C_DECISION_PACKET.md"
+decision_packet_path: "command-center/docs/governance/decisions/G2.3B-B2C-App_DECISION_PACKET.md"
+public_exposure_review_path: "command-center/docs/governance/decisions/G2.3B-B2C_PUBLIC_EXPOSURE_REVIEW.md"
 github_access_review_path: "command-center/docs/governance/decisions/G2.3B-B2C_GITHUB_ACCESS_REVIEW.md"
-role_isolation_path: "command-center/docs/governance/CURSOR_ROLE_ISOLATION.md"
 
 completed_phase: "G2.3B-B1"
-completed_phase_status: "complete"
-g2_3a_merge_sha: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"
-g2_3b_b1_pr_number: 53
-g2_3b_b1_approved_head_sha: "07d647399936a40525554d78ca6a466de67424d1"
 g2_3b_b1_merge_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
 base_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
-
 pr_number: 54
-approved_head_sha: ""
-head_sha: "eb93ba960569bf770e928d89c565fc2570c53077"
-merge_sha: ""
+head_sha: ""
 
-check_status: "green"
-architecture_guard_status: "CHANGES_REQUIRED (GitHub personal-repo ownership/permission model)"
-uat_status: "NOT_APPLICABLE"
+check_status: "unknown"
+architecture_guard_status: "CHANGES_REQUIRED resolved by Alternative 1 redesign — App packet pending Founder"
+owner_checkpoint: "g2-3b-b2c_app_packet_awaiting_founder_after_exposure_clear"
 
-owner_checkpoint: "g2-3b-b2c_github_access_review_changes_required"
-
-merge_authorization: "none"
-deployment_authorization: "none"
-migration_authorization: "none"
-production_test_authorization: "none"
-production_access_authorization: "none"
-b2c_cursor_integration_authorization: "partial — repo impl authorized; live machine-PAT/collaborator path REJECTED"
-supabase_credential_authorization: "none"
-hostinger_credential_authorization: "none"
-implementation_authorization: "granted (adapter + isolation artifacts); GitHub credential redesign required"
-
-deployment_status: "not_performed"
-migration_status: "not_performed"
-production_action_status: "none"
-
+b2c_cursor_integration_authorization: "repo artifacts in progress; live App create/install pending Founder B2C-App packet"
+github_i2_status: "App path selected — awaiting Founder create/install; PAT/collaborator rejected"
 hostinger_i2_status: "READ_ONLY_CAPABILITY_UNAVAILABLE"
-github_i2_status: "CHANGES_REQUIRED — personal User-owned PUBLIC repo; no read-only collaborator; machine PAT design unsafe"
 supabase_i2_status: "adapter_implemented_no_credential"
-repo_visibility_flag: "PUBLIC — separate Founder security decision required; not changed in this review"
-
-rollback_point: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
+repo_visibility_flag: "PUBLIC — issue #55 deferred (no material secret exposure)"
+issue_55_status: "deferred_until_g2_3_v1_operational"
 
 blockers:
-  - "CHANGES_REQUIRED: machine-user fine-grained PAT/collaborator cannot provide least-privilege I2 on personal repo"
-  - "Repository PUBLIC visibility flagged for separate Founder security decision"
+  - "Founder authorization required to create/install private GitHub App (B2C-App Decision Packet)"
   - "Hostinger I2: READ_ONLY_CAPABILITY_UNAVAILABLE"
-  - "Supabase credential: separate Decision Packet after AG on adapter"
+  - "Supabase credential: separate packet after adapter AG"
 
-next_phase: "Founder Decision Packet — GitHub App launcher vs org transfer vs public-reduced diagnostics"
-next_owner: "Program Orchestrator → Founder"
+next_phase: "Founder approves G2.3B-B2C-App Decision Packet then creates/installs App"
+next_owner: "Founder"

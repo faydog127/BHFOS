@@ -1,37 +1,27 @@
-# Production Diagnostics — GitHub MCP (G2.3B-B2C)
+# Production Diagnostics — GitHub App + protected launcher (G2.3B-B2C-App)
 
-> Names and wiring only. **Never** put the PAT value in this file, chat, or repo.
+> Names and wiring only. Never commit App private keys or installation tokens.
 
-## Identity
+## Model
 
-| Field | Value |
-| --- | --- |
-| Inventory name | `I2_GITHUB_MCP_DIAGNOSTICS_PAT` |
-| Owner | Dedicated machine GitHub identity (not founder personal) |
-| Scope | `faydog127/BHFOS` only |
-| Permissions | Metadata, Contents, Actions, Pull requests, Commit statuses: **read**; Administration: **read** (branch-protection/rulesets only) |
-| Expiration | ≤ 90 days |
-| MCP | Official `ghcr.io/github/github-mcp-server` |
-| Read-only | `GITHUB_READ_ONLY=1` |
-| Toolsets | `context,repos,pull_requests,actions` only |
+1. Private GitHub App (founder-owned interim) installed **only** on `faydog127/BHFOS`.
+2. Diagnostics secret store holds: App ID, Installation ID, Private key.
+3. Protected launcher (Diagnostics environment only) mints a **short-lived
+   installation access token** and starts GitHub MCP with:
+   - `GITHUB_PERSONAL_ACCESS_TOKEN=<installation token>`
+   - `GITHUB_READ_ONLY=1`
+   - `GITHUB_TOOLSETS=context,repos,pull_requests,actions`
+4. Agent never receives the App private key.
+5. Revoke by uninstalling/disabling the App and deleting secret-store entries.
 
-## Secret injection (local)
+## MCP template
 
-1. Store PAT only in the approved Diagnostics secret environment.
-2. Export into the Diagnostics Cursor session process environment as
-   `GITHUB_PERSONAL_ACCESS_TOKEN` (value never logged).
-3. Copy `mcp.json.template` into the **Diagnostics profile** MCP config only
-   (not global Cursor config used by other roles).
-4. Restart MCP for that profile.
+See `mcp.json.template` — invoke via launcher wrapper (not raw Docker with a
+long-lived PAT). Placeholder env names only.
 
-## Validation (after PAT exists)
+## Not used
 
-- Read PR + check state for `faydog127/BHFOS`
-- Confirm `get_me` / context shows machine identity
-- Attempt write (e.g. create issue / merge) → denied by read-only MCP and/or API
-- Revoke PAT → reads fail
-
-## Branch-protection evidence
-
-Prefer existing `npm run verify:branch-protection` under the same Diagnostics env
-PAT when MCP lacks a dedicated ruleset tool. Do not expand toolsets to org-wide.
+- Machine GitHub user
+- Collaborator invite
+- Fine-grained PAT
+- Global Cursor MCP with App credentials
