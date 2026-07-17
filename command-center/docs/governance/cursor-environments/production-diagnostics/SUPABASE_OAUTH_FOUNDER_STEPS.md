@@ -41,9 +41,10 @@
 ## C. Run the protected helper (one command)
 
 > **Windows note:** Use a helper build that includes the Windows browser-launch
-> fix (PowerShell `Start-Process -LiteralPath`). Older builds that used
-> `cmd /c start` truncate the authorize URL at the first `&` and never reach
-> consent. Do not retry until that fix is on the Diagnostics worktree / main.
+> fix (PowerShell `Start-Process -FilePath` with a single-quoted URL). Older
+> builds that used `cmd /c start` truncate the authorize URL at the first `&`
+> and never reach consent. Do not retry until that fix is on the Diagnostics
+> worktree / main.
 
 From a Production Diagnostics shell with the secret env loaded:
 

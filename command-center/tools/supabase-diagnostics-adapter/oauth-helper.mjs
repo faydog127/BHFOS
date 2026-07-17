@@ -398,7 +398,8 @@ export function formatStatusResult({
  *
  * Windows: do NOT use `cmd /c start … <url>` with an unquoted URL — cmd.exe treats
  * `&` as a command separator and truncates the OAuth query string.
- * Use PowerShell Start-Process -LiteralPath with a single-quoted URL instead.
+ * Use PowerShell Start-Process -FilePath with a single-quoted URL instead
+ * (Windows PowerShell 5.x has no -LiteralPath on Start-Process).
  */
 export function buildBrowserLaunchSpec(url, platform = process.platform) {
   if (!url || typeof url !== 'string' || !/^https:\/\//i.test(url)) {
@@ -416,7 +417,7 @@ export function buildBrowserLaunchSpec(url, platform = process.platform) {
         '-WindowStyle',
         'Hidden',
         '-Command',
-        `Start-Process -LiteralPath '${escaped}'`,
+        `Start-Process -FilePath '${escaped}'`,
       ],
       options: { detached: true, stdio: 'ignore', windowsHide: true },
     };
@@ -447,9 +448,9 @@ export function extractUrlFromBrowserLaunchSpec(spec) {
   if (spec.platform === 'win32' || spec.command === 'powershell.exe') {
     const idx = spec.args.indexOf('-Command');
     const cmd = idx >= 0 ? spec.args[idx + 1] : '';
-    const m = String(cmd).match(/^Start-Process -LiteralPath '((?:''|[^'])*)'$/);
+    const m = String(cmd).match(/^Start-Process -FilePath '((?:''|[^'])*)'$/);
     if (!m) {
-      throw new OAuthHelperError('DENY: Windows launch spec missing LiteralPath URL', 'BROWSER_SPEC');
+      throw new OAuthHelperError('DENY: Windows launch spec missing FilePath URL', 'BROWSER_SPEC');
     }
     return m[1].replace(/''/g, "'");
   }

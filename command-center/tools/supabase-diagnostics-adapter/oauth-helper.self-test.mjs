@@ -283,10 +283,57 @@ export async function runSelfTests() {
     winSpec.command === 'powershell.exe' &&
       winSpec.args.includes('-Command') &&
       String(winSpec.args[winSpec.args.indexOf('-Command') + 1]).startsWith(
-        'Start-Process -LiteralPath'
+        'Start-Process -FilePath'
       ) &&
       !captured.some((c) => c.command === 'cmd' || c.command === 'cmd.exe')
   );
+
+  // Runtime parameter binding on Windows PowerShell 5.x (no browser navigation):
+  // Get-Command Start-Process must expose -FilePath; must NOT require -LiteralPath.
+  if (process.platform === 'win32') {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const probe = spawnSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          "(Get-Command Start-Process).Parameters.ContainsKey('FilePath') -and -not (Get-Command Start-Process).Parameters.ContainsKey('LiteralPath')",
+        ],
+        { encoding: 'utf8', windowsHide: true }
+      );
+      const out = String(probe.stdout || '').trim().toLowerCase();
+      pass(
+        results,
+        'windows_powershell_start_process_filepath_param',
+        probe.status === 0 && out === 'true'
+      );
+      // Validate -Command parsing accepts FilePath with ampersands (WhatIf / dry syntax check)
+      const ampProbe = spawnSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `[void][scriptblock]::Create("Start-Process -FilePath '${delivered.replace(/'/g, "''")}'"); 'ok'`,
+        ],
+        { encoding: 'utf8', windowsHide: true }
+      );
+      pass(
+        results,
+        'windows_powershell_ampersand_filepath_command_parses',
+        ampProbe.status === 0 && String(ampProbe.stdout || '').includes('ok') &&
+          !String(ampProbe.stderr || '').includes('LiteralPath')
+      );
+    } catch (e) {
+      pass(results, 'windows_powershell_start_process_filepath_param', false, String(e.message || e));
+      pass(results, 'windows_powershell_ampersand_filepath_command_parses', false);
+    }
+  } else {
+    pass(results, 'windows_powershell_start_process_filepath_param', true, 'skipped_non_windows');
+    pass(results, 'windows_powershell_ampersand_filepath_command_parses', true, 'skipped_non_windows');
+  }
   pass(
     results,
     'windows_launcher_pkce_verifier_not_in_launch_args',
