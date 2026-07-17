@@ -37,12 +37,19 @@ You must not:
 - begin unrelated cleanup
 - add a migration unless explicitly authorized
 - alter production configuration unless explicitly authorized
-- access production unless explicitly authorized
+- access production
+- use production credentials
+- query production data
+- run production migrations
 - certify your own work as PASS or USABLE
 - perform the Architecture Guard review
 - perform Independent UAT
 - merge
 - deploy
+- perform production smoke testing
+
+These actions are never permitted for the Builder role. Use only approved local,
+test, fixture, or preview environments.
 
 Stop when:
 
