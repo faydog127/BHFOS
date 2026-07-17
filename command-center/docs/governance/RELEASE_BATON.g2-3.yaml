@@ -7,46 +7,60 @@
 #
 # AUTHORITATIVE SOURCES: GitHub and CI remain authoritative for live PR and
 # check state. This Baton records verified references and current handoff, not a
-# competing source of truth. Live PR/check/SHA fields are left pending until
-# known.
+# competing source of truth.
 #
 # CONTENT RULES: NO credentials, NO secrets, NO customer data, NO copied logs,
 # NO screenshots. MAINTENANCE: agent-maintained; the founder never edits it.
 
 release_id: "G2.3"                   # program-level Baton, reused across phases
-current_phase: "G2.3A"               # active sub-release
+current_phase: "G2.3B-B1"            # repository preparation and access specification
 governance_version: "v2.2"
-risk_tier: "Tier 1"                  # G2.3A: repository-only, high-consequence foundation
-status: "in_progress"                # planning|in_progress|in_review|awaiting_owner|authorized|merged|deployed|closed|halted
-current_owner: "Builder"
-release_brief_path: "command-center/docs/stabilization/releases/G2.3A_BRIEF.md"
+risk_tier: "Tier 1"                  # B1 repository-only; B2–B5 are Tier 3 and not authorized here
+status: "in_progress"                # B1 implementation in progress
+current_owner: "V1 Builder"
+release_brief_path: "command-center/docs/stabilization/releases/G2.3B_BRIEF.md"
 umbrella_brief_path: "command-center/docs/stabilization/releases/G2.3_BRIEF.md"
-decision_packet_path: "command-center/docs/governance/decisions/G2.3A_DECISION_PACKET.md"
+decision_packet_path: "command-center/docs/governance/decisions/G2.3B_DECISION_PACKET.md"
 
-pr_number: null                      # pending until the implementation PR is opened
-base_sha: "bea39abf9a1a6c9cd42a47e40bac8f90ebc9cba9"  # verified origin/main at planning
-head_sha: ""                         # pending until known (authorization invalid if it changes)
+# --- G2.3A closeout (verified; historical) ---
+completed_phase: "G2.3A"
+completed_phase_status: "complete"
+# G2.3A PR/SHA fields retained for handoff continuity. Do not invent B1 PR/head
+# until GitHub is authoritative.
+g2_3a_pr_number: 52
+g2_3a_approved_head_sha: "27606714a73f663121962ae03dd1e603964d2f72"
+g2_3a_merge_sha: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"
+base_sha: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"  # origin/main at B1 start (G2.3A merge)
 
-check_status: "unknown"              # GitHub/CI authoritative: unknown|pending|green|failed
-architecture_guard_status: "not_started"  # REQUIRED for G2.3A before any merge authorization
-uat_status: "NOT_APPLICABLE"         # no deployed application workflow changes in this phase
+# Live B1 PR/check/SHA — pending until GitHub authoritative
+pr_number: null
+approved_head_sha: ""
+head_sha: ""
+merge_sha: ""
 
-owner_checkpoint: "pending"          # founder decision packet authorized implementation/PR/review only
+check_status: "unknown"              # GitHub/CI authoritative once B1 PR exists
+architecture_guard_status: "not_started"  # REQUIRED for B1 before merge authorization
+uat_status: "NOT_APPLICABLE"         # no deployed application workflow changes in B1
 
-# Authorizations — granted only by the Founder/Human Decider and merely recorded
-# here. Recording an authorization never creates one. Merge is NOT authorized by
-# the G2.3A decision packet; it requires a later, separate exact authorization.
-merge_authorization: "none"
+owner_checkpoint: "g2-3b-b1_implementation_authorized"
+
+# Authorizations — recording never creates authority
+merge_authorization: "none"          # B1 merge requires later exact PR + head SHA packet
 deployment_authorization: "none"
 migration_authorization: "none"
 production_test_authorization: "none"
+production_access_authorization: "none"
+b2_credential_authorization: "none"
+implementation_authorization: "granted (G2.3B Decision Packet: B1 repository scope only — implement, validate, open PR, obtain Architecture Guard review)"
 
-# Scope authorized by the G2.3A Decision Packet (implementation + validation + PR
-# + Architecture Guard review only). This is NOT a production authorization.
-implementation_authorization: "granted (G2.3A Decision Packet: implement scope, validate, open PR, obtain Architecture Guard review)"
+# Operational outcomes for current phase
+deployment_status: "not_performed"
+migration_status: "not_performed"
+production_action_status: "none"
 
-rollback_point: "bea39abf9a1a6c9cd42a47e40bac8f90ebc9cba9"  # pre-merge main SHA (clean git revert of the PR)
+rollback_point: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"  # pre-B1-merge main; clean git revert of B1 PR
 
 blockers: []
 
-next_owner: "Architecture Guard"     # required review after the PR opens
+next_phase: "G2.3B-B1 Architecture Guard review after PR"
+next_owner: "Architecture Guard"
