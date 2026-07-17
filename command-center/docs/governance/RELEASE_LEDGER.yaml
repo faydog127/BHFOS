@@ -19,22 +19,23 @@ entries:
     governance_version: "v2.2"
     risk_tier: "Tier 1"              # repository-only, high-consequence foundation
     phase: "Foundations and Production Identity"
-    pr: null                         # pending until the implementation PR is opened
-    approved_head_sha: ""            # pending (a later decision packet names the exact head SHA)
-    merge_sha: ""                    # empty until merged (merge NOT authorized by this phase)
-    deployed_sha: ""                 # empty (no deployment in this phase)
-    environment: ""                  # none (no production access in this phase)
+    pr: 52
+    approved_head_sha: "27606714a73f663121962ae03dd1e603964d2f72"
+    merge_sha: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"
+    deployed_sha: ""                 # none — no deployment occurred
+    environment: ""                  # none — no production environment targeted
     migration_state: "none"          # no migration authored or run
     authorization_references:
       implementation: "granted-by-Founder via G2.3A Decision Packet (implement scope, validate, open PR, obtain Architecture Guard review)"
-      merge: "none"                  # requires a later separate exact authorization
+      architecture_guard: "APPROVE_FOR_FINAL_DECISION_PACKET (exact head 27606714a73f663121962ae03dd1e603964d2f72)"
+      merge: "granted-by-Founder via G2.3A Authorized Merge (exact PR #52 @ 27606714a73f663121962ae03dd1e603964d2f72)"
       deployment: "none"
       migration: "none"
       production_test: "none"
-    production_actions: []           # none — no production action occurred
-    verification_result: "SOURCE-ONLY"  # plus a CI-DEPLOYED build artifact once CI runs; production USABLE is NOT_APPLICABLE
-    architecture_guard_status: "not_started"  # REQUIRED before any merge authorization
-    uat_status: "NOT_APPLICABLE"     # no deployed application workflow changes
-    rollback_point: "bea39abf9a1a6c9cd42a47e40bac8f90ebc9cba9"  # pre-merge main SHA; clean git revert
-    completion_status: "open"
-    notes: "Repository-only foundations: build identity + build-info, deploy tooling (committed, not executed; dry-run default), secret inventory, migration verifier, synthetic-data registry structure, health probe, branch-protection verifier, and this Baton/Ledger. No credentials, deployment, production access, migration, external mutation, or production-data action occurred."
+    production_actions: []           # empty — no consequential production action occurred
+    verification_result: "merged_repository_only; required checks green (lint, identity_contracts, build, ledger_lock); Architecture Guard APPROVE_FOR_FINAL_DECISION_PACKET; SOURCE-ONLY foundations landed on main; production USABLE NOT_APPLICABLE"
+    architecture_guard_status: "APPROVE_FOR_FINAL_DECISION_PACKET"
+    uat_status: "NOT_APPLICABLE"
+    rollback_point: "bea39abf9a1a6c9cd42a47e40bac8f90ebc9cba9"
+    completion_status: "merged_repository_only"
+    notes: "G2.3A closed. PR #52 merge commit b218c70db5dbeb33a5b9d19dab941e4273a6507f equals origin/main at closeout. Repository foundations only: build identity + build-info, Hostinger deploy tooling (committed, not executed; dry-run default), DEPLOYMENT.md, secret inventory (names-only), migration verifier, synthetic-data registry structure, health probe, branch-protection verifier, Baton, Ledger. Confirmed non-actions: no deployment, no production access, no credential provisioning, no migration, no external configuration mutation, no production-data action, no financial action, no communication."

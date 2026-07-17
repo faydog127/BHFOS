@@ -7,46 +7,54 @@
 #
 # AUTHORITATIVE SOURCES: GitHub and CI remain authoritative for live PR and
 # check state. This Baton records verified references and current handoff, not a
-# competing source of truth. Live PR/check/SHA fields are left pending until
-# known.
+# competing source of truth.
 #
 # CONTENT RULES: NO credentials, NO secrets, NO customer data, NO copied logs,
 # NO screenshots. MAINTENANCE: agent-maintained; the founder never edits it.
 
 release_id: "G2.3"                   # program-level Baton, reused across phases
-current_phase: "G2.3A"               # active sub-release
+current_phase: "G2.3B"               # next phase after G2.3A closeout
 governance_version: "v2.2"
-risk_tier: "Tier 1"                  # G2.3A: repository-only, high-consequence foundation
-status: "in_progress"                # planning|in_progress|in_review|awaiting_owner|authorized|merged|deployed|closed|halted
-current_owner: "Builder"
-release_brief_path: "command-center/docs/stabilization/releases/G2.3A_BRIEF.md"
+risk_tier: "Tier 1"                  # G2.3B-B1 planning/repo prep only; B2–B5 provisioning is Tier 3 (see G2.3B brief)
+status: "awaiting_owner"             # G2.3A complete; G2.3B Decision Packet awaiting founder authorization
+current_owner: "V1 Orchestrator"
+release_brief_path: "command-center/docs/stabilization/releases/G2.3B_BRIEF.md"
 umbrella_brief_path: "command-center/docs/stabilization/releases/G2.3_BRIEF.md"
-decision_packet_path: "command-center/docs/governance/decisions/G2.3A_DECISION_PACKET.md"
+decision_packet_path: "command-center/docs/governance/decisions/G2.3B_DECISION_PACKET.md"
 
-pr_number: null                      # pending until the implementation PR is opened
-base_sha: "bea39abf9a1a6c9cd42a47e40bac8f90ebc9cba9"  # verified origin/main at planning
-head_sha: ""                         # pending until known (authorization invalid if it changes)
+# --- G2.3A closeout (verified) ---
+# Prior phase status recorded here for handoff continuity; Ledger holds the
+# append-only historical entry.
+completed_phase: "G2.3A"
+completed_phase_status: "complete"
+pr_number: 52
+base_sha: "bea39abf9a1a6c9cd42a47e40bac8f90ebc9cba9"  # pre-merge main / G2.3A rollback point
+approved_head_sha: "27606714a73f663121962ae03dd1e603964d2f72"
+head_sha: "27606714a73f663121962ae03dd1e603964d2f72"
+merge_sha: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"
 
-check_status: "unknown"              # GitHub/CI authoritative: unknown|pending|green|failed
-architecture_guard_status: "not_started"  # REQUIRED for G2.3A before any merge authorization
-uat_status: "NOT_APPLICABLE"         # no deployed application workflow changes in this phase
+check_status: "green"                # lint, identity_contracts, build, ledger_lock — GitHub/CI authoritative
+architecture_guard_status: "APPROVE_FOR_FINAL_DECISION_PACKET"
+uat_status: "NOT_APPLICABLE"         # no deployed application workflow changes in G2.3A
 
-owner_checkpoint: "pending"          # founder decision packet authorized implementation/PR/review only
+owner_checkpoint: "g2-3a_merge_authorized_and_completed"
 
 # Authorizations — granted only by the Founder/Human Decider and merely recorded
-# here. Recording an authorization never creates one. Merge is NOT authorized by
-# the G2.3A decision packet; it requires a later, separate exact authorization.
-merge_authorization: "none"
+# here. Recording an authorization never creates one.
+merge_authorization: "completed"     # G2.3A PR #52 merged under exact head-SHA authorization
 deployment_authorization: "none"
 migration_authorization: "none"
 production_test_authorization: "none"
+implementation_authorization: "completed (G2.3A Decision Packet + merge authorization)"
 
-# Scope authorized by the G2.3A Decision Packet (implementation + validation + PR
-# + Architecture Guard review only). This is NOT a production authorization.
-implementation_authorization: "granted (G2.3A Decision Packet: implement scope, validate, open PR, obtain Architecture Guard review)"
+# Post-merge operational outcomes (G2.3A)
+deployment_status: "not_performed"
+migration_status: "not_performed"
+production_action_status: "none"
 
-rollback_point: "bea39abf9a1a6c9cd42a47e40bac8f90ebc9cba9"  # pre-merge main SHA (clean git revert of the PR)
+rollback_point: "bea39abf9a1a6c9cd42a47e40bac8f90ebc9cba9"
 
 blockers: []
 
-next_owner: "Architecture Guard"     # required review after the PR opens
+next_phase: "G2.3B planning"
+next_owner: "V1 Orchestrator"
