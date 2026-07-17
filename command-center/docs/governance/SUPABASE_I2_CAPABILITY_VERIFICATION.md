@@ -27,23 +27,37 @@ refresh until revoked).
 
 ## 3. Candidate permission identifiers (FGA) vs OAuth scopes
 
-| Desired I2 surface | OAuth scope (docs) | Fine-grained permission id(s) | Issue? |
-| --- | --- | --- | --- |
-| Project status / health / metadata | `Projects` **Read** | `projects:read` / `projects_read` | Candidate |
-| Analytics / unified logs | `analytics:read` | `analytics_logs_read` | **High sensitivity** — see §5 |
-| Edge Function inventory / metadata | `Edge Functions` **Read** | `edge_functions_read` | **Includes function body** — see §6 |
-| Migration version list | `database:read` (partner note) | `database_migrations_read` | Endpoint marked **“Only available to selected partner OAuth apps”** — treat as **unavailable** unless partner entitlement proven |
-| Schema / SQL / table data | — | `database_read` | **PROHIBITED** |
-| Secrets / API keys | `Secrets` **Read** | `secrets:read` (+ related) | **PROHIBITED** |
-| Function deploy/update/delete | `Edge Functions` **Write** | `edge_functions_write` | **PROHIBITED** |
+**Do not treat these as interchangeable labels.**
+
+| Layer | Example | Where selected / used |
+| --- | --- | --- |
+| Dashboard OAuth app scope | Category **Projects** + type **Read** → wire scope **`projects:read`** | Supabase Dashboard OAuth Apps UI |
+| Management API permission identifiers | `projects_read`, `project_admin_read`, … | Endpoint FGA docs / API authorization — **not** Dashboard checkbox synonyms for `projects:read` |
+
+| Desired I2 surface | Dashboard OAuth selection | Wire OAuth scope | Management API permission id examples (docs) | Issue? |
+| --- | --- | --- | --- | --- |
+| Project status / health / metadata (adapter-bounded) | Projects **Read** | `projects:read` | `projects_read` (and related endpoint ids; may also cover listing/network/upgrade reads) | Candidate for corrected B2D Option A **with residual token-scope risk** |
+| Analytics / unified logs | Analytics **Read** (if offered) | `analytics:read` | `analytics_logs_read` | **High sensitivity** — see §5 |
+| Edge Function inventory / metadata | Edge Functions **Read** | `edge_functions:read` | `edge_functions_read` | **Includes function body** — see §6 |
+| Migration version list | Database **Read** (partner note) | `database:read` | `database_migrations_read` | Endpoint marked **“Only available to selected partner OAuth apps”** — treat as **unavailable** unless partner entitlement proven |
+| Schema / SQL / table data | — | — | `database_read` | **PROHIBITED** |
+| Secrets / API keys | Secrets **Read** | `secrets:read` | `secrets:read` (+ related) | **PROHIBITED** |
+| Function deploy/update/delete | Edge Functions **Write** | `edge_functions:write` | `edge_functions_write` | **PROHIBITED** |
+
+**Project scoping note:** OAuth-account authorization and OAuth scope boundaries are
+**not** independently verified as token-level single-project restriction. Adapter
+project-ref lock (`wwyxohjnyqnegzbxtuxs`) is a separate process control.
 
 ## 4. Endpoints enabled by proposed permissions (non-exhaustive; from Management API docs)
 
-### 4.1 `projects:read` / `projects_read`
-Enables (examples): list/get projects; project service health; network
-restrictions/bans (read); restore-version list; org project list (with
-`organization_projects_read` where required). Does **not** by itself enable
-secrets, SQL, or function deploy.
+### 4.1 Projects Read / wire scope `projects:read` (Management API ids may include `projects_read`)
+Enables (examples from platform docs — **broader than** the adapter allowlist):
+list/get projects; project metadata; service health; network restrictions/bans
+(read); upgrade eligibility; org project list (with org-related permissions where
+required). Does **not** by itself enable secrets, SQL, or function deploy.
+
+**I2 adapter** must still expose only approved allowlisted paths for fixed ref
+`wwyxohjnyqnegzbxtuxs`. Do **not** claim the OAuth token is project-scoped.
 
 ### 4.2 `analytics_logs_read`
 Enables:

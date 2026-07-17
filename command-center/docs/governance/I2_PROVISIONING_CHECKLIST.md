@@ -12,7 +12,7 @@
 
 | Field | Value |
 | --- | --- |
-| Authorization reference | _pending — Founder B2 Decision Packet id_ |
+| Authorization reference | B2A/B2C/B2C-App granted; B2C merge `9ba22c28…`; **B2D pending** for Supabase adapter credential |
 | Risk tier | Tier 3 |
 | Actor allowed to provision | Founder or delegated operator **under exact B2 auth** |
 | B1 prerequisite | G2.3B-B1 merged; `DIAGNOSTICS_ACCESS.md` accepted |
@@ -32,51 +32,52 @@ only in the approved secret-store category.
 | Field | Planned / recorded value |
 | --- | --- |
 | Exact system | GitHub `faydog127/BHFOS` |
-| Exact identity | I2 fine-grained PAT or GitHub App (`prod-diagnostics` naming) |
-| Exact permissions | Read-only scopes per `DIAGNOSTICS_ACCESS.md` §4.1 |
-| Issue time | _pending B2_ |
-| Expiration | _pending B2_ (prefer short TTL) |
-| Credential-storage category | Secret store |
-| Inventory name row | `I2_GITHUB_DIAGNOSTICS_TOKEN` (or App id name) — names only |
-| Actor | _pending B2_ |
-| Audit attribution | Distinct I2 identity visible in audit log |
-| Successful read test | _pending B3_ |
+| Exact identity | Dedicated App `BHFOS I2 Diagnostics` (installation tokens via protected launcher) |
+| Exact permissions | Metadata/Contents/Actions/PRs/Commit statuses **read**; Administration **none** |
+| Issue time | Founder-attested under B2C-App (pre-merge #54) |
+| Expiration | Short-lived installation tokens (launcher-minted) |
+| Credential-storage category | Diagnostics secret store only |
+| Inventory name row | `I2_GITHUB_APP_ID` / `I2_GITHUB_APP_INSTALLATION_ID` / `I2_GITHUB_APP_PRIVATE_KEY` |
+| Actor | Founder (provision); Production Diagnostics launcher (mint) |
+| Audit attribution | GitHub App installation identity |
+| Successful read test | _pending B3_ (App+launcher ≠ live proof) |
 | Negative mutation test | Write/settings denied — _pending B3_ |
-| Evidence required before accept | Read OK + negative write fail-closed + audit identity |
+| Evidence required before accept | Read OK + negative write fail-closed + audit identity (**B3**) |
 
 ### 2.2 Hostinger
 
 | Field | Planned / recorded value |
 | --- | --- |
 | Exact system | Hostinger hosting for `app.bhfos.com` |
-| Exact identity | I2 read token or read-only role |
-| Exact permissions | Read history/status/logs/version/errors only |
-| Issue time | _pending B2_ |
-| Expiration | _pending B2_ |
-| Credential-storage category | Secret store |
-| Inventory name row | `I2_HOSTINGER_DIAGNOSTICS_TOKEN` |
-| Actor | _pending B2_ |
-| Audit attribution | Named I2 (`unknown` if platform cannot attribute) |
-| Successful read test | _pending B3_ |
-| Negative mutation test | Upload/deploy/delete denied — _pending B3_ |
-| Stop if | Only shared-admin login works |
+| Exact identity | **None** — `READ_ONLY_CAPABILITY_UNAVAILABLE` for Diagnostics |
+| Exact permissions | N/A |
+| Issue time | **Do not issue in G2.3B** |
+| Expiration | N/A |
+| Credential-storage category | N/A |
+| Inventory name row | `I2_HOSTINGER_DIAGNOSTICS_TOKEN` — blocked |
+| Actor | N/A |
+| Audit attribution | N/A |
+| Successful read test | N/A (Diagnostics) |
+| Negative mutation test | N/A (Diagnostics) |
+| Stop if | Only shared-admin login works — **recorded; reserved for G2.3C Operator** |
 
 ### 2.3 Supabase
 
 | Field | Planned / recorded value |
 | --- | --- |
-| Exact system | Production Supabase project |
-| Exact identity | I2 read-only member / management token |
-| Exact permissions | Logs + metadata + inventory; **no** service-role |
-| Issue time | _pending B2_ |
-| Expiration | _pending B2_ |
-| Credential-storage category | Secret store |
-| Inventory name row | `I2_SUPABASE_DIAGNOSTICS_TOKEN` |
-| Actor | _pending B2_ |
-| Audit attribution | Named I2 project member |
+| Exact system | Production Supabase project ref `wwyxohjnyqnegzbxtuxs` (adapter lock) |
+| Exact identity | Dedicated OAuth application + Founder authorization (pending corrected B2D) |
+| Exact permissions | Dashboard **Projects Read** only (wire scope `projects:read`); adapter allowlist metadata/health only |
+| Token project scope | **Not proven** at token layer; project isolation is adapter-enforced |
+| Issue time | _pending corrected G2.3B-B2D after AG_ |
+| Expiration | Short-lived access token; refresh until revoked (platform-controlled) |
+| Credential-storage category | Diagnostics adapter secret env only |
+| Inventory name rows | `I2_SUPABASE_OAUTH_CLIENT_ID`, `I2_SUPABASE_OAUTH_CLIENT_SECRET` (if issued), `I2_SUPABASE_OAUTH_ACCESS_TOKEN`, `I2_SUPABASE_OAUTH_REFRESH_TOKEN`, `I2_SUPABASE_OAUTH_TOKEN_EXPIRY`, `SUPABASE_DIAGNOSTICS_PROJECT_REF` |
+| Actor | Founder under B2D only |
+| Audit attribution | OAuth app identity (not founder-personal PAT) |
 | Successful read test | _pending B3_ |
-| Negative mutation test | Write/DDL/deploy/`execute-sql` denied — _pending B3_ |
-| Explicitly not provisioned | `SUPABASE_SERVICE_ROLE_KEY` for I2 |
+| Negative mutation test | Writes/SQL/secrets/`/body`/listing/bypass denied — _pending B3_ |
+| Explicitly not provisioned | PAT; Dashboard Read-Only member; service-role; `SUPABASE_DIAGNOSTICS_ADAPTER_TOKEN`; agent-held OAuth; unrestricted Supabase MCP |
 
 ### 2.4 Application build identity / health
 
@@ -102,16 +103,18 @@ only in the approved secret-store category.
 
 ## 3. Post-provisioning checklist (B2 complete when all true)
 
-- [ ] Founder B2 authorization reference recorded on Baton/Ledger (references only)
-- [ ] Each issued secret **name** added to `SECRET_INVENTORY.md` as unverified→yes
-- [ ] **No** secret value in repository, PR, chat, or Markdown
-- [ ] Over-scope review: issued permissions ⊆ approved matrix
-- [ ] Emergency-disable procedure acknowledged (`I2_REVOCATION_CHECKLIST.md`)
+- [x] Founder B2 authorization references recorded on Baton/Ledger (B2A/B2C/B2C-App; B2C merge `9ba22c28…`)
+- [x] GitHub App secret **names** in `SECRET_INVENTORY.md` (`founder_attested_present`)
+- [x] Hostinger recorded `READ_ONLY_CAPABILITY_UNAVAILABLE` (no Diagnostics credential)
+- [ ] Supabase OAuth lifecycle credentials issued under corrected **G2.3B-B2D** (or Option C deferral recorded)
+- [x] **No** secret value in repository, PR, chat, or Markdown
+- [x] Over-scope review: GitHub Administration none; Hostinger none; Supabase none until B2D
+- [x] Emergency-disable procedure acknowledged (`I2_REVOCATION_CHECKLIST.md`)
 - [ ] B3 connection verification scheduled under separate authorization
 
 ---
 
-## 4. Explicit non-action (B1)
+## 4. Explicit non-action notes
 
-This checklist was **not** executed. No identities were created. No tokens were
-issued. No secret-store entries were created.
+B1 was planning-only. B2C merged App + launcher + adapter (no Supabase credential).
+Live connection / negative-write remain **B3**. Hostinger Diagnostics remains blocked.

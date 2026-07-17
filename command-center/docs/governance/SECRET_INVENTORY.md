@@ -61,8 +61,9 @@
 
 ## Planned / authorized I2 Production Diagnostics identities (names only)
 
-> No secret values. **G2.3B-B2C-App:** GitHub App provisioned (Founder-attested).
-> Hostinger blocked. Supabase adapter implemented; **no** Supabase credential.
+> No secret values. **G2.3B-B2C** merged (`9ba22c28…`). GitHub App provisioned
+> (Founder-attested). Hostinger blocked. Supabase adapter present; **no** Supabase
+> OAuth credential until corrected **G2.3B-B2D** Founder auth after AG.
 
 | Name | Owning system | Purpose | Environment | Expected storage | Responsible role | Rotation requirement | Revocation method | Verified? | Notes (non-sensitive) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -73,8 +74,15 @@
 | `I2_GITHUB_DIAGNOSTICS_APP` | GitHub | (legacy name) | — | — | — | — | — | unverified | Replaced by `I2_GITHUB_APP_*`. |
 | `I2_HOSTINGER_DIAGNOSTICS_TOKEN` | Hostinger | — | — | — | — | — | — | **READ_ONLY_CAPABILITY_UNAVAILABLE** | **Do not create in G2.3B.** Reserved for G2.3C Production Operator + mutation-gated deploy CLI only. |
 | `I2_SUPABASE_DIAGNOSTICS_TOKEN` | Supabase | — | — | — | — | — | — | unverified | Legacy; not issued. |
-| `I2_SUPABASE_OAUTH_DIAGNOSTICS_TOKEN` | Supabase | — | — | — | — | — | — | unverified | Option-A-as-final superseded; adapter-first. |
-| `SUPABASE_DIAGNOSTICS_ADAPTER_TOKEN` | Supabase | Internal credential for bounded adapter only | production-diagnostics (adapter process) | Diagnostics secret store; **not** agent-visible | Production Diagnostics adapter | Cadence + revoke | Revoke token; stop adapter | unverified | **Not issued under B2C.** Requires separate Founder Decision Packet after AG review of adapter. |
+| `I2_SUPABASE_OAUTH_DIAGNOSTICS_TOKEN` | Supabase | — | — | — | — | — | — | unverified | Superseded by OAuth lifecycle names below. |
+| `SUPABASE_DIAGNOSTICS_ADAPTER_TOKEN` | Supabase | — | — | — | — | — | — | unverified | **Retired.** Do not issue. Replaced by OAuth lifecycle names. |
+| `I2_SUPABASE_OAUTH_CLIENT_ID` | Supabase | OAuth app client id for Diagnostics adapter | production-diagnostics (adapter) | Diagnostics adapter secret env only | Production Diagnostics | n/a (id) | Disable/delete OAuth app | unverified | **Not issued.** Pending corrected G2.3B-B2D after AG. |
+| `I2_SUPABASE_OAUTH_CLIENT_SECRET` | Supabase | OAuth client secret **if issued** for app type | production-diagnostics (adapter) | Diagnostics adapter secret env only | Production Diagnostics | Rotate on suspicion / cadence | Rotate secret; re-authorize if required | unverified | **Not issued.** Omit row usage if platform issues public client without secret. |
+| `I2_SUPABASE_OAUTH_ACCESS_TOKEN` | Supabase | Short-lived Management API Bearer token | production-diagnostics (adapter) | Diagnostics adapter secret env only | Production Diagnostics adapter | Refresh before expiry; fail closed on 401 | Revoke app auth; clear env | unverified | **Not issued.** Not claimed project-scoped at token layer. |
+| `I2_SUPABASE_OAUTH_REFRESH_TOKEN` | Supabase | Refresh token for access-token rotation | production-diagnostics (adapter) | Diagnostics adapter secret env only | Production Diagnostics adapter | Rotate with re-auth | Revoke app auth; clear env | unverified | **Not issued.** Never agent-visible. |
+| `I2_SUPABASE_OAUTH_TOKEN_EXPIRY` | Supabase | Access-token expiry reference | production-diagnostics (adapter) | Diagnostics adapter env only | Production Diagnostics adapter | Update on refresh | Clear with tokens | unverified | **Not issued.** Metadata; still Diagnostics-env only. |
+| `SUPABASE_DIAGNOSTICS_PROJECT_REF` | Supabase | Fixed production project ref for adapter lock | production-diagnostics (adapter) | Diagnostics adapter env only | Production Diagnostics adapter | n/a | Clear env | unverified | Must equal `wwyxohjnyqnegzbxtuxs`. Adapter isolation — **not** proof of token-level project scope. |
+| `I2_DIAGNOSTICS_SECRET_ENV_FILE` | Local | Absolute path to durable Diagnostics env file | production-diagnostics | Path only (file is gitignored) | Production Diagnostics | n/a | Delete path env; shred file | unverified | Required by protected OAuth helper for durable token writes. Path only in docs — never commit file contents. |
 
 ## Handling rules (binding)
 
