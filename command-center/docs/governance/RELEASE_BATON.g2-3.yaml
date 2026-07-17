@@ -13,54 +13,58 @@
 # NO screenshots. MAINTENANCE: agent-maintained; the founder never edits it.
 
 release_id: "G2.3"                   # program-level Baton, reused across phases
-current_phase: "G2.3B-B1"            # repository preparation and access specification
+current_phase: "G2.3B-B2"            # I2 identity and credential provisioning
 governance_version: "v2.2"
-risk_tier: "Tier 1"                  # B1 repository-only; B2–B5 are Tier 3 and not authorized here
-status: "in_progress"                # B1 implementation in progress
-current_owner: "V1 Builder"
-release_brief_path: "command-center/docs/stabilization/releases/G2.3B_BRIEF.md"
+risk_tier: "Tier 3"                  # B2 credential/identity provisioning
+status: "awaiting_founder_authorization"
+current_owner: "Program Orchestrator"
+release_brief_path: "command-center/docs/stabilization/releases/G2.3B-B2_BRIEF.md"
 umbrella_brief_path: "command-center/docs/stabilization/releases/G2.3_BRIEF.md"
-decision_packet_path: "command-center/docs/governance/decisions/G2.3B_DECISION_PACKET.md"
+parent_brief_path: "command-center/docs/stabilization/releases/G2.3B_BRIEF.md"
+decision_packet_path: "command-center/docs/governance/decisions/G2.3B-B2_DECISION_PACKET.md"
 
-# --- G2.3A closeout (verified; historical) ---
-completed_phase: "G2.3A"
+# --- Completed phases (verified) ---
+completed_phase: "G2.3B-B1"
 completed_phase_status: "complete"
-# G2.3A PR/SHA fields retained for handoff continuity. Do not invent B1 PR/head
-# until GitHub is authoritative.
 g2_3a_pr_number: 52
 g2_3a_approved_head_sha: "27606714a73f663121962ae03dd1e603964d2f72"
 g2_3a_merge_sha: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"
-base_sha: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"  # origin/main at B1 start (G2.3A merge)
+g2_3b_b1_pr_number: 53
+g2_3b_b1_approved_head_sha: "07d647399936a40525554d78ca6a466de67424d1"
+g2_3b_b1_merge_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
+base_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"  # origin/main after B1 merge
 
-# Live B1 PR/check/SHA — pending until GitHub authoritative
-pr_number: null
-approved_head_sha: ""
-head_sha: ""
-merge_sha: ""
+# Live B1 PR/check/SHA (closed)
+pr_number: 53
+approved_head_sha: "07d647399936a40525554d78ca6a466de67424d1"
+head_sha: "07d647399936a40525554d78ca6a466de67424d1"
+merge_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
 
-check_status: "unknown"              # GitHub/CI authoritative once B1 PR exists
-architecture_guard_status: "not_started"  # REQUIRED for B1 before merge authorization
-uat_status: "NOT_APPLICABLE"         # no deployed application workflow changes in B1
+check_status: "green"                # lint, identity_contracts, build, ledger_lock SUCCESS at merge
+architecture_guard_status: "APPROVE_FOR_FINAL_DECISION_PACKET"  # B1 exact head 07d6473…
+uat_status: "NOT_APPLICABLE"
 
-owner_checkpoint: "g2-3b-b1_implementation_authorized"
+owner_checkpoint: "g2-3b-b1_merged_awaiting_b2_authorization"
 
 # Authorizations — recording never creates authority
-merge_authorization: "none"          # B1 merge requires later exact PR + head SHA packet
+merge_authorization: "granted (Founder G2.3B-B1 Authorized Merge: PR #53 @ 07d647399936a40525554d78ca6a466de67424d1)"
 deployment_authorization: "none"
 migration_authorization: "none"
 production_test_authorization: "none"
 production_access_authorization: "none"
-b2_credential_authorization: "none"
-implementation_authorization: "granted (G2.3B Decision Packet: B1 repository scope only — implement, validate, open PR, obtain Architecture Guard review)"
+b2_credential_authorization: "none"  # Decision Packet prepared; Founder auth pending
+implementation_authorization: "none"  # B2 is provisioning, not Builder repo implementation
 
 # Operational outcomes for current phase
 deployment_status: "not_performed"
 migration_status: "not_performed"
 production_action_status: "none"
 
-rollback_point: "b218c70db5dbeb33a5b9d19dab941e4273a6507f"  # pre-B1-merge main; clean git revert of B1 PR
+rollback_point: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
 
-blockers: []
+blockers:
+  - "I2 credentials not provisioned (B2 pending Founder authorization)"
+  - "Six G2.3B reconciliation items remain open until B4 (do not block B2 entry)"
 
-next_phase: "G2.3B-B1 Architecture Guard review after PR"
-next_owner: "Architecture Guard"
+next_phase: "G2.3B-B2 Founder authorization then exact I2 provisioning"
+next_owner: "Founder (authorization) → Production Diagnostics / Founder (provisioning actor)"
