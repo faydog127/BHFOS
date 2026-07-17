@@ -392,3 +392,100 @@ export function formatStatusResult({
     'token values: not displayed',
   ].join('\n');
 }
+
+/**
+ * Build OS browser-launch argv. Never log the URL (contains state / PKCE challenge).
+ *
+ * Windows: do NOT use `cmd /c start … <url>` with an unquoted URL — cmd.exe treats
+ * `&` as a command separator and truncates the OAuth query string.
+ * Use PowerShell Start-Process -LiteralPath with a single-quoted URL instead.
+ */
+export function buildBrowserLaunchSpec(url, platform = process.platform) {
+  if (!url || typeof url !== 'string' || !/^https:\/\//i.test(url)) {
+    throw new OAuthHelperError('DENY: browser launch requires https URL', 'BROWSER_URL');
+  }
+
+  if (platform === 'win32') {
+    const escaped = url.replace(/'/g, "''");
+    return {
+      platform: 'win32',
+      command: 'powershell.exe',
+      args: [
+        '-NoProfile',
+        '-NonInteractive',
+        '-WindowStyle',
+        'Hidden',
+        '-Command',
+        `Start-Process -LiteralPath '${escaped}'`,
+      ],
+      options: { detached: true, stdio: 'ignore', windowsHide: true },
+    };
+  }
+
+  if (platform === 'darwin') {
+    return {
+      platform: 'darwin',
+      command: 'open',
+      args: [url],
+      options: { detached: true, stdio: 'ignore' },
+    };
+  }
+
+  return {
+    platform: 'linux',
+    command: 'xdg-open',
+    args: [url],
+    options: { detached: true, stdio: 'ignore' },
+  };
+}
+
+/** Recover the target URL from a launch spec (tests only — do not print). */
+export function extractUrlFromBrowserLaunchSpec(spec) {
+  if (!spec || !spec.command) {
+    throw new OAuthHelperError('DENY: invalid browser launch spec', 'BROWSER_SPEC');
+  }
+  if (spec.platform === 'win32' || spec.command === 'powershell.exe') {
+    const idx = spec.args.indexOf('-Command');
+    const cmd = idx >= 0 ? spec.args[idx + 1] : '';
+    const m = String(cmd).match(/^Start-Process -LiteralPath '((?:''|[^'])*)'$/);
+    if (!m) {
+      throw new OAuthHelperError('DENY: Windows launch spec missing LiteralPath URL', 'BROWSER_SPEC');
+    }
+    return m[1].replace(/''/g, "'");
+  }
+  if (spec.args && spec.args.length === 1) {
+    return spec.args[0];
+  }
+  throw new OAuthHelperError('DENY: cannot extract URL from launch spec', 'BROWSER_SPEC');
+}
+
+/**
+ * Presence checks only — never return parameter values to callers that might log them.
+ */
+export function authorizeUrlParamPresence(url) {
+  const u = new URL(url);
+  return {
+    responseTypeCode: u.searchParams.get('response_type') === 'code',
+    clientIdPresent: Boolean(u.searchParams.get('client_id')),
+    redirectUriPresent: Boolean(u.searchParams.get('redirect_uri')),
+    statePresent: Boolean(u.searchParams.get('state')),
+    codeChallengePresent: Boolean(u.searchParams.get('code_challenge')),
+    codeChallengeMethodS256: u.searchParams.get('code_challenge_method') === 'S256',
+    ampersandCount: (url.match(/&/g) || []).length,
+  };
+}
+
+/**
+ * Demonstrate the defective cmd.exe pattern truncates at the first `&`.
+ * Used only in tests — never used for live launch.
+ */
+export function defectiveCmdStartTruncatesAtAmpersand(url) {
+  // Models: cmd.exe parsing of `start "" <unquoted-url>` where `&` starts a new command.
+  const first = url.split('&')[0];
+  return {
+    truncated: first !== url,
+    firstSegmentEqualsFullUrl: first === url,
+    firstSegmentHasOnlyResponseType:
+      first.includes('response_type=') && !first.includes('client_id='),
+  };
+}

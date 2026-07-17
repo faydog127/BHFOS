@@ -40,6 +40,11 @@
 
 ## C. Run the protected helper (one command)
 
+> **Windows note:** Use a helper build that includes the Windows browser-launch
+> fix (PowerShell `Start-Process -LiteralPath`). Older builds that used
+> `cmd /c start` truncate the authorize URL at the first `&` and never reach
+> consent. Do not retry until that fix is on the Diagnostics worktree / main.
+
 From a Production Diagnostics shell with the secret env loaded:
 
 ```bash
@@ -50,7 +55,7 @@ node tools/supabase-diagnostics-adapter/oauth-authorize.mjs
 The helper will:
 
 - bind `127.0.0.1:8765`
-- open the browser consent screen
+- open the browser consent screen (**without** printing the authorize URL)
 - exchange the code
 - write `I2_SUPABASE_OAUTH_ACCESS_TOKEN`, `I2_SUPABASE_OAUTH_REFRESH_TOKEN`, and
   `I2_SUPABASE_OAUTH_TOKEN_EXPIRY` into the Diagnostics secret env file
