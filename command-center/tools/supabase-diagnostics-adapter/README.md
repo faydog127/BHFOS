@@ -25,5 +25,5 @@ npm run test:supabase-diagnostics-adapter
 
 ## Credential issuance
 
-Requires a **separate Founder Decision Packet** after Architecture Guard review
-of this adapter.
+Requires Founder Decision Packet **G2.3B-B2D** (adapter design AG via PR `#54`).
+Do not issue or connect a credential without that authorization.

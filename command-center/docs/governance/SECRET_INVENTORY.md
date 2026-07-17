@@ -61,8 +61,9 @@
 
 ## Planned / authorized I2 Production Diagnostics identities (names only)
 
-> No secret values. **G2.3B-B2C-App:** GitHub App provisioned (Founder-attested).
-> Hostinger blocked. Supabase adapter implemented; **no** Supabase credential.
+> No secret values. **G2.3B-B2C** merged (`9ba22c28…`). GitHub App provisioned
+> (Founder-attested). Hostinger blocked. Supabase adapter on main; **no** Supabase
+> credential until **G2.3B-B2D**.
 
 | Name | Owning system | Purpose | Environment | Expected storage | Responsible role | Rotation requirement | Revocation method | Verified? | Notes (non-sensitive) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -74,7 +75,7 @@
 | `I2_HOSTINGER_DIAGNOSTICS_TOKEN` | Hostinger | — | — | — | — | — | — | **READ_ONLY_CAPABILITY_UNAVAILABLE** | **Do not create in G2.3B.** Reserved for G2.3C Production Operator + mutation-gated deploy CLI only. |
 | `I2_SUPABASE_DIAGNOSTICS_TOKEN` | Supabase | — | — | — | — | — | — | unverified | Legacy; not issued. |
 | `I2_SUPABASE_OAUTH_DIAGNOSTICS_TOKEN` | Supabase | — | — | — | — | — | — | unverified | Option-A-as-final superseded; adapter-first. |
-| `SUPABASE_DIAGNOSTICS_ADAPTER_TOKEN` | Supabase | Internal credential for bounded adapter only | production-diagnostics (adapter process) | Diagnostics secret store; **not** agent-visible | Production Diagnostics adapter | Cadence + revoke | Revoke token; stop adapter | unverified | **Not issued under B2C.** Requires separate Founder Decision Packet after AG review of adapter. |
+| `SUPABASE_DIAGNOSTICS_ADAPTER_TOKEN` | Supabase | Internal credential for bounded adapter only | production-diagnostics (adapter process) | Diagnostics secret store; **not** agent-visible | Production Diagnostics adapter | Cadence + revoke | Revoke token; stop adapter | unverified | **Not issued.** Pending Founder Decision Packet `G2.3B-B2D` (adapter design AG via PR #54). |
 
 ## Handling rules (binding)
 

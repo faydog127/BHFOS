@@ -2,44 +2,42 @@
 # Release Baton — BHFOS Operating Model v2.2
 
 release_id: "G2.3"
-current_phase: "G2.3B-B2C-App"
+current_phase: "G2.3B-B2D"
 governance_version: "v2.2"
 risk_tier: "Tier 3"
 status: "in_progress"
-current_owner: "V1 Builder → Architecture Guard"
-decision_packet_path: "command-center/docs/governance/decisions/G2.3B-B2C-App_DECISION_PACKET.md"
-founder_steps_path: "command-center/docs/governance/cursor-environments/production-diagnostics/GITHUB_APP_FOUNDER_STEPS.md"
+current_owner: "Program Orchestrator → Founder (Supabase adapter credential Decision Packet)"
+decision_packet_path: "command-center/docs/governance/decisions/G2.3B-B2D_DECISION_PACKET.md"
 
-completed_phase: "G2.3B-B1"
+completed_phase: "G2.3B-B2C"
 g2_3b_b1_merge_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
-base_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
-pr_number: 54
+g2_3b_b2c_merge_sha: "9ba22c28a9f878bb760428d8ffe7e2c072c55141"
+g2_3b_b2c_approved_head_sha: "818f12d2832f7034de7e27e7ba2cd8f4fcbf416a"
+g2_3b_b2c_pr: 54
+base_sha: "9ba22c28a9f878bb760428d8ffe7e2c072c55141"
+pr_number: null
 head_sha: ""
 
-check_status: "unknown"
-architecture_guard_status: "required_before_merge"
-owner_checkpoint: "g2-3b-b2c_app_provisioned_awaiting_ag_and_merge_packet"
+check_status: "n/a_baton_closeout"
+architecture_guard_status: "adapter_design_approved_via_pr54_ag"
+owner_checkpoint: "b2c_merged_awaiting_supabase_adapter_credential_decision"
 
+b2c_authorization: "granted + merged"
 b2c_app_authorization: "granted + Founder provisioning complete (attested)"
-github_app_name: "BHFOS I2 Diagnostics"
-github_app_install_scope: "faydog127/BHFOS only"
-github_app_permissions: "Metadata/Contents/Actions/Pull requests/Commit statuses read; Administration none; org/account none; user auth disabled; webhook inactive"
-github_app_secrets_attestation: "I2_GITHUB_APP_ID, I2_GITHUB_APP_INSTALLATION_ID, private key — founder_attested_present in Diagnostics secret env only"
-merge_authorization: "none"
-supabase_credential_authorization: "none"
+merge_authorization_b2c: "granted — merge commit 9ba22c28a9f878bb760428d8ffe7e2c072c55141"
+supabase_credential_authorization: "none — pending G2.3B-B2D"
 hostinger_credential_authorization: "none"
 
-github_i2_status: "app_provisioned_launcher_ready_live_mint_requires_diagnostics_env"
+github_i2_status: "app_provisioned_launcher_on_main_live_connection_is_b3"
 hostinger_i2_status: "READ_ONLY_CAPABILITY_UNAVAILABLE"
-supabase_i2_status: "adapter_implemented_no_credential"
+supabase_i2_status: "adapter_on_main_no_credential"
 repo_visibility_flag: "PUBLIC — issue #55 deferred"
 issue_55_status: "deferred_until_g2_3_v1_operational"
 
 blockers:
-  - "Architecture Guard review of PR #54 required before merge Decision Packet"
-  - "Live installation-token mint / MCP connect only in Diagnostics env (secrets not in Orchestrator shell — expected)"
-  - "Hostinger I2: READ_ONLY_CAPABILITY_UNAVAILABLE"
-  - "Supabase credential: separate packet after adapter AG"
+  - "Supabase adapter credential: Founder Decision Packet G2.3B-B2D required before issue"
+  - "Live GitHub Diagnostics connection / negative-write: B3 (separate auth) — App+launcher is not live proof"
+  - "Hostinger I2: READ_ONLY_CAPABILITY_UNAVAILABLE (Diagnostics); reserved G2.3C Operator"
 
-next_phase: "AG review PR #54 → Founder merge authorization (separate packet)"
-next_owner: "Architecture Guard"
+next_phase: "G2.3B-B2D Supabase adapter credential Decision Packet → then B2 completion gate → B3 under separate auth"
+next_owner: "Founder"
