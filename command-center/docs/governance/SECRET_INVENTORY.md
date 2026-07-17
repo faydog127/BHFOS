@@ -61,17 +61,16 @@
 
 ## Planned / authorized I2 Production Diagnostics identities (names only)
 
-> No secret values. **G2.3B-B2C** (Cursor integration): GitHub machine-PAT for
-> Diagnostics MCP authorized for issue into Diagnostics secret env only.
+> No secret values. **G2.3B-B2C-App:** GitHub App provisioned (Founder-attested).
 > Hostinger blocked. Supabase adapter implemented; **no** Supabase credential.
 
 | Name | Owning system | Purpose | Environment | Expected storage | Responsible role | Rotation requirement | Revocation method | Verified? | Notes (non-sensitive) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `I2_GITHUB_APP_ID` | GitHub | Diagnostics GitHub App id | production-diagnostics | Diagnostics secret store | Production Diagnostics (I2) | n/a (id) | Disable/uninstall App | unverified | **B2C-App path.** Private App, founder-owned interim, install only on `faydog127/BHFOS`. |
-| `I2_GITHUB_APP_INSTALLATION_ID` | GitHub | Installation id for BHFOS | production-diagnostics | Diagnostics secret store | Production Diagnostics (I2) | n/a (id) | Uninstall App | unverified | Installation scoped to one repo. |
-| `I2_GITHUB_APP_PRIVATE_KEY` / path | GitHub | App private key for installation JWT | production-diagnostics | Diagnostics secret store / key file path | Production Diagnostics launcher only | Rotate App key on suspicion | Delete key; generate new; disable App | unverified | **Never** in repo/chat/MCP global. Launcher mints short-lived installation tokens only. |
+| `I2_GITHUB_APP_ID` | GitHub | Diagnostics GitHub App id | production-diagnostics | Diagnostics secret store | Production Diagnostics (I2) | n/a (id) | Disable/uninstall App | **founder_attested_present** | App name `BHFOS I2 Diagnostics`. Private App; founder-owned interim; install only `faydog127/BHFOS` (Only select repositories). Permissions: Metadata/Contents/Actions/PRs/Commit statuses read; **Administration none**. Org/account permissions none; user auth disabled; webhook inactive. |
+| `I2_GITHUB_APP_INSTALLATION_ID` | GitHub | Installation id for BHFOS | production-diagnostics | Diagnostics secret store | Production Diagnostics (I2) | n/a (id) | Uninstall App | **founder_attested_present** | Single-repo installation. |
+| `I2_GITHUB_APP_PRIVATE_KEY` / path | GitHub | App private key for installation JWT | production-diagnostics | Diagnostics secret store / key file path | Production Diagnostics launcher only | Rotate App key on suspicion | Delete key; generate new; disable App | **founder_attested_present** | **Never** in repo/chat/MCP global/other roles. Launcher mints short-lived installation tokens only. |
 | `I2_GITHUB_MCP_DIAGNOSTICS_PAT` | GitHub | — | — | — | — | — | — | unverified | **Rejected** (CHANGES_REQUIRED). Do not issue. |
-| `I2_GITHUB_DIAGNOSTICS_APP` | GitHub | (legacy name) | — | — | — | — | — | unverified | Replaced by `I2_GITHUB_APP_*` inventory names. |
+| `I2_GITHUB_DIAGNOSTICS_APP` | GitHub | (legacy name) | — | — | — | — | — | unverified | Replaced by `I2_GITHUB_APP_*`. |
 | `I2_HOSTINGER_DIAGNOSTICS_TOKEN` | Hostinger | — | — | — | — | — | — | **READ_ONLY_CAPABILITY_UNAVAILABLE** | **Do not create in G2.3B.** Reserved for G2.3C Production Operator + mutation-gated deploy CLI only. |
 | `I2_SUPABASE_DIAGNOSTICS_TOKEN` | Supabase | — | — | — | — | — | — | unverified | Legacy; not issued. |
 | `I2_SUPABASE_OAUTH_DIAGNOSTICS_TOKEN` | Supabase | — | — | — | — | — | — | unverified | Option-A-as-final superseded; adapter-first. |
