@@ -1,0 +1,52 @@
+---
+# Release Baton — BHFOS Operating Model v2.2
+#
+# One Baton for the G2.3 production-readiness program, reused across phases
+# (G2.3A..G2.3E) per the umbrella brief. Machine-readable, credential-free
+# release-state artifact recording verified references and the current handoff.
+#
+# AUTHORITATIVE SOURCES: GitHub and CI remain authoritative for live PR and
+# check state. This Baton records verified references and current handoff, not a
+# competing source of truth. Live PR/check/SHA fields are left pending until
+# known.
+#
+# CONTENT RULES: NO credentials, NO secrets, NO customer data, NO copied logs,
+# NO screenshots. MAINTENANCE: agent-maintained; the founder never edits it.
+
+release_id: "G2.3"                   # program-level Baton, reused across phases
+current_phase: "G2.3A"               # active sub-release
+governance_version: "v2.2"
+risk_tier: "Tier 1"                  # G2.3A: repository-only, high-consequence foundation
+status: "in_progress"                # planning|in_progress|in_review|awaiting_owner|authorized|merged|deployed|closed|halted
+current_owner: "Builder"
+release_brief_path: "command-center/docs/stabilization/releases/G2.3A_BRIEF.md"
+umbrella_brief_path: "command-center/docs/stabilization/releases/G2.3_BRIEF.md"
+decision_packet_path: "command-center/docs/governance/decisions/G2.3A_DECISION_PACKET.md"
+
+pr_number: null                      # pending until the implementation PR is opened
+base_sha: "bea39abf9a1a6c9cd42a47e40bac8f90ebc9cba9"  # verified origin/main at planning
+head_sha: ""                         # pending until known (authorization invalid if it changes)
+
+check_status: "unknown"              # GitHub/CI authoritative: unknown|pending|green|failed
+architecture_guard_status: "not_started"  # REQUIRED for G2.3A before any merge authorization
+uat_status: "NOT_APPLICABLE"         # no deployed application workflow changes in this phase
+
+owner_checkpoint: "pending"          # founder decision packet authorized implementation/PR/review only
+
+# Authorizations — granted only by the Founder/Human Decider and merely recorded
+# here. Recording an authorization never creates one. Merge is NOT authorized by
+# the G2.3A decision packet; it requires a later, separate exact authorization.
+merge_authorization: "none"
+deployment_authorization: "none"
+migration_authorization: "none"
+production_test_authorization: "none"
+
+# Scope authorized by the G2.3A Decision Packet (implementation + validation + PR
+# + Architecture Guard review only). This is NOT a production authorization.
+implementation_authorization: "granted (G2.3A Decision Packet: implement scope, validate, open PR, obtain Architecture Guard review)"
+
+rollback_point: "bea39abf9a1a6c9cd42a47e40bac8f90ebc9cba9"  # pre-merge main SHA (clean git revert of the PR)
+
+blockers: []
+
+next_owner: "Architecture Guard"     # required review after the PR opens

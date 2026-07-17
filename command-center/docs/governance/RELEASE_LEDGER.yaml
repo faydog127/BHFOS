@@ -1,0 +1,40 @@
+---
+# Release Ledger — BHFOS Operating Model v2.2
+#
+# Structured, persistent, append-only record of releases, merges, deployments,
+# migrations, and production actions. The "what happened" source of truth so
+# evidence is not requested from the founder repeatedly.
+#
+# MAINTENANCE: agent-maintained; the founder never edits it.
+#
+# CONTENT RULES: NO credentials, NO secrets, NO customer data, NO copied logs,
+# NO screenshots. Reference logs/evidence by location/id, never pasted content.
+#
+# USAGE: append one entry per release under `entries`. Do not rewrite history,
+# and do not record actions that did not occur. GitHub and CI are authoritative
+# for live PR/check/SHA state.
+
+entries:
+  - release_id: "G2.3A"
+    governance_version: "v2.2"
+    risk_tier: "Tier 1"              # repository-only, high-consequence foundation
+    phase: "Foundations and Production Identity"
+    pr: null                         # pending until the implementation PR is opened
+    approved_head_sha: ""            # pending (a later decision packet names the exact head SHA)
+    merge_sha: ""                    # empty until merged (merge NOT authorized by this phase)
+    deployed_sha: ""                 # empty (no deployment in this phase)
+    environment: ""                  # none (no production access in this phase)
+    migration_state: "none"          # no migration authored or run
+    authorization_references:
+      implementation: "granted-by-Founder via G2.3A Decision Packet (implement scope, validate, open PR, obtain Architecture Guard review)"
+      merge: "none"                  # requires a later separate exact authorization
+      deployment: "none"
+      migration: "none"
+      production_test: "none"
+    production_actions: []           # none — no production action occurred
+    verification_result: "SOURCE-ONLY"  # plus a CI-DEPLOYED build artifact once CI runs; production USABLE is NOT_APPLICABLE
+    architecture_guard_status: "not_started"  # REQUIRED before any merge authorization
+    uat_status: "NOT_APPLICABLE"     # no deployed application workflow changes
+    rollback_point: "bea39abf9a1a6c9cd42a47e40bac8f90ebc9cba9"  # pre-merge main SHA; clean git revert
+    completion_status: "open"
+    notes: "Repository-only foundations: build identity + build-info, deploy tooling (committed, not executed; dry-run default), secret inventory, migration verifier, synthetic-data registry structure, health probe, branch-protection verifier, and this Baton/Ledger. No credentials, deployment, production access, migration, external mutation, or production-data action occurred."

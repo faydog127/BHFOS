@@ -1,0 +1,55 @@
+---
+# Synthetic-Data Registry (template) — BHFOS Operating Model v2.2
+#
+# Structure only (G2.3A). This template defines the schema and one clearly
+# marked EXAMPLE entry. No real or synthetic production record is created here.
+# The live registry is populated later under separate authorization (G2.3D).
+#
+# CONTENT RULES (must hold): NO secret values, NO real customer PII, NO real
+# financial data, NO live charges. Identifiers and non-sensitive notes only.
+#
+# MAINTENANCE: agent-maintained. The founder never edits this file.
+
+registry_version: "v2.2"
+governance_version: "v2.2"
+release_program: "G2.3"
+
+# Allowed record types (see SYNTHETIC_DATA_REGISTRY.md).
+record_types:
+  - user
+  - lead
+  - customer
+  - property
+  - inspection
+  - appointment
+  - job
+  - estimate
+  - invoice
+  - payment_simulation   # synthetic simulation or non-financial substitute ONLY
+
+# Allowed cleanup_status values.
+cleanup_status_values:
+  - pending
+  - not_required
+  - cleaned
+  - retained
+
+# Live entries are appended here in a later phase. Empty in G2.3A.
+entries: []
+
+# ---------------------------------------------------------------------------
+# EXAMPLE ONLY — NOT A REAL OR SYNTHETIC PRODUCTION RECORD.
+# Shows the required shape of a future entry. Do not treat as live data.
+# ---------------------------------------------------------------------------
+example_entry:
+  record_type: "lead"
+  record_identifier: "EXAMPLE-lead-0000"
+  tenant: "vent-guys"
+  purpose: "EXAMPLE: shape of a future controlled-UAT synthetic lead"
+  creator_role: "Independent UAT"
+  release_or_incident_reference: "G2.3D (example)"
+  created_timestamp: "1970-01-01T00:00:00Z"
+  cleanup_status: "not_required"
+  cleanup_authority: "Independent UAT"
+  protected_from_cleanup: false
+  notes: "EXAMPLE entry for schema illustration only; no real data; no customer contact; no live charge."
