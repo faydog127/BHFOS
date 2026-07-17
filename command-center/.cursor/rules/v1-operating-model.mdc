@@ -1,0 +1,49 @@
+---
+description: V1 agent operating model — control chain, separation of duties, evidence tiers
+alwaysApply: true
+---
+
+# V1 Operating Model (read before starting any release)
+
+This is the spine. The full definitions live in (do not duplicate them):
+- Roles + authority: `docs/governance/AI_ROLES.md`
+- Where humans must approve: `docs/governance/APPROVAL_THRESHOLDS.md`
+- Orchestration / worktree / merge / deploy rules: `docs/stabilization/V1_CURSOR_ORCHESTRATOR.md`
+- One owner per business state: `docs/stabilization/V1_MODULE_OWNERSHIP.md`
+- Machine gate: `review-policy.json` + `tools/review-gate.mjs` (`npm run review:gate`)
+
+## Control chain (no single agent owns the whole chain)
+Owner picks priority → Orchestrator writes a Release Brief → Implementation builds
+→ Architecture/Contract Guard reviews contracts → CI → Independent UAT verifies
+behavior with owner checkpoints → **Owner accepts** → Release merges & deploys
+→ Independent UAT verifies production → release closes.
+
+## Separation of duties (the control that was missing)
+- One operational problem per release; one implementation agent per overlapping fileset.
+- The chat/agent that **implements** a change must NOT be the one that **certifies**
+  it usable, **merges** it, or **deploys** it.
+- Start a **fresh chat** for each role. Do not switch hats inside one implementation
+  chat to approve, merge, deploy, or certify your own work.
+- Merge, deploy, and any consequential action are **human-approved only**
+  (you, the owner = Human Decider — see `docs/governance/APPROVAL_THRESHOLDS.md`).
+
+## Evidence tiers (never conflate)
+Label every claim as one of: **SOURCE-ONLY** (in code) / **DEPLOYED** (in the live
+bundle) / **REACHABLE** (route loads) / **USABLE** (the action was completed in the
+real role + browser/device with a visible result). Only **USABLE**, confirmed by the
+owner or independently observed, may be called **PASS**.
+Forbidden without evidence: "healthy", "fully verified", "should work", "deployed successfully".
+
+## Per-release non-negotiables
+1. One operational problem per PR; no unrelated cleanup; no V2 work in V1.
+2. Inspect before editing; reuse existing services/helpers before adding new ones.
+3. Branch from verified `origin/main`; never use the dirty worktree `F:\Dev\BHFOS`.
+4. No migration without explicit written owner approval.
+5. No production access during implementation; no deploy from a dev worktree.
+6. Every behavior change gets a focused test or a documented reason it cannot.
+7. Trigger domains (tenant_isolation, money_state, acceptance_commit, state_machine,
+   completion_gate) require the review gate + owner approval before release.
+
+## Scope stop
+If the root cause or required architecture differs materially from the approved
+Release Brief, stop and return to the Orchestrator/owner. Do not expand scope silently.
