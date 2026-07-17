@@ -65,18 +65,19 @@ only in the approved secret-store category.
 
 | Field | Planned / recorded value |
 | --- | --- |
-| Exact system | Production Supabase project |
-| Exact identity | Adapter-internal OAuth2 Management API token (pending B2D) |
-| Exact permissions | Per B2D Option A or B; **no** service-role; adapter deny `/body`/SQL/secrets |
-| Issue time | _pending G2.3B-B2D_ |
-| Expiration | _pending B2D_ |
-| Credential-storage category | Diagnostics secret store → adapter env only |
-| Inventory name row | `SUPABASE_DIAGNOSTICS_ADAPTER_TOKEN` |
+| Exact system | Production Supabase project ref `wwyxohjnyqnegzbxtuxs` (adapter lock) |
+| Exact identity | Dedicated OAuth application + Founder authorization (pending corrected B2D) |
+| Exact permissions | Dashboard **Projects Read** only (wire scope `projects:read`); adapter allowlist metadata/health only |
+| Token project scope | **Not proven** at token layer; project isolation is adapter-enforced |
+| Issue time | _pending corrected G2.3B-B2D after AG_ |
+| Expiration | Short-lived access token; refresh until revoked (platform-controlled) |
+| Credential-storage category | Diagnostics adapter secret env only |
+| Inventory name rows | `I2_SUPABASE_OAUTH_CLIENT_ID`, `I2_SUPABASE_OAUTH_CLIENT_SECRET` (if issued), `I2_SUPABASE_OAUTH_ACCESS_TOKEN`, `I2_SUPABASE_OAUTH_REFRESH_TOKEN`, `I2_SUPABASE_OAUTH_TOKEN_EXPIRY`, `SUPABASE_DIAGNOSTICS_PROJECT_REF` |
 | Actor | Founder under B2D only |
-| Audit attribution | OAuth app / adapter identity |
+| Audit attribution | OAuth app identity (not founder-personal PAT) |
 | Successful read test | _pending B3_ |
-| Negative mutation test | Write/DDL/deploy/`execute-sql`/`/body` denied — _pending B3_ |
-| Explicitly not provisioned | `SUPABASE_SERVICE_ROLE_KEY` for I2; agent-held OAuth; unrestricted Supabase MCP |
+| Negative mutation test | Writes/SQL/secrets/`/body`/listing/bypass denied — _pending B3_ |
+| Explicitly not provisioned | PAT; Dashboard Read-Only member; service-role; `SUPABASE_DIAGNOSTICS_ADAPTER_TOKEN`; agent-held OAuth; unrestricted Supabase MCP |
 
 ### 2.4 Application build identity / health
 
@@ -105,7 +106,7 @@ only in the approved secret-store category.
 - [x] Founder B2 authorization references recorded on Baton/Ledger (B2A/B2C/B2C-App; B2C merge `9ba22c28…`)
 - [x] GitHub App secret **names** in `SECRET_INVENTORY.md` (`founder_attested_present`)
 - [x] Hostinger recorded `READ_ONLY_CAPABILITY_UNAVAILABLE` (no Diagnostics credential)
-- [ ] Supabase adapter credential issued under **G2.3B-B2D** (or Option C deferral recorded)
+- [ ] Supabase OAuth lifecycle credentials issued under corrected **G2.3B-B2D** (or Option C deferral recorded)
 - [x] **No** secret value in repository, PR, chat, or Markdown
 - [x] Over-scope review: GitHub Administration none; Hostinger none; Supabase none until B2D
 - [x] Emergency-disable procedure acknowledged (`I2_REVOCATION_CHECKLIST.md`)
