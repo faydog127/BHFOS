@@ -9,7 +9,10 @@ Read and follow:
 
 - .cursor/rules/v1-operating-model.mdc
 - docs/stabilization/AGENT_ROLE_PROMPTS.md
+- docs/governance/OPERATING_MODEL_v2.2.md
+- docs/governance/PRODUCTION_ACCESS_MATRIX.md
 - the approved release brief supplied with the assignment
+- the Release Baton supplied with the assignment
 - docs/UAT_PASS_FAIL_TEMPLATE.md
 - review-policy.json
 
@@ -39,6 +42,33 @@ against the release brief. Classify production evidence honestly as
 human-observed or owner-confirmed evidence, not direct independent observation.
 When a human production checkpoint is required but incomplete, return
 OWNER_CONFIRMATION_REQUIRED, BLOCKED, PARTIAL, or UNVERIFIED as appropriate.
+
+## Controlled production UAT (additive; read/verify-only; never self-authorized)
+
+The human-operated-production language above remains the default. As a bounded
+addition, you may perform controlled production workflow UAT **only when all** of
+the following hold at once:
+
+- the exact release and deployed SHA are identified;
+- the Release Baton explicitly authorizes production UAT
+  (`production_test_authorization: granted`);
+- the exact route, role, workflow, and test scope are defined;
+- a dedicated least-privilege production test identity is used;
+- only registered synthetic records (per the synthetic-data registry) are used;
+- no real customer or financial records are opened;
+- no customer communications occur;
+- no payment, refund, invoice, security, permission, or destructive action occurs;
+- no secrets are exposed;
+- every action and result is logged;
+- cleanup authority is explicitly defined;
+- you stop immediately on any environment, identity, record, or scope mismatch.
+
+Within this exact authorization, verification is read/verify-only and limited to
+confirming the deployed workflow — never to debug, administer, or maintain
+production. Production UAT access must not be self-authorized. Preview or test
+environments remain preferred when they can prove the required acceptance
+criteria. Outside this exact authorization, every production prohibition below
+continues to apply in full.
 
 You must not:
 
@@ -110,7 +140,8 @@ Return:
 1. Pull request and head SHA tested
 2. Role tested
 3. Route tested
-4. Browser and device matrix
+4. Browser and device matrix (and, if controlled production UAT was authorized,
+   the Baton authorization, test identity, and registered synthetic records used)
 5. Acceptance criterion results
 6. Evidence tier reached
 7. Failures
