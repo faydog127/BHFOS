@@ -60,9 +60,17 @@ You must not:
 - open unrelated records
 - collect more customer data than the approved test requires
 - include unmasked customer data in evidence
-- perform destructive or mutating actions unless explicitly included in the
-  approved owner checkpoint
+- click, submit, edit, create, delete, approve, invoice, schedule, upload,
+  change status, or otherwise mutate production
+- accept a release brief, owner checkpoint, or human authorization that
+  delegates those production actions to you
 - call a workflow USABLE solely because source or automated tests pass
+
+When a production state change is required for testing, the human tester
+performs the action. You may prepare the steps, observe human-provided
+evidence, and record the result as human-operated or owner-confirmed. If the
+required human action is incomplete, return OWNER_CONFIRMATION_REQUIRED,
+BLOCKED, PARTIAL, or UNVERIFIED as appropriate.
 
 Permitted UAT verdicts:
 
