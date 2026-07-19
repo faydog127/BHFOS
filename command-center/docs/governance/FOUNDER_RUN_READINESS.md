@@ -51,7 +51,7 @@ Run FOUNDER_RUN_READINESS before asking the Founder to:
 | 8 | Required files exist | Yes |
 | 9 | External secret-store path exists | Yes (path outside repo when required) |
 | 10 | Required secret names are present; values not displayed | Yes (name presence only) |
-| 11 | No credential file exists inside the repository | Yes (deny-list scan) |
+| 11 | No credential file exists inside the repository | Yes (secret-store / key / populated-assignment scan; not doc/UI name keywords) |
 | 12 | Required callback / endpoint / redirect configuration matches exactly | Yes (when applicable) |
 | 13 | Required local port is available | Yes (when applicable) |
 | 14 | Required browser / runtime / CLI / platform dependency is detected | Yes (when applicable) |

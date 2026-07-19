@@ -13,18 +13,108 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REPO_ROOT = path.resolve(__dirname, '..');
 
-const CREDENTIAL_BASENAME_DENY = [
-  /^\.env(\.|$)/i,
-  /secret/i,
-  /credential/i,
-  /token/i,
-  /\.pem$/i,
+/** Basename patterns that are always treated as in-repo credential stores (fail-closed). */
+const ALWAYS_DENY_BASENAME = [
+  /^\.env$/i,
+  /^\.env\./i, // .env.local, .env.diagnostics, etc.
+  /^credentials\.json$/i,
+  /(?:^|[._-])credentials\.json$/i,
   /\.p12$/i,
-  /\.key$/i,
+  /\.pfx$/i,
+  /^id_rsa$/i,
+  /^id_ed25519$/i,
+  /^id_ecdsa$/i,
+  /(?:^|[._-])token-cache(?:\.[^.]+)?$/i,
+  /(?:^|[._-])oauth-tokens?(?:\.[^.]+)?$/i,
+  /^secrets\.env$/i,
+  /^\.secrets$/i,
+  /^secrets\.json$/i,
 ];
+
+const EXAMPLE_OR_TEMPLATE = /\.(?:example|template|sample)(?:\.|$)/i;
+
+/** Secret-named env keys that indicate a populated credential assignment. */
+const SECRET_ASSIGNMENT_KEY =
+  /(?:SECRET|TOKEN|PASSWORD|PRIVATE_KEY|API_KEY|ACCESS_KEY|CLIENT_SECRET|REFRESH_TOKEN|BEARER|CREDENTIAL)/i;
+
+const PLACEHOLDER_VALUE =
+  /^(?:changeme|placeholder|your[_-]?[\w-]*|x{3,}|<.*>|\$\{.*\}|TODO|replace(?:me)?|example|dummy|test[_-]?only|not[_-]?a[_-]?secret|redacted)$/i;
+
+const PRIVATE_KEY_MARKER = /-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----/;
 
 export function nonEmpty(value) {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+export function isExampleOrTemplateName(name) {
+  return EXAMPLE_OR_TEMPLATE.test(name) || /^env\.example$/i.test(name) || name === '.env.example';
+}
+
+export function isAlwaysDenyCredentialBasename(name) {
+  if (isExampleOrTemplateName(name)) return false;
+  return ALWAYS_DENY_BASENAME.some((re) => re.test(name));
+}
+
+export function stripEnvValueQuotes(raw) {
+  let val = String(raw ?? '').trim();
+  if (
+    (val.startsWith('"') && val.endsWith('"')) ||
+    (val.startsWith("'") && val.endsWith("'"))
+  ) {
+    val = val.slice(1, -1);
+  }
+  return val.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+}
+
+export function isPlaceholderSecretValue(value) {
+  const v = String(value ?? '').trim();
+  if (!v) return true;
+  return PLACEHOLDER_VALUE.test(v);
+}
+
+/**
+ * True when text contains a populated secret-named assignment (value not displayed).
+ * Names-only inventories and placeholder fixtures return false.
+ */
+export function hasPopulatedSecretAssignment(text) {
+  if (typeof text !== 'string' || !text) return false;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim();
+    if (!SECRET_ASSIGNMENT_KEY.test(key)) continue;
+    const val = stripEnvValueQuotes(line.slice(eq + 1));
+    if (isPlaceholderSecretValue(val)) continue;
+    return true;
+  }
+  return false;
+}
+
+export function hasPrivateKeyMaterial(text) {
+  return typeof text === 'string' && PRIVATE_KEY_MARKER.test(text);
+}
+
+function shouldContentInspect(basename) {
+  if (isAlwaysDenyCredentialBasename(basename)) return false; // already denied by name
+  if (isExampleOrTemplateName(basename)) return false;
+  if (/\.(?:pem|key)$/i.test(basename)) return true;
+  if (/\.env$/i.test(basename)) return true; // e.g. diagnostics.env inside repo
+  if (/^(?:\.env|secrets\.env|\.secrets|secrets\.json|credentials\.json)$/i.test(basename)) return true;
+  if (/(?:^|[._-])(?:token-cache|oauth-tokens?)(?:\.[^.]+)?$/i.test(basename)) return true;
+  if (/credentials\.json$/i.test(basename)) return true;
+  return false;
+}
+
+function safeReadHead(filePath, readFileSync, maxBytes = 64 * 1024) {
+  try {
+    const buf = readFileSync(filePath);
+    const slice = Buffer.isBuffer(buf) ? buf.subarray(0, maxBytes) : Buffer.from(String(buf)).subarray(0, maxBytes);
+    return slice.toString('utf8');
+  } catch {
+    return null;
+  }
 }
 
 export function isSha(value) {
@@ -63,28 +153,61 @@ export function secretNamesPresent(envFilePath, names) {
   return { ok: missing.length === 0, missing, present };
 }
 
-export function credentialFilesInsideRepo(repoRoot) {
+/**
+ * Find live credential / secret-store files inside the repository.
+ *
+ * Distinguishes documentation, source identifiers, UI names, and names-only
+ * inventories from .env stores, private keys, token caches, and populated
+ * secret assignments. Never returns file contents or secret values.
+ */
+export function credentialFilesInsideRepo(repoRoot, options = {}) {
+  const readFileSync = options.readFileSync || fs.readFileSync;
+  const readdirSync = options.readdirSync || fs.readdirSync;
   const hits = [];
   const walk = (dir, depth = 0) => {
-    if (depth > 4) return;
+    if (depth > 6) return;
     let entries;
     try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
+      entries = readdirSync(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const ent of entries) {
-      if (ent.name === 'node_modules' || ent.name === '.git' || ent.name === 'dist') continue;
+      if (
+        ent.name === 'node_modules' ||
+        ent.name === '.git' ||
+        ent.name === 'dist' ||
+        ent.name === 'coverage' ||
+        ent.name === '.turbo'
+      ) {
+        continue;
+      }
       const full = path.join(dir, ent.name);
       if (ent.isDirectory()) {
         walk(full, depth + 1);
         continue;
       }
-      if (CREDENTIAL_BASENAME_DENY.some((re) => re.test(ent.name))) {
-        // Allow documented templates / examples that are not live secret stores.
-        if (/\.example(\.|$)/i.test(ent.name) || /\.template(\.|$)/i.test(ent.name)) continue;
-        if (ent.name === '.env.example') continue;
-        hits.push(path.relative(repoRoot, full).replaceAll('\\', '/'));
+
+      const rel = path.relative(repoRoot, full).replaceAll('\\', '/');
+
+      // Never treat ordinary docs / source as credential stores by keyword alone.
+      if (isAlwaysDenyCredentialBasename(ent.name)) {
+        hits.push(rel);
+        continue;
+      }
+
+      if (!shouldContentInspect(ent.name)) continue;
+
+      const text = safeReadHead(full, readFileSync);
+      if (text == null) continue;
+
+      if (/\.(?:pem|key)$/i.test(ent.name)) {
+        if (hasPrivateKeyMaterial(text)) hits.push(rel);
+        continue;
+      }
+
+      if (hasPrivateKeyMaterial(text) || hasPopulatedSecretAssignment(text)) {
+        hits.push(rel);
       }
     }
   };
