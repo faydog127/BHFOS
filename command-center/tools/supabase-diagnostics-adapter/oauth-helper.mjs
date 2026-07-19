@@ -12,10 +12,29 @@ export const PRODUCTION_PROJECT_REF = 'wwyxohjnyqnegzbxtuxs';
 export const CALLBACK_HOST = '127.0.0.1';
 export const CALLBACK_PORT = 8765;
 export const CALLBACK_PATH = '/oauth/callback';
+/** Plain HTTP loopback — platform docs + preflight do not require HTTPS. */
 export const REDIRECT_URI = `http://${CALLBACK_HOST}:${CALLBACK_PORT}${CALLBACK_PATH}`;
 export const AUTHORIZE_URL = 'https://api.supabase.com/v1/oauth/authorize';
 export const TOKEN_URL = 'https://api.supabase.com/v1/oauth/token';
 export const ALLOWED_SCOPES = new Set(['projects:read']);
+
+/** Listener bind contract — host must be loopback IP only (not 0.0.0.0). */
+export const CALLBACK_BIND = Object.freeze({
+  host: CALLBACK_HOST,
+  port: CALLBACK_PORT,
+  path: CALLBACK_PATH,
+  redirectUri: REDIRECT_URI,
+});
+
+/**
+ * Approved Windows browser absolute paths only.
+ * Do not derive from PATH, PATHEXT, or environment-steered directories.
+ */
+export const APPROVED_WINDOWS_BROWSER_PATHS = Object.freeze([
+  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+]);
 
 const SECRET_NAMES = {
   clientId: 'I2_SUPABASE_OAUTH_CLIENT_ID',
@@ -180,6 +199,21 @@ export function buildAuthorizeUrl({
  * Validate callback request. Returns { code } or throws.
  * Never include code in thrown messages.
  */
+export function parseCallbackHostHeader(hostHeader) {
+  const raw = String(hostHeader || '').trim();
+  if (!raw) {
+    throw new OAuthHelperError('DENY: callback host header missing', 'CALLBACK_HOST');
+  }
+  // IPv4 Host:port only (listener is 127.0.0.1).
+  const m = raw.match(/^([^:]+):(\d+)$/) || raw.match(/^([^:]+)$/);
+  if (!m) {
+    throw new OAuthHelperError('DENY: callback host header invalid', 'CALLBACK_HOST');
+  }
+  const host = m[1];
+  const port = m[2] !== undefined ? Number(m[2]) : CALLBACK_PORT;
+  return { host, port };
+}
+
 export function validateCallbackRequest({
   method,
   hostHeader,
@@ -190,15 +224,12 @@ export function validateCallbackRequest({
     throw new OAuthHelperError('DENY: callback method must be GET', 'CALLBACK_METHOD');
   }
 
-  const host = String(hostHeader || '').split(':')[0];
-  if (host !== CALLBACK_HOST && host !== 'localhost') {
-    // Bind is 127.0.0.1; Host should be 127.0.0.1 (reject foreign hosts).
-    throw new OAuthHelperError('DENY: callback host mismatch', 'CALLBACK_HOST');
-  }
-  // Prefer exact 127.0.0.1; localhost accepted only if it resolves to loopback listener
-  // but we bind exclusively to 127.0.0.1 — require Host 127.0.0.1.
+  const { host, port } = parseCallbackHostHeader(hostHeader);
   if (host !== CALLBACK_HOST) {
     throw new OAuthHelperError('DENY: callback host must be 127.0.0.1', 'CALLBACK_HOST');
+  }
+  if (port !== CALLBACK_PORT) {
+    throw new OAuthHelperError('DENY: callback port mismatch', 'CALLBACK_PORT');
   }
 
   let parsed;
@@ -231,13 +262,14 @@ export function validateCallbackRequest({
 
 /**
  * Assert token response scopes ⊆ allowed (projects:read only).
- * Empty scope is treated as fail-closed (unexpected).
+ * Omitted/empty scope is fail-closed (explicit decision — do not treat as OK).
  */
 export function assertTokenScopes(scopeField) {
-  // If the provider omits scope, App Dashboard still constrains to Projects Read.
-  // Fail closed only on *unexpected* scopes when the field is present.
   if (scopeField === undefined || scopeField === null || String(scopeField).trim() === '') {
-    return { omitted: true };
+    throw new OAuthHelperError(
+      'DENY: token response missing scope; expected projects:read',
+      'MISSING_SCOPE'
+    );
   }
   const parts = String(scopeField)
     .split(/[\s,]+/)
@@ -250,6 +282,12 @@ export function assertTokenScopes(scopeField) {
         'UNEXPECTED_SCOPE'
       );
     }
+  }
+  if (!parts.includes('projects:read')) {
+    throw new OAuthHelperError(
+      'DENY: token response scope must include projects:read',
+      'MISSING_PROJECTS_READ'
+    );
   }
   return { omitted: false, scopes: parts };
 }
@@ -393,50 +431,116 @@ export function formatStatusResult({
   ].join('\n');
 }
 
+export function normalizeWindowsPath(p) {
+  return path.normalize(String(p || '')).toLowerCase();
+}
+
+export function isApprovedWindowsBrowserPath(candidate) {
+  const n = normalizeWindowsPath(candidate);
+  return APPROVED_WINDOWS_BROWSER_PATHS.some((allowed) => normalizeWindowsPath(allowed) === n);
+}
+
+/**
+ * Resolve an approved Edge/Chrome absolute path. Never searches PATH.
+ * Never uses ProgramFiles/LOCALAPPDATA env (environment-steerable).
+ */
+export function resolveWindowsBrowserExecutable(existsSyncFn = fs.existsSync) {
+  for (const candidate of APPROVED_WINDOWS_BROWSER_PATHS) {
+    if (existsSyncFn(candidate) && isApprovedWindowsBrowserPath(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+export function assertNotForbiddenBrowserCommand(command) {
+  const base = path.basename(String(command || '')).toLowerCase();
+  const forbidden = new Set([
+    'explorer.exe',
+    'cmd.exe',
+    'powershell.exe',
+    'pwsh.exe',
+    'wscript.exe',
+    'cscript.exe',
+    'mshta.exe',
+  ]);
+  if (forbidden.has(base)) {
+    throw new OAuthHelperError(
+      'DENY: forbidden browser/launcher executable',
+      'BROWSER_FORBIDDEN'
+    );
+  }
+  if (!path.isAbsolute(String(command || ''))) {
+    throw new OAuthHelperError(
+      'DENY: browser executable must be an absolute path (PATH resolution forbidden)',
+      'BROWSER_NOT_ABSOLUTE'
+    );
+  }
+}
+
 /**
  * Build OS browser-launch argv. Never log the URL (contains state / PKCE challenge).
  *
- * Windows: do NOT use `cmd /c start … <url>` with an unquoted URL — cmd.exe treats
- * `&` as a command separator and truncates the OAuth query string.
- * Use PowerShell Start-Process -FilePath with a single-quoted URL instead
- * (Windows PowerShell 5.x has no -LiteralPath on Start-Process).
+ * Windows: spawn approved Edge/Chrome absolute path with the authorize URL as
+ * one argv element (ampersands preserved). No cmd.exe, no explorer.exe, no PATH.
  */
-export function buildBrowserLaunchSpec(url, platform = process.platform) {
-  if (!url || typeof url !== 'string' || !/^https:\/\//i.test(url)) {
-    throw new OAuthHelperError('DENY: browser launch requires https URL', 'BROWSER_URL');
+export function buildBrowserLaunchSpec(
+  url,
+  platform = process.platform,
+  { existsSyncFn = fs.existsSync } = {}
+) {
+  if (!url || typeof url !== 'string') {
+    throw new OAuthHelperError('DENY: browser launch requires URL', 'BROWSER_URL');
+  }
+  if (!/^https:\/\/api\.supabase\.com\/v1\/oauth\/authorize\?/i.test(url)) {
+    throw new OAuthHelperError(
+      'DENY: browser launch URL must be Supabase authorize endpoint',
+      'BROWSER_URL_HOST'
+    );
   }
 
   if (platform === 'win32') {
-    const escaped = url.replace(/'/g, "''");
+    const browser = resolveWindowsBrowserExecutable(existsSyncFn);
+    if (!browser) {
+      throw new OAuthHelperError(
+        'DENY: no approved Edge/Chrome absolute path found',
+        'BROWSER_NOT_FOUND'
+      );
+    }
+    assertNotForbiddenBrowserCommand(browser);
+    if (!isApprovedWindowsBrowserPath(browser)) {
+      throw new OAuthHelperError('DENY: browser path not on allowlist', 'BROWSER_NOT_APPROVED');
+    }
     return {
       platform: 'win32',
-      command: 'powershell.exe',
-      args: [
-        '-NoProfile',
-        '-NonInteractive',
-        '-WindowStyle',
-        'Hidden',
-        '-Command',
-        `Start-Process -FilePath '${escaped}'`,
-      ],
-      options: { detached: true, stdio: 'ignore', windowsHide: true },
+      command: browser,
+      args: [url],
+      options: { detached: true, stdio: 'ignore', windowsHide: true, shell: false },
     };
   }
 
   if (platform === 'darwin') {
+    const openPath = '/usr/bin/open';
+    if (!existsSyncFn(openPath)) {
+      throw new OAuthHelperError('DENY: /usr/bin/open not found', 'BROWSER_NOT_FOUND');
+    }
     return {
       platform: 'darwin',
-      command: 'open',
+      command: openPath,
       args: [url],
-      options: { detached: true, stdio: 'ignore' },
+      options: { detached: true, stdio: 'ignore', shell: false },
     };
   }
 
+  const xdg = '/usr/bin/xdg-open';
+  if (!existsSyncFn(xdg)) {
+    throw new OAuthHelperError('DENY: /usr/bin/xdg-open not found', 'BROWSER_NOT_FOUND');
+  }
   return {
     platform: 'linux',
-    command: 'xdg-open',
+    command: xdg,
     args: [url],
-    options: { detached: true, stdio: 'ignore' },
+    options: { detached: true, stdio: 'ignore', shell: false },
   };
 }
 
@@ -445,19 +549,16 @@ export function extractUrlFromBrowserLaunchSpec(spec) {
   if (!spec || !spec.command) {
     throw new OAuthHelperError('DENY: invalid browser launch spec', 'BROWSER_SPEC');
   }
-  if (spec.platform === 'win32' || spec.command === 'powershell.exe') {
-    const idx = spec.args.indexOf('-Command');
-    const cmd = idx >= 0 ? spec.args[idx + 1] : '';
-    const m = String(cmd).match(/^Start-Process -FilePath '((?:''|[^'])*)'$/);
-    if (!m) {
-      throw new OAuthHelperError('DENY: Windows launch spec missing FilePath URL', 'BROWSER_SPEC');
-    }
-    return m[1].replace(/''/g, "'");
-  }
-  if (spec.args && spec.args.length === 1) {
+  assertNotForbiddenBrowserCommand(spec.command);
+  if (spec.args && spec.args.length === 1 && /^https:\/\/api\.supabase\.com\//i.test(spec.args[0])) {
     return spec.args[0];
   }
-  throw new OAuthHelperError('DENY: cannot extract URL from launch spec', 'BROWSER_SPEC');
+  throw new OAuthHelperError('DENY: launch spec missing authorize URL argv', 'BROWSER_SPEC');
+}
+
+/** Bind args for the callback listener (tests assert loopback-only). */
+export function callbackListenArgs() {
+  return [CALLBACK_BIND.port, CALLBACK_BIND.host];
 }
 
 /**

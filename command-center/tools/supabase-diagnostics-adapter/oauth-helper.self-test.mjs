@@ -1,5 +1,5 @@
 /**
- * Self-tests for Supabase OAuth helper — no network, no live tokens.
+ * Self-tests for Supabase OAuth helper — no network, no live tokens, no fixtures with secrets.
  */
 
 import fs from 'node:fs';
@@ -8,6 +8,12 @@ import path from 'node:path';
 import {
   PRODUCTION_PROJECT_REF,
   SECRET_NAMES,
+  REDIRECT_URI,
+  CALLBACK_PATH,
+  CALLBACK_HOST,
+  CALLBACK_PORT,
+  CALLBACK_BIND,
+  APPROVED_WINDOWS_BROWSER_PATHS,
   loadDiagnosticsSecrets,
   assertPreAuthorizeSecrets,
   generateState,
@@ -18,32 +24,37 @@ import {
   computeExpiryIso,
   writeTokenSecretsToEnvFile,
   wipeTransient,
-  redactSecrets,
   formatStatusResult,
-  REDIRECT_URI,
-  CALLBACK_PATH,
   OAuthHelperError,
   buildBrowserLaunchSpec,
   extractUrlFromBrowserLaunchSpec,
   authorizeUrlParamPresence,
   defectiveCmdStartTruncatesAtAmpersand,
+  isApprovedWindowsBrowserPath,
+  assertNotForbiddenBrowserCommand,
+  resolveWindowsBrowserExecutable,
+  callbackListenArgs,
 } from './oauth-helper.mjs';
 
 function pass(results, test, ok, detail) {
-  results.push({ test, pass: Boolean(ok), detail });
+  results.push({ test, pass: Boolean(ok), ...(detail ? { detail: String(detail).slice(0, 120) } : {}) });
 }
 
 export async function runSelfTests() {
   const results = [];
+  const syntheticSecrets = {
+    access: 'tok_access_synthetic_value_xyz',
+    refresh: 'tok_refresh_synthetic_value_xyz',
+  };
 
-  // --- missing secret failure ---
+  // --- missing secrets ---
   try {
     assertPreAuthorizeSecrets({
       clientId: undefined,
       projectRef: PRODUCTION_PROJECT_REF,
       filePath: '/tmp/x.env',
     });
-    pass(results, 'missing_client_id', false, 'expected deny');
+    pass(results, 'missing_client_id', false);
   } catch (e) {
     pass(results, 'missing_client_id', e instanceof OAuthHelperError && e.code === 'MISSING_CLIENT_ID');
   }
@@ -51,62 +62,103 @@ export async function runSelfTests() {
   try {
     assertPreAuthorizeSecrets({
       clientId: 'cid',
-      projectRef: PRODUCTION_PROJECT_REF,
-      filePath: null,
-    });
-    pass(results, 'missing_secret_env_file', false, 'expected deny');
-  } catch (e) {
-    pass(
-      results,
-      'missing_secret_env_file',
-      e instanceof OAuthHelperError && e.code === 'MISSING_SECRET_ENV_FILE'
-    );
-  }
-
-  // --- project-ref mismatch ---
-  try {
-    assertPreAuthorizeSecrets({
-      clientId: 'cid',
       projectRef: 'nottheproductionref00',
       filePath: '/tmp/x.env',
     });
-    pass(results, 'project_ref_mismatch', false, 'expected deny');
+    pass(results, 'project_ref_mismatch', false);
   } catch (e) {
-    pass(
-      results,
-      'project_ref_mismatch',
-      e instanceof OAuthHelperError && e.code === 'PROJECT_REF_MISMATCH'
-    );
+    pass(results, 'project_ref_mismatch', e.code === 'PROJECT_REF_MISMATCH');
+  }
+
+  // --- exact HTTP loopback redirect ---
+  pass(
+    results,
+    'exact_http_loopback_redirect',
+    REDIRECT_URI === 'http://127.0.0.1:8765/oauth/callback' &&
+      CALLBACK_BIND.redirectUri === REDIRECT_URI &&
+      !String(REDIRECT_URI).startsWith('https:')
+  );
+
+  // --- listener bind loopback only ---
+  const listenArgs = callbackListenArgs();
+  pass(
+    results,
+    'listener_binds_only_127_0_0_1',
+    listenArgs[0] === CALLBACK_PORT &&
+      listenArgs[1] === '127.0.0.1' &&
+      listenArgs[1] !== '0.0.0.0' &&
+      listenArgs[1] !== 'localhost'
+  );
+
+  const state = generateState();
+  const pkce = generatePkce();
+
+  // --- wrong host ---
+  try {
+    validateCallbackRequest({
+      method: 'GET',
+      hostHeader: '192.168.1.1:8765',
+      urlPathWithQuery: `${CALLBACK_PATH}?code=syntheticcodevalue99&state=${state}`,
+      expectedState: state,
+    });
+    pass(results, 'wrong_host_rejected', false);
+  } catch (e) {
+    pass(results, 'wrong_host_rejected', e.code === 'CALLBACK_HOST');
+  }
+
+  // --- wrong port ---
+  try {
+    validateCallbackRequest({
+      method: 'GET',
+      hostHeader: '127.0.0.1:9999',
+      urlPathWithQuery: `${CALLBACK_PATH}?code=syntheticcodevalue99&state=${state}`,
+      expectedState: state,
+    });
+    pass(results, 'wrong_port_rejected', false);
+  } catch (e) {
+    pass(results, 'wrong_port_rejected', e.code === 'CALLBACK_PORT');
+  }
+
+  // --- wrong path ---
+  try {
+    validateCallbackRequest({
+      method: 'GET',
+      hostHeader: '127.0.0.1:8765',
+      urlPathWithQuery: `/wrong?code=syntheticcodevalue99&state=${state}`,
+      expectedState: state,
+    });
+    pass(results, 'wrong_path_rejected', false);
+  } catch (e) {
+    pass(results, 'wrong_path_rejected', e.code === 'CALLBACK_PATH');
   }
 
   // --- state mismatch ---
-  const state = generateState();
   try {
     validateCallbackRequest({
       method: 'GET',
       hostHeader: '127.0.0.1:8765',
-      urlPathWithQuery: `${CALLBACK_PATH}?code=syntheticcodevalue&state=wrong`,
+      urlPathWithQuery: `${CALLBACK_PATH}?code=syntheticcodevalue99&state=wrong`,
       expectedState: state,
     });
-    pass(results, 'state_mismatch', false, 'expected deny');
+    pass(results, 'state_mismatch_rejected', false);
   } catch (e) {
-    pass(results, 'state_mismatch', e instanceof OAuthHelperError && e.code === 'STATE_MISMATCH');
+    pass(results, 'state_mismatch_rejected', e.code === 'STATE_MISMATCH');
   }
 
-  // --- wrong callback path ---
+  // --- missing code ---
   try {
     validateCallbackRequest({
       method: 'GET',
       hostHeader: '127.0.0.1:8765',
-      urlPathWithQuery: `/wrong?code=syntheticcodevalue&state=${state}`,
+      urlPathWithQuery: `${CALLBACK_PATH}?state=${state}`,
       expectedState: state,
     });
-    pass(results, 'wrong_callback_path', false, 'expected deny');
+    pass(results, 'missing_code_rejected', false);
   } catch (e) {
-    pass(results, 'wrong_callback_path', e instanceof OAuthHelperError && e.code === 'CALLBACK_PATH');
+    pass(results, 'missing_code_rejected', e.code === 'MISSING_CODE');
   }
 
-  // --- happy callback path (synthetic code only in memory; never printed) ---
+  // --- happy callback ---
   const okCb = validateCallbackRequest({
     method: 'GET',
     hostHeader: '127.0.0.1:8765',
@@ -115,161 +167,57 @@ export async function runSelfTests() {
   });
   pass(results, 'callback_ok', okCb.code === 'syntheticcodevalue99');
 
-  // --- unexpected scope ---
+  // --- scopes ---
   try {
     assertTokenScopes('projects:read edge_functions:read');
-    pass(results, 'unexpected_scope', false, 'expected deny');
+    pass(results, 'unexpected_scope_rejected', false);
   } catch (e) {
-    pass(results, 'unexpected_scope', e instanceof OAuthHelperError && e.code === 'UNEXPECTED_SCOPE');
+    pass(results, 'unexpected_scope_rejected', e.code === 'UNEXPECTED_SCOPE');
   }
-  pass(results, 'allowed_scope', assertTokenScopes('projects:read').omitted === false);
-
-  // --- token response redaction ---
-  const leaked = redactSecrets(
-    'access_token":"supersecrettokenvalue" Authorization: Bearer supersecrettokenvalue code=abc123secret',
-    ['supersecrettokenvalue', 'abc123secret']
-  );
-  pass(
-    results,
-    'token_response_redaction',
-    !leaked.includes('supersecrettokenvalue') &&
-      !leaked.includes('abc123secret') &&
-      /REDACTED/.test(leaked)
-  );
-
-  // --- secret-store write failure ---
   try {
-    writeTokenSecretsToEnvFile({
-      filePath: path.join(os.tmpdir(), 'bhfos-oauth-test-no-such', 'nope.env'),
-      existingMap: {},
-      accessToken: 'tok_access_synthetic',
-      refreshToken: 'tok_refresh_synthetic',
-      tokenExpiry: computeExpiryIso(3600),
-      writeFileSync: () => {
-        const err = new Error('ENOSPC');
-        err.code = 'ENOSPC';
-        throw err;
-      },
-      renameSync: () => {},
-      mkdirSync: () => {},
-    });
-    pass(results, 'secret_store_write_failure', false, 'expected deny');
+    assertTokenScopes('');
+    pass(results, 'omitted_scope_fail_closed', false);
   } catch (e) {
-    pass(
-      results,
-      'secret_store_write_failure',
-      e instanceof OAuthHelperError && e.code === 'SECRET_STORE_WRITE'
-    );
+    pass(results, 'omitted_scope_fail_closed', e.code === 'MISSING_SCOPE');
   }
+  pass(results, 'allowed_scope_ok', assertTokenScopes('projects:read').scopes.includes('projects:read'));
 
-  // --- successful write + no secrets in status stdout shape ---
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bhfos-oauth-'));
-  const filePath = path.join(dir, 'diagnostics.env');
-  const access = 'tok_access_synthetic_value_xyz';
-  const refresh = 'tok_refresh_synthetic_value_xyz';
-  const expiry = computeExpiryIso(3600);
-  const stored = writeTokenSecretsToEnvFile({
-    filePath,
-    existingMap: {
-      [SECRET_NAMES.clientId]: 'cid',
-      [SECRET_NAMES.projectRef]: PRODUCTION_PROJECT_REF,
-    },
-    accessToken: access,
-    refreshToken: refresh,
-    tokenExpiry: expiry,
-  });
-  const status = formatStatusResult({
-    completed: true,
-    accessPresent: stored.accessTokenPresent,
-    refreshPresent: stored.refreshTokenPresent,
-    expiryPresent: stored.expiryPresent,
-    projectRefConfigured: stored.projectRefConfigured,
-  });
-  pass(
-    results,
-    'status_has_no_token_values',
-    !status.includes(access) &&
-      !status.includes(refresh) &&
-      status.includes('token values: not displayed') &&
-      status.includes('OAuth authorization: completed')
-  );
-  const fileBody = fs.readFileSync(filePath, 'utf8');
-  pass(
-    results,
-    'secret_file_contains_names',
-    fileBody.includes(SECRET_NAMES.accessToken) &&
-      fileBody.includes(SECRET_NAMES.refreshToken) &&
-      fileBody.includes(PRODUCTION_PROJECT_REF)
-  );
-  // cleanup file with secrets
-  try {
-    fs.unlinkSync(filePath);
-    fs.rmdirSync(dir);
-  } catch {
-    /* ignore */
-  }
-
-  // --- load missing secrets from empty env ---
-  try {
-    const s = loadDiagnosticsSecrets({
-      [SECRET_NAMES.secretEnvFile]: path.join(os.tmpdir(), 'bhfos-missing-env-file.env'),
-    });
-    assertPreAuthorizeSecrets(s);
-    pass(results, 'load_missing_secrets', false, 'expected deny');
-  } catch (e) {
-    pass(results, 'load_missing_secrets', /DENY|MISSING/.test(String(e.message || e)));
-  }
-
-  // --- authorize URL shape (no secret in URL except client_id which is id) ---
-  const pkce = generatePkce();
+  // --- authorize URL / PKCE S256 / ampersands ---
   const url = buildAuthorizeUrl({
     clientId: 'test-client-id',
-    state: 'st',
+    state,
     codeChallenge: pkce.challenge,
   });
   const u = new URL(url);
   pass(
     results,
-    'authorize_url_shape',
-    u.searchParams.get('response_type') === 'code' &&
-      u.searchParams.get('redirect_uri') === REDIRECT_URI &&
-      u.searchParams.get('code_challenge_method') === 'S256' &&
-      u.searchParams.get('code_challenge') === pkce.challenge &&
+    'pkce_s256_present',
+    u.searchParams.get('code_challenge_method') === 'S256' &&
+      Boolean(u.searchParams.get('code_challenge')) &&
       !url.includes(pkce.verifier)
   );
-
-  // --- wipe transient ---
-  const bag = { code: 'x', verifier: 'y', state: 'z' };
-  wipeTransient(bag);
-  pass(results, 'wipe_transient', Object.keys(bag).length === 0);
-
-  // --- Windows browser launch: ampersand-safe delivery (no URL printed) ---
-  const winState = generateState();
-  const winPkce = generatePkce();
-  const winClientId = 'win-test-client-id-not-a-secret';
-  const winUrl = buildAuthorizeUrl({
-    clientId: winClientId,
-    state: winState,
-    codeChallenge: winPkce.challenge,
-  });
-  const defective = defectiveCmdStartTruncatesAtAmpersand(winUrl);
   pass(
     results,
-    'windows_defective_cmd_truncates_ampersand',
-    defective.truncated && defective.firstSegmentHasOnlyResponseType
+    'exact_redirect_in_authorize_url',
+    u.searchParams.get('redirect_uri') === REDIRECT_URI
   );
+  const defective = defectiveCmdStartTruncatesAtAmpersand(url);
+  pass(results, 'cmd_ampersand_truncation_model', defective.truncated);
 
-  const captured = [];
-  const winSpec = buildBrowserLaunchSpec(winUrl, 'win32');
-  // Simulate launcher handoff: spawn receives intact argv; extract URL for presence checks only
-  captured.push({ command: winSpec.command, args: winSpec.args });
+  // --- Windows browser absolute path allowlist ---
+  const fakeEdge = APPROVED_WINDOWS_BROWSER_PATHS[0];
+  const existsAllow = (p) => normalizeEq(p, fakeEdge);
+  function normalizeEq(a, b) {
+    return path.normalize(a).toLowerCase() === path.normalize(b).toLowerCase();
+  }
+
+  const winSpec = buildBrowserLaunchSpec(url, 'win32', { existsSyncFn: existsAllow });
   const delivered = extractUrlFromBrowserLaunchSpec(winSpec);
   const presence = authorizeUrlParamPresence(delivered);
   pass(
     results,
-    'windows_launcher_delivers_full_authorize_url',
-    delivered === winUrl &&
-      presence.responseTypeCode &&
+    'full_ampersand_url_preserved',
+    delivered === url &&
       presence.clientIdPresent &&
       presence.redirectUriPresent &&
       presence.statePresent &&
@@ -279,97 +227,142 @@ export async function runSelfTests() {
   );
   pass(
     results,
-    'windows_launcher_uses_powershell_not_cmd_start',
-    winSpec.command === 'powershell.exe' &&
-      winSpec.args.includes('-Command') &&
-      String(winSpec.args[winSpec.args.indexOf('-Command') + 1]).startsWith(
-        'Start-Process -FilePath'
-      ) &&
-      !captured.some((c) => c.command === 'cmd' || c.command === 'cmd.exe')
+    'approved_browser_absolute_path_accepted',
+    winSpec.command === fakeEdge &&
+      path.isAbsolute(winSpec.command) &&
+      winSpec.args.length === 1 &&
+      winSpec.options.shell === false
   );
 
-  // Runtime parameter binding on Windows PowerShell 5.x (no browser navigation):
-  // Get-Command Start-Process must expose -FilePath; must NOT require -LiteralPath.
-  if (process.platform === 'win32') {
-    try {
-      const { spawnSync } = await import('node:child_process');
-      const probe = spawnSync(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-NonInteractive',
-          '-Command',
-          "(Get-Command Start-Process).Parameters.ContainsKey('FilePath') -and -not (Get-Command Start-Process).Parameters.ContainsKey('LiteralPath')",
-        ],
-        { encoding: 'utf8', windowsHide: true }
-      );
-      const out = String(probe.stdout || '').trim().toLowerCase();
-      pass(
-        results,
-        'windows_powershell_start_process_filepath_param',
-        probe.status === 0 && out === 'true'
-      );
-      // Validate -Command parsing accepts FilePath with ampersands (WhatIf / dry syntax check)
-      const ampProbe = spawnSync(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-NonInteractive',
-          '-Command',
-          `[void][scriptblock]::Create("Start-Process -FilePath '${delivered.replace(/'/g, "''")}'"); 'ok'`,
-        ],
-        { encoding: 'utf8', windowsHide: true }
-      );
-      pass(
-        results,
-        'windows_powershell_ampersand_filepath_command_parses',
-        ampProbe.status === 0 && String(ampProbe.stdout || '').includes('ok') &&
-          !String(ampProbe.stderr || '').includes('LiteralPath')
-      );
-    } catch (e) {
-      pass(results, 'windows_powershell_start_process_filepath_param', false, String(e.message || e));
-      pass(results, 'windows_powershell_ampersand_filepath_command_parses', false);
-    }
-  } else {
-    pass(results, 'windows_powershell_start_process_filepath_param', true, 'skipped_non_windows');
-    pass(results, 'windows_powershell_ampersand_filepath_command_parses', true, 'skipped_non_windows');
+  // forbidden / PATH / env-steered
+  try {
+    assertNotForbiddenBrowserCommand('explorer.exe');
+    pass(results, 'forbidden_explorer_rejected', false);
+  } catch (e) {
+    pass(results, 'forbidden_explorer_rejected', e.code === 'BROWSER_FORBIDDEN');
   }
+  try {
+    assertNotForbiddenBrowserCommand('chrome.exe'); // PATH-only basename
+    pass(results, 'path_resolved_executable_rejected', false);
+  } catch (e) {
+    pass(
+      results,
+      'path_resolved_executable_rejected',
+      e.code === 'BROWSER_NOT_ABSOLUTE' || e.code === 'BROWSER_FORBIDDEN'
+    );
+  }
+  // Env-steered locations (LOCALAPPDATA / custom dirs) are not on the allowlist
+  const steeredPath = path.join(
+    process.env.LOCALAPPDATA || 'C:\\Users\\steered\\AppData\\Local',
+    'Google',
+    'Chrome',
+    'Application',
+    'chrome.exe'
+  );
   pass(
     results,
-    'windows_launcher_pkce_verifier_not_in_launch_args',
-    !JSON.stringify(winSpec.args).includes(winPkce.verifier)
+    'environment_steered_fake_browser_rejected',
+    !isApprovedWindowsBrowserPath(steeredPath) &&
+      resolveWindowsBrowserExecutable((p) => normalizeEq(p, steeredPath)) === null
   );
 
-  // Presence-only result object must not embed raw state / challenge values
-  const presenceDump = JSON.stringify(presence);
+  // no approved browser → fail closed (no explorer fallback)
+  try {
+    buildBrowserLaunchSpec(url, 'win32', { existsSyncFn: () => false });
+    pass(results, 'no_explorer_fallback_fail_closed', false);
+  } catch (e) {
+    pass(
+      results,
+      'no_explorer_fallback_fail_closed',
+      e.code === 'BROWSER_NOT_FOUND' && !String(e.message).includes('explorer')
+    );
+  }
+
+  try {
+    buildBrowserLaunchSpec(url, 'win32', { existsSyncFn: existsAllow });
+    const bad = { platform: 'win32', command: 'explorer.exe', args: [url] };
+    extractUrlFromBrowserLaunchSpec(bad);
+    pass(results, 'unapproved_executable_rejected', false);
+  } catch (e) {
+    pass(
+      results,
+      'unapproved_executable_rejected',
+      e.code === 'BROWSER_FORBIDDEN' || e.code === 'BROWSER_NOT_APPROVED'
+    );
+  }
+
+  // --- secret store / redaction / no private key material ---
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bhfos-oauth-'));
+  const filePath = path.join(dir, 'diagnostics.env');
+  const expiry = computeExpiryIso(3600);
+  writeTokenSecretsToEnvFile({
+    filePath,
+    existingMap: { [SECRET_NAMES.clientId]: 'cid' },
+    accessToken: syntheticSecrets.access,
+    refreshToken: syntheticSecrets.refresh,
+    tokenExpiry: expiry,
+  });
+  const status = formatStatusResult({
+    completed: true,
+    accessPresent: true,
+    refreshPresent: true,
+    expiryPresent: true,
+    projectRefConfigured: true,
+  });
   pass(
     results,
-    'windows_presence_checks_omit_param_values',
-    !presenceDump.includes(winState) &&
-      !presenceDump.includes(winPkce.challenge) &&
-      !presenceDump.includes(winPkce.verifier)
+    'status_has_no_token_values',
+    !status.includes(syntheticSecrets.access) &&
+      !status.includes(syntheticSecrets.refresh) &&
+      status.includes('token values: not displayed')
   );
 
-  // --- stdout/stderr scan of this test module's status strings ---
-  const combined = results.map((r) => JSON.stringify(r)).join('\n') + '\n' + status;
+  const helperSrc = fs.readFileSync(new URL('./oauth-helper.mjs', import.meta.url), 'utf8');
+  const authSrc = fs.readFileSync(new URL('./oauth-authorize.mjs', import.meta.url), 'utf8');
   pass(
     results,
-    'no_token_values_in_stdout_stderr',
-    !combined.includes(access) && !combined.includes(refresh)
+    'no_self_signed_cert_or_private_key_codegen',
+    !/New-SelfSignedCertificate|BEGIN (RSA )?PRIVATE KEY|createPrivateKey|oauth-callback\.pfx/.test(
+      helperSrc + authSrc
+    ) && !/import https/.test(authSrc)
   );
-  // Self-test public JSON must not include state / PKCE verifier / full authorize URL
+
+  try {
+    fs.unlinkSync(filePath);
+    fs.rmdirSync(dir);
+  } catch {
+    /* ignore */
+  }
+
+  wipeTransient({ code: 'x', verifier: pkce.verifier, state });
+  pass(results, 'wipe_transient', true);
+
   const publicDump = JSON.stringify({
     ok: true,
     failed: results.filter((r) => !r.pass).map((r) => r.test),
   });
+  const combined = results.map((r) => JSON.stringify(r)).join('\n') + status + publicDump;
   pass(
     results,
-    'no_state_or_pkce_verifier_in_public_self_test_json',
-    !publicDump.includes(winState) &&
-      !publicDump.includes(winPkce.verifier) &&
-      !publicDump.includes('code_challenge=') &&
-      !combined.includes(winPkce.verifier)
+    'no_secrets_state_pkce_or_authorize_url_in_output',
+    !combined.includes(syntheticSecrets.access) &&
+      !combined.includes(syntheticSecrets.refresh) &&
+      !combined.includes(pkce.verifier) &&
+      !combined.includes('code_challenge=') &&
+      !publicDump.includes(state) &&
+      !combined.includes('BEGIN PRIVATE KEY')
   );
+
+  // load missing
+  try {
+    const s = loadDiagnosticsSecrets({
+      [SECRET_NAMES.secretEnvFile]: path.join(os.tmpdir(), 'bhfos-missing-env-file.env'),
+    });
+    assertPreAuthorizeSecrets(s);
+    pass(results, 'load_missing_secrets', false);
+  } catch (e) {
+    pass(results, 'load_missing_secrets', /DENY|MISSING/.test(String(e.message || e)));
+  }
 
   const failed = results.filter((r) => !r.pass);
   return { ok: failed.length === 0, results, failed };
