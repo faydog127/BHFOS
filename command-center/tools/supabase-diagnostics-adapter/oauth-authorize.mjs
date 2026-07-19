@@ -38,12 +38,13 @@ import {
   redactSecrets,
   parseEnvFile,
   buildBrowserLaunchSpec,
+  callbackListenArgs,
 } from './oauth-helper.mjs';
 import { runSelfTests } from './oauth-helper.self-test.mjs';
 
 /**
- * Open the system browser without printing the URL (contains state / PKCE).
- * Windows uses PowerShell Start-Process so cmd.exe cannot split on `&`.
+ * Open an approved browser without printing the URL (contains state / PKCE).
+ * Windows: absolute Edge/Chrome path only; URL is one argv item; no explorer/cmd/PATH.
  */
 export function openBrowser(url, { spawnFn = spawn, platform = process.platform } = {}) {
   const spec = buildBrowserLaunchSpec(url, platform);
@@ -106,8 +107,9 @@ function waitForCallback({ expectedState, timeoutMs = 5 * 60 * 1000 }) {
       server.close(() => reject(new Error('DENY: OAuth callback timed out')));
     }, timeoutMs);
 
-    server.listen(CALLBACK_PORT, CALLBACK_HOST, () => {
-      // Bound exclusively to 127.0.0.1:8765
+    const [port, host] = callbackListenArgs();
+    server.listen(port, host, () => {
+      // Bound exclusively to 127.0.0.1:8765 (HTTP loopback)
     });
   });
 }

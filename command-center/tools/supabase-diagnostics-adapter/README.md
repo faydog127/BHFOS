@@ -43,6 +43,11 @@ Inventory names (values never in repo):
 
 ### Protected OAuth helper
 
+Plain HTTP loopback: `http://127.0.0.1:8765/oauth/callback` (no self-signed TLS).
+Windows browser launch uses approved Edge/Chrome **absolute** paths only (no
+explorer/cmd/PATH). Quarantined tokens from failed attempts must be replaced
+before B3.
+
 ```bash
 npm run test:supabase-oauth-helper
 node tools/supabase-diagnostics-adapter/oauth-authorize.mjs
