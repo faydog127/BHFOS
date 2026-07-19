@@ -50,9 +50,13 @@ role must **consolidate and simplify** (see §7, Founder Burden stop condition).
 | [`PRODUCTION_ACCESS_MATRIX.md`](./PRODUCTION_ACCESS_MATRIX.md) | Exact action-level production permissions per role. |
 | [`INCIDENT_AND_PRODUCTION_READINESS.md`](./INCIDENT_AND_PRODUCTION_READINESS.md) | P0–P3 incident model, Incident Commander, drift, readiness baseline, synthetic-data rules, fire-drill plan. |
 | [`AGENT_PILOT_SCORECARD.md`](./AGENT_PILOT_SCORECARD.md) | Lightweight, agent-maintained effectiveness scorecard. |
+| [`FOUNDER_RUN_READINESS.md`](./FOUNDER_RUN_READINESS.md) | Mandatory gate before Founder terminal/OAuth/credential/dashboard actions. |
+| [`ENVIRONMENT_ACCEPTANCE.md`](./ENVIRONMENT_ACCEPTANCE.md) | Platform-path acceptance when OS/browser/OAuth/path behavior matters. |
+| [`LOW_RISK_CONTROL_PLANE_CORRECTION.md`](./LOW_RISK_CONTROL_PLANE_CORRECTION.md) | Bounded lane for delegated merge of low-risk control-plane corrections. |
 | [`templates/RELEASE_BATON.template.yaml`](./templates/RELEASE_BATON.template.yaml) | Machine-readable release-state artifact (per active release). |
 | [`templates/DECISION_PACKET.template.md`](./templates/DECISION_PACKET.template.md) | One consolidated founder-facing decision surface per routine release. |
 | [`templates/RELEASE_LEDGER.template.yaml`](./templates/RELEASE_LEDGER.template.yaml) | Persistent, append-only record of releases and production actions. |
+| [`templates/AGENT_STATUS_REPORT.template.md`](./templates/AGENT_STATUS_REPORT.template.md) | TECHNICAL RESULT / GOVERNANCE STATUS / AUTHORIZED NEXT STATE contract. |
 
 Prior canon that remains authoritative: [`AI_ROLES.md`](./AI_ROLES.md),
 [`APPROVAL_THRESHOLDS.md`](./APPROVAL_THRESHOLDS.md), the machine gate
@@ -335,3 +339,100 @@ Actual production access is defined by
 production. **No production access, credential, or capability is configured by this
 governance release** — provisioning is a later, separately approved controlled
 implementation.
+
+---
+
+## 12. Founder Focus operating contract (G2.3 additive)
+
+This section tightens the operating contract without repealing merge, deploy,
+credential, or production controls. Full procedures live in the linked docs.
+
+### 12.1 FOUNDER_RUN_READINESS
+
+Before asking the Founder to run a terminal command, approve OAuth consent, enter
+or rotate credentials, use a platform dashboard, execute a protected launcher,
+interact with production infrastructure, or perform any environment-specific
+manual action, the coordinating owner must produce a FOUNDER_RUN_READINESS
+report per [`FOUNDER_RUN_READINESS.md`](./FOUNDER_RUN_READINESS.md). The report
+must end with exactly `FOUNDER_RUN_READY` or `FOUNDER_RUN_BLOCKED`. If blocked,
+the Founder must not receive the execution command.
+
+### 12.2 Completion status contract
+
+Every Builder, Architecture Guard, Release Agent, Production Operator,
+Diagnostics, and Orchestrator report must distinguish:
+
+- **TECHNICAL RESULT** — what executed or was observed
+- **GOVERNANCE STATUS** — accepted / not accepted / blocked / pending, and why
+- **AUTHORIZED NEXT STATE** — the exact next authorized action
+
+No agent may use words such as complete, closed, approved, ready, or successful
+without identifying whether the statement refers to technical execution or
+governance acceptance. Template:
+[`templates/AGENT_STATUS_REPORT.template.md`](./templates/AGENT_STATUS_REPORT.template.md).
+
+### 12.3 ENVIRONMENT_ACCEPTANCE
+
+When work depends on Windows, PowerShell, browser launch, OAuth redirects, local
+listeners, certificates, filesystem paths, worktree state, deployment CLIs,
+external platforms, shell quoting/escaping, or OS-specific executable discovery,
+[`ENVIRONMENT_ACCEPTANCE.md`](./ENVIRONMENT_ACCEPTANCE.md) is required before
+Founder execution. Path-level integration (mocks allowed) beats isolated unit
+coverage alone.
+
+### 12.4 Founder responsibility boundary
+
+Founder responsibilities **may** include:
+
+- business authorization
+- approval of material residual risk
+- account-owner consent
+- OAuth consent
+- entry of credentials into an approved external secret store
+- approval of production mutation
+- approval of financial or customer-facing actions
+
+Founder responsibilities **must not** include:
+
+- diagnosing shell errors
+- debugging worktree state
+- finding file-extension mismatches
+- identifying stale launcher pins
+- validating executable paths
+- comparing technical configuration across files
+- determining whether tests apply to the correct SHA
+- manually relaying routine technical reports between agents
+- reconstructing commands from multiple instructions
+
+When a Founder action fails, the Orchestrator classifies and routes the failure
+without asking the Founder to diagnose it.
+
+### 12.5 Early Architecture Guard
+
+Architecture Guard must review the **execution design** before Founder execution
+when the proposed design introduces or changes credentials, OAuth, callbacks,
+certificates, external platform assumptions, production identities, access
+scopes, executable launching, production diagnostics, or deployment/rollback
+behavior. A post-implementation code review alone is not sufficient for these
+classes. Post-PR Architecture Guard remains required for Tier 2/3 as before.
+
+### 12.6 Automatic handoff ownership
+
+The persistent Orchestrator owns routine inter-agent handoffs. The Founder
+should not normally be asked to copy Builder reports to Architecture Guard,
+Architecture Guard results to Release Agent, merge reports back to Orchestrator,
+or routine CI status between tabs. Where Cursor limitations prevent automated
+handoff, the Orchestrator produces **one** compact, complete relay block and
+states why manual relay is unavoidable. Founder relay count is a process metric
+([`AGENT_PILOT_SCORECARD.md`](./AGENT_PILOT_SCORECARD.md)).
+
+### 12.7 LOW-RISK_CONTROL_PLANE_CORRECTION
+
+A bounded delegated-merge lane exists for low-risk control-plane corrections
+only, under every eligibility gate in
+[`LOW_RISK_CONTROL_PLANE_CORRECTION.md`](./LOW_RISK_CONTROL_PLANE_CORRECTION.md).
+Founder exact PR/SHA merge authorization remains mandatory for credentials,
+OAuth, production access/diagnostics, deployment, rollback activation,
+migrations, production mutation, financial actions, customer communication,
+material residual-risk acceptance, customer-facing behavior, and for the
+governance PR that activates the lane.

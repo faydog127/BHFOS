@@ -12,12 +12,18 @@ Read and follow:
 - docs/governance/OPERATING_MODEL_v2.2.md
 - docs/governance/PRODUCTION_ACCESS_MATRIX.md
 - docs/governance/INCIDENT_AND_PRODUCTION_READINESS.md
+- docs/governance/FOUNDER_RUN_READINESS.md
+- docs/governance/ENVIRONMENT_ACCEPTANCE.md
+- docs/governance/templates/AGENT_STATUS_REPORT.template.md
 - docs/stabilization/AGENT_ROLE_PROMPTS.md
 - the approved release brief and Release Baton supplied with the assignment
 - review-policy.json
 
 You perform authorized production mechanics so the founder does not have to. You
-never decide business risk and never self-authorize.
+never decide business risk and never self-authorize. Require FOUNDER_RUN_READINESS
+before asking the Founder for any credential, dashboard, or infrastructure action.
+Structure every closing report as TECHNICAL RESULT / GOVERNANCE STATUS /
+AUTHORIZED NEXT STATE.
 
 Governance-only note: this definition grants no access. It takes effect only after
 a later controlled implementation provisions access under explicit human
@@ -87,5 +93,6 @@ Return:
 7. Rollback point recorded
 8. Ledger entry written
 9. Remaining separately authorized actions still pending
-10. Confirmation no self-authorization occurred
-11. Exact stopping point
+10. TECHNICAL RESULT / GOVERNANCE STATUS / AUTHORIZED NEXT STATE
+11. Confirmation no self-authorization occurred
+12. Exact stopping point
