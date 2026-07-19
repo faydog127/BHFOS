@@ -12,8 +12,8 @@
   "required_secret_names": [
     "EXAMPLE_SECRET_NAME"
   ],
-  "callback_or_redirect_expected": "http://127.0.0.1:8765/oauth/callback",
-  "callback_or_redirect_actual": "http://127.0.0.1:8765/oauth/callback",
+  "callback_or_redirect_expected": "https://oauth-diagnostics.bhfos.com/oauth/callback",
+  "callback_or_redirect_actual": "https://oauth-diagnostics.bhfos.com/oauth/callback",
   "required_local_port": 8765,
   "required_dependencies": [
     {
@@ -21,6 +21,16 @@
       "path": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
     }
   ],
+  "tunnel": {
+    "required": false,
+    "class": "cloudflare_named",
+    "stable_hostname": "oauth-diagnostics.bhfos.com",
+    "public_redirect_uri": "https://oauth-diagnostics.bhfos.com/oauth/callback",
+    "local_listener_uri": "http://127.0.0.1:8765/oauth/callback",
+    "credentials_path": "C:/Users/<founder>/AppData/Local/BHFOS/production-diagnostics/tunnel/<credentials>.json",
+    "path_only_config_attested": true,
+    "stop_after_run_and_closure_procedure_present": true
+  },
   "platform_acceptance_tests_passed": true,
   "unit_integration_tests_passed": true,
   "architecture_guard_approval": {
@@ -32,7 +42,8 @@
   "explicit_stop_conditions": [
     "Any readiness field fails",
     "Browser fails to launch",
-    "Callback does not match contract"
+    "Callback does not match contract",
+    "Tunnel fails to stop or public callback remains reachable"
   ],
   "one_exact_founder_command_or_action": "Exactly one command or dashboard action"
 }

@@ -9,6 +9,9 @@ import {
   PRODUCTION_PROJECT_REF,
   SECRET_NAMES,
   REDIRECT_URI,
+  PUBLIC_REDIRECT_URI,
+  LOCAL_LISTENER_URI,
+  PUBLIC_CALLBACK_HOST,
   CALLBACK_PATH,
   CALLBACK_HOST,
   CALLBACK_PORT,
@@ -16,9 +19,11 @@ import {
   APPROVED_WINDOWS_BROWSER_PATHS,
   loadDiagnosticsSecrets,
   assertPreAuthorizeSecrets,
+  assertSplitRedirectContract,
   generateState,
   generatePkce,
   buildAuthorizeUrl,
+  buildTokenExchangeRequest,
   validateCallbackRequest,
   assertTokenScopes,
   computeExpiryIso,
@@ -70,13 +75,33 @@ export async function runSelfTests() {
     pass(results, 'project_ref_mismatch', e.code === 'PROJECT_REF_MISMATCH');
   }
 
-  // --- exact HTTP loopback redirect ---
+  // --- split public HTTPS redirect vs local HTTP listener ---
   pass(
     results,
-    'exact_http_loopback_redirect',
-    REDIRECT_URI === 'http://127.0.0.1:8765/oauth/callback' &&
-      CALLBACK_BIND.redirectUri === REDIRECT_URI &&
-      !String(REDIRECT_URI).startsWith('https:')
+    'exact_public_https_redirect',
+    PUBLIC_REDIRECT_URI === 'https://oauth-diagnostics.bhfos.com/oauth/callback' &&
+      REDIRECT_URI === PUBLIC_REDIRECT_URI &&
+      CALLBACK_BIND.publicRedirectUri === PUBLIC_REDIRECT_URI &&
+      String(PUBLIC_REDIRECT_URI).startsWith('https:')
+  );
+  pass(
+    results,
+    'exact_local_http_listener',
+    LOCAL_LISTENER_URI === 'http://127.0.0.1:8765/oauth/callback' &&
+      CALLBACK_BIND.localListenerUri === LOCAL_LISTENER_URI &&
+      !String(LOCAL_LISTENER_URI).startsWith('https:')
+  );
+  pass(
+    results,
+    'split_redirect_contract',
+    assertSplitRedirectContract() === true &&
+      PUBLIC_CALLBACK_HOST === 'oauth-diagnostics.bhfos.com' &&
+      PUBLIC_REDIRECT_URI !== LOCAL_LISTENER_URI
+  );
+  pass(
+    results,
+    'http_loopback_not_used_as_oauth_redirect',
+    REDIRECT_URI !== 'http://127.0.0.1:8765/oauth/callback'
   );
 
   // --- listener bind loopback only ---
@@ -199,7 +224,21 @@ export async function runSelfTests() {
   pass(
     results,
     'exact_redirect_in_authorize_url',
-    u.searchParams.get('redirect_uri') === REDIRECT_URI
+    u.searchParams.get('redirect_uri') === PUBLIC_REDIRECT_URI &&
+      u.searchParams.get('redirect_uri') !== LOCAL_LISTENER_URI
+  );
+  const tokenReq = buildTokenExchangeRequest({
+    code: 'syntheticcodevalue99',
+    codeVerifier: pkce.verifier,
+    clientId: 'test-client-id',
+    clientSecret: undefined,
+  });
+  pass(
+    results,
+    'exact_public_redirect_in_token_exchange',
+    tokenReq.body.includes(
+      `redirect_uri=${encodeURIComponent(PUBLIC_REDIRECT_URI)}`
+    ) && !tokenReq.body.includes(encodeURIComponent(LOCAL_LISTENER_URI))
   );
   const defective = defectiveCmdStartTruncatesAtAmpersand(url);
   pass(results, 'cmd_ampersand_truncation_model', defective.truncated);
@@ -319,12 +358,22 @@ export async function runSelfTests() {
 
   const helperSrc = fs.readFileSync(new URL('./oauth-helper.mjs', import.meta.url), 'utf8');
   const authSrc = fs.readFileSync(new URL('./oauth-authorize.mjs', import.meta.url), 'utf8');
+  const tunnelSrc = fs.readFileSync(new URL('./oauth-tunnel.mjs', import.meta.url), 'utf8');
   pass(
     results,
     'no_self_signed_cert_or_private_key_codegen',
     !/New-SelfSignedCertificate|BEGIN (RSA )?PRIVATE KEY|createPrivateKey|oauth-callback\.pfx/.test(
-      helperSrc + authSrc
+      helperSrc + authSrc + tunnelSrc
     ) && !/import https/.test(authSrc)
+  );
+  pass(
+    results,
+    'named_tunnel_only_constants',
+    /cloudflare_named/.test(tunnelSrc) &&
+      !tunnelSrc.includes('trycloudflare.com') &&
+      helperSrc.includes('oauth-diagnostics.bhfos.com') &&
+      tunnelSrc.includes('PUBLIC_CALLBACK_HOST') &&
+      !helperSrc.includes('trycloudflare.com')
   );
 
   try {

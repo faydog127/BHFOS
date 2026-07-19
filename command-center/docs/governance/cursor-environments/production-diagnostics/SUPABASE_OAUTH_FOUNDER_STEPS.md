@@ -1,6 +1,7 @@
-# Exact Supabase OAuth App creation — G2.3B-B2D Option A (Founder UI)
+# Exact Supabase OAuth App creation — G2.3B-B2D Option B (Founder UI)
 
-> Binding ceiling from Founder **G2.3B-B2D Option A** authorization.
+> Binding ceiling from Founder **G2.3B-B2D Option B** authorization
+> (Cloudflare Named Tunnel → loopback helper).
 > **No secret values** belong in this file, chat, repository files, Cursor, or
 > terminal command history.
 >
@@ -9,19 +10,25 @@
 
 **Authorized scope only:** Dashboard **Projects** → **Read** (wire `projects:read`).  
 **Project ref (adapter lock):** `wwyxohjnyqnegzbxtuxs`  
-**Redirect URI (exact):** `http://127.0.0.1:8765/oauth/callback`
+**Public redirect URI (exact):** `https://oauth-diagnostics.bhfos.com/oauth/callback`  
+**Local listener (helper bind only):** `http://127.0.0.1:8765/oauth/callback`  
+**Tunnel class:** Cloudflare Named Tunnel (stable hostname only; no random/temporary hostnames)
 
 ---
 
 ## Quarantined tokens (binding)
 
 Any OAuth access/refresh tokens issued during failed or non-clean attempts
-(including pre-HTTP-harden / HTTPS-callback experiments) are **quarantined**:
+(including HTTP-loopback rejection, PR #58 self-signed HTTPS experiments, and
+pre-tunnel runs) are **quarantined**:
 
 - **Invalid for B3** and for any live Diagnostics campaign
-- Must be **replaced** by a clean helper rerun after this HTTP + hardened launcher
-  correction is on the Diagnostics worktree
+- Must be **replaced** by a clean helper rerun after this Option B tunnel design
+  is merged and `FOUNDER_RUN_READY` is issued
 - Do **not** reuse quarantined token values
+
+PR #58 (self-signed `https://127.0.0.1` callback) is **superseded** and must not
+be merged as the tunnel baseline.
 
 ---
 
@@ -31,19 +38,19 @@ Any OAuth access/refresh tokens issued during failed or non-clean attempts
 2. Open that project’s **organization** → **Organization Settings → OAuth Apps**.
 3. Create or edit **`BHFOS I2 Diagnostics`**.
 4. Set:
-   - **Redirect URI (exact):** `http://127.0.0.1:8765/oauth/callback`
+   - **Redirect URI (exact):** `https://oauth-diagnostics.bhfos.com/oauth/callback`
    - **Scopes:** **Projects → Read** only (nothing else)
 5. Confirm / save.
 
-Do **not** register an HTTPS loopback redirect. Do **not** use `localhost` unless
-you intentionally change both the app and the helper together (helper uses
-`127.0.0.1` only).
+Do **not** register HTTP loopback, self-signed HTTPS loopback, `localhost`, or
+any random/temporary tunnel hostname.
 
 ---
 
 ## B. Place Client ID / secret in Diagnostics secret store only
 
-1. Create or open the Diagnostics durable env file (gitignored; outside chat/repo).
+1. Create or open the Diagnostics durable env file (gitignored; outside chat/repo):
+   `%LOCALAPPDATA%\BHFOS\production-diagnostics\diagnostics.env`
 2. Set `I2_DIAGNOSTICS_SECRET_ENV_FILE` to that file’s absolute path (Diagnostics shell only).
 3. Put into that file (values never pasted into chat/Cursor/repo/history):
    - `I2_SUPABASE_OAUTH_CLIENT_ID`
@@ -52,37 +59,62 @@ you intentionally change both the app and the helper together (helper uses
 
 ---
 
-## C. Run the protected helper only (one command)
+## C. Place Named Tunnel credentials outside the repository
 
-Use **only** the protected launcher from an updated Production Diagnostics worktree
-(HTTP callback + approved Edge/Chrome absolute path launch). Do not use ad-hoc
-scripts, browser address-bar OAuth, or quarantined tokens.
+1. Create the Founder-owned Cloudflare Named Tunnel for hostname
+   `oauth-diagnostics.bhfos.com` (Founder DNS / Cloudflare account).
+2. Store tunnel credentials **outside the repo**, e.g.
+   `%LOCALAPPDATA%\BHFOS\production-diagnostics\tunnel\<credentials>.json`
+3. In the Diagnostics shell only, set:
+   - `I2_CLOUDFLARE_TUNNEL_CREDENTIALS_FILE` → absolute path to that file
+   - `I2_CLOUDFLARE_TUNNEL_ID` → named tunnel id
+   - `I2_CLOUDFLARED_EXECUTABLE` → absolute path to `cloudflared` (optional if
+     installed at an approved default absolute path)
+
+Tunnel credentials must never be committed, pasted into chat, or stored under
+the repository tree.
+
+Ingress must forward **only** `/oauth/callback` to
+`http://127.0.0.1:8765`, rewrite Host to `127.0.0.1:8765`, and catch-all deny
+all other paths.
+
+---
+
+## D. Run only after FOUNDER_RUN_READY (one protected command)
+
+Orchestrator must produce `FOUNDER_RUN_READY` first. Then, from an updated
+Production Diagnostics worktree at the approved merge SHA:
 
 ```bash
 cd command-center
+set I2_FOUNDER_RUN_READINESS_VERDICT=FOUNDER_RUN_READY
 node tools/supabase-diagnostics-adapter/oauth-authorize.mjs
 ```
 
 The helper will:
 
-- bind **only** `127.0.0.1:8765` (plain HTTP)
+- start the Named Tunnel
+- bind **only** `127.0.0.1:8765` (plain HTTP local listener)
 - open Edge/Chrome via an approved absolute path (URL as one argv; no explorer/cmd/PATH)
-- exchange the code with PKCE
+- exchange the code with PKCE locally
 - write access/refresh/expiry into the Diagnostics secret env file
+- stop the tunnel and verify public callback closure
 - print **names/status only**
 
 ---
 
-## D. Approve the browser consent screen
+## E. Approve the browser consent screen
 
 Approve as the Founder for the organization that owns `wwyxohjnyqnegzbxtuxs`.
-Confirm status includes `OAuth authorization: completed` and
-`token values: not displayed`.
+Confirm status includes `OAuth authorization: completed`,
+`token values: not displayed`, `tunnel stopped: yes`, and
+`public callback closed: yes`.
 
 ---
 
-## E. Explicit non-actions
+## F. Explicit non-actions
 
-Do **not**: grant other OAuth scopes; use HTTPS self-signed callbacks; paste
-secrets into Cursor/chat/repo/history; reuse quarantined tokens; start B3; use
-PAT / Dashboard Read-Only / service-role; provision Hostinger.
+Do **not**: grant other OAuth scopes; use HTTPS self-signed callbacks; reuse or
+merge PR #58; paste secrets/tunnel credentials into Cursor/chat/repo/history;
+reuse quarantined tokens; start B3; use PAT / Dashboard Read-Only / service-role;
+provision Hostinger; leave the tunnel running after the authorize attempt.

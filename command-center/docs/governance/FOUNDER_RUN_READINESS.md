@@ -61,6 +61,35 @@ Run FOUNDER_RUN_READINESS before asking the Founder to:
 | 18 | Expected safe output | Declarative (must be non-empty) |
 | 19 | Explicit stop conditions | Declarative (must be non-empty) |
 | 20 | One exact Founder command or action | Declarative (exactly one) |
+| 21 | Tunnel required + class is Cloudflare Named Tunnel (when OAuth tunnel packet) | Yes (when `tunnel.required`) |
+| 22 | Stable public hostname pinned exactly | Yes (when `tunnel.required`) |
+| 23 | Public HTTPS redirect URI matches helper contract exactly | Yes (when `tunnel.required`) |
+| 24 | Tunnel credentials path exists outside the repository | Yes (when `tunnel.required`) |
+| 25 | Path-only forward + catch-all deny attested | Yes (when `tunnel.required`) |
+| 26 | Tunnel stop-after-run + public callback closure procedure present | Yes (when `tunnel.required`) |
+
+### OAuth tunnel packet contract (G2.3B-B2D Option B)
+
+When authorizing Diagnostics Supabase OAuth under Option B, set:
+
+```json
+"callback_or_redirect_expected": "https://oauth-diagnostics.bhfos.com/oauth/callback",
+"callback_or_redirect_actual": "https://oauth-diagnostics.bhfos.com/oauth/callback",
+"required_local_port": 8765,
+"tunnel": {
+  "required": true,
+  "class": "cloudflare_named",
+  "stable_hostname": "oauth-diagnostics.bhfos.com",
+  "public_redirect_uri": "https://oauth-diagnostics.bhfos.com/oauth/callback",
+  "local_listener_uri": "http://127.0.0.1:8765/oauth/callback",
+  "credentials_path": "%LOCALAPPDATA%/BHFOS/production-diagnostics/tunnel/<credentials>.json",
+  "path_only_config_attested": true,
+  "stop_after_run_and_closure_procedure_present": true
+}
+```
+
+Do **not** ask the Founder to run OAuth until the packet evaluates to exactly
+`FOUNDER_RUN_READY`. Tunnel credentials never enter the repository.
 
 ## Machine tool
 

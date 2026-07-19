@@ -76,6 +76,9 @@ jobs:
       - name: Supabase OAuth helper self-tests
         run: npm run test:supabase-oauth-helper
 
+      - name: Supabase OAuth tunnel self-tests
+        run: npm run test:supabase-oauth-tunnel
+
   founder_run_readiness:
     runs-on: ubuntu-latest
     defaults:

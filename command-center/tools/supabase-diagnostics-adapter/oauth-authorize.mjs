@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 /**
- * Protected local Supabase OAuth authorization helper (G2.3B-B2D)
+ * Protected local Supabase OAuth authorization helper (G2.3B-B2D Option B)
  *
  * Diagnostics environment only. Never prints secrets, codes, or tokens.
+ *
+ * Sequencing:
+ *   FOUNDER_RUN_READY (external) → tunnel up → helper → tunnel down →
+ *   public callback closure verified
  *
  * Usage:
  *   node tools/supabase-diagnostics-adapter/oauth-authorize.mjs --self-test
@@ -13,18 +17,26 @@
  *   I2_SUPABASE_OAUTH_CLIENT_ID
  *   I2_SUPABASE_OAUTH_CLIENT_SECRET (if issued)
  *   SUPABASE_DIAGNOSTICS_PROJECT_REF=wwyxohjnyqnegzbxtuxs
+ *   I2_CLOUDFLARE_TUNNEL_CREDENTIALS_FILE — outside repo
+ *   I2_CLOUDFLARE_TUNNEL_ID
+ *   I2_CLOUDFLARED_EXECUTABLE (optional absolute path)
+ *   I2_FOUNDER_RUN_READINESS_VERDICT=FOUNDER_RUN_READY
  */
 
 import http from 'node:http';
+import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 import {
   CALLBACK_HOST,
   CALLBACK_PORT,
   CALLBACK_PATH,
-  REDIRECT_URI,
+  PUBLIC_REDIRECT_URI,
+  LOCAL_LISTENER_URI,
   loadDiagnosticsSecrets,
   assertPreAuthorizeSecrets,
+  assertSplitRedirectContract,
   generateState,
   generatePkce,
   buildAuthorizeUrl,
@@ -40,7 +52,11 @@ import {
   buildBrowserLaunchSpec,
   callbackListenArgs,
 } from './oauth-helper.mjs';
+import { createTunnelController, formatTunnelStatus } from './oauth-tunnel.mjs';
 import { runSelfTests } from './oauth-helper.self-test.mjs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ADAPTER_ROOT = path.resolve(__dirname, '..', '..');
 
 /**
  * Open an approved browser without printing the URL (contains state / PKCE).
@@ -81,9 +97,6 @@ function waitForCallback({ expectedState, timeoutMs = 5 * 60 * 1000 }) {
           { code }
         );
       } catch (e) {
-        const msg = e && e.message ? e.message : 'DENY: callback rejected';
-        // Wrong path / state: keep listening unless fatal host issues — for path mismatch
-        // respond 404 and continue waiting; for state mismatch fail closed.
         if (e && e.code === 'CALLBACK_PATH') {
           res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
           res.end('Not found');
@@ -148,9 +161,13 @@ async function exchangeCode({ secrets, code, codeVerifier, fetchImpl = fetch }) 
   };
 }
 
-async function authorizeMain() {
+/**
+ * Core authorize after tunnel is up. Local PKCE/state/exchange only.
+ */
+async function runAuthorizeExchange() {
   const transient = {};
   try {
+    assertSplitRedirectContract();
     const secrets = loadDiagnosticsSecrets();
     assertPreAuthorizeSecrets(secrets);
 
@@ -166,11 +183,13 @@ async function authorizeMain() {
     });
 
     const authorizeParsed = new URL(authorizeUrl);
-    if (authorizeParsed.searchParams.get('redirect_uri') !== REDIRECT_URI) {
+    if (authorizeParsed.searchParams.get('redirect_uri') !== PUBLIC_REDIRECT_URI) {
       throw new Error('DENY: redirect_uri mismatch in authorize URL');
     }
 
-    console.log(`Callback listener: http://${CALLBACK_HOST}:${CALLBACK_PORT}${CALLBACK_PATH}`);
+    console.log(`Public redirect: ${PUBLIC_REDIRECT_URI}`);
+    console.log(`Local listener: ${LOCAL_LISTENER_URI}`);
+    console.log(`Callback path: ${CALLBACK_PATH}`);
     console.log('Opening browser for Founder consent (Projects Read only)…');
 
     const callbackPromise = waitForCallback({ expectedState: transient.state });
@@ -187,7 +206,6 @@ async function authorizeMain() {
     transient.accessToken = tokens.accessToken;
     transient.refreshToken = tokens.refreshToken;
 
-    // Reload file map for upsert (may have been created empty)
     let existingMap = secrets.fileMap || Object.create(null);
     try {
       const fs = await import('node:fs');
@@ -204,7 +222,6 @@ async function authorizeMain() {
       tokenExpiry: tokens.tokenExpiry,
     });
 
-    // Mirror into current process env only (no print)
     process.env.I2_SUPABASE_OAUTH_ACCESS_TOKEN = tokens.accessToken;
     process.env.I2_SUPABASE_OAUTH_REFRESH_TOKEN = tokens.refreshToken;
     process.env.I2_SUPABASE_OAUTH_TOKEN_EXPIRY = tokens.tokenExpiry;
@@ -212,16 +229,59 @@ async function authorizeMain() {
     wipeTransient(transient);
     wipeTransient(tokens);
 
-    const status = formatStatusResult({
+    return formatStatusResult({
       completed: true,
       accessPresent: stored.accessTokenPresent,
       refreshPresent: stored.refreshTokenPresent,
       expiryPresent: stored.expiryPresent,
       projectRefConfigured: stored.projectRefConfigured,
     });
-    console.log(status);
   } catch (e) {
     wipeTransient(transient);
+    throw e;
+  }
+}
+
+async function authorizeMain() {
+  // Live authorize requires FOUNDER_RUN_READY from Orchestrator before invoke.
+  const gate = process.env.I2_FOUNDER_RUN_READINESS_VERDICT;
+  if (gate !== 'FOUNDER_RUN_READY') {
+    console.error(
+      'DENY: set I2_FOUNDER_RUN_READINESS_VERDICT=FOUNDER_RUN_READY after FOUNDER_RUN_READY packet'
+    );
+    console.log(
+      formatStatusResult({
+        completed: false,
+        accessPresent: false,
+        refreshPresent: false,
+        expiryPresent: false,
+        projectRefConfigured: false,
+      })
+    );
+    console.log(
+      formatTunnelStatus({
+        phase: 'blocked_readiness',
+        started: false,
+        stopped: false,
+        healthOk: false,
+        publicClosed: false,
+      })
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  const tunnel = createTunnelController({
+    env: process.env,
+    repoRoot: ADAPTER_ROOT,
+    readinessGate: gate,
+  });
+
+  try {
+    const status = await tunnel.runWithTunnel(async () => runAuthorizeExchange());
+    console.log(status);
+    console.log(tunnel.status('complete'));
+  } catch (e) {
     const safe = redactSecrets(e && e.message ? e.message : String(e));
     console.error(safe);
     console.log(
@@ -233,6 +293,11 @@ async function authorizeMain() {
         projectRefConfigured: false,
       })
     );
+    try {
+      console.log(tunnel.status('failed'));
+    } catch {
+      /* ignore */
+    }
     process.exitCode = 1;
   }
 }
@@ -240,32 +305,51 @@ async function authorizeMain() {
 async function main() {
   const args = process.argv.slice(2);
   if (args.includes('--help') || args.includes('-h')) {
-    console.log(`supabase oauth-authorize (G2.3B-B2D)
+    console.log(`supabase oauth-authorize (G2.3B-B2D Option B HTTPS tunnel)
 
 Protected local helper. Secrets from Diagnostics env only. Never prints tokens.
 
-  --self-test   Run fail-closed / redaction self-tests (no network, no live tokens)
-  (default)     Run OAuth authorize → store tokens in I2_DIAGNOSTICS_SECRET_ENV_FILE
+  --self-test   Run fail-closed / redaction / tunnel contract self-tests
+  (default)     Tunnel up → OAuth authorize → store tokens → tunnel down
 
 Requires:
+  I2_FOUNDER_RUN_READINESS_VERDICT=FOUNDER_RUN_READY
   I2_DIAGNOSTICS_SECRET_ENV_FILE
   I2_SUPABASE_OAUTH_CLIENT_ID
   I2_SUPABASE_OAUTH_CLIENT_SECRET (if issued)
   SUPABASE_DIAGNOSTICS_PROJECT_REF=${'wwyxohjnyqnegzbxtuxs'}
+  I2_CLOUDFLARE_TUNNEL_CREDENTIALS_FILE (outside repo)
+  I2_CLOUDFLARE_TUNNEL_ID
+  I2_CLOUDFLARED_EXECUTABLE (optional absolute path)
+
+Public redirect: ${PUBLIC_REDIRECT_URI}
+Local listener:  ${LOCAL_LISTENER_URI} (${CALLBACK_HOST}:${CALLBACK_PORT})
 `);
     return;
   }
 
   if (args.includes('--self-test')) {
     const result = await runSelfTests();
-    // Ensure no token-like leakage in serialized output
-    const dumped = JSON.stringify(result);
+    const { runTunnelSelfTests } = await import('./oauth-tunnel.self-test.mjs');
+    const tunnelResult = await runTunnelSelfTests();
+    const dumped = JSON.stringify({ oauth: result, tunnel: tunnelResult });
     if (/access_token|refresh_token|Bearer\s+[A-Za-z0-9._-]{20,}/i.test(dumped)) {
       console.error('DENY: self-test output contained secret-shaped material');
       process.exit(1);
     }
-    console.log(JSON.stringify({ ok: result.ok, failed: result.failed.map((f) => f.test) }, null, 2));
-    process.exit(result.ok ? 0 : 1);
+    const ok = result.ok && tunnelResult.ok;
+    console.log(
+      JSON.stringify(
+        {
+          ok,
+          oauthFailed: result.failed.map((f) => f.test),
+          tunnelFailed: tunnelResult.failed.map((f) => f.test),
+        },
+        null,
+        2
+      )
+    );
+    process.exit(ok ? 0 : 1);
   }
 
   await authorizeMain();

@@ -41,20 +41,28 @@ Inventory names (values never in repo):
 - `SUPABASE_DIAGNOSTICS_PROJECT_REF` (= `wwyxohjnyqnegzbxtuxs`)
 - `I2_DIAGNOSTICS_SECRET_ENV_FILE` (path to durable Diagnostics env file)
 
-### Protected OAuth helper
+### Protected OAuth helper (Option B — Named Tunnel)
 
-Plain HTTP loopback: `http://127.0.0.1:8765/oauth/callback` (no self-signed TLS).
-Windows browser launch uses approved Edge/Chrome **absolute** paths only (no
-explorer/cmd/PATH). Quarantined tokens from failed attempts must be replaced
-before B3.
+- **Public redirect URI:** `https://oauth-diagnostics.bhfos.com/oauth/callback`
+- **Local listener:** `http://127.0.0.1:8765/oauth/callback` (plain HTTP loopback)
+- Cloudflare **Named Tunnel** only (stable hostname; no random/temporary hostnames)
+- Forwards **only** `/oauth/callback` to the local listener (Host rewritten to loopback)
+- Tunnel credentials outside the repository
+- Tunnel stops after every authorize attempt; public callback closure verified
+- Windows browser launch uses approved Edge/Chrome **absolute** paths only
+- Quarantined tokens from failed attempts (including PR #58) must be replaced before B3
 
 ```bash
 npm run test:supabase-oauth-helper
+npm run test:supabase-oauth-tunnel
+# Live authorize only after FOUNDER_RUN_READY:
+# set I2_FOUNDER_RUN_READINESS_VERDICT=FOUNDER_RUN_READY
 node tools/supabase-diagnostics-adapter/oauth-authorize.mjs
 ```
 
-Founder creates the OAuth app + places client id/secret in Diagnostics env, then
-runs the helper once and approves the browser consent screen. The helper never
-prints token values.
+Founder creates the OAuth app with the **exact HTTPS** redirect, places client
+id/secret + tunnel credentials in Diagnostics env (outside repo), then runs the
+helper once and approves the browser consent screen. The helper never prints
+token values.
 
 Legacy `SUPABASE_DIAGNOSTICS_ADAPTER_TOKEN` is **retired** — do not issue.

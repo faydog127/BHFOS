@@ -12,8 +12,13 @@ export const PRODUCTION_PROJECT_REF = 'wwyxohjnyqnegzbxtuxs';
 export const CALLBACK_HOST = '127.0.0.1';
 export const CALLBACK_PORT = 8765;
 export const CALLBACK_PATH = '/oauth/callback';
-/** Plain HTTP loopback — platform docs + preflight do not require HTTPS. */
-export const REDIRECT_URI = `http://${CALLBACK_HOST}:${CALLBACK_PORT}${CALLBACK_PATH}`;
+/** Public HTTPS redirect (Cloudflare Named Tunnel). Authorize + token exchange. */
+export const PUBLIC_CALLBACK_HOST = 'oauth-diagnostics.bhfos.com';
+export const PUBLIC_REDIRECT_URI = `https://${PUBLIC_CALLBACK_HOST}${CALLBACK_PATH}`;
+/** Local loopback listener only — never used as OAuth redirect_uri. */
+export const LOCAL_LISTENER_URI = `http://${CALLBACK_HOST}:${CALLBACK_PORT}${CALLBACK_PATH}`;
+/** OAuth redirect_uri contract (public HTTPS). Alias of PUBLIC_REDIRECT_URI. */
+export const REDIRECT_URI = PUBLIC_REDIRECT_URI;
 export const AUTHORIZE_URL = 'https://api.supabase.com/v1/oauth/authorize';
 export const TOKEN_URL = 'https://api.supabase.com/v1/oauth/token';
 export const ALLOWED_SCOPES = new Set(['projects:read']);
@@ -23,7 +28,10 @@ export const CALLBACK_BIND = Object.freeze({
   host: CALLBACK_HOST,
   port: CALLBACK_PORT,
   path: CALLBACK_PATH,
-  redirectUri: REDIRECT_URI,
+  localListenerUri: LOCAL_LISTENER_URI,
+  publicRedirectUri: PUBLIC_REDIRECT_URI,
+  /** @deprecated use publicRedirectUri — OAuth redirect is public HTTPS */
+  redirectUri: PUBLIC_REDIRECT_URI,
 });
 
 /**
@@ -185,7 +193,7 @@ export function buildAuthorizeUrl({
   const u = new URL(AUTHORIZE_URL);
   u.searchParams.set('response_type', 'code');
   u.searchParams.set('client_id', clientId);
-  u.searchParams.set('redirect_uri', REDIRECT_URI);
+  u.searchParams.set('redirect_uri', PUBLIC_REDIRECT_URI);
   u.searchParams.set('state', state);
   u.searchParams.set('code_challenge', codeChallenge);
   u.searchParams.set('code_challenge_method', 'S256');
@@ -193,6 +201,41 @@ export function buildAuthorizeUrl({
     u.searchParams.set('organization_slug', organizationSlug);
   }
   return u.toString();
+}
+
+/** Assert public HTTPS redirect is pinned and distinct from local HTTP listener. */
+export function assertSplitRedirectContract() {
+  if (PUBLIC_REDIRECT_URI !== 'https://oauth-diagnostics.bhfos.com/oauth/callback') {
+    throw new OAuthHelperError(
+      'DENY: public redirect URI must be https://oauth-diagnostics.bhfos.com/oauth/callback',
+      'PUBLIC_REDIRECT'
+    );
+  }
+  if (LOCAL_LISTENER_URI !== 'http://127.0.0.1:8765/oauth/callback') {
+    throw new OAuthHelperError(
+      'DENY: local listener URI must be http://127.0.0.1:8765/oauth/callback',
+      'LOCAL_LISTENER'
+    );
+  }
+  if (PUBLIC_REDIRECT_URI === LOCAL_LISTENER_URI) {
+    throw new OAuthHelperError(
+      'DENY: public redirect and local listener must be split',
+      'REDIRECT_SPLIT'
+    );
+  }
+  if (!PUBLIC_REDIRECT_URI.startsWith('https://')) {
+    throw new OAuthHelperError('DENY: public redirect must use HTTPS', 'PUBLIC_REDIRECT_SCHEME');
+  }
+  if (!LOCAL_LISTENER_URI.startsWith('http://')) {
+    throw new OAuthHelperError('DENY: local listener must use plain HTTP loopback', 'LOCAL_LISTENER_SCHEME');
+  }
+  if (REDIRECT_URI !== PUBLIC_REDIRECT_URI) {
+    throw new OAuthHelperError(
+      'DENY: OAuth redirect_uri alias must equal public HTTPS URI',
+      'REDIRECT_ALIAS'
+    );
+  }
+  return true;
 }
 
 /**
@@ -312,7 +355,7 @@ export function buildTokenExchangeRequest({
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
-    redirect_uri: REDIRECT_URI,
+    redirect_uri: PUBLIC_REDIRECT_URI,
     code_verifier: codeVerifier,
   });
 
