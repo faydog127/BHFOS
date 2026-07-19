@@ -229,7 +229,7 @@ export async function runSelfTests() {
     results,
     'approved_browser_absolute_path_accepted',
     winSpec.command === fakeEdge &&
-      path.isAbsolute(winSpec.command) &&
+      path.win32.isAbsolute(winSpec.command) &&
       winSpec.args.length === 1 &&
       winSpec.options.shell === false
   );
@@ -242,7 +242,7 @@ export async function runSelfTests() {
     pass(results, 'forbidden_explorer_rejected', e.code === 'BROWSER_FORBIDDEN');
   }
   try {
-    assertNotForbiddenBrowserCommand('chrome.exe'); // PATH-only basename
+    assertNotForbiddenBrowserCommand('chrome.exe', { pathApi: path.win32 }); // PATH-only basename
     pass(results, 'path_resolved_executable_rejected', false);
   } catch (e) {
     pass(

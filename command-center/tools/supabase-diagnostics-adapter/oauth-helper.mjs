@@ -453,8 +453,9 @@ export function resolveWindowsBrowserExecutable(existsSyncFn = fs.existsSync) {
   return null;
 }
 
-export function assertNotForbiddenBrowserCommand(command) {
-  const base = path.basename(String(command || '')).toLowerCase();
+export function assertNotForbiddenBrowserCommand(command, { pathApi = path } = {}) {
+  const raw = String(command || '');
+  const base = pathApi.basename(raw).toLowerCase();
   const forbidden = new Set([
     'explorer.exe',
     'cmd.exe',
@@ -470,7 +471,8 @@ export function assertNotForbiddenBrowserCommand(command) {
       'BROWSER_FORBIDDEN'
     );
   }
-  if (!path.isAbsolute(String(command || ''))) {
+  // Use win32 absolute rules when validating Windows browser paths (CI may run on Linux).
+  if (!pathApi.isAbsolute(raw)) {
     throw new OAuthHelperError(
       'DENY: browser executable must be an absolute path (PATH resolution forbidden)',
       'BROWSER_NOT_ABSOLUTE'
@@ -507,7 +509,7 @@ export function buildBrowserLaunchSpec(
         'BROWSER_NOT_FOUND'
       );
     }
-    assertNotForbiddenBrowserCommand(browser);
+    assertNotForbiddenBrowserCommand(browser, { pathApi: path.win32 });
     if (!isApprovedWindowsBrowserPath(browser)) {
       throw new OAuthHelperError('DENY: browser path not on allowlist', 'BROWSER_NOT_APPROVED');
     }
@@ -549,7 +551,8 @@ export function extractUrlFromBrowserLaunchSpec(spec) {
   if (!spec || !spec.command) {
     throw new OAuthHelperError('DENY: invalid browser launch spec', 'BROWSER_SPEC');
   }
-  assertNotForbiddenBrowserCommand(spec.command);
+  const pathApi = spec.platform === 'win32' ? path.win32 : path;
+  assertNotForbiddenBrowserCommand(spec.command, { pathApi });
   if (spec.args && spec.args.length === 1 && /^https:\/\/api\.supabase\.com\//i.test(spec.args[0])) {
     return spec.args[0];
   }
