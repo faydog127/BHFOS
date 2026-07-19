@@ -277,62 +277,35 @@ export async function runSelfTests() {
       presence.codeChallengeMethodS256 &&
       presence.ampersandCount >= 4
   );
-  pass(
-    results,
-    'windows_launcher_uses_powershell_not_cmd_start',
-    winSpec.command === 'powershell.exe' &&
-      winSpec.args.includes('-Command') &&
-      String(winSpec.args[winSpec.args.indexOf('-Command') + 1]).startsWith(
-        'Start-Process -FilePath'
-      ) &&
-      !captured.some((c) => c.command === 'cmd' || c.command === 'cmd.exe')
-  );
+  const winCmd = String(winSpec.command || '').toLowerCase();
+  const usesDirectBrowserArgv =
+    winSpec.args.length === 1 &&
+    winSpec.args[0] === winUrl &&
+    (winCmd.endsWith('msedge.exe') ||
+      winCmd.endsWith('chrome.exe') ||
+      winCmd === 'explorer.exe') &&
+    !captured.some((c) => c.command === 'cmd' || c.command === 'cmd.exe' || c.command === 'powershell.exe');
+  pass(results, 'windows_launcher_uses_direct_browser_not_cmd_start', usesDirectBrowserArgv);
 
-  // Runtime parameter binding on Windows PowerShell 5.x (no browser navigation):
-  // Get-Command Start-Process must expose -FilePath; must NOT require -LiteralPath.
+  // Runtime: resolved Windows browser path must exist when present (no navigation).
   if (process.platform === 'win32') {
     try {
-      const { spawnSync } = await import('node:child_process');
-      const probe = spawnSync(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-NonInteractive',
-          '-Command',
-          "(Get-Command Start-Process).Parameters.ContainsKey('FilePath') -and -not (Get-Command Start-Process).Parameters.ContainsKey('LiteralPath')",
-        ],
-        { encoding: 'utf8', windowsHide: true }
-      );
-      const out = String(probe.stdout || '').trim().toLowerCase();
+      const { existsSync } = await import('node:fs');
+      const resolvedIsFile =
+        winCmd === 'explorer.exe' || (winSpec.command && existsSync(winSpec.command));
+      pass(results, 'windows_launcher_browser_executable_resolves', resolvedIsFile);
       pass(
         results,
-        'windows_powershell_start_process_filepath_param',
-        probe.status === 0 && out === 'true'
-      );
-      // Validate -Command parsing accepts FilePath with ampersands (WhatIf / dry syntax check)
-      const ampProbe = spawnSync(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-NonInteractive',
-          '-Command',
-          `[void][scriptblock]::Create("Start-Process -FilePath '${delivered.replace(/'/g, "''")}'"); 'ok'`,
-        ],
-        { encoding: 'utf8', windowsHide: true }
-      );
-      pass(
-        results,
-        'windows_powershell_ampersand_filepath_command_parses',
-        ampProbe.status === 0 && String(ampProbe.stdout || '').includes('ok') &&
-          !String(ampProbe.stderr || '').includes('LiteralPath')
+        'windows_launcher_ampersand_url_is_single_argv',
+        winSpec.args.length === 1 && presence.ampersandCount >= 4
       );
     } catch (e) {
-      pass(results, 'windows_powershell_start_process_filepath_param', false, String(e.message || e));
-      pass(results, 'windows_powershell_ampersand_filepath_command_parses', false);
+      pass(results, 'windows_launcher_browser_executable_resolves', false, String(e.message || e));
+      pass(results, 'windows_launcher_ampersand_url_is_single_argv', false);
     }
   } else {
-    pass(results, 'windows_powershell_start_process_filepath_param', true, 'skipped_non_windows');
-    pass(results, 'windows_powershell_ampersand_filepath_command_parses', true, 'skipped_non_windows');
+    pass(results, 'windows_launcher_browser_executable_resolves', true, 'skipped_non_windows');
+    pass(results, 'windows_launcher_ampersand_url_is_single_argv', true, 'skipped_non_windows');
   }
   pass(
     results,

@@ -19,9 +19,14 @@
 4. Set:
    - **Name:** `BHFOS I2 Diagnostics`
    - **Website** (if asked): `https://github.com/faydog127/BHFOS`
-   - **Redirect URI:** `http://127.0.0.1:8765/oauth/callback`
+   - **Redirect URI:** `https://127.0.0.1:8765/oauth/callback`
+     (Platform OAuth Apps reject `http://` — HTTPS is required even for loopback.)
    - **Scopes:** **Projects → Read** only (nothing else)
 5. Confirm / create.
+
+If the app was already created with the old `http://` redirect, edit the OAuth app
+and set Redirect URI to exactly `https://127.0.0.1:8765/oauth/callback` before
+running the helper again.
 
 ---
 
@@ -40,11 +45,10 @@
 
 ## C. Run the protected helper (one command)
 
-> **Windows note:** Use a helper build that includes the Windows browser-launch
-> fix (PowerShell `Start-Process -FilePath` with a single-quoted URL). Older
-> builds that used `cmd /c start` truncate the authorize URL at the first `&`
-> and never reach consent. Do not retry until that fix is on the Diagnostics
-> worktree / main.
+> **Windows note:** Use a helper build that launches Edge/Chrome with the authorize
+> URL as a single argv element (not `cmd /c start`). Older builds truncate at `&`.
+> The callback listener is **HTTPS** on `127.0.0.1:8765` using a local self-signed
+> certificate under `%LOCALAPPDATA%\BHFOS\production-diagnostics\certs\` (not in git).
 
 From a Production Diagnostics shell with the secret env loaded:
 
@@ -55,7 +59,7 @@ node tools/supabase-diagnostics-adapter/oauth-authorize.mjs
 
 The helper will:
 
-- bind `127.0.0.1:8765`
+- bind `https://127.0.0.1:8765/oauth/callback`
 - open the browser consent screen (**without** printing the authorize URL)
 - exchange the code
 - write `I2_SUPABASE_OAUTH_ACCESS_TOKEN`, `I2_SUPABASE_OAUTH_REFRESH_TOKEN`, and
@@ -67,8 +71,11 @@ The helper will:
 ## D. Approve the browser consent screen
 
 When the browser opens, approve as the Founder for the organization that owns
-`wwyxohjnyqnegzbxtuxs`. Then confirm the helper printed status lines including
-`OAuth authorization: completed` and `token values: not displayed`.
+`wwyxohjnyqnegzbxtuxs`. If Edge shows a certificate warning for `127.0.0.1` after
+consent (local callback TLS), choose **Continue** / proceed to the loopback host —
+that page only confirms receipt; it never displays tokens. Then confirm the helper
+printed status lines including `OAuth authorization: completed` and
+`token values: not displayed`.
 
 ---
 

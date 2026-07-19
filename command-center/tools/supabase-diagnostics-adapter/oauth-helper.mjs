@@ -12,7 +12,9 @@ export const PRODUCTION_PROJECT_REF = 'wwyxohjnyqnegzbxtuxs';
 export const CALLBACK_HOST = '127.0.0.1';
 export const CALLBACK_PORT = 8765;
 export const CALLBACK_PATH = '/oauth/callback';
-export const REDIRECT_URI = `http://${CALLBACK_HOST}:${CALLBACK_PORT}${CALLBACK_PATH}`;
+/** Platform OAuth Apps require HTTPS redirect_uri (http://127.0.0.1 is rejected). */
+export const CALLBACK_SCHEME = 'https';
+export const REDIRECT_URI = `${CALLBACK_SCHEME}://${CALLBACK_HOST}:${CALLBACK_PORT}${CALLBACK_PATH}`;
 export const AUTHORIZE_URL = 'https://api.supabase.com/v1/oauth/authorize';
 export const TOKEN_URL = 'https://api.supabase.com/v1/oauth/token';
 export const ALLOWED_SCOPES = new Set(['projects:read']);
@@ -394,12 +396,32 @@ export function formatStatusResult({
 }
 
 /**
+ * Prefer a real browser executable on Windows so the authorize URL is a single
+ * argv element (ampersands preserved) and the tab opens in that browser.
+ */
+export function resolveWindowsBrowserExecutable(
+  env = process.env,
+  existsSyncFn = fs.existsSync
+) {
+  const candidates = [
+    path.join(env['ProgramFiles(x86)'] || '', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+    path.join(env.ProgramFiles || '', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+    path.join(env.ProgramFiles || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    path.join(env.LOCALAPPDATA || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+  ];
+  for (const candidate of candidates) {
+    if (candidate && existsSyncFn(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
  * Build OS browser-launch argv. Never log the URL (contains state / PKCE challenge).
  *
  * Windows: do NOT use `cmd /c start … <url>` with an unquoted URL — cmd.exe treats
  * `&` as a command separator and truncates the OAuth query string.
- * Use PowerShell Start-Process -FilePath with a single-quoted URL instead
- * (Windows PowerShell 5.x has no -LiteralPath on Start-Process).
+ * Prefer spawning Edge/Chrome with the URL as one argv element. Fall back to
+ * explorer.exe (still a single argv URL — never cmd.exe).
  */
 export function buildBrowserLaunchSpec(url, platform = process.platform) {
   if (!url || typeof url !== 'string' || !/^https:\/\//i.test(url)) {
@@ -407,18 +429,11 @@ export function buildBrowserLaunchSpec(url, platform = process.platform) {
   }
 
   if (platform === 'win32') {
-    const escaped = url.replace(/'/g, "''");
+    const browser = resolveWindowsBrowserExecutable();
     return {
       platform: 'win32',
-      command: 'powershell.exe',
-      args: [
-        '-NoProfile',
-        '-NonInteractive',
-        '-WindowStyle',
-        'Hidden',
-        '-Command',
-        `Start-Process -FilePath '${escaped}'`,
-      ],
+      command: browser || 'explorer.exe',
+      args: [url],
       options: { detached: true, stdio: 'ignore', windowsHide: true },
     };
   }
@@ -445,14 +460,21 @@ export function extractUrlFromBrowserLaunchSpec(spec) {
   if (!spec || !spec.command) {
     throw new OAuthHelperError('DENY: invalid browser launch spec', 'BROWSER_SPEC');
   }
-  if (spec.platform === 'win32' || spec.command === 'powershell.exe') {
-    const idx = spec.args.indexOf('-Command');
-    const cmd = idx >= 0 ? spec.args[idx + 1] : '';
-    const m = String(cmd).match(/^Start-Process -FilePath '((?:''|[^'])*)'$/);
-    if (!m) {
-      throw new OAuthHelperError('DENY: Windows launch spec missing FilePath URL', 'BROWSER_SPEC');
+  if (spec.platform === 'win32') {
+    if (spec.args && spec.args.length === 1 && /^https:\/\//i.test(spec.args[0])) {
+      return spec.args[0];
     }
-    return m[1].replace(/''/g, "'");
+    // Legacy PowerShell Start-Process -FilePath form (pre-Edge-direct launch)
+    if (spec.command === 'powershell.exe') {
+      const idx = spec.args.indexOf('-Command');
+      const cmd = idx >= 0 ? spec.args[idx + 1] : '';
+      const m = String(cmd).match(/^Start-Process -FilePath '((?:''|[^'])*)'$/);
+      if (!m) {
+        throw new OAuthHelperError('DENY: Windows launch spec missing FilePath URL', 'BROWSER_SPEC');
+      }
+      return m[1].replace(/''/g, "'");
+    }
+    throw new OAuthHelperError('DENY: Windows launch spec missing https URL argv', 'BROWSER_SPEC');
   }
   if (spec.args && spec.args.length === 1) {
     return spec.args[0];

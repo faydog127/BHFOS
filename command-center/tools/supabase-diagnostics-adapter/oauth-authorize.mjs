@@ -15,9 +15,13 @@
  *   SUPABASE_DIAGNOSTICS_PROJECT_REF=wwyxohjnyqnegzbxtuxs
  */
 
-import http from 'node:http';
-import { spawn } from 'node:child_process';
+import https from 'node:https';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { spawn, spawnSync } from 'node:child_process';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import {
   CALLBACK_HOST,
   CALLBACK_PORT,
@@ -42,8 +46,63 @@ import {
 import { runSelfTests } from './oauth-helper.self-test.mjs';
 
 /**
+ * Local TLS material for https://127.0.0.1:8765 only (never committed).
+ * Platform OAuth Apps reject http redirect_uri.
+ */
+export function ensureLocalCallbackTlsMaterial(
+  baseDir = path.join(process.env.LOCALAPPDATA || '', 'BHFOS', 'production-diagnostics', 'certs')
+) {
+  if (!process.env.LOCALAPPDATA) {
+    throw new Error('DENY: LOCALAPPDATA required for local OAuth callback TLS material');
+  }
+  fs.mkdirSync(baseDir, { recursive: true });
+  const pfxPath = path.join(baseDir, 'oauth-callback.pfx');
+  const passPath = path.join(baseDir, 'oauth-callback.pfx.pass');
+
+  if (!fs.existsSync(pfxPath) || !fs.existsSync(passPath)) {
+    const passphrase = cryptoRandomPassphrase();
+    const ps = `
+$ErrorActionPreference = 'Stop'
+$dir = ${JSON.stringify(baseDir)}
+$pfx = ${JSON.stringify(pfxPath)}
+$passFile = ${JSON.stringify(passPath)}
+$plain = ${JSON.stringify(passphrase)}
+$secure = ConvertTo-SecureString -String $plain -Force -AsPlainText
+$cert = New-SelfSignedCertificate -Subject 'CN=127.0.0.1' -DnsName @('127.0.0.1') -CertStoreLocation 'Cert:\\CurrentUser\\My' -KeyExportPolicy Exportable -NotAfter (Get-Date).AddYears(2) -KeyAlgorithm RSA -KeyLength 2048 -FriendlyName 'BHFOS-I2-OAuth-Callback' -HashAlgorithm SHA256
+Export-PfxCertificate -Cert $cert -FilePath $pfx -Password $secure | Out-Null
+Set-Content -LiteralPath $passFile -Value $plain -NoNewline -Encoding ascii
+Remove-Item -LiteralPath ("Cert:\\CurrentUser\\My\\" + $cert.Thumbprint) -Force -ErrorAction SilentlyContinue
+Write-Output 'ok'
+`;
+    const probe = spawnSync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', ps],
+      { encoding: 'utf8', windowsHide: true }
+    );
+    if (probe.status !== 0 || !String(probe.stdout || '').includes('ok')) {
+      const err = String(probe.stderr || probe.stdout || 'cert generation failed');
+      throw new Error(`DENY: unable to create local OAuth callback TLS material (${err.slice(0, 200)})`);
+    }
+  }
+
+  const passphrase = fs.readFileSync(passPath, 'utf8').trim();
+  if (!passphrase) {
+    throw new Error('DENY: local OAuth callback TLS passphrase missing');
+  }
+  return {
+    pfx: fs.readFileSync(pfxPath),
+    passphrase,
+  };
+}
+
+function cryptoRandomPassphrase() {
+  return crypto.randomBytes(24).toString('base64url');
+}
+
+/**
  * Open the system browser without printing the URL (contains state / PKCE).
- * Windows uses PowerShell Start-Process so cmd.exe cannot split on `&`.
+ * Windows spawns Edge/Chrome (or explorer.exe fallback) with the URL as one argv
+ * element so cmd.exe cannot split on `&`.
  */
 export function openBrowser(url, { spawnFn = spawn, platform = process.platform } = {}) {
   const spec = buildBrowserLaunchSpec(url, platform);
@@ -51,46 +110,48 @@ export function openBrowser(url, { spawnFn = spawn, platform = process.platform 
   return spec;
 }
 
-function waitForCallback({ expectedState, timeoutMs = 5 * 60 * 1000 }) {
+function waitForCallback({ expectedState, timeoutMs = 5 * 60 * 1000, tls }) {
   return new Promise((resolve, reject) => {
     let settled = false;
-    const server = http.createServer((req, res) => {
-      const finish = (status, body, result, err) => {
-        res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end(body);
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        server.close(() => {
-          if (err) reject(err);
-          else resolve(result);
-        });
-      };
+    const server = https.createServer(
+      { pfx: tls.pfx, passphrase: tls.passphrase },
+      (req, res) => {
+        const finish = (status, body, result, err) => {
+          res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8' });
+          res.end(body);
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          server.close(() => {
+            if (err) reject(err);
+            else resolve(result);
+          });
+        };
 
-      try {
-        const { code } = validateCallbackRequest({
-          method: req.method,
-          hostHeader: req.headers.host,
-          urlPathWithQuery: req.url || '/',
-          expectedState,
-        });
-        finish(
-          200,
-          'Authorization received. You may close this window. Tokens are not displayed.',
-          { code }
-        );
-      } catch (e) {
-        const msg = e && e.message ? e.message : 'DENY: callback rejected';
-        // Wrong path / state: keep listening unless fatal host issues — for path mismatch
-        // respond 404 and continue waiting; for state mismatch fail closed.
-        if (e && e.code === 'CALLBACK_PATH') {
-          res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-          res.end('Not found');
-          return;
+        try {
+          const { code } = validateCallbackRequest({
+            method: req.method,
+            hostHeader: req.headers.host,
+            urlPathWithQuery: req.url || '/',
+            expectedState,
+          });
+          finish(
+            200,
+            'Authorization received. You may close this window. Tokens are not displayed.',
+            { code }
+          );
+        } catch (e) {
+          // Wrong path / state: keep listening unless fatal host issues — for path mismatch
+          // respond 404 and continue waiting; for state mismatch fail closed.
+          if (e && e.code === 'CALLBACK_PATH') {
+            res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('Not found');
+            return;
+          }
+          finish(400, 'Authorization failed. You may close this window.', null, e);
         }
-        finish(400, 'Authorization failed. You may close this window.', null, e);
       }
-    });
+    );
 
     server.on('error', (err) => {
       if (!settled) {
@@ -107,7 +168,7 @@ function waitForCallback({ expectedState, timeoutMs = 5 * 60 * 1000 }) {
     }, timeoutMs);
 
     server.listen(CALLBACK_PORT, CALLBACK_HOST, () => {
-      // Bound exclusively to 127.0.0.1:8765
+      // Bound exclusively to 127.0.0.1:8765 (HTTPS)
     });
   });
 }
@@ -168,10 +229,12 @@ async function authorizeMain() {
       throw new Error('DENY: redirect_uri mismatch in authorize URL');
     }
 
-    console.log(`Callback listener: http://${CALLBACK_HOST}:${CALLBACK_PORT}${CALLBACK_PATH}`);
+    const tls = ensureLocalCallbackTlsMaterial();
+    console.log(`Callback listener: ${REDIRECT_URI}`);
     console.log('Opening browser for Founder consent (Projects Read only)…');
+    console.log('status: if Edge warns about the local certificate, continue to 127.0.0.1 (callback only)');
 
-    const callbackPromise = waitForCallback({ expectedState: transient.state });
+    const callbackPromise = waitForCallback({ expectedState: transient.state, tls });
     openBrowser(authorizeUrl);
 
     const { code } = await callbackPromise;
@@ -269,4 +332,9 @@ Requires:
   await authorizeMain();
 }
 
-main();
+const isMain =
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+if (isMain) {
+  main();
+}
