@@ -14,6 +14,13 @@ Founder-authorized by exact PR/SHA, and merged to `main`. Until then, Founder
 exact PR/SHA merge authorization remains mandatory for every PR, including this
 one.
 
+**Fail-closed (self-contained in agent definitions):** If this file is absent
+from the current `main` branch, cannot be verified as active on `main`, or its
+activation status is ambiguous, delegated merge authority is unavailable and
+Founder exact PR/SHA authorization is required. Activation must not be inferred
+from a pull-request or candidate branch alone. Machine check:
+`tools/control-plane-lane-activation.mjs`.
+
 ## Purpose
 
 Allow mechanical merge of low-risk control-plane corrections without Founder

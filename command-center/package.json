@@ -33,6 +33,7 @@
     "validate:review-governance": "node tools/validate-review-governance.mjs",
     "test:governance-boundary": "node tools/governance-boundary-tests.mjs",
     "test:founder-run-readiness": "node tools/founder-run-readiness.mjs --self-test",
+    "test:control-plane-lane": "node tools/control-plane-lane-activation.mjs --self-test",
     "test:cursor-role-isolation": "node tools/verify-cursor-role-isolation.mjs",
     "test:supabase-diagnostics-adapter": "node tools/supabase-diagnostics-adapter/cli.mjs --self-test",
     "test:supabase-oauth-helper": "node tools/supabase-diagnostics-adapter/oauth-authorize.mjs --self-test",

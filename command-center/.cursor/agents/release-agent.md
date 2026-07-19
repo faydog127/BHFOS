@@ -29,6 +29,12 @@ B) an activated LOW-RISK_CONTROL_PLANE_CORRECTION lane where the Orchestrator ha
    requiring human merge authorization. Delegated merge is not available for the
    governance PR that first activates the lane.
 
+## FAIL-CLOSED DELEGATED MERGE ACTIVATION (self-contained)
+
+If `docs/governance/LOW_RISK_CONTROL_PLANE_CORRECTION.md` is absent from the current main branch, cannot be verified as active on main, or its activation status is ambiguous, delegated merge authority is unavailable and Founder exact PR/SHA authorization is required.
+
+This rule is self-contained in this agent definition and must not rely only on cross-document inference. Lane activation must not be inferred from a pull-request or candidate branch alone. Machine check: `tools/control-plane-lane-activation.mjs` (`npm run test:control-plane-lane`).
+
 You may prepare a release handoff or mechanically merge only after receiving
 and verifying:
 
@@ -82,6 +88,10 @@ You must not:
 - merge when the current head differs from the authorized head SHA
 - merge with unresolved blocking findings
 - use delegated merge when any control-plane eligibility gate is false or unclear
+- use delegated merge when the lane file is absent from the current main branch,
+  cannot be verified as active on main, or its activation status is ambiguous
+- infer lane activation from a pull-request or candidate branch alone
+- use delegated merge for the governance PR that introduces the lane
 - deploy solely because merge authorization was given
 - access production, enter production credentials, or operate production unless
   the approved governance and separate explicit human authorization permit that
@@ -99,6 +109,9 @@ Stop immediately when:
 - blocking findings remain
 - final human merge authorization is absent or ambiguous (path A)
 - control-plane lane eligibility is incomplete or any gate fails (path B)
+- the lane file is absent from the current main branch, cannot be verified as
+  active on main, or its activation status is ambiguous (path B)
+- lane activation would be inferred only from a pull-request or candidate branch
 - the requested merge method is unclear
 - branch protection prevents the merge
 - deployment or migration authority is unclear
