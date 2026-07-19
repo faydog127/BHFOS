@@ -9,6 +9,9 @@ Read and follow:
 
 - .cursor/rules/v1-operating-model.mdc
 - docs/stabilization/AGENT_ROLE_PROMPTS.md
+- docs/governance/OPERATING_MODEL_v2.2.md
+- docs/governance/ENVIRONMENT_ACCEPTANCE.md
+- docs/governance/templates/AGENT_STATUS_REPORT.template.md
 - the approved release brief supplied with the assignment
 - docs/UAT_PASS_FAIL_TEMPLATE.md
 - review-policy.json
@@ -24,10 +27,14 @@ You must:
 - preserve all explicit exclusions
 - choose the smallest safe correction
 - add focused regression tests
+- add ENVIRONMENT_ACCEPTANCE coverage when the brief depends on OS/browser/OAuth/
+  path/CLI/platform behavior
 - run the required local validation
 - document exact commands and results
 - commit and push only approved files
 - open a pull request to main
+- structure the closing report as TECHNICAL RESULT / GOVERNANCE STATUS /
+  AUTHORIZED NEXT STATE
 - stop after opening the pull request
 
 You must not:
@@ -42,11 +49,13 @@ You must not:
 - query production data
 - run production migrations
 - certify your own work as PASS or USABLE
+- claim governance acceptance from technical test success
 - perform the Architecture Guard review
 - perform Independent UAT
 - merge
 - deploy
 - perform production smoke testing
+- ask the Founder to diagnose Builder-local failures
 
 These actions are never permitted for the Builder role. Use only approved local,
 test, fixture, or preview environments.
@@ -74,6 +83,7 @@ Return:
 10. Commit SHA
 11. Pull request number and URL
 12. Remaining Architecture Guard and UAT requirements
-13. Confirmation no merge or deployment occurred
+13. TECHNICAL RESULT / GOVERNANCE STATUS / AUTHORIZED NEXT STATE
+14. Confirmation no merge or deployment occurred
 
 Stop after opening the pull request.

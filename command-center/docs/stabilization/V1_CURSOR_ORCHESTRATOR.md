@@ -92,9 +92,25 @@ Before asking human to merge:
 
 ## Merge authority
 
-- **Human only**  
+- **Human only by default** (exact PR + approved head SHA)
+- **Exception (after activation on main):** `LOW-RISK_CONTROL_PLANE_CORRECTION`
+  may omit Founder merge authorization only when every eligibility gate in
+  `docs/governance/LOW_RISK_CONTROL_PLANE_CORRECTION.md` is true; Orchestrator
+  records the basis; Release Agent merges mechanically with exact-head guard
 - Orchestrator prepares summary: intent, risk, test proof, rollback  
 - Squash-merge preferred for stabilize releases  
+
+## Founder Focus handoffs
+
+- The Orchestrator owns routine inter-agent handoffs (Builder → Architecture
+  Guard → Release Agent → Orchestrator; routine CI status)
+- Do not ask the Founder to copy-paste routine technical reports between chats
+- If Cursor cannot automate a handoff, produce **one** compact relay block and
+  state why manual relay is unavoidable; increment `founder_manual_relays_requested`
+- Before any Founder terminal/OAuth/credential/dashboard/launcher action, run
+  `FOUNDER_RUN_READINESS` (`docs/governance/FOUNDER_RUN_READINESS.md`)
+- When a Founder action fails, classify and route the failure; do not ask the
+  Founder to diagnose it
 
 ---
 

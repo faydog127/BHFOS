@@ -1,0 +1,38 @@
+{
+  "task_and_authorization_boundary": "Exact authorized task and what is out of scope",
+  "exact_repository": "https://github.com/faydog127/BHFOS",
+  "exact_worktree_path": "F:/Dev/BHFOS-<theme>",
+  "exact_commit_sha": "<40-char-sha>",
+  "protected_launcher_or_script_path": "command-center/tools/<launcher>.mjs",
+  "launcher_sha_pin": "<40-char-sha-or-omit>",
+  "required_files": [
+    "command-center/tools/<file>"
+  ],
+  "external_secret_store_path": "C:/path/outside/repo/secrets.env",
+  "required_secret_names": [
+    "EXAMPLE_SECRET_NAME"
+  ],
+  "callback_or_redirect_expected": "http://127.0.0.1:8765/oauth/callback",
+  "callback_or_redirect_actual": "http://127.0.0.1:8765/oauth/callback",
+  "required_local_port": 8765,
+  "required_dependencies": [
+    {
+      "kind": "file",
+      "path": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+    }
+  ],
+  "platform_acceptance_tests_passed": true,
+  "unit_integration_tests_passed": true,
+  "architecture_guard_approval": {
+    "applies_to_execution_design": true,
+    "head_sha": "<40-char-sha>",
+    "verdict": "APPROVE_FOR_INDEPENDENT_UAT"
+  },
+  "expected_safe_output": "What the Founder should see on success (no secrets)",
+  "explicit_stop_conditions": [
+    "Any readiness field fails",
+    "Browser fails to launch",
+    "Callback does not match contract"
+  ],
+  "one_exact_founder_command_or_action": "Exactly one command or dashboard action"
+}

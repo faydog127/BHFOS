@@ -20,7 +20,15 @@ of returning it to the founder. Full definitions live in (do not duplicate them)
 - Exact production permissions: `docs/governance/PRODUCTION_ACCESS_MATRIX.md`
 - Incidents + production readiness: `docs/governance/INCIDENT_AND_PRODUCTION_READINESS.md`
 - Effectiveness signals: `docs/governance/AGENT_PILOT_SCORECARD.md`
-- Templates: `docs/governance/templates/` (Release Baton, Decision Packet, Release Ledger)
+- Founder run gate: `docs/governance/FOUNDER_RUN_READINESS.md`
+- Environment acceptance: `docs/governance/ENVIRONMENT_ACCEPTANCE.md`
+- Control-plane correction lane: `docs/governance/LOW_RISK_CONTROL_PLANE_CORRECTION.md`
+- Templates: `docs/governance/templates/` (Release Baton, Decision Packet, Release Ledger, Agent Status Report)
+
+Merge remains human-authorized by default. Delegated Release Agent merge is
+allowed only under an activated `LOW-RISK_CONTROL_PLANE_CORRECTION` lane when
+every eligibility gate is true. Reports must separate TECHNICAL RESULT,
+GOVERNANCE STATUS, and AUTHORIZED NEXT STATE.
 
 Risk tier + pinned version: the Orchestrator assigns a risk tier (Tier 1 / 2 / 3)
 at planning time and records it, with the pinned `governance_version`, on the
@@ -40,7 +48,12 @@ behavior with owner checkpoints → **Owner accepts** → Release merges & deplo
 - Start a **fresh chat** for each role. Do not switch hats inside one implementation
   chat to approve, merge, deploy, or certify your own work.
 - Merge, deploy, and any consequential action are **human-approved only**
-  (you, the owner = Human Decider — see `docs/governance/APPROVAL_THRESHOLDS.md`).
+  (you, the owner = Human Decider — see `docs/governance/APPROVAL_THRESHOLDS.md`),
+  except mechanical merge under an activated
+  `LOW-RISK_CONTROL_PLANE_CORRECTION` lane when every eligibility gate is true.
+- Do not ask the Founder to execute until `FOUNDER_RUN_READINESS` is
+  `FOUNDER_RUN_READY`. Orchestrator owns routine handoffs and Founder-failure
+  classification.
 
 ## Evidence tiers (never conflate)
 Label every claim as one of: **SOURCE-ONLY** (in code) / **DEPLOYED** (in the live

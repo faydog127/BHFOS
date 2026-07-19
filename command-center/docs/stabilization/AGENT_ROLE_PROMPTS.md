@@ -10,16 +10,31 @@ Canonical definitions: `docs/governance/AI_ROLES.md`,
 **Golden rule:** the chat that implements does not certify, merge, or deploy its
 own work. Use a different chat for UAT and for Release.
 
+**Status contract:** every role report uses TECHNICAL RESULT / GOVERNANCE STATUS /
+AUTHORIZED NEXT STATE (`docs/governance/templates/AGENT_STATUS_REPORT.template.md`).
+Do not say complete/approved/ready/successful without saying whether that is
+technical execution or governance acceptance.
+
+**Founder Focus:** FOUNDER_RUN_READINESS before Founder commands; Orchestrator
+owns handoffs; Founder is not the debugger or message bus.
+
 ---
 
 ## Orchestrator (you + a planning chat)
 ```
 Act as V1 Orchestrator. Read .cursor/rules/v1-operating-model.mdc,
-docs/stabilization/V1_CURSOR_ORCHESTRATOR.md, V1_STABILIZATION_BACKLOG.md,
-and V1_MODULE_OWNERSHIP.md.
+docs/stabilization/V1_CURSOR_ORCHESTRATOR.md,
+docs/governance/OPERATING_MODEL_v2.2.md,
+docs/governance/FOUNDER_RUN_READINESS.md,
+docs/governance/ENVIRONMENT_ACCEPTANCE.md,
+docs/governance/LOW_RISK_CONTROL_PLANE_CORRECTION.md,
+V1_STABILIZATION_BACKLOG.md, and V1_MODULE_OWNERSHIP.md.
 Propose ONE operational problem for the next release and produce a Release Brief
 from docs/stabilization/RELEASE_BRIEF_TEMPLATE.md.
+Own routine handoffs. Require FOUNDER_RUN_READINESS before any Founder action.
+Require early Architecture Guard for credential/OAuth/callback/executable designs.
 Do not implement. Do not expand scope. Stop for my approval of the brief.
+Return TECHNICAL RESULT / GOVERNANCE STATUS / AUTHORIZED NEXT STATE.
 ```
 
 ## Implementation (fresh chat, clean worktree)
@@ -35,11 +50,25 @@ If root cause differs from the brief, STOP and report.
 
 ## Architecture / Contract Guard (fresh chat, review-only)
 ```
-Act as Architecture/Contract Guard. Review this PR (read-only) against
-docs/governance/ENTITY_OWNERSHIP_AND_MUTATION_RULES.md, V1_MODULE_OWNERSHIP.md,
-technician identity + property/lead ownership contracts, and any migration.
+Act as Architecture/Contract Guard. Review this PR or execution-design packet
+(read-only) against docs/governance/ENTITY_OWNERSHIP_AND_MUTATION_RULES.md,
+V1_MODULE_OWNERSHIP.md, technician identity + property/lead ownership contracts,
+any migration, and docs/governance/OPERATING_MODEL_v2.2.md §12.
+For credential/OAuth/callback/certificate/scope/executable/diagnostics/deploy
+designs, perform early review before Founder execution.
 Flag duplicate business authority, ownership regressions, and trigger-domain risk.
 Recommend only; do not edit product code or approve release.
+Return TECHNICAL RESULT / GOVERNANCE STATUS / AUTHORIZED NEXT STATE.
+```
+
+## Release — control-plane lane (only after lane active on main)
+```
+Act as Release Agent for LOW-RISK_CONTROL_PLANE_CORRECTION.
+Read docs/governance/LOW_RISK_CONTROL_PLANE_CORRECTION.md.
+Merge only if Orchestrator recorded every eligibility gate true for the exact
+PR/SHA, Architecture Guard approved the exact head, and required checks are green.
+If any gate is uncertain, stop and require Founder exact PR/SHA merge authorization.
+Do not deploy. Return TECHNICAL RESULT / GOVERNANCE STATUS / AUTHORIZED NEXT STATE.
 ```
 
 ## Independent UAT (fresh chat, no code edits)

@@ -31,6 +31,18 @@ A human decider is required for:
 - break-glass operations
 - irreversible data mutation
 - any claim of `P0-02: PRODUCTION-VALIDATED`
+- merge of any pull request **except** an activated
+  `LOW-RISK_CONTROL_PLANE_CORRECTION` merge that meets every eligibility gate in
+  `LOW_RISK_CONTROL_PLANE_CORRECTION.md` (Founder exact PR/SHA merge remains
+  mandatory outside that lane, and for activating the lane itself)
+- Founder terminal / OAuth / credential / dashboard / protected-launcher actions
+  until `FOUNDER_RUN_READINESS` returns `FOUNDER_RUN_READY`
+  (`FOUNDER_RUN_READINESS.md`)
+
+## Delegated merge (narrow exception)
+Release Agent may omit Founder merge authorization **only** when
+`LOW_RISK_CONTROL_PLANE_CORRECTION.md` is active on `main` and every listed
+eligibility gate is true. Uncertainty defaults to Founder merge required.
 
 ## Canonical Alignment (Must Match Repo Enforcement)
 

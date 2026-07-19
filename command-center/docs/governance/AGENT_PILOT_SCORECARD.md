@@ -33,6 +33,21 @@ performance ritual. If maintaining it ever becomes a burden, simplify it.
 - repeated evidence requests (target: **0**)
 - Tier 1 releases completed **without** founder mechanics
 
+### Founder Focus process metrics (G2.3 pilot)
+- founder_commands_requested
+- founder_dashboard_actions_requested
+- founder_manual_relays_requested
+- failed_founder_runs
+- failures_caught_before_founder_execution
+- failures_first_discovered_by_founder
+- commands_requiring_correction_or_rerun
+- technical_successes_rejected_for_governance_reasons
+- architecture_guard_changes_requested_before_execution
+- architecture_guard_changes_requested_after_execution
+
+Objective: Founder involvement is limited to consent, consequential
+authorization, and business decisions — not zero involvement.
+
 ### Delivery
 - release cycle time (planning → completion)
 - defects caught **before merge**
@@ -61,6 +76,17 @@ founder_focus:
   technical_actions_assigned_to_founder: 0
   repeated_evidence_requests: 0
   tier1_releases_without_founder_mechanics: 0
+founder_focus_process:
+  founder_commands_requested: 0
+  founder_dashboard_actions_requested: 0
+  founder_manual_relays_requested: 0
+  failed_founder_runs: 0
+  failures_caught_before_founder_execution: 0
+  failures_first_discovered_by_founder: 0
+  commands_requiring_correction_or_rerun: 0
+  technical_successes_rejected_for_governance_reasons: 0
+  architecture_guard_changes_requested_before_execution: 0
+  architecture_guard_changes_requested_after_execution: 0
 delivery:
   release_cycle_time_hours_median: null
   defects_caught_before_merge: 0
