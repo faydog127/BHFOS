@@ -16,8 +16,9 @@
 - **Release ID / governance version:** `ML-P1` / `v2.2`
 - **Prior program:** `G2.3` — Stabilization Exit Review complete (minimum safe baseline); **closed, no reopen**
 - **Risk tier:** **Tier 3** (money-loop / financial domain) — this packet authorizes **planning docs only**
-- **Pinned baseline SHA:** `6bc8db4f46bb604c0a3e4c9631985e8314616a8d`
-- **PR and approved SHA:** `#64` @ `<exact head SHA at Founder merge auth — GitHub authoritative>` (base `origin/main` `6bc8db4f46bb604c0a3e4c9631985e8314616a8d`)
+- **Pinned G2.3 exit baseline SHA:** `6bc8db4f46bb604c0a3e4c9631985e8314616a8d`
+- **PR and approved SHA:** `#64` @ head `43c776eaf226fb4c0d9a95da18c6b77a0044f711` → merge `dd7bbe3544f9f8ec016330c5f29b9d8f95f02b40`
+- **Planning correction:** Required before implementation — see `ML-P1_PLANNING_CORRECTION_DECISION_PACKET.md`
 
 ## Operational problem
 G2.3 reached a minimum safe diagnostics baseline, but the Money Loop remains

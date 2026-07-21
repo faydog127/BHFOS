@@ -20,10 +20,12 @@
 | Release name | **ML-P1 — Money Loop Phase 1 (Planning / Lock Focus)** |
 | Governance version pinned | **BHFOS Operating Model v2.2** |
 | Release type | Planning / lock-boundary ratification (docs-first) |
-| Base `origin/main` SHA (pinned baseline) | `6bc8db4f46bb604c0a3e4c9631985e8314616a8d` |
+| G2.3 exit baseline SHA | `6bc8db4f46bb604c0a3e4c9631985e8314616a8d` |
+| ML-P1 planning merge (PR #64) | head `43c776eaf226fb4c0d9a95da18c6b77a0044f711` → merge `dd7bbe3544f9f8ec016330c5f29b9d8f95f02b40` |
+| Planning correction | Required before implementation — see `ML-P1_PLANNING_CORRECTION_DECISION_PACKET.md` |
 | G2.3 exit | **Complete** — minimum safe baseline (B2D Named Tunnel + B3 read-only adapter); no reopen |
-| Planning worktree | `F:\Dev\BHFOS-ml-p1-plan` |
-| Planning branch | `ml/p1-planning` |
+| Planning worktree (initial) | `F:\Dev\BHFOS-ml-p1-plan` / `ml/p1-planning` |
+| Planning correction worktree | `F:\Dev\BHFOS-ml-p1-plan-correction` / `ml/p1-planning-correction` |
 | Risk tier | **Tier 3** (money-loop / financial domain) — planning ratification only under this brief |
 | Application deployment required | **No** |
 | Migration execution required | **No** |
@@ -97,8 +99,8 @@ implementation. This planning brief / packet does **not** execute them.
    surface (smoke, automation, manual UX, snapshots/summary) so A-LOCK is
    documentary-real, not implied by local GREEN alone.
 2. **DR ratification or explicit defer** —
-   - `DR-2026-03-18_job-state-doctrine` (ratify live two-layer model as A-equivalent, or record alternate),
-   - `DR-2026-03-18_send-estimate-scope` (**include in A-LOCK** or **explicitly defer** out of implicit scope).
+   - `DR-2026-03-18_job-state-doctrine` → planning correction **recommends RATIFY** (two-layer model); see `.RESOLUTION.md`,
+   - `DR-2026-03-18_send-estimate-scope` → planning correction **recommends EXPLICIT DEFER** from P1 lock / implicit A-LOCK; see `.RESOLUTION.md`.
 3. **Quote→pay lock bound** — Phase 1 implementation (when authorized) stays
    inside quote→accept→job→invoice→payment→receipt; no silent expansion into
    Pillar 2–4 or TIS.
@@ -141,14 +143,25 @@ These items must not expand Phase 1 into a diagnostics reopen.
 
 ---
 
-## 8. Planning artifacts (this PR)
+## 8. Planning artifacts
 
 | Artifact | Path | Role |
 | --- | --- | --- |
 | This brief | `command-center/docs/stabilization/releases/ML-P1_BRIEF.md` | Planning / lock boundary |
-| Decision Packet | `command-center/docs/governance/decisions/ML-P1_DECISION_PACKET.md` | Tier 3 planning ratification |
+| Decision Packet (initial) | `command-center/docs/governance/decisions/ML-P1_DECISION_PACKET.md` | Tier 3 planning ratification (PR #64) |
+| Planning correction packet | `command-center/docs/governance/decisions/ML-P1_PLANNING_CORRECTION_DECISION_PACKET.md` | Review disposition corrections |
+| Known-Issue Register | `command-center/docs/stabilization/releases/ML-P1_KNOWN_ISSUE_REGISTER.md` | Issues + deferral rationale |
+| KPI Scorecard | `command-center/docs/stabilization/releases/ML-P1_KPI_SCORECARD.md` | Baseline-first KPIs |
+| Blocking Acceptance Gates | `command-center/docs/stabilization/releases/ML-P1_BLOCKING_ACCEPTANCE_GATES.md` | USABLE gates |
+| Money-State Design Contract | `command-center/docs/stabilization/releases/ML-P1_MONEY_STATE_DESIGN_CONTRACT.md` | Minimum design rules |
 | G2.3 Baton close | `command-center/docs/governance/RELEASE_BATON.g2-3.yaml` | Close G2.3; point next to ML-P1 |
 | ML-P1 Baton | `command-center/docs/governance/RELEASE_BATON.ml-p1.yaml` | Active baton; `status: planning_only` |
+
+### 8.1 Independent review disposition
+
+**LIMITED PLANNING CORRECTIONS REQUIRED BEFORE IMPLEMENTATION** — accepted.
+Implementation Decision Packets are ineligible until the planning-correction
+docs are merged. Correction docs still do **not** authorize implementation.
 
 ---
 
