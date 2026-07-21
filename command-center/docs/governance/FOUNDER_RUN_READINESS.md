@@ -37,6 +37,23 @@ Run FOUNDER_RUN_READINESS before asking the Founder to:
 - interact with production infrastructure
 - perform any environment-specific manual action
 
+## When **not** to ask the Founder (Delegated Authority)
+
+Per [`FOUNDER_DELEGATED_AUTHORITY_POLICY.md`](./FOUNDER_DELEGATED_AUTHORITY_POLICY.md),
+do **not** invent a Founder manual action for Category A/B work, including:
+
+- read-only repository / PR / SHA verification
+- lint, build, tests, local disposable environments
+- approved read-only hosted **metadata** checks (RLS, policies, grants, health)
+- drafting Decision Packets, baton updates, review dispatch
+- preparing (not applying) migrations or rollback scripts
+
+If an approved read-only path is **unavailable**, report
+`LIVE_CHECK_UNAVAILABLE` (or equivalent) and escalate for **capability
+provisioning** — do not default to “Founder, please run this SQL/dashboard step”
+for routine metadata. Standing authority never authorizes unsafe bypass tools
+(e.g. banned `execute-sql`).
+
 ## Required readiness fields
 
 | # | Field | Machine-checkable |

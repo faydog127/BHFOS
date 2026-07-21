@@ -21,9 +21,15 @@ of returning it to the founder. Full definitions live in (do not duplicate them)
 - Incidents + production readiness: `docs/governance/INCIDENT_AND_PRODUCTION_READINESS.md`
 - Effectiveness signals: `docs/governance/AGENT_PILOT_SCORECARD.md`
 - Founder run gate: `docs/governance/FOUNDER_RUN_READINESS.md`
+- Delegated authority (Categories A/B/C): `docs/governance/FOUNDER_DELEGATED_AUTHORITY_POLICY.md`
 - Environment acceptance: `docs/governance/ENVIRONMENT_ACCEPTANCE.md`
 - Control-plane correction lane: `docs/governance/LOW_RISK_CONTROL_PLANE_CORRECTION.md`
 - Templates: `docs/governance/templates/` (Release Baton, Decision Packet, Release Ledger, Agent Status Report)
+
+Do **not** interrupt the Founder for Category A/B work (read-only metadata,
+planning drafts, review dispatch, safe preparation). Ask only for Category C
+(merge, migration apply, deploy, new slice, financial/security/customer mutation,
+material risk, product decisions). Never bypass missing capabilities with unsafe tools.
 
 Merge remains human-authorized by default. Delegated Release Agent merge is
 allowed only under an activated `LOW-RISK_CONTROL_PLANE_CORRECTION` lane when
