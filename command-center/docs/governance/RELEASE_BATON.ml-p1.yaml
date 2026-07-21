@@ -3,43 +3,65 @@
 # Status: planning_only. No implementation/deploy/migration authorized by this baton.
 
 release_id: "ML-P1"
-current_phase: "planning"
+current_phase: "planning_correction"
 governance_version: "v2.2"
 risk_tier: "Tier 3"
 status: "planning_only"
 current_owner: "Orchestrator"
 release_brief_path: "command-center/docs/stabilization/releases/ML-P1_BRIEF.md"
 decision_packet_path: "command-center/docs/governance/decisions/ML-P1_DECISION_PACKET.md"
+planning_correction_packet_path: "command-center/docs/governance/decisions/ML-P1_PLANNING_CORRECTION_DECISION_PACKET.md"
+known_issue_register_path: "command-center/docs/stabilization/releases/ML-P1_KNOWN_ISSUE_REGISTER.md"
+kpi_scorecard_path: "command-center/docs/stabilization/releases/ML-P1_KPI_SCORECARD.md"
+blocking_gates_path: "command-center/docs/stabilization/releases/ML-P1_BLOCKING_ACCEPTANCE_GATES.md"
+money_state_contract_path: "command-center/docs/stabilization/releases/ML-P1_MONEY_STATE_DESIGN_CONTRACT.md"
 
 prior_release: "G2.3"
 prior_release_exit: "complete_minimum_safe_baseline"
 g2_3_reopen: "forbidden"
+g2_3_exit_baseline_sha: "6bc8db4f46bb604c0a3e4c9631985e8314616a8d"
 baseline_sha: "6bc8db4f46bb604c0a3e4c9631985e8314616a8d"
-base_sha: "6bc8db4f46bb604c0a3e4c9631985e8314616a8d"
-pr_number: 64
-head_sha: ""  # GitHub authoritative — record exact head at Founder merge auth
 
-check_status: "pending_ci"
+# PR #64 planning docs (merged)
+pr_number_planning: 64
+planning_head_sha: "43c776eaf226fb4c0d9a95da18c6b77a0044f711"
+planning_merge_sha: "dd7bbe3544f9f8ec016330c5f29b9d8f95f02b40"
+base_sha: "dd7bbe3544f9f8ec016330c5f29b9d8f95f02b40"
+
+# Planning correction PR (docs only) — fill head at Founder merge auth
+pr_number_correction: null
+correction_head_sha: ""
+correction_merge_sha: ""
+
+review_disposition: "LIMITED_PLANNING_CORRECTIONS_REQUIRED_BEFORE_IMPLEMENTATION"
+review_disposition_accepted: true
+
+check_status: "pending_ci_on_correction_pr"
 architecture_guard_status: "not_required_for_planning_docs"
 uat_status: "NOT_APPLICABLE"
-owner_checkpoint: "planning_transition_authorized"
+owner_checkpoint: "planning_correction_docs_pending_merge"
 
-merge_authorization: "none"
+merge_authorization_planning: "granted — PR #64 merged dd7bbe3544f9f8ec016330c5f29b9d8f95f02b40"
+merge_authorization_correction: "none — awaiting Founder exact head-SHA auth"
 deployment_authorization: "none"
 migration_authorization: "none"
 production_test_authorization: "none"
-implementation_authorization: "none — separate Founder auth required"
+implementation_authorization: "none — separate Founder auth required after correction merge"
 
 canonical_loop: "lead → quote → accept → job → invoice → payment → receipt"
-phase_1_focus: "Appendix A evidence formalization; DR ratify/defer (job-state, send-estimate); quote→pay lock bound"
+phase_1_focus: "Appendix A evidence formalization; quote→pay lock; gates + register + KPIs + money-state contract"
+
+dr_resolutions:
+  job_state_doctrine: "recommended_ratify_two_layer — pending Founder yes on correction packet"
+  send_estimate_scope: "recommended_explicit_defer_from_p1_lock — pending Founder yes on correction packet"
 
 carry_forward_hygiene:
   - "Release Baton refresh (G2.3 closed → ML-P1 planning_only)"
-  - "Windows node adapter exit anomaly after successful HTTP (diagnostics hygiene; no B3 re-run required)"
+  - "Windows node adapter exit anomaly after successful HTTP (diagnostics hygiene; KI-17)"
 
 blockers:
-  - "Founder merge auth required for planning-docs PR (exact PR + head SHA)"
-  - "Implementation not authorized until separate Founder Decision Packet"
+  - "Founder merge auth required for planning-correction PR (exact PR + head SHA)"
+  - "Implementation not authorized until separate Founder Decision Packet after correction merge"
 
-next_phase: "Founder merge of planning docs → separate auth for Phase 1 implementation slices"
+next_phase: "Founder merge of planning correction → eligible to draft implementation Decision Packet (still requires separate auth)"
 next_owner: "Founder (merge auth) → Orchestrator"
