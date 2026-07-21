@@ -1,8 +1,8 @@
 # ML-P1 Minimum Money-State Design Contract
 
-> Planning correction artifact. **Does not authorize implementation or live pay.**
-> Defines the minimum rules any Phase 1 implementation slice must satisfy.
-> Not a full enterprise FSM or payment platform.
+> Planning correction artifact. **Does not authorize implementation by itself.**
+> Stripe payment processing is **in V1** (slice **S5b**). Autonomous follow-up is
+> **in V1** (slice **S6**). See `BHFOS_V1_V2_PRODUCT_BOUNDARY.md` and roadmap.
 
 Canonical loop: **lead → quote → accept → job (×1) → invoice → payment → receipt/close**.
 

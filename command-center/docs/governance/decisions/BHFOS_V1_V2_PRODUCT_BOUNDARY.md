@@ -15,9 +15,15 @@
 | Operator | **The Vent Guys (TVG)** only |
 | Deployment | One operating company on the current V1 runtime |
 | Money loop | Lead → quote → accept → job → invoice → **Stripe payment** → receipt/close |
-| Follow-up | **Autonomous** customer/revenue follow-up required (approved rules; not open-ended AI) |
-| Workflow engine | Subject to separate V1 analysis — **not** pre-classified as non-goal |
-| Shared multi-tenancy | **Not applicable** |
+| Follow-up | **Autonomous** customer/revenue follow-up required (**S6**) — approved rules; not open-ended AI |
+| Workflow engine | **Founder-approved:** lightweight internal framework on task/event/runner/escalation spine (**S6**). **No** visual builder or arbitrary admin workflow language in V1 |
+| Stripe | **In V1** — operational slice **S5b** |
+| Shared multi-tenancy | **Removed** (V1 and V2) |
+
+### Final V1 slice map
+
+S1 draft foundation → S2 issue/approve → S3 quote→job → S4 job execution → S5 invoice → **S5b Stripe** → **S6 autonomous follow-up** → **S7 UAT / V1 freeze**.
+
 
 ### V1 security / integrity controls (retain)
 
@@ -167,5 +173,6 @@ ops. Automate only what blocks repeatable delivery.
 - Internal role enforcement remains required.  
 - **Stripe remains in V1.**  
 - **Autonomous follow-up remains in V1.**  
-- Workflow architecture remains subject to the separate V1 analysis.  
+- Workflow architecture remains **Founder-approved lightweight framework** (S6); no visual builder in V1.  
 - Current Money Loop work stays focused on **TVG operational value.**
+- **S2** remains issue/approve only — does **not** implement Stripe or autonomous follow-up.

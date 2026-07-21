@@ -1,67 +1,68 @@
 # ML-P1 Implementation Roadmap
 
-> **Authoritative Phase 1 implementation sequence.** One coordinated planning pass.
-> Baseline `origin/main`: `8d8ac06b7e64f2b8e92b04c76d7d7094c631831d`
+> **Authoritative V1 / Phase 1 implementation sequence.**
+> Baseline after Slice 1 merge: `2b62bf35dd2cc32ac30808ba36b3ad93ff1547ab`
 >
 > Binds: Known-Issue Register, KPI Scorecard, Blocking Acceptance Gates,
-> Money-State Design Contract, job-state doctrine (ratified), send-estimate deferral.
+> Money-State Design Contract, job-state doctrine (ratified),
+> `BHFOS_V1_V2_PRODUCT_BOUNDARY.md`.
 >
 > **This document does not authorize implementation.** Each slice requires a
 > separate Founder Decision Packet + exact head-SHA authorization.
 >
 > **Anti-delay:** Do not reopen full planning before each slice unless evidence
-> invalidates an assumption, a critical known issue changes, a platform constraint
-> changes, or a material security/data/financial/usability risk is discovered.
-> Otherwise prepare the next slice Decision Packet directly after prior slice acceptance.
+> invalidates an assumption. Otherwise prepare the next slice Decision Packet
+> directly after prior slice acceptance.
 
 ---
 
-## 0. Phase 1 end-state
+## 0. V1 end-state
 
 ```
 Create/find customer
-  → create canonical quote (draft)
-  → issue quote
-  → revise or approve quote
-  → convert approved quote → job (×1)
+  → draft canonical quote
+  → issue / revise / approve quote
+  → approved quote → job (×1)
   → execute and complete job
-  → generate invoice (draft → issued)
-  → office + mobile end-to-end acceptance
+  → invoice (draft → issued)
+  → Stripe payment (full/partial/refund/void paths)
+  → autonomous follow-up (quote→pay→review)
+  → office + mobile end-to-end UAT → V1 freeze / USABLE
 ```
 
-**In Phase 1 / V1 freeze:** Live **Stripe payment processing is in scope for V1**
-(see `BHFOS_V1_V2_PRODUCT_BOUNDARY.md`). Money Loop **slices S1–S4** still stop
-before payment execution; payment hardening and autonomous follow-up are scheduled
-in payment/follow-up oriented work — not treated as “V2-only.”
+**Product boundary:** V1 = TVG single-company. V2 = dedicated white-label instance
+per company. Shared multi-tenancy **removed**. Stripe + autonomous follow-up
+**in V1**. Workflow = **lightweight internal framework** (Founder-approved);
+no visual builder / arbitrary admin workflow language in V1.
 
-**USABLE** requires gates G-01–G-10 (Blocking Acceptance Gates). CI green ≠ USABLE.
+**USABLE** requires gates G-01–G-10. CI green ≠ USABLE.
 
 ---
 
-## 1. Full slice map
+## 1. Full slice map (final)
 
 | Slice | Name | Stops before |
 | --- | --- | --- |
-| **S1** | Customer + canonical quote foundation | Approval, job, invoice, pay |
-| **S2** | Quote issue, revision, approval | Job conversion, invoice, pay |
-| **S3** | Approved quote → job | Job field execution beyond init, invoice, pay |
+| **S1** | Customer + canonical draft quote foundation | Issue/approve, job, invoice, pay, follow-up product |
+| **S2** | Quote issue, revision, approval, rejection, expiration | Job, invoice, Stripe, autonomous follow-up product |
+| **S3** | Approved quote → job | Field execution beyond init, invoice, pay |
 | **S4** | Job execution and completion | Invoice, pay |
-| **S5** | Completed job → invoice | Live pay |
-| **S6** | End-to-end UAT + Phase 1 acceptance | Post-P1 scope |
+| **S5** | Completed job → invoice | Stripe execution (S5b) |
+| **S5b** | Stripe payment operations | Autonomous follow-up product build-out (S6) |
+| **S6** | Autonomous follow-up and automation | Claiming V1 freeze without UAT |
+| **S7** | End-to-end UAT and V1 freeze | Post-V1 scope |
 
 ### Dependency graph
 
 ```
-S1 ──► S2 ──► S3 ──► S4 ──► S5 ──► S6
- │      │      │      │      │
- │      │      │      │      └── payment readiness (design only)
- │      │      │      └── job-state doctrine (ratified two-layer)
- │      │      └── KI-16 dup job / idempotent accept
- │      └── immutability + approval audit
- └── KI-01 canonical quotes; KI-02..04 identity/address; tenant
+S1 → S2 → S3 → S4 → S5 → S5b → S6 → S7
+                      │      │     │
+                      │      │     └── lightweight workflow framework + journeys
+                      │      └── canonical paid writer + refunds/voids
+                      └── invoice immutability / lineage
 ```
 
-S6 depends on S1–S5 acceptance evidence. No parallel Tier-3 money-state slices without Architecture Guard exception.
+S7 depends on S1–S6 acceptance evidence. No parallel Tier-3 money-state slices without Architecture Guard exception. **S2 must not implement Stripe or autonomous follow-up.**
 
 ---
 
@@ -69,25 +70,25 @@ S6 depends on S1–S5 acceptance evidence. No parallel Tier-3 money-state slices
 
 | KI | Disposition |
 | --- | --- |
-| KI-01 Dual estimates/quotes | **Required before S1** (path policy); **fixed during S1** (freeze legacy create on P1 path); full UI purge may continue S2 if needed |
-| KI-02 Customer/property/address lineage | **Resolved in S1** (P1 authority rules); B-023 rewrite **explicitly deferred** |
-| KI-03 UUID↔bigint | **Required before S1** (document safe join; no name linking); unification **explicitly deferred** |
-| KI-04 Address field mismatch | **Fixed during S1** (correct `address_line_1` mapping on P1 path) |
-| KI-05 Company context / money-writer | **V1 every slice:** authn + role + TVG context DENY; money-writer inventory by payment slice. **Shared multi-tenant / cross-tenant → NOT APPLICABLE** |
-| KI-06 payment_status divergence | **Designed in S4/S5** (invoice authority); **fixed during S5** |
-| KI-07 Alternate paid writers | **Proven by S5** (inventory); no paid mutation in S1–S4 |
-| KI-08 Admin auth fallback | **Fixed during each slice** touching money-state endpoints; **blocking for S1+** on new endpoints |
-| KI-09 Technician identity | **Must design S3/S4**; full auth FK **deferred**; actor on completion **S4** |
-| KI-10 tenant_id gaps on properties/techs | **Enforce via money entities S1+**; column backfill **deferred** |
-| KI-11 Follow-up fragility | **Deferred** rich UX; **S5/S6** visible failure / no silent break on P1 path |
-| KI-12 Incomplete event doctrine | **Fixed during each slice** for transitions introduced; **100% by S6** |
-| KI-13 Mobile / poor-connectivity | **S1+** idempotent submit; full offline **deferred**; proven **S4/S6** |
-| KI-14 Notes escape | **Measured S1+**; **blocking S6** (0 escape on gate trials) |
-| KI-15 Manual re-entry | **Must design S1–S5**; **0 on path by S5** |
-| KI-16 Duplicate JobCreated | **Fixed during S3** (dup jobs blocking); event hygiene **S3/S6** |
-| KI-17 Node adapter exit | **Hygiene / N/A** to money-loop product — **rejected as P1 product gate** |
-| Send-estimate | **Explicitly deferred** (not in any slice) |
-| Job-state doctrine | **Ratified**; applied **S3–S4** |
+| KI-01 Dual estimates/quotes | S1 path + R-S1-01 server DENY before S2; remainder purge as needed |
+| KI-02 Identity/address | S1; B-023 deferred |
+| KI-03 UUID↔bigint | Documented pattern S1; unification deferred |
+| KI-04 Address fields | S1 |
+| KI-05 Company context / money-writer | Every slice authn/role/context; **G-09 / KI-07 proven in S5b**; cross-tenant **N/A** |
+| KI-06 payment_status divergence | Design S4/S5; fix S5/S5b |
+| KI-07 Alternate paid writers | **Proven in S5b** |
+| KI-08 Admin auth fallback | Each money-state slice |
+| KI-09 Technician identity | S3/S4 |
+| KI-10 tenant_id gaps | Enforce via money entities; backfill deferred |
+| KI-11 Follow-up fragility | **S6** (framework + journeys); no silent fail |
+| KI-12 Event doctrine | Each slice; 100% by S7 |
+| KI-13 Idempotent / connectivity | S1+; proven S4/S5b/S6/S7 |
+| KI-14 Notes escape | Measured S1+; **0 on S7 gate trials** |
+| KI-15 Manual re-entry | Design S1–S5; 0 on path by S5 |
+| KI-16 Dup JobCreated | S3 |
+| KI-17 Node adapter | N/A product gate |
+| Send-estimate product | Deferred unless packet includes |
+| Job-state doctrine | Ratified; S3–S4 |
 
 ---
 
@@ -95,27 +96,29 @@ S6 depends on S1–S5 acceptance evidence. No parallel Tier-3 money-state slices
 
 | Slice | Product | UX/Field | Data | Security | Architecture | Financial | Release/Prod |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| S1 | Required | Required | Required | Required | Required (Tier 3 path) | Light (no money settle) | Only if deploy |
+| S1 | Required | Required | Required | Required | Required | Light | Only if deploy |
 | S2 | Required | Required | Required | Required | Required | Required | Only if deploy |
 | S3 | Required | Light | Required | Required | Required | Required | Only if deploy |
 | S4 | Required | Required | Required | Required | Required | Light | Only if deploy |
 | S5 | Required | Required | Required | Required | Required | Required | Only if deploy |
-| S6 | Required | Required | Required | Required | Required | Required | As needed for UAT env |
+| S5b | Required | Light | Required | Required | Required | Required | Only if deploy |
+| S6 | Required | Required | Required | Required | Required | Light | Only if deploy |
+| S7 | Required | Required | Required | Required | Required | Required | As needed for UAT env |
 
 ---
 
 ## 4. KPI and instrumentation plan
 
-| Slice | Instrument now | Gates exercised |
+| Slice | Instrument now | Gates |
 | --- | --- | --- |
-| S1 | Customer find/create time; estimate create time; taps; Notes escape diary; dup customer attempts; authz deny count; audit completeness on quote draft create | G-02 (slice events), G-03 **V1** (role/authn/context), G-06 partial, G-07 baseline start |
-| S2 | Approval rate inputs; abandoned; audit on issue/approve/revise; unauthorized **role** attempts | G-02, G-03 **V1** (role/authn), G-05 (issue/approve atomicity) |
-| S3 | Approval→job time; dup job under retry; lineage quote→job; partial tx under failure | G-01 partial, G-04 jobs, G-05, G-02 |
-| S4 | Job complete time; evidence completeness; Notes escape; failed transitions; tech help requests | G-06, G-02, G-13/14 metrics |
-| S5 | Completion→invoice time; lineage 100%; dup invoice retry; void reason coverage; writer inventory | G-01, G-04 invoices, G-05, G-09 |
-| S6 | Full scorecard baseline lock; all G-01–G-10; task-time caps published | **All blocking gates** |
-
-**Baseline-first:** no invented numeric task-time targets until S1–S6 measurement window allows lock (G-07).
+| S1 | Customer/draft times; taps; escape diary; dup hits; authz denies; audit | G-02, G-03, G-06 partial, G-07 start |
+| S2 | Issue/approve/revise; unauthorized role; abandoned | G-02, G-03, G-05 |
+| S3 | Approval→job; dup job; lineage; partial tx | G-01 partial, G-04 jobs, G-05, G-02 |
+| S4 | Complete time; evidence; Notes escape; failed transitions | G-06, G-02, G-05 |
+| S5 | Complete→invoice; lineage; dup invoice; void reasons | G-01, G-04 invoices, G-05, G-02 |
+| S5b | Pay conversion; webhook/idempotent hits; fail recovery; refund/void; recon exceptions; **G-09** | G-02, G-05, G-09 |
+| S6 | Automation failure rate; chase conversion; time-to-first-follow-up; opt-out; escape | G-02, G-06 progress, KI-11 |
+| S7 | Full scorecard lock; all G-01–G-10; task-time caps | **All blocking gates** |
 
 ---
 
@@ -123,59 +126,54 @@ S6 depends on S1–S5 acceptance evidence. No parallel Tier-3 money-state slices
 
 | Slice | Migration expectation |
 | --- | --- |
-| S1 | Prefer **no** migration if enforceable in app + RLS; if quote state/audit tables missing columns, **separate migration auth** in S1 packet amendment |
-| S2 | Likely schema/constraints for quote states, version immutability, approval records — **Dedicated Founder migration auth** if required |
-| S3 | Idempotency keys / unique (quote_version→job) — migration if needed + auth |
-| S4 | Job status columns if missing for ratified two-layer model — migration if needed + auth |
-| S5 | Invoice immutability / numbering / lineage columns — migration if needed + auth |
-| S6 | None preferred (verification only) |
+| S1 | Prefer none (done); R-S1-01 estimates INSERT DENY = **before S2** separate auth |
+| S2 | Versions/approvals/idempotency UNIQUE — separate auth if needed |
+| S3 | Accept→job idempotency unique — if needed + auth |
+| S4 | Job status columns if needed + auth |
+| S5 | Invoice immutability/numbering/lineage — if needed + auth |
+| S5b | Prefer none if existing Stripe schema suffices; additive only + auth |
+| S6 | Framework tables if needed (triggers/runs/failures) — additive + auth |
+| S7 | None preferred (verification) |
 
-**Rule:** No migration in a slice without explicit Founder migration line in that slice’s Decision Packet. Prefer additive, reversible migrations.
+**Rule:** No migration without explicit Founder migration line in that slice’s packet.
 
 ---
 
 ## 6. UX and field acceptance plan
 
-- Mobile-first for customer find/create, quote entry (S1), approval surfaces (S2), job execution (S4), invoice review (S5).
-- Housecall Pro = **workflow benchmark only** (states/cadence), not UI copy.
-- P1 path must be **easier than Notes** (G-06).
-- Real-device Founder + technician trials at S4 and mandatory at S6; S1/S2 office+mobile smoke.
-- Escape-to-Notes diary from S1; zero on S6 gate trials.
+- Mobile-first S1–S5; pay UX in S5b; follow-up surfaces in S6.
+- Housecall Pro = workflow **benchmark** only.
+- Easier than Notes (G-06); real-device trials S4 + mandatory S7.
+- Escape diary from S1; **0** on S7 gate trials.
 
 ---
 
 ## 7. Security and authorization plan
 
-- Deny-by-default; least privilege; **internal role** matrix from Money-State §11.
-- **V1:** single-company TVG — require valid TVG context on money writes.
-- **V2 product model:** dedicated white-label instance per company (`BHFOS_V1_V2_PRODUCT_BOUNDARY.md`). **Shared multi-tenancy removed** from V2 scope.
-- No UI-only auth; V1 negatives: unauthorized **role**, unauthenticated access (G-03). Cross-tenant suites **N/A**.
-- Secrets never in logs; audit events without token/PII payloads.
-- Single money-writer proven by payment-oriented slice (G-09); Stripe **in V1**.
-- Autonomous follow-up **in V1** (separate from this security bullet list; see product boundary).
+- Deny-by-default; internal role matrix §11.
+- Valid TVG company context on money writes.
+- V2 = dedicated instances; shared multi-tenancy **removed**.
+- G-03 = authn/role/context negatives; cross-tenant **N/A**.
+- Canonical paid writer proven **S5b** (G-09).
+- Automation enable/disable + failure queue **S6** (no silent fail).
 
 ---
 
 ## 8. Data and lineage plan
 
 ```
-lead (authoritative customer for P1)
-  └─ service address (address_line_1 mapping)
-       └─ quote + quote_version + quote_items
-            └─ job (source_quote_id + version) + job scope lines
-                 └─ invoice + invoice_items (lineage ids)
+lead → service address → quote/version/items → job/scope → invoice/items
+                                                      └─ Stripe settlement (S5b)
+follow-up framework (S6) observes money/job/appointment events
 ```
-
-- No name-based linking (KI-03).
-- UUID↔bigint: documented opaque/safe pattern only; no unification migration in P1 unless separately authorized as exception.
 
 ---
 
 ## 9. Financial-control plan
 
-- S2: issued/approved immutability; approval amount+version.
-- S5: issued invoice immutability; void/correction reason codes; reconciliation-ready fields.
-- Payment readiness (partials, webhooks, idempotent intents) designed in S5; **not executed**.
+- S2: issued/approved immutability.
+- S5: issued invoice immutability; void reason codes.
+- **S5b:** Stripe initiation/status/webhooks/idempotency/fail recovery/recon/**full+partial refunds**/unpaid void behavior/audit/comms/escalation/**one paid writer**.
 - No alternate paid writers.
 
 ---
@@ -185,125 +183,118 @@ lead (authoritative customer for P1)
 | Level | Action |
 | --- | --- |
 | Code | `git revert` slice PR |
-| Migration | Expand/contract or reverse migration per packet; never destructive without separate auth |
-| Partial failure | Atomic units per Money-State Contract §14; visible error; safe retry |
-| Exceptions | Owned queue by S5/S6; no silent automation failure on P1 path |
+| Migration | Expand/contract per packet |
+| Partial failure | Atomic units §14; visible error; safe retry |
+| Exceptions | Owned queue by **S5b/S6**; no silent automation failure |
 
 ---
 
-## 11. Slice definitions (complete)
+## 11. Lightweight workflow framework (V1 — Founder-approved)
 
-### SLICE 1 — Customer and canonical quote foundation
+Built on existing `crm_tasks` / events / runners / escalation spine.
+
+| Capability | V1 |
+| --- | --- |
+| Shared trigger model | **Required** |
+| Controlled conditions (code/policy, not free-form) | **Required** |
+| Actions (email/SMS/task/event) | **Required** |
+| Delays and schedules | **Required** |
+| Bounded retry policy | **Required** |
+| Idempotency | **Required** |
+| Audit events | **Required** |
+| Failure queue | **Required** |
+| Exception ownership | **Required** |
+| Enable/disable controls | **Required** |
+| Operational visibility | **Required** |
+| Visual workflow builder | **Not in V1** |
+| Arbitrary admin-defined conditions | **Not in V1** |
+| Free-form workflow scripting | **Not in V1** |
+| Shared multi-tenant workflow configuration | **N/A** |
+
+Implemented primarily in **S6**; earlier slices may emit events/tasks compatible with the framework.
+
+---
+
+## 12. Slice definitions
+
+### S1 — Customer + canonical draft quote foundation
+
+*(Merged — PR #67.)* Draft `quotes` only; app estimates DENY; TVG context; audit; soft idempotency. Stop before issue/approve. **R-S1-01** server estimates INSERT DENY remains prerequisite before S2 coding.
+
+### S2 — Quote issue, revision, approval, rejection, expiration
 
 | Field | Content |
 | --- | --- |
-| Business objective | Office/tech can find or create customer, select service address, create **draft** canonical quote with line items on `quotes` only |
-| Roles | Office, Manager, Admin; Technician per policy (create draft if allowed) |
-| Exact scope | Authoritative lead/customer identity for P1; service address selection; duplicate detection (warn/block); canonical `quotes` + line items; draft only; stable IDs; tenant enforcement; role authz; initial audit events; duplicate-submit protection; mobile-first entry; KPI instrumentation for S1 |
-| Non-scope | Issue/approve/reject/expire; job; invoice; live pay; send-estimate; estimates table writes; property schema unification; TIS; G2.3 |
-| Entities | `leads`/`contacts` as used today for customer; service address fields; `quotes`, `quote_items`; tenant; audit/event store |
-| KI addressed | KI-01 (path), KI-02, KI-03 (pattern), KI-04, KI-05/08 (tenant/auth on new endpoints), KI-10 (via entities), KI-12 (draft events), KI-13/14/15 (start) |
-| KI deferred | KI-03 unification, B-023, send-estimate, KI-17, KI-06/07/09 completion, KI-16 |
-| Dependencies | Planning correction merged (`8d8ac06…`) |
-| Migration | Prefer none; if required → explicit auth in S1 packet |
-| Authz | Server-side create/update draft quote; tenant required |
-| UX | Mobile-first find/create customer + draft quote; fewer taps; no Notes required for draft |
-| Audit | quote.draft_created / line_item events with minimum fields |
-| Idempotency | Duplicate submit → same draft quote id |
-| Failure | No orphan quote without tenant/customer; rollback create |
-| KPI | Time find/create customer; time create draft; taps; escape diary; tenant denies |
-| Acceptance | Draft quote on `quotes` only; legacy estimates create blocked on P1 path; tenant negatives pass; audit present; mobile smoke |
-| Blocking gates | G-02 (slice), G-03 **V1** (role/authn/context), G-08 for S1 critical KIs, start G-07 baseline |
-| Reviewers | Product, UX/Field, Data, Security, Architecture |
-| Branch/worktree | See Slice 1 Decision Packet |
-| Evidence | Screenshots/IDs (no secrets); test log; KI checklist |
-| Stop | Before issue/approve |
-| Next slice criteria | S1 Founder acceptance → prepare S2 Decision Packet (no full replan) |
-
-### SLICE 2 — Quote issue, revision, approval
-
-| Field | Content |
-| --- | --- |
-| Business objective | Issue immutable quote versions; revise; approve/reject/expire with full approval audit |
-| Roles | Office/Manager issue; Customer approve via designated method; Manager override+reason |
-| Scope | States draft/issued/approved/rejected/expired/revised; immutability; approval actor/method/ts/amount/version; revision/expiration; partial-approval **policy** (default: whole-quote approve unless packet amends); cancel/reject reasons; idempotent approve; server authz; audit; mobile + customer-facing accept behavior |
-| Non-scope | Job conversion; invoice; pay; send-estimate |
-| Entities | Quote versions, approval records, state machine |
-| KI | KI-01 remainder; KI-12; KI-08; KI-15 |
-| Deferred | send-estimate; job |
-| Migration | Likely state/version/approval tables — separate auth if needed |
-| Gates | G-02, G-03 **V1** (role/authn), G-05 on issue/approve |
+| Scope | Issue/revise/approve/reject/expire; immutability; approval audit; server **role** authz; idempotency (incl. draft UNIQUE R-S1-02); mobile + designated customer accept |
+| Non-scope | Job; invoice; **Stripe**; **autonomous follow-up product**; send-estimate; shared multi-tenancy |
+| Gates | G-02, G-03, G-05 |
 | Stop | Before accept→job |
-| Next | S2 accepted → S3 packet |
+| Branch | `ml/p1-s2-quote-issue-approval` · `F:\Dev\BHFOS-ml-p1-s2` |
 
-### SLICE 3 — Approved quote → job
+### S3 — Approved quote → job
 
-| Field | Content |
-| --- | --- |
-| Business objective | One idempotent job from approved quote version with lineage |
-| Roles | System via accept; office trigger if allowed; no tech-created bypass |
-| Scope | Version pin; accept→job idempotency; line→scope lineage; dup job prevention; atomicity; minimal job init per ratified two-layer model; office/tech assignment fields; rollback; retry; audit+correlation |
-| Non-scope | Full field execution UI; invoice; pay; collapsing job FSM |
-| KI | KI-16 (blocking); KI-12; KI-05; KI-09 assignment fields |
-| Gates | G-01 partial, G-04 jobs, G-05, G-02 |
-| Stop | Before job execution workflow |
-| Next | S3 accepted → S4 packet |
+Idempotent job from approved version; lineage; dup-job prevention; audit. Stop before field execution. Branch `ml/p1-s3-quote-to-job`.
 
-### SLICE 4 — Job execution and completion
+### S4 — Job execution and completion
 
-| Field | Content |
-| --- | --- |
-| Business objective | Field completes job with evidence; authorized transitions; no Notes escape |
-| Roles | Technician, Office, Manager |
-| Scope | States: scheduled, dispatched, on_my_way, arrived, started, paused (if required), completed, cancelled, no_access, rescheduled — **as authorized subset** of ratified two-layer model; tech identity; timestamps; notes/photos/findings/measurements; additional-work customer approval when required; completion evidence; mobile-first; safe retry/poor-connectivity; no dup complete; Notes-escape measurement |
-| Non-scope | Invoice; pay; full offline sync engine; copying Housecall Pro UI |
-| KI | KI-09, KI-13, KI-14, KI-06 design input, KI-12 |
-| Gates | G-06 progress, G-02, G-05 |
-| Benchmark | Housecall Pro workflow cadence only |
-| Stop | Before invoice |
-| Next | S4 accepted → S5 packet |
+Authorized field transitions; evidence; mobile; Notes-escape measurement. Includes statuses needed for later on-my-way / no-access **comms** (comms themselves in S6). Stop before invoice. Branch `ml/p1-s4-job-execution`.
 
-### SLICE 5 — Completed job → invoice
+### S5 — Completed job → invoice
+
+Invoice from completed scope; lineage; issued immutability; void reason codes; reconciliation-ready fields. **Stop before Stripe execution.** Branch `ml/p1-s5-job-to-invoice`.
+
+### S5b — Stripe payment operations
 
 | Field | Content |
 | --- | --- |
-| Business objective | Invoice from approved+completed scope with full lineage; issued immutability; payment-ready |
-| Roles | Office, Manager; Admin void+reason |
-| Non-scope | Live Stripe/pay execution **in this slice** (Stripe remains **in V1** — schedule payment slice); send-estimate product |
-| Scope | Generate from completed scope; quote→job→invoice lineage; draft/issued; issued immutability; numbering; taxes/fees/discounts/credits/deposits/adjustments as needed for P1; void/correction reasons; partial completion; dup invoice prevention; atomicity; financial audit; reconciliation-ready; **hand off to V1 Stripe payment work** |
-| Stop | Before claiming Phase 1 USABLE without payment+follow-up evidence; invoice slice may stop before pay **execution** only if a named payment slice immediately follows |
-| Next | S5 accepted → S6 packet |
+| Business objective | TVG collects via Stripe with safe settlement and recovery |
+| Scope | Payment initiation; payment status; webhook settlement; duplicate-payment protection; failed-payment recovery; reconciliation; **full and partial refunds**; unpaid-invoice void behavior; audit events; customer communication; exception escalation; **proof of one canonical paid writer (G-09 / KI-07)** |
+| Non-scope | Autonomous follow-up product build-out (S6); visual workflow builder; new payment providers |
+| Gates | G-02, G-05, **G-09**; financial review required |
+| Branch | `ml/p1-s5b-stripe-payment-operations` · `F:\Dev\BHFOS-ml-p1-s5b` |
+| Stop | Before claiming V1 freeze; before S6 may assume paid-writer closed |
 
-### SLICE 6 — End-to-end UAT and Phase 1 acceptance
+### S6 — Autonomous follow-up and automation
 
 | Field | Content |
 | --- | --- |
-| Business objective | Prove office + Founder + technician mobile path USABLE under gates |
-| Roles | Founder, Technician, Office, reviewers |
-| Scope | Real-device tests; repeated-click; forced-failure; **V1** unauthorized-role/unauthenticated negatives; lineage verification; audit completeness; task-time baselines→caps; Notes escape testing; recovery/exceptions; blocking KPI review; UX/Field review disposition. **Cross-tenant suite = V2** |
-| Non-scope | New product features; live pay; TIS; G2.3 reopen |
+| Business objective | Customer/revenue follow-up runs without routine manual push |
+| Framework | Lightweight internal workflow framework (section 11) |
+| Scope journeys | Quote follow-up; appointment confirmation and reminders; on-my-way communication; no-access and reschedule handling; job-completion communication; invoice delivery; unpaid-invoice follow-up; failed-payment follow-up; review requests; internal task escalation |
+| Non-scope | Visual builder; arbitrary admin conditions; free-form scripting; shared multi-tenant workflow config; Stripe paid-writer changes (owned by S5b) |
+| Gates | G-02; KI-11 no silent fail; G-06 progress |
+| Branch | `ml/p1-s6-autonomous-follow-up` · `F:\Dev\BHFOS-ml-p1-s6` |
+| Stop | Before S7 UAT freeze claim |
+
+**Autonomous ≠ uncontrolled AI:** executes Founder-approved rules with audit, retry, opt-out, and escalation.
+
+### S7 — End-to-end UAT and V1 freeze
+
+| Field | Content |
+| --- | --- |
+| Scope | Real-device office + Founder + tech path; repeated-click; forced-failure; role/authn negatives; lineage; audit; task-time caps; Notes escape = 0; Stripe + follow-up journeys; KPI review; UX disposition |
+| Non-scope | New features; TIS; G2.3 reopen; shared multi-tenancy |
 | Gates | **All G-01–G-10** |
-| Stop | Phase 1 complete definition met or residual-risk acceptances signed |
-| Next | Post-P1 only under new program auth |
+| Branch | `ml/p1-s7-uat-v1-freeze` · `F:\Dev\BHFOS-ml-p1-s7` |
 
 ---
 
-## 12. Phase 1 completion definition
+## 13. V1 freeze / Phase 1 completion definition
 
-Phase 1 is **complete** when:
+V1 freeze is **complete** when:
 
-1. S1–S5 implementation slices accepted with evidence.  
-2. S6 proves G-01–G-10 (or Founder signs residual-risk waivers per gate).  
-3. Known-Issue Register shows all `P1_BLOCKING` items fixed or signed.  
-4. Single money-writer proven; **Stripe payment path in V1** evidenced.  
-5. Autonomous follow-up minimum in V1 evidenced (or Founder residual signed).  
-6. send-estimate remains deferred unless a packet includes it.  
-7. Founder declares Phase 1 / V1 USABLE — not CI alone.  
+1. S1–S6 implementation slices accepted with evidence.  
+2. **S7** proves G-01–G-10 (or Founder signs residual-risk waivers per gate).  
+3. Known-Issue Register: all `P1_BLOCKING` fixed or signed.  
+4. **S5b:** single money-writer + Stripe operational minimum evidenced.  
+5. **S6:** autonomous follow-up minimum + no silent automation failure evidenced.  
+6. send-estimate deferred unless packet includes it.  
+7. Founder declares V1 **USABLE** — not CI alone.  
 8. Shared multi-tenancy is **not** a completion requirement.
 
 ---
 
-## 13. Worktree / branch naming convention
+## 14. Worktree / branch naming
 
 | Slice | Branch | Worktree |
 | --- | --- | --- |
@@ -312,25 +303,24 @@ Phase 1 is **complete** when:
 | S3 | `ml/p1-s3-quote-to-job` | `F:\Dev\BHFOS-ml-p1-s3` |
 | S4 | `ml/p1-s4-job-execution` | `F:\Dev\BHFOS-ml-p1-s4` |
 | S5 | `ml/p1-s5-job-to-invoice` | `F:\Dev\BHFOS-ml-p1-s5` |
-| S6 | `ml/p1-s6-uat-acceptance` (docs/evidence) | `F:\Dev\BHFOS-ml-p1-s6` |
+| S5b | `ml/p1-s5b-stripe-payment-operations` | `F:\Dev\BHFOS-ml-p1-s5b` |
+| S6 | `ml/p1-s6-autonomous-follow-up` | `F:\Dev\BHFOS-ml-p1-s6` |
+| S7 | `ml/p1-s7-uat-v1-freeze` | `F:\Dev\BHFOS-ml-p1-s7` |
 
-**V1:** single-company The Vent Guys. **V2:** dedicated white-label instance per company — shared multi-tenancy **removed**.
-See `BHFOS_V1_V2_PRODUCT_BOUNDARY.md`, `ML-P1_SLICE1_CLOSEOUT_AND_RESIDUAL_DISPOSITION.md`,
-and `ML-P1_SLICE2_DECISION_PACKET.md` (docs only — coding not authorized by those docs alone).
+Docs planning branch for this packet: `ml/p1-s2-decision-packet` · `F:\Dev\BHFOS-ml-p1-s2-plan`.
 
-Base each slice on the **then-current** `origin/main` after prior slice merge (anti-delay: no full replan).
+Base each slice on then-current `origin/main` after prior merge.
 
 ---
 
-## 14. Explicit program non-scope (clarify)
+## 15. Explicit program non-scope
 
-- Shared multi-tenancy / cross-tenant shared-runtime (removed from V1 and V2)  
+- Shared multi-tenancy / cross-tenant shared-runtime  
+- Visual workflow builder; arbitrary admin conditions; free-form workflow scripting  
 - TIS / Pillar 2–4 (unless separately authorized)  
 - G2.3 reopen  
 - Full offline sync  
-- UUID↔bigint unification migration  
+- UUID↔bigint unification  
 - Full property multi-company rewrite  
-- Visual workflow builder (unless value-proved)  
 
-**Not “out of V1”:** Stripe payment processing; autonomous follow-up (placement in slices TBD).  
-**Still slice-scoped:** send-estimate product may remain deferred from early money-loop slices until scheduled.
+**In V1 (not non-scope):** Stripe (S5b); autonomous follow-up (S6); lightweight workflow framework.

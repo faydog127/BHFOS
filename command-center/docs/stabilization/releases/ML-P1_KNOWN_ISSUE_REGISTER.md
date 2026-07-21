@@ -96,7 +96,7 @@ Timing classes: `P1_BLOCKING` | `P1_MUST_DESIGN` | `P1_FIX_DURING` | `DEFER_SIGN
 | Risk | Bypass of canonical writer; duplicate/conflicted paid state |
 | Safe to defer? | **No** |
 | Deferral rationale | N/A — single money writer is ML-P1 invariant |
-| Timing | `P1_BLOCKING` |
+| Timing | `P1_BLOCKING` — **proven in S5b** |
 | Owner | Money-loop owner + Architecture Guard |
 | Completion test | Inventory of code paths that set paid/amount_paid/balance; only canonical writer mutates; alternate paths DENY or removed from P1 surface |
 
@@ -148,7 +148,7 @@ Timing classes: `P1_BLOCKING` | `P1_MUST_DESIGN` | `P1_FIX_DURING` | `DEFER_SIGN
 | Risk | Missed follow-ups; work escapes to Notes/text; silent trigger failures |
 | Safe to defer? | **No** for V1 autonomous follow-up minimum + failure visibility |
 | Deferral rationale | **Superseded:** Autonomous follow-up is **in V1** (`BHFOS_V1_V2_PRODUCT_BOUNDARY.md`). Unowned silent automation failure remains unacceptable. Full visual workflow builder not assumed |
-| Timing | `P1_BLOCKING` (visible fail + V1 follow-up minimum); visual builder = later unless value-proved |
+| Timing | `P1_BLOCKING` (visible fail + V1 follow-up minimum in **S6**); visual builder = not in V1 |
 | Owner | Ops automation owner |
 | Completion test | Forced automation failure surfaces in exception log/queue; V1 follow-up journeys run without routine manual push; opt-out/retry/audit present |
 

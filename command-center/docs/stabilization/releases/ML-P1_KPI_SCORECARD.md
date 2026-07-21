@@ -19,7 +19,11 @@ Owners below are role titles; assign named humans at implementation auth.
 | Estimate→job conversion | Jobs created ÷ approved quotes | Measure | `BASELINE_FIRST` + **100%** on P1 test set | Join quote↔job | Money-loop | Per slice + weekly | 100% on test set; prod trend | Silent non-conversion | Lagging | Fake jobs |
 | Jobs completed | Completions on authorized transitions | Measure | `BASELINE_FIRST` | Job state events | Field lead | Weekly | Trend with evidence complete | Completing without evidence | Lagging | Skip photos to speed close |
 | Invoices issued | Issued invoices (not draft) | Measure | `BASELINE_FIRST` | Invoice status | Money-loop | Weekly | Matches completed billable scope | Invoice without completion | Lagging | Premature issue |
-| Invoice→payment conversion | Paid ÷ issued (when pay available) | Measure | `BASELINE_FIRST` | Invoice+payment | Finance ops | Monthly | Improve; not a P1 live-pay gate | Push fake paid | Lagging | Alternate paid writers |
+| Invoice→payment conversion | Paid ÷ issued | Measure | `BASELINE_FIRST` then ↑ | Invoice+payment | Finance ops | Monthly | Improve on S5b+ | Push fake paid | Lagging | Alternate paid writers |
+| Automation failure rate | Failed automations÷runs | Measure | Visible; near 0 | S6 automation log | Ops | Daily | No silent fail | Silent fail | Lagging | Disabling automation |
+| Follow-up time-to-first | Median hours trigger→first chase | Measure | `BASELINE_FIRST` then ↓ | S6 runs | Ops | Weekly | Down | Spam risk | Leading | — |
+| Payment fail recovery rate | Recovered÷failed pays | Measure | `BASELINE_FIRST` then ↑ | S5b | Finance | Weekly | Up | Ignoring fails | Lagging | — |
+| Refund/void with audit | % refunds/voids with complete audit | N/A | **100%** when used | S5b events | Finance | Weekly | 100% | Missing audit | Lagging | — |
 | Request→estimate time | Median hours request→first issued quote | Measure | `BASELINE_FIRST` then ↓ | Timestamps | Ops | Weekly | Down vs baseline | Skip required fields | Leading | Incomplete estimates |
 | Approval→job time | Median approved→job created | Measure | Near-immediate on path; measure | Events | Money-loop | Per slice | Idempotent same-session create | Manual delay OK if owned | Leading | — |
 | Completion→invoice time | Median complete→invoice issued | Measure | `BASELINE_FIRST` then ↓ | Events | Money-loop | Weekly | Down without skipping lineage | Invoice before complete | Leading | — |
@@ -61,7 +65,7 @@ Owners below are role titles; assign named humans at implementation auth.
 | Manual re-entry points | Count on P1 path | Inventory | **0** | Design review | Money-loop | Per slice | 0 | Any | Leading | — |
 | Incomplete completion evidence | Completes missing required artifacts | Measure | **0** on P1 path if gate on | Job evidence | Field | Per slice | 0 | — | Lagging | Disabling gate |
 | Invoice exception rate | Exceptions÷issued | Measure | Near 0 owned queue | Exception queue | Finance | Daily | Owned &lt;SLA | Unowned overnight | Lagging | — |
-| Automation failure rate | Failed automations÷runs | Measure | Visible; near 0 | Automation log | Ops | Daily | No silent fail | Silent fail | Lagging | Disabling automation |
+| Automation failure rate | Failed automations÷runs | Measure | Visible; near 0 | S6 automation log | Ops | Daily | No silent fail | Silent fail | Lagging | Disabling automation |
 | Recovery time | MTTRmoney-state error | Measure | `BASELINE_FIRST` then ↓ | Incident log | Ops | Monthly | Down | — | Lagging | — |
 
 ---

@@ -88,9 +88,9 @@ to V1 or to V2 Money Loop acceptance.
 
 ## G-09 — Single money-writer invariant
 
-**Require:** Single money-writer invariant proven.
+**Require:** Single money-writer invariant proven (**Slice S5b**).
 
-**Proof:** Writer inventory of all paths that mutate paid/amount_paid/balance_due/invoice paid status; exactly one canonical writer; negatives for alternates.
+**Proof:** Writer inventory of all paths that mutate paid/amount_paid/balance_due/invoice paid status; exactly one canonical Stripe/settlement writer; negatives for alternates.
 
 **Fail:** Second writer can mark paid, or inventory incomplete.
 
