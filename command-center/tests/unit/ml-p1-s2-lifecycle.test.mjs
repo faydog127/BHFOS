@@ -295,6 +295,87 @@ describe('ML-P1 S2 remediation source guards', () => {
     assert.match(mig, /app_metadata/);
   });
 
+  it('revise RPC is live-schema compatible (no quotes.notes)', () => {
+    const mig = fs.readFileSync(
+      path.join(
+        __dirname,
+        '../../supabase/migrations/20260721170000_ml_p1_s2_lifecycle_server_authz.sql',
+      ),
+      'utf8',
+    );
+    assert.equal(/\bv_quote\.notes\b/.test(mig), false);
+    assert.equal(/ADD COLUMN IF NOT EXISTS notes\b/i.test(mig), false);
+    // Revise INSERT must copy lineage fields without inventing notes.
+    assert.match(mig, /supersedes_quote_id/);
+    assert.match(mig, /quote_version/);
+    assert.match(mig, /coalesce\(v_quote\.line_items/);
+    const insertBlock = mig.match(
+      /INSERT INTO public\.quotes \(([\s\S]*?)\) VALUES \(([\s\S]*?)\)\s*RETURNING \* INTO v_draft/i,
+    );
+    assert.ok(insertBlock, 'revise INSERT block present');
+    assert.equal(/\bnotes\b/i.test(insertBlock[1]), false);
+    assert.equal(/\bnotes\b/i.test(insertBlock[2]), false);
+    // Live-compatible columns only (+ S2 additive).
+    const allowed = new Set([
+      'lead_id',
+      'tenant_id',
+      'status',
+      'service_address',
+      'customer_name',
+      'customer_email',
+      'customer_phone',
+      'subtotal',
+      'total_amount',
+      'tax_amount',
+      'tax_rate',
+      'header_text',
+      'footer_text',
+      'fulfillment_mode',
+      'estimate_id',
+      'user_id',
+      'inspection_id',
+      'inspection_revision',
+      'line_items',
+      'quote_version',
+      'supersedes_quote_id',
+      'created_at',
+      'updated_at',
+    ]);
+    const cols = insertBlock[1]
+      .split(',')
+      .map((c) => c.trim().toLowerCase())
+      .filter(Boolean);
+    for (const col of cols) {
+      assert.equal(allowed.has(col), true, `unexpected revise column: ${col}`);
+    }
+  });
+
+  it('R-S1-02 migration gates accept AND paid job inserts; neutralizes WO trigger', () => {
+    const mig = fs.readFileSync(
+      path.join(
+        __dirname,
+        '../../supabase/migrations/20260721160000_ml_p1_s2_quote_lifecycle_rs102.sql',
+      ),
+      'utf8',
+    );
+    assert.match(mig, /auto_create_job_on_quote_acceptance/);
+    assert.match(mig, /QuoteAccepted_JobCreateDeferred/);
+    assert.match(mig, /QuotePaid_JobCreateDeferred/);
+    assert.match(mig, /trg_emit_wo_on_quote_accept/);
+    assert.match(mig, /QuoteAccepted_WorkOrderDeferred/);
+    assert.equal(/\bv_quote\.notes\b/.test(mig), false);
+    assert.equal(/ADD COLUMN IF NOT EXISTS notes\b/i.test(mig), false);
+
+    // Every jobs INSERT must sit behind v_should_job true path.
+    const jobInserts = [...mig.matchAll(/INSERT INTO public\.jobs\s*\(/gi)];
+    assert.equal(jobInserts.length, 2, 'expected accept + paid gated job inserts only');
+    for (const m of jobInserts) {
+      const before = mig.slice(Math.max(0, m.index - 800), m.index);
+      assert.match(before, /v_should_job/);
+      assert.match(before, /IF NOT v_should_job/);
+    }
+  });
+
   it('maps QUOTE_EXPIRED from public approve RPC', async () => {
     const supabase = {
       rpc: async () => ({
@@ -307,6 +388,42 @@ describe('ML-P1 S2 remediation source guards', () => {
       () => svc.approveByPublicToken({ publicToken: 'tok-expired' }),
       (err) => /EXPIRED/i.test(err.message) || err.code === 'ML_P1_S2_QUOTE_EXPIRED',
     );
+  });
+
+  it('customer public approve vs office break-glass stay on distinct RPCs', async () => {
+    const calls = [];
+    const supabase = {
+      rpc: async (name, args) => {
+        calls.push({ name, args });
+        if (name === 'ml_p1_s2_quote_approve_public') {
+          return {
+            data: { action: 'approve', jobCreated: false, quote: { id: 'q1', status: 'accepted' } },
+            error: null,
+          };
+        }
+        return {
+          data: { action: 'approve', jobCreated: false, quote: { id: 'q1', status: 'accepted' } },
+          error: null,
+        };
+      },
+    };
+    const svc = createMlP1S2QuoteLifecycleService({ supabase });
+    await svc.approveByPublicToken({ publicToken: 'tok' });
+    await svc.approveQuote({
+      quoteId: 'q1',
+      sessionTenantId: 'tvg',
+      urlTenantId: 'tvg',
+      actorRole: 'admin',
+      reasonCode: 'bg',
+    });
+    assert.equal(calls[0].name, 'ml_p1_s2_quote_approve_public');
+    assert.equal(calls[1].name, 'ml_p1_s2_quote_lifecycle');
+    assert.equal(calls[1].args.p_action, 'approve');
+    assert.equal(calls[1].args.p_reason_code, 'bg');
+  });
+
+  it('legacy estimates writer remains DENY (alternate path)', () => {
+    assert.throws(() => assertEstimatesCreateAllowed());
   });
 
   it('exposes required Money-State statuses', () => {

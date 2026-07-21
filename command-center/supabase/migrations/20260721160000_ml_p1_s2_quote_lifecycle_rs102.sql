@@ -7,7 +7,9 @@
 --
 -- Replaces ensure_job_and_optional_draft_invoice_for_accepted_quote from
 -- 20260416210000_backfill_job_service_address_on_quote_accept.sql with the same
--- body plus an auto_create_job_on_quote_acceptance gate (default false).
+-- body plus an auto_create_job_on_quote_acceptance gate (default false) that
+-- defers BOTH accept→job and paid→job until Slice 3 explicitly enables the gate.
+-- Also neutralizes on_quote_accepted_emit_wo so it cannot create jobs pre-S3.
 
 BEGIN;
 
@@ -256,9 +258,33 @@ BEGIN
     RETURN new;
   END IF;
 
-  -- Quote marked paid: sync job payment + invoice payment (idempotent) — unchanged from prior.
+  -- Quote marked paid: job/invoice sync only when S3 gate explicitly ON.
+  -- Pre-S3 (gate default false): defer — must not create jobs.
   IF lower(btrim(coalesce(new.status, ''))) = 'paid'
      AND lower(btrim(coalesce(old.status, ''))) <> 'paid' THEN
+
+    SELECT value INTO v_auto_job
+    FROM public.global_config
+    WHERE key = 'auto_create_job_on_quote_acceptance'
+    LIMIT 1;
+
+    v_should_job := lower(btrim(coalesce(v_auto_job, 'false'))) IN ('1','true','yes','on');
+
+    IF NOT v_should_job THEN
+      INSERT INTO public.events (tenant_id, entity_type, entity_id, event_type, actor_type, payload)
+      VALUES (
+        new.tenant_id,
+        'quote',
+        new.id,
+        'QuotePaid_JobCreateDeferred',
+        'system',
+        jsonb_build_object(
+          'reason', 'auto_create_job_on_quote_acceptance=false',
+          'slice', 'ml-p1-s2'
+        )
+      );
+      RETURN new;
+    END IF;
 
     INSERT INTO public.jobs (
       tenant_id,
@@ -358,6 +384,55 @@ BEGIN
     );
 
     RETURN new;
+  END IF;
+
+  RETURN new;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Legacy WO-on-accept trigger: neutralize job/WO creation before Slice 3.
+-- Original body is not in-repo; fail-closed — emit deferred event only.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.trg_emit_wo_on_quote_accept()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_new text;
+  v_old text;
+  v_auto text;
+BEGIN
+  v_new := public.normalize_quote_status(new.status);
+  IF tg_op = 'INSERT' THEN
+    v_old := '';
+  ELSE
+    v_old := public.normalize_quote_status(old.status);
+  END IF;
+
+  IF v_new = 'accepted' AND v_old IS DISTINCT FROM 'accepted' THEN
+    SELECT value INTO v_auto
+    FROM public.global_config
+    WHERE key = 'auto_create_job_on_quote_acceptance'
+    LIMIT 1;
+
+    -- Pre-S3: never create jobs/WOs from this path. Even if gate is later
+    -- enabled, S3 must restore a known-good WO body — do not invent inserts.
+    INSERT INTO public.events (tenant_id, entity_type, entity_id, event_type, actor_type, payload)
+    VALUES (
+      new.tenant_id,
+      'quote',
+      new.id,
+      'QuoteAccepted_WorkOrderDeferred',
+      'system',
+      jsonb_build_object(
+        'reason', 'ml-p1-s2-pre-s3-wo-neutralized',
+        'gate', coalesce(v_auto, 'false'),
+        'slice', 'ml-p1-s2'
+      )
+    );
   END IF;
 
   RETURN new;
