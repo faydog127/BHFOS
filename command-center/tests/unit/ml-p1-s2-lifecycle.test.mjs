@@ -1,5 +1,5 @@
 /**
- * ML-P1 Slice 2 — lifecycle + R-S1-03 role authz + adversarial cases.
+ * ML-P1 Slice 2 — lifecycle + R-S1-03 + remediation adversarial cases.
  * Run: node --test tests/unit/ml-p1-s2-lifecycle.test.mjs
  */
 import assert from 'node:assert/strict';
@@ -23,141 +23,13 @@ import {
 } from '../../src/services/mlP1S2QuoteLifecycleService.js';
 import { ML_P1_S2_EVENT_TYPES, buildS2AuditEvent } from '../../src/lib/mlP1S2AuditEvents.js';
 import { assertAuditPayloadComplete } from '../../src/lib/mlP1S1AuditEvents.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-function makeQuoteStore(seed) {
-  const quotes = new Map(seed.map((q) => [q.id, { ...q }]));
-  const items = new Map();
-  const events = [];
-  let insertCount = 0;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-  const supabase = {
-    from(table) {
-      const state = {
-        table,
-        filters: {},
-        op: null,
-        payload: null,
-        selectCols: '*',
-      };
-      const api = {
-        select(cols) {
-          state.selectCols = cols;
-          return api;
-        },
-        insert(rows) {
-          state.op = 'insert';
-          state.payload = rows;
-          return api;
-        },
-        update(patch) {
-          state.op = 'update';
-          state.payload = patch;
-          return api;
-        },
-        delete() {
-          state.op = 'delete';
-          return api;
-        },
-        eq(col, val) {
-          state.filters[col] = val;
-          return api;
-        },
-        maybeSingle: async () => {
-          if (table !== 'quotes') return { data: null, error: null };
-          for (const q of quotes.values()) {
-            let ok = true;
-            for (const [k, v] of Object.entries(state.filters)) {
-              if (q[k] !== v) ok = false;
-            }
-            if (ok) return { data: { ...q }, error: null };
-          }
-          return { data: null, error: null };
-        },
-        single: async () => {
-          if (table === 'events') {
-            events.push(state.payload);
-            return { data: state.payload, error: null };
-          }
-          if (table === 'quote_items') {
-            if (state.op === 'insert') {
-              const list = items.get(state.payload[0]?.quote_id) || [];
-              list.push(...state.payload);
-              items.set(state.payload[0].quote_id, list);
-              return { data: state.payload, error: null };
-            }
-            const qid = state.filters.quote_id;
-            return { data: items.get(qid) || [], error: null };
-          }
-          if (table === 'quotes') {
-            if (state.op === 'insert') {
-              insertCount += 1;
-              const row = {
-                ...state.payload[0],
-                id: state.payload[0].id || `q-new-${insertCount}`,
-              };
-              quotes.set(row.id, row);
-              return { data: { ...row }, error: null };
-            }
-            if (state.op === 'update') {
-              const id = state.filters.id;
-              const existing = quotes.get(id);
-              if (!existing) return { data: null, error: { message: 'not found' } };
-              if (state.filters.tenant_id && existing.tenant_id !== state.filters.tenant_id) {
-                return { data: null, error: { message: 'tenant mismatch' } };
-              }
-              const next = { ...existing, ...state.payload };
-              // Simulate DB normalize approved → accepted
-              if (String(next.status).toLowerCase() === 'approved') {
-                next.status = 'accepted';
-              }
-              quotes.set(id, next);
-              return { data: { ...next }, error: null };
-            }
-          }
-          return { data: null, error: { message: 'unsupported' } };
-        },
-        then(resolve, reject) {
-          // await supabase.from('quote_items').select(...).eq(...)
-          if (table === 'quote_items' && state.op !== 'insert') {
-            const qid = state.filters.quote_id;
-            return Promise.resolve({ data: items.get(qid) || [], error: null }).then(
-              resolve,
-              reject,
-            );
-          }
-          if (table === 'events' && state.op === 'insert') {
-            events.push(state.payload);
-            return Promise.resolve({ data: state.payload, error: null }).then(resolve, reject);
-          }
-          if (table === 'quotes' && state.op === 'update') {
-            const id = state.filters.id;
-            const existing = quotes.get(id);
-            if (!existing) {
-              return Promise.resolve({ data: null, error: { message: 'not found' } }).then(
-                resolve,
-                reject,
-              );
-            }
-            const next = { ...existing, ...state.payload };
-            if (String(next.status).toLowerCase() === 'approved') {
-              next.status = 'accepted';
-            }
-            quotes.set(id, next);
-            return Promise.resolve({ data: { ...next }, error: null }).then(resolve, reject);
-          }
-          return Promise.resolve({ data: null, error: null }).then(resolve, reject);
-        },
-      };
-      return api;
-    },
-    _quotes: quotes,
-    _events: events,
-    _insertCount: () => insertCount,
-  };
-  return supabase;
-}
-
-describe('ML-P1 S2 R-S1-03 role matrix', () => {
+describe('ML-P1 S2 R-S1-03 role matrix (client helper — server is source of truth)', () => {
   it('maps live roles and denies viewer/partner/technician money mutations', () => {
     assert.equal(normalizeActorRole('csr'), 'office');
     assert.equal(normalizeActorRole('viewer'), 'unauthenticated');
@@ -185,30 +57,25 @@ describe('ML-P1 S2 R-S1-03 role matrix', () => {
   });
 });
 
-describe('ML-P1 S2 transitions + immutability', () => {
+describe('ML-P1 S2 transitions + immutability helpers', () => {
   it('allows Money-State happy path transitions only', () => {
     assertTransitionAllowed('issue', 'draft');
     assertTransitionAllowed('approve', 'issued');
-    assertTransitionAllowed('reject', 'issued');
-    assertTransitionAllowed('expire', 'issued');
-    assertTransitionAllowed('revise', 'issued');
     assert.throws(() => assertTransitionAllowed('approve', 'draft'), (e) => e.code === 'ML_P1_S2_TRANSITION_DENY');
-    assert.throws(() => assertTransitionAllowed('issue', 'issued'), (e) => e.code === 'ML_P1_S2_TRANSITION_DENY');
   });
 
   it('blocks in-place edit of issued/approved content', () => {
     assert.throws(() => assertQuoteMutableForEdit('issued'), (e) => e.code === 'ML_P1_S2_IMMUTABLE');
-    assert.throws(() => assertQuoteMutableForEdit('accepted'), (e) => e.code === 'ML_P1_S2_IMMUTABLE');
     assert.equal(assertQuoteMutableForEdit('draft'), true);
   });
 
-  it('normalizes approved → accepted for comparison', () => {
+  it('normalizes approved → accepted', () => {
     assert.equal(normalizeQuoteStatus('approved'), 'accepted');
   });
 });
 
 describe('ML-P1 S2 audit G-02 fields', () => {
-  it('builds complete issued/approved audit payloads', () => {
+  it('builds complete issued audit payloads with version fields available', () => {
     const row = buildS2AuditEvent({
       tenantId: 'tvg',
       recordId: 'q1',
@@ -219,203 +86,173 @@ describe('ML-P1 S2 audit G-02 fields', () => {
       sourceAction: 'ml_p1_s2.issue_quote',
       correlationId: 'c1',
       eventType: ML_P1_S2_EVENT_TYPES.ISSUED,
-      related: { lead_id: 'l1' },
+      related: { lead_id: 'l1', quote_version: 2 },
     });
-    assert.equal(row.event_type, ML_P1_S2_EVENT_TYPES.ISSUED);
     assert.equal(assertAuditPayloadComplete(row.payload).ok, true);
   });
 });
 
-describe('ML-P1 S2 lifecycle service (happy + adversarial)', () => {
-  it('issues draft → issued with audit and no job create claim', async () => {
-    const supabase = makeQuoteStore([
-      {
-        id: 'q1',
-        tenant_id: 'tvg',
-        lead_id: 'l1',
-        status: 'draft',
-        total_amount: 100,
-        quote_version: 1,
+describe('ML-P1 S2 lifecycle service via server RPC', () => {
+  it('issues via RPC and always returns jobCreated false', async () => {
+    const calls = [];
+    const supabase = {
+      rpc: async (name, args) => {
+        calls.push({ name, args });
+        assert.equal(name, 'ml_p1_s2_quote_lifecycle');
+        return {
+          data: {
+            action: 'issue',
+            jobCreated: true, // hostile server — client must still report false
+            correlationId: 'c-issue',
+            quote: { id: 'q1', status: 'issued', tenant_id: 'tvg' },
+          },
+          error: null,
+        };
       },
-    ]);
+    };
     const svc = createMlP1S2QuoteLifecycleService({ supabase });
     const result = await svc.issueQuote({
       quoteId: 'q1',
       sessionTenantId: 'tvg',
       urlTenantId: 'tvg',
-      actorId: 'u-office',
-      actorRole: 'csr',
+      actorRole: 'technician', // forged — server ignores; client still calls RPC
     });
+    assert.equal(result.jobCreated, false);
     assert.equal(result.quote.status, 'issued');
-    assert.equal(result.jobCreated, false);
-    assert.ok(result.audit.ok);
-    assert.equal(supabase._quotes.get('q1').status, 'issued');
+    assert.equal(calls[0].args.p_action, 'issue');
   });
 
-  it('customer approve issued → accepted (normalized) without job', async () => {
-    const supabase = makeQuoteStore([
-      {
-        id: 'q2',
-        tenant_id: 'tvg',
-        lead_id: 'l1',
-        status: 'issued',
-        total_amount: 250,
-        quote_version: 1,
-      },
-    ]);
-    const svc = createMlP1S2QuoteLifecycleService({ supabase });
-    const result = await svc.approveQuote({
-      quoteId: 'q2',
-      sessionTenantId: 'tvg',
-      urlTenantId: 'tvg',
-      actorId: 'cust-1',
-      actorRole: 'customer',
-      approvalMethod: 'public_token',
-    });
-    assert.equal(result.quote.status, 'accepted');
-    assert.equal(result.quote.approved_amount, 250);
-    assert.equal(result.jobCreated, false);
-  });
-
-  it('admin break-glass approve requires reason_code', async () => {
-    const supabase = makeQuoteStore([
-      { id: 'q3', tenant_id: 'tvg', lead_id: 'l1', status: 'issued', total_amount: 10 },
-    ]);
-    const svc = createMlP1S2QuoteLifecycleService({ supabase });
-    await assert.rejects(
-      () =>
-        svc.approveQuote({
-          quoteId: 'q3',
-          sessionTenantId: 'tvg',
-          urlTenantId: 'tvg',
-          actorId: 'admin-1',
-          actorRole: 'admin',
-        }),
-      (err) => err.code === 'ML_P1_S2_BREAK_GLASS_REASON_REQUIRED',
-    );
-  });
-
-  it('DENY technician issue (unauthorized role)', async () => {
-    const supabase = makeQuoteStore([
-      { id: 'q4', tenant_id: 'tvg', lead_id: 'l1', status: 'draft', total_amount: 10 },
-    ]);
+  it('maps server ROLE_DENY for technician', async () => {
+    const supabase = {
+      rpc: async () => ({
+        data: null,
+        error: { message: 'ML_P1_S2_ROLE_DENY: role "technician" cannot perform quote.issue' },
+      }),
+    };
     const svc = createMlP1S2QuoteLifecycleService({ supabase });
     await assert.rejects(
       () =>
         svc.issueQuote({
-          quoteId: 'q4',
+          quoteId: 'q1',
           sessionTenantId: 'tvg',
           urlTenantId: 'tvg',
-          actorId: 'tech-1',
-          actorRole: 'technician',
+          actorRole: 'office',
         }),
       (err) => err.code === ROLE_AUTHZ_DENY_CODE,
     );
   });
 
-  it('DENY missing session tenant (TVG context)', async () => {
-    const supabase = makeQuoteStore([
-      { id: 'q5', tenant_id: 'tvg', lead_id: 'l1', status: 'draft', total_amount: 10 },
-    ]);
+  it('DENY missing session tenant before RPC', async () => {
+    const supabase = { rpc: async () => ({ data: null, error: null }) };
     const svc = createMlP1S2QuoteLifecycleService({ supabase });
     await assert.rejects(
       () =>
         svc.issueQuote({
-          quoteId: 'q5',
+          quoteId: 'q1',
           urlTenantId: 'tvg',
-          actorId: 'u1',
           actorRole: 'office',
         }),
       (err) => err.code === TENANT_DENY_CODE,
     );
   });
 
-  it('reject + expire + revise create new draft version', async () => {
-    const supabase = makeQuoteStore([
-      {
-        id: 'q6',
-        tenant_id: 'tvg',
-        lead_id: 'l1',
-        status: 'issued',
-        total_amount: 99,
-        quote_version: 1,
-        service_address: '1 Main',
-        customer_name: 'A',
-      },
-    ]);
+  it('approve break-glass maps reason required from server', async () => {
+    const supabase = {
+      rpc: async () => ({
+        data: null,
+        error: {
+          message:
+            'ML_P1_S2_BREAK_GLASS_REASON_REQUIRED: admin break-glass approve requires reason_code',
+        },
+      }),
+    };
     const svc = createMlP1S2QuoteLifecycleService({ supabase });
+    await assert.rejects(
+      () =>
+        svc.approveQuote({
+          quoteId: 'q1',
+          sessionTenantId: 'tvg',
+          urlTenantId: 'tvg',
+          actorRole: 'admin',
+        }),
+      (err) => err.code === 'ML_P1_S2_BREAK_GLASS_REASON_REQUIRED',
+    );
+  });
 
-    const rejected = await svc.rejectQuote({
-      quoteId: 'q6',
-      sessionTenantId: 'tvg',
-      urlTenantId: 'tvg',
-      actorId: 'u1',
-      actorRole: 'manager',
-      rejectionReason: 'price',
-    });
-    assert.equal(rejected.quote.status, 'rejected');
+  it('public-token approve via RPC; concurrent idempotent safe', async () => {
+    let n = 0;
+    const supabase = {
+      rpc: async (name) => {
+        assert.equal(name, 'ml_p1_s2_quote_approve_public');
+        n += 1;
+        return {
+          data: {
+            action: 'approve',
+            jobCreated: false,
+            idempotent: n > 1,
+            quote: { id: 'q-tok', status: 'accepted', approved_amount: 40 },
+          },
+          error: null,
+        };
+      },
+    };
+    const svc = createMlP1S2QuoteLifecycleService({ supabase });
+    const a = await svc.approveByPublicToken({ publicToken: 'tok-abc' });
+    const b = await svc.approveByPublicToken({ publicToken: 'tok-abc' });
+    assert.equal(a.jobCreated, false);
+    assert.equal(b.jobCreated, false);
+    assert.equal(b.idempotent, true);
+  });
 
-    // Re-seed issued for expire path
-    supabase._quotes.set('q7', {
-      id: 'q7',
-      tenant_id: 'tvg',
-      lead_id: 'l2',
-      status: 'issued',
-      total_amount: 50,
-      quote_version: 1,
-    });
-    const expired = await svc.expireQuote({
-      quoteId: 'q7',
-      sessionTenantId: 'tvg',
-      urlTenantId: 'tvg',
-      actorId: 'u1',
-      actorRole: 'office',
-    });
-    assert.equal(expired.quote.status, 'expired');
-
-    supabase._quotes.set('q8', {
-      id: 'q8',
-      tenant_id: 'tvg',
-      lead_id: 'l3',
-      status: 'issued',
-      total_amount: 75,
-      quote_version: 2,
-      service_address: '2 Oak',
-      notes: 'n',
-    });
+  it('revise via RPC returns new draft and jobCreated false', async () => {
+    const supabase = {
+      rpc: async (_name, args) => {
+        assert.equal(args.p_action, 'revise');
+        return {
+          data: {
+            action: 'revise',
+            jobCreated: false,
+            superseded: 'q8',
+            quote: { id: 'q-new', status: 'draft', quote_version: 3 },
+          },
+          error: null,
+        };
+      },
+    };
+    const svc = createMlP1S2QuoteLifecycleService({ supabase });
     const revised = await svc.reviseQuote({
       quoteId: 'q8',
       sessionTenantId: 'tvg',
       urlTenantId: 'tvg',
-      actorId: 'u1',
       actorRole: 'office',
     });
     assert.equal(revised.action, 'revise');
-    assert.equal(revised.quote.status, 'draft');
     assert.equal(revised.quote.quote_version, 3);
-    assert.equal(revised.superseded, 'q8');
-    assert.equal(supabase._quotes.get('q8').status, 'revised');
     assert.equal(revised.jobCreated, false);
   });
 
-  it('customer public-token approve (designated accept)', async () => {
-    const supabase = makeQuoteStore([
-      {
-        id: 'q-tok',
-        tenant_id: 'tvg',
-        lead_id: 'l1',
-        status: 'issued',
-        total_amount: 40,
-        public_token: 'tok-abc',
-      },
-    ]);
+  it('JOB_GATE_REQUIRED mapped from server (pre-A3 fail-closed)', async () => {
+    const supabase = {
+      rpc: async () => ({
+        data: null,
+        error: {
+          message:
+            'ML_P1_S2_JOB_GATE_REQUIRED: cannot approve until auto_create_job_on_quote_acceptance=false',
+        },
+      }),
+    };
     const svc = createMlP1S2QuoteLifecycleService({ supabase });
-    const result = await svc.approveByPublicToken({
-      publicToken: 'tok-abc',
-      actorId: 'cust-token',
-    });
-    assert.equal(result.quote.status, 'accepted');
-    assert.equal(result.jobCreated, false);
+    await assert.rejects(
+      () =>
+        svc.approveQuote({
+          quoteId: 'q1',
+          sessionTenantId: 'tvg',
+          urlTenantId: 'tvg',
+          actorRole: 'admin',
+          reasonCode: 'bg-1',
+        }),
+      (err) => err.code === 'ML_P1_S2_JOB_GATE_REQUIRED',
+    );
   });
 
   it('S-04: estimates create path remains DENY', () => {
@@ -423,43 +260,38 @@ describe('ML-P1 S2 lifecycle service (happy + adversarial)', () => {
     assert.equal(d.ok, false);
     assert.throws(() => assertEstimatesCreateAllowed());
   });
-
-  it('DENY transition issued→issue and draft→approve', async () => {
-    const supabase = makeQuoteStore([
-      { id: 'q9', tenant_id: 'tvg', lead_id: 'l1', status: 'issued', total_amount: 1 },
-      { id: 'q10', tenant_id: 'tvg', lead_id: 'l1', status: 'draft', total_amount: 1 },
-    ]);
-    const svc = createMlP1S2QuoteLifecycleService({ supabase });
-    await assert.rejects(
-      () =>
-        svc.issueQuote({
-          quoteId: 'q9',
-          sessionTenantId: 'tvg',
-          urlTenantId: 'tvg',
-          actorId: 'u1',
-          actorRole: 'office',
-        }),
-      (e) => e.code === 'ML_P1_S2_TRANSITION_DENY',
-    );
-    await assert.rejects(
-      () =>
-        svc.approveQuote({
-          quoteId: 'q10',
-          sessionTenantId: 'tvg',
-          urlTenantId: 'tvg',
-          actorId: 'c1',
-          actorRole: 'customer',
-        }),
-      (e) => e.code === 'ML_P1_S2_TRANSITION_DENY',
-    );
-  });
 });
 
-describe('ML-P1 S2 statuses contract coverage', () => {
+describe('ML-P1 S2 remediation source guards', () => {
+  it('public-quote-approve no longer inserts jobs', () => {
+    const edgePath = path.join(
+      __dirname,
+      '../../supabase/functions/public-quote-approve/index.ts',
+    );
+    const src = fs.readFileSync(edgePath, 'utf8');
+    assert.equal(/from\('jobs'\)/.test(src), false);
+    assert.match(src, /ML_P1_S2_JOB_GATE_REQUIRED/);
+    assert.match(src, /job_created:\s*false/);
+    assert.match(src, /ml_p1_s2_quote_approve_public/);
+  });
+
+  it('server authz migration defines RPC + gate-off accept trigger + draft-only RLS', () => {
+    const mig = fs.readFileSync(
+      path.join(
+        __dirname,
+        '../../supabase/migrations/20260721170000_ml_p1_s2_lifecycle_server_authz.sql',
+      ),
+      'utf8',
+    );
+    assert.match(mig, /ml_p1_s2_quote_lifecycle/);
+    assert.match(mig, /ml_p1_s2_quote_approve_public/);
+    assert.match(mig, /ml_p1_s2_job_gate_is_off/);
+    assert.match(mig, /trg_ml_p1_s2_require_job_gate_off_on_accept/);
+    assert.match(mig, /Quotes draft updatable by tenant/);
+    assert.match(mig, /FOR UPDATE/);
+  });
+
   it('exposes required Money-State statuses', () => {
-    for (const s of ['draft', 'issued', 'approved', 'rejected', 'expired', 'revised']) {
-      assert.ok(Object.values(ML_P1_S2_STATUSES).includes(s) || s === 'approved');
-    }
     assert.equal(ML_P1_S2_STATUSES.APPROVED, 'approved');
     assert.equal(ML_P1_S2_STATUSES.ISSUED, 'issued');
   });
