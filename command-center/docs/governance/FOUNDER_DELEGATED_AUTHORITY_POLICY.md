@@ -13,6 +13,11 @@ non-intrusive, read-only, reversible work. The Orchestrator acts under **standin
 authority** for bounded Category A work and **proceed-and-notify** for Category B.
 Category C still requires explicit Founder authorization.
 
+**ML-P1 Slice 2–3:** Also apply the
+[`REDUCED_AI_DEVELOPMENT_ASSURANCE_PILOT.md`](./REDUCED_AI_DEVELOPMENT_ASSURANCE_PILOT.md)
+**A0–A3** matrix and limited docs-merge rule for the pilot window. The pilot does
+not repeal Category C consequential gates.
+
 ---
 
 ## Decision test
