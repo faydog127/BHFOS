@@ -10,6 +10,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatPhoneNumber } from '@/lib/formUtils';
 import { getTenantId } from '@/lib/tenantUtils';
 import AddressAutocomplete from '@/components/AddressAutocomplete';
+import { assertEstimatesCreateAllowed } from '@/lib/mlP1S1EstimatesDeny';
+import { incrementKpi } from '@/lib/mlP1S1Kpi';
 
 const EstimateEditorModal = ({ isOpen, onClose, onEstimateCreated }) => {
   const { toast } = useToast();
@@ -266,25 +268,12 @@ const EstimateEditorModal = ({ isOpen, onClose, onEstimateCreated }) => {
         updated_at: new Date().toISOString()
       };
 
-      // 4. Insert
-      const { data, error } = await supabase.from('estimates').insert(payload).select().single();
-
-      if (error) throw error;
-
-      toast({ title: "Success", description: "Estimate created successfully." });
-      if (onEstimateCreated) onEstimateCreated(data);
-      onClose();
-      
-      // Reset State
-      setStep(1);
-      setSelectedLead(null);
-      setLineItems([]);
-      setSearchTerm('');
-      setIsCreatingNewCustomer(false);
-      setNewCustomer({ firstName: '', lastName: '', email: '', phone: '', company: '', address: '' });
-      setAppliedDiscount(null);
-      setDiscountCode('');
-
+      // 4. ML-P1 Slice 1: legacy estimates create is DENY (use canonical quotes).
+      // No insert is attempted — dead insert removed. Server RLS still requires
+      // a separately authorized additive migration (see Slice 1 evidence residual).
+      void payload;
+      assertEstimatesCreateAllowed('EstimateEditorModal.save');
+      incrementKpi('estimates_create_deny');
     } catch (err) {
       console.error(err);
       toast({ variant: "destructive", title: "Error", description: err.message });
