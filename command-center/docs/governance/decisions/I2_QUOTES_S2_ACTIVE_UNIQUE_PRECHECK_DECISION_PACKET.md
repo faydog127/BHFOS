@@ -9,7 +9,7 @@
 | Base | `b2edaca6cc22b0299888b38cffac7835fa97f413` |
 | Branch | `ml/i2-quotes-active-unique-precheck` |
 | PR | [#80](https://github.com/faydog127/BHFOS/pull/80) |
-| Frozen head | `06fc3aecefabc1a70c89c7b7919630cb31106ec2` |
+| Frozen head | `2dd1e3514245efef6767d92f7cbe0d7e12761c53` |
 | Scope | One read-only aggregate catalog op for S2 uniqueness precheck |
 
 ## Correction
@@ -29,4 +29,4 @@ S2 A3 apply · deploy · Slice 3 · Stripe · invoice · TIS · G2.3 · row/toke
 
 ## Founder merge line (after reviews)
 
-> Authorize merge of PR #80 at `06fc3aecefabc1a70c89c7b7919630cb31106ec2` (source only). Does not authorize deploy, A3 prod migration apply, Slice 3, Stripe, follow-up, job, or invoice.
+> Authorize merge of PR #80 at `2dd1e3514245efef6767d92f7cbe0d7e12761c53` (source only). Does not authorize deploy, A3 prod migration apply, Slice 3, Stripe, follow-up, job, or invoice.
