@@ -93,7 +93,7 @@ describe('ML-P1 S2 audit G-02 fields', () => {
 });
 
 describe('ML-P1 S2 lifecycle service via server RPC', () => {
-  it('issues via RPC and always returns jobCreated false', async () => {
+  it('issues via RPC and surfaces server jobCreated/jobId (issue = false)', async () => {
     const calls = [];
     const supabase = {
       rpc: async (name, args) => {
@@ -102,7 +102,8 @@ describe('ML-P1 S2 lifecycle service via server RPC', () => {
         return {
           data: {
             action: 'issue',
-            jobCreated: true, // hostile server — client must still report false
+            jobCreated: false,
+            jobId: null,
             correlationId: 'c-issue',
             quote: { id: 'q1', status: 'issued', tenant_id: 'tvg' },
           },
@@ -118,8 +119,34 @@ describe('ML-P1 S2 lifecycle service via server RPC', () => {
       actorRole: 'technician', // forged — server ignores; client still calls RPC
     });
     assert.equal(result.jobCreated, false);
+    assert.equal(result.jobId, null);
     assert.equal(result.quote.status, 'issued');
     assert.equal(calls[0].args.p_action, 'issue');
+  });
+
+  it('approve surfaces jobCreated and jobId from server', async () => {
+    const supabase = {
+      rpc: async () => ({
+        data: {
+          action: 'approve',
+          jobCreated: true,
+          jobId: 'job-1',
+          idempotent: false,
+          quote: { id: 'q1', status: 'approved', tenant_id: 'tvg' },
+        },
+        error: null,
+      }),
+    };
+    const svc = createMlP1S2QuoteLifecycleService({ supabase });
+    const result = await svc.approveQuote({
+      quoteId: 'q1',
+      sessionTenantId: 'tvg',
+      urlTenantId: 'tvg',
+      actorRole: 'admin',
+      reasonCode: 'bg-1',
+    });
+    assert.equal(result.jobCreated, true);
+    assert.equal(result.jobId, 'job-1');
   });
 
   it('maps server ROLE_DENY for technician', async () => {
@@ -179,7 +206,7 @@ describe('ML-P1 S2 lifecycle service via server RPC', () => {
     );
   });
 
-  it('public-token approve via RPC; concurrent idempotent safe', async () => {
+  it('public-token approve via RPC; concurrent idempotent safe; surfaces jobId', async () => {
     let n = 0;
     const supabase = {
       rpc: async (name) => {
@@ -188,7 +215,8 @@ describe('ML-P1 S2 lifecycle service via server RPC', () => {
         return {
           data: {
             action: 'approve',
-            jobCreated: false,
+            jobCreated: n === 1,
+            jobId: 'job-tok',
             idempotent: n > 1,
             quote: { id: 'q-tok', status: 'accepted', approved_amount: 40 },
           },
@@ -199,9 +227,11 @@ describe('ML-P1 S2 lifecycle service via server RPC', () => {
     const svc = createMlP1S2QuoteLifecycleService({ supabase });
     const a = await svc.approveByPublicToken({ publicToken: 'tok-abc' });
     const b = await svc.approveByPublicToken({ publicToken: 'tok-abc' });
-    assert.equal(a.jobCreated, false);
+    assert.equal(a.jobCreated, true);
+    assert.equal(a.jobId, 'job-tok');
     assert.equal(b.jobCreated, false);
     assert.equal(b.idempotent, true);
+    assert.equal(b.jobId, 'job-tok');
   });
 
   it('revise via RPC returns new draft and jobCreated false', async () => {
@@ -231,7 +261,30 @@ describe('ML-P1 S2 lifecycle service via server RPC', () => {
     assert.equal(revised.jobCreated, false);
   });
 
-  it('JOB_GATE_REQUIRED mapped from server (pre-A3 fail-closed)', async () => {
+  it('maps ADDRESS_REQUIRED from S3 writer', async () => {
+    const supabase = {
+      rpc: async () => ({
+        data: null,
+        error: {
+          message: 'ML_P1_S3_ADDRESS_REQUIRED: service address required before job create',
+        },
+      }),
+    };
+    const svc = createMlP1S2QuoteLifecycleService({ supabase });
+    await assert.rejects(
+      () =>
+        svc.approveQuote({
+          quoteId: 'q1',
+          sessionTenantId: 'tvg',
+          urlTenantId: 'tvg',
+          actorRole: 'admin',
+          reasonCode: 'bg-1',
+        }),
+      (err) => err.code === 'ML_P1_S3_ADDRESS_REQUIRED',
+    );
+  });
+
+  it('JOB_GATE_REQUIRED still mapped if legacy server returns it', async () => {
     const supabase = {
       rpc: async () => ({
         data: null,
@@ -263,16 +316,17 @@ describe('ML-P1 S2 lifecycle service via server RPC', () => {
 });
 
 describe('ML-P1 S2 remediation source guards', () => {
-  it('public-quote-approve no longer inserts jobs', () => {
+  it('public-quote-approve does not insert jobs; passes through RPC job fields', () => {
     const edgePath = path.join(
       __dirname,
       '../../supabase/functions/public-quote-approve/index.ts',
     );
     const src = fs.readFileSync(edgePath, 'utf8');
     assert.equal(/from\('jobs'\)/.test(src), false);
-    assert.match(src, /ML_P1_S2_JOB_GATE_REQUIRED/);
-    assert.match(src, /job_created:\s*false/);
+    assert.equal(/ML_P1_S2_JOB_GATE_REQUIRED/.test(src), false);
     assert.match(src, /ml_p1_s2_quote_approve_public/);
+    assert.match(src, /job_created:\s*rpcJobCreated/);
+    assert.match(src, /job_id:\s*rpcJobId/);
   });
 
   it('server authz migration defines RPC + gate-off accept trigger + draft-only RLS', () => {

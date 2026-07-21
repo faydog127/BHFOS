@@ -103,7 +103,13 @@ function mapRpcError(error) {
     err.code = 'ML_P1_S2_TRANSITION_DENY';
   } else if (/ML_P1_S2_JOB_GATE_REQUIRED/i.test(msg)) {
     err.code = 'ML_P1_S2_JOB_GATE_REQUIRED';
-  } else if (/ML_P1_S2_QUOTE_NOT_FOUND/i.test(msg)) {
+  } else if (/ML_P1_S3_ADDRESS_REQUIRED/i.test(msg)) {
+    err.code = 'ML_P1_S3_ADDRESS_REQUIRED';
+  } else if (/ML_P1_S3_VERSION_MISMATCH/i.test(msg)) {
+    err.code = 'ML_P1_S3_VERSION_MISMATCH';
+  } else if (/ML_P1_S3_STATUS_DENY/i.test(msg)) {
+    err.code = 'ML_P1_S3_STATUS_DENY';
+  } else if (/ML_P1_S2_QUOTE_NOT_FOUND|ML_P1_S3_QUOTE_NOT_FOUND/i.test(msg)) {
     err.code = 'ML_P1_S2_QUOTE_NOT_FOUND';
   } else if (/ML_P1_S2_MISSING_TOKEN/i.test(msg)) {
     err.code = 'ML_P1_S2_MISSING_TOKEN';
@@ -120,6 +126,7 @@ function mapRpcError(error) {
 
 function normalizeRpcResult(data) {
   const payload = data && typeof data === 'object' ? data : {};
+  const jobId = payload.jobId ?? payload.job_id ?? null;
   return {
     quote: payload.quote || null,
     action: payload.action,
@@ -127,7 +134,9 @@ function normalizeRpcResult(data) {
     correlationId: payload.correlationId || null,
     audit: { ok: true, server: true },
     idempotent: Boolean(payload.idempotent),
-    jobCreated: false, // Slice 2 hard stop — never claim job create
+    // Slice 3: surface server job ensure result (approve path only creates jobs).
+    jobCreated: Boolean(payload.jobCreated ?? payload.job_created),
+    jobId: jobId ? String(jobId) : null,
   };
 }
 

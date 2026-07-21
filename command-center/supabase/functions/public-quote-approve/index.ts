@@ -682,42 +682,9 @@ Deno.serve(async (req) => {
     );
   }
 
-  // ML-P1 S2: prefer server RPC for approve (role/transition/gate/idempotency).
-  // Fail closed on approve if job-create gate is not explicitly off (eliminates pre-A3 auto-job).
+  // ML-P1 S3: prefer server RPC for approve (role/transition/idempotency + canonical job).
+  // Gate-off precheck retired — writer is mandatory inside approve RPC.
   if (!isDecline) {
-    const { data: gateRow, error: gateErr } = await supabaseAdmin
-      .from('global_config')
-      .select('value')
-      .eq('key', 'auto_create_job_on_quote_acceptance')
-      .maybeSingle();
-
-    const gateValue = String(gateRow?.value ?? 'true')
-      .trim()
-      .toLowerCase();
-    const gateOff = ['0', 'false', 'no', 'off'].includes(gateValue);
-    if (gateErr || !gateOff) {
-      await logPublicEvent({
-        kind: 'public_quote_approve',
-        tenantId,
-        quoteId: existingQuote.id,
-        token,
-        status: 'job_gate_required',
-        ip,
-        userAgent,
-        metadata: { run_id: runId, gate_value: gateRow?.value ?? null, error: gateErr?.message },
-      });
-      return respondJson(
-        {
-          error:
-            'Quote approval is deferred until job auto-create is disabled (ML-P1 S2 gate).',
-          code: 'ML_P1_S2_JOB_GATE_REQUIRED',
-          job_created: false,
-        },
-        503,
-        cors.headers,
-      );
-    }
-
     // Prefer SECURITY DEFINER RPC when migration applied (service_role / anon path).
     const rpcAttempt = await supabaseAdmin.rpc('ml_p1_s2_quote_approve_public', {
       p_public_token: token,
@@ -728,6 +695,8 @@ Deno.serve(async (req) => {
     if (!rpcAttempt.error && rpcAttempt.data) {
       const rpcPayload = rpcAttempt.data as Record<string, unknown>;
       const rpcQuote = (rpcPayload.quote || {}) as Record<string, unknown>;
+      const rpcJobId = (rpcPayload.jobId ?? rpcPayload.job_id ?? null) as string | null;
+      const rpcJobCreated = Boolean(rpcPayload.jobCreated ?? rpcPayload.job_created);
       await logPublicEvent({
         kind: 'public_quote_approve',
         tenantId,
@@ -740,6 +709,9 @@ Deno.serve(async (req) => {
           run_id: runId,
           via: 'ml_p1_s2_quote_approve_public',
           idempotent: Boolean(rpcPayload.idempotent),
+          job_id: rpcJobId,
+          job_created: rpcJobCreated,
+          slice: 'ml-p1-s3',
         },
       });
 
@@ -756,7 +728,12 @@ Deno.serve(async (req) => {
           entityId: String(rpcQuote.id || existingQuote.id),
           eventType: 'QuoteAccepted',
           actorType: 'public',
-          payload: { run_id: runId, job_created: false, slice: 'ml-p1-s2' },
+          payload: {
+            run_id: runId,
+            job_created: rpcJobCreated,
+            job_id: rpcJobId,
+            slice: 'ml-p1-s3',
+          },
         });
       }
 
@@ -778,7 +755,8 @@ Deno.serve(async (req) => {
           quote_result: 'approved',
           invoice_id: null,
           invoice_token: null,
-          job_created: false,
+          job_created: rpcJobCreated,
+          job_id: rpcJobId,
           idempotent: Boolean(rpcPayload.idempotent),
         },
         200,
