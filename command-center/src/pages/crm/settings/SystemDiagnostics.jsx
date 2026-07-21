@@ -111,7 +111,8 @@ const SystemDiagnostics = () => {
             requirements: {
                 tables: ['leads', 'calls', 'properties'],
                 functions: ['generate-call-options', 'google-places'],
-                secrets: ['OPENAI_API_KEY', 'GOOGLE_MAPS_API_KEY'],
+                // Backend LLM secrets are never checked or named in the browser.
+                secrets: ['GOOGLE_MAPS_API_KEY'],
                 frontend: ['Google Maps Script']
             }
         },
@@ -123,7 +124,8 @@ const SystemDiagnostics = () => {
             requirements: {
                 tables: ['script_library'],
                 functions: ['generate-scripts'],
-                secrets: ['OPENAI_API_KEY'],
+                // Script generation uses backend-only secrets; do not name them here.
+                secrets: [],
                 frontend: []
             }
         },
@@ -203,8 +205,9 @@ const SystemDiagnostics = () => {
 
     const runFeatureAudit = async () => {
         log("Phase 2: Auditing Feature Readiness...", "info");
-        // Mock secrets check for frontend demo (actual check would be server-side)
-        let secretStatus = { 'OPENAI_API_KEY': true, 'GOOGLE_MAPS_API_KEY': true, 'RESEND_API_KEY': true, 'SUPABASE_SERVICE_ROLE_KEY': true }; 
+        // Frontend may only assert client-exposed config names. Backend secrets
+        // (LLM providers, service role, etc.) are never named or checked here.
+        let secretStatus = { 'GOOGLE_MAPS_API_KEY': true, 'RESEND_API_KEY': true, 'SUPABASE_SERVICE_ROLE_KEY': true }; 
         
         const report = [];
         for (const feature of FEATURE_DEFS) {

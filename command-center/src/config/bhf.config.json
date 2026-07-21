@@ -41,8 +41,7 @@
   ],
   "integrations": [
     { "id": "google_places", "key_name": "VITE_GOOGLE_MAPS_API_KEY", "service_name": "Google Places API" },
-    { "id": "supabase", "key_name": "VITE_SUPABASE_URL", "service_name": "Supabase Core" },
-    { "id": "openai", "key_name": "OPENAI_API_KEY", "service_name": "OpenAI LLM (Backend Only)", "backend_only": true }
+    { "id": "supabase", "key_name": "VITE_SUPABASE_URL", "service_name": "Supabase Core" }
   ],
   "bhf_defaults": {
     "features": {

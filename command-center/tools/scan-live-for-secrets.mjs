@@ -39,6 +39,11 @@ const BANNED_PATTERNS = [
     description: 'Disallowed frontend env var name',
     regex: /VITE_OPENAI_API_KEY/g,
   },
+  {
+    id: 'disallowed_backend_openai_env_name',
+    description: 'Backend OpenAI env var name must not ship in frontend bundles',
+    regex: /OPENAI_API_KEY/g,
+  },
 ];
 
 function redact(value) {
