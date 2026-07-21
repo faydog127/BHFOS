@@ -10,6 +10,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatPhoneNumber } from '@/lib/formUtils';
 import { getTenantId } from '@/lib/tenantUtils';
 import AddressAutocomplete from '@/components/AddressAutocomplete';
+import { assertEstimatesCreateAllowed } from '@/lib/mlP1S1EstimatesDeny';
+import { incrementKpi } from '@/lib/mlP1S1Kpi';
 
 const EstimateEditorModal = ({ isOpen, onClose, onEstimateCreated }) => {
   const { toast } = useToast();
@@ -266,7 +268,9 @@ const EstimateEditorModal = ({ isOpen, onClose, onEstimateCreated }) => {
         updated_at: new Date().toISOString()
       };
 
-      // 4. Insert
+      // 4. Insert — ML-P1 Slice 1: legacy estimates create is DENY (use canonical quotes)
+      assertEstimatesCreateAllowed('EstimateEditorModal.save');
+      incrementKpi('estimates_create_deny');
       const { data, error } = await supabase.from('estimates').insert(payload).select().single();
 
       if (error) throw error;
