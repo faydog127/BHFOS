@@ -388,6 +388,114 @@ export async function evaluateReadiness(packet, options = {}) {
   add('explicit_stop_conditions', stops.length > 0 && stops.every((s) => nonEmpty(s)), 'need at least one');
   add('one_exact_founder_command_or_action', nonEmpty(packet.one_exact_founder_command_or_action), 'exactly one action string');
 
+  // 21–32 OAuth Named Tunnel (when tunnel.required)
+  const tunnel = packet.tunnel && typeof packet.tunnel === 'object' ? packet.tunnel : null;
+  if (!tunnel || tunnel.required !== true) {
+    add('tunnel_required_named_class', true, 'tunnel not required for this packet');
+    add('tunnel_stable_hostname_pinned', true, 'tunnel not required for this packet');
+    add('tunnel_public_redirect_uri_match', true, 'tunnel not required for this packet');
+    add('tunnel_credentials_outside_repo', true, 'tunnel not required for this packet');
+    add('tunnel_path_only_attested', true, 'tunnel not required for this packet');
+    add('tunnel_catch_all_deny_attested', true, 'tunnel not required for this packet');
+    add('tunnel_stop_and_closure_procedure', true, 'tunnel not required for this packet');
+    add('tunnel_executable_present', true, 'tunnel not required for this packet');
+    add('tunnel_config_present', true, 'tunnel not required for this packet');
+    add('tunnel_start_command_present', true, 'tunnel not required for this packet');
+    add('tunnel_stop_command_present', true, 'tunnel not required for this packet');
+    add('tunnel_closure_verification_command_present', true, 'tunnel not required for this packet');
+    add('tunnel_local_listener_loopback_only', true, 'tunnel not required for this packet');
+    add('tunnel_no_random_or_quick_hostname', true, 'tunnel not required for this packet');
+  } else {
+    const expectedHost = 'oauth-diagnostics.bhfos.com';
+    const expectedPublic = 'https://oauth-diagnostics.bhfos.com/oauth/callback';
+    const expectedLocal = 'http://127.0.0.1:8765/oauth/callback';
+    add(
+      'tunnel_required_named_class',
+      tunnel.class === 'cloudflare_named',
+      `class=${tunnel.class || 'missing'}`
+    );
+    add(
+      'tunnel_stable_hostname_pinned',
+      tunnel.stable_hostname === expectedHost,
+      tunnel.stable_hostname || 'missing'
+    );
+    add(
+      'tunnel_public_redirect_uri_match',
+      tunnel.public_redirect_uri === expectedPublic &&
+        tunnel.local_listener_uri === expectedLocal &&
+        packet.callback_or_redirect_expected === expectedPublic &&
+        packet.callback_or_redirect_actual === expectedPublic &&
+        String(tunnel.public_redirect_uri || '').startsWith('https://') &&
+        !String(tunnel.public_redirect_uri || '').startsWith('http://127.'),
+      'public HTTPS redirect + local HTTP listener split must match contract'
+    );
+    const credPath = tunnel.credentials_path;
+    const credExists = nonEmpty(credPath) && fs.existsSync(credPath);
+    const credOutside = credExists && pathIsOutsideRepo(credPath, repoRoot);
+    add(
+      'tunnel_credentials_outside_repo',
+      credExists && credOutside,
+      credExists ? (credOutside ? 'outside repo' : 'inside repo') : 'missing'
+    );
+    add(
+      'tunnel_path_only_attested',
+      tunnel.path_only_config_attested === true,
+      'path-only forward contract must be attested'
+    );
+    add(
+      'tunnel_catch_all_deny_attested',
+      tunnel.catch_all_deny_attested === true || tunnel.path_only_config_attested === true,
+      'catch-all deny must be attested (path_only implies catch-all in Option B)'
+    );
+    add(
+      'tunnel_stop_and_closure_procedure',
+      tunnel.stop_after_run_and_closure_procedure_present === true,
+      'stop-after-run + public callback closure procedure required'
+    );
+    const exePath = tunnel.executable_path;
+    add(
+      'tunnel_executable_present',
+      nonEmpty(exePath) && fs.existsSync(exePath) && path.isAbsolute(exePath),
+      exePath ? (fs.existsSync(exePath) ? 'present' : 'missing') : 'missing path'
+    );
+    const cfgPath = tunnel.config_path;
+    add(
+      'tunnel_config_present',
+      nonEmpty(cfgPath) && fs.existsSync(cfgPath) && pathIsOutsideRepo(cfgPath, repoRoot),
+      cfgPath ? 'config outside repo' : 'missing config path'
+    );
+    add(
+      'tunnel_start_command_present',
+      nonEmpty(tunnel.start_command),
+      'tunnel start command required'
+    );
+    add(
+      'tunnel_stop_command_present',
+      nonEmpty(tunnel.stop_command),
+      'tunnel stop command required'
+    );
+    add(
+      'tunnel_closure_verification_command_present',
+      nonEmpty(tunnel.closure_verification_command),
+      'public callback closure verification command required'
+    );
+    add(
+      'tunnel_local_listener_loopback_only',
+      tunnel.local_listener_uri === expectedLocal &&
+        String(tunnel.local_listener_uri || '').startsWith('http://127.0.0.1:') &&
+        !/0\.0\.0\.0|localhost/i.test(String(tunnel.local_listener_uri || '')),
+      'local listener must remain 127.0.0.1 loopback-only'
+    );
+    const host = String(tunnel.stable_hostname || '');
+    add(
+      'tunnel_no_random_or_quick_hostname',
+      host === expectedHost &&
+        !/trycloudflare\.com|cfargotunnel\.com/i.test(host) &&
+        !/trycloudflare\.com|cfargotunnel\.com/i.test(String(tunnel.public_redirect_uri || '')),
+      'no random or quick-tunnel hostname'
+    );
+  }
+
   const failed = checks.filter((c) => !c.ok);
   const ready = failed.length === 0;
   const verdict = ready ? 'FOUNDER_RUN_READY' : 'FOUNDER_RUN_BLOCKED';

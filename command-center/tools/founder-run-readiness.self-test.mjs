@@ -233,14 +233,85 @@ export async function runSelfTests() {
     basePacket({
       external_secret_store_path: secretFile,
       required_secret_names: ['I2_EXAMPLE_NAME'],
-      callback_or_redirect_expected: 'http://127.0.0.1:8765/oauth/callback',
-      callback_or_redirect_actual: 'http://127.0.0.1:8765/oauth/callback',
+      callback_or_redirect_expected: 'https://oauth-diagnostics.bhfos.com/oauth/callback',
+      callback_or_redirect_actual: 'https://oauth-diagnostics.bhfos.com/oauth/callback',
       required_dependencies: [{ kind: 'file', path: path.join(repoRoot, 'tools/founder-run-readiness.mjs') }],
     }),
     { repoRoot, allowFixtureSkip: true }
   );
   pass(results, 'ready_when_all_fields_pass', happy.verdict === 'FOUNDER_RUN_READY', happy.failed.join(','));
   pass(results, 'ready_includes_credential_field', happy.checks.some((c) => c.id === 'no_credential_file_in_repo' && c.ok));
+
+  // OAuth tunnel packet — credentials outside repo + exact public redirect
+  const tunnelCreds = path.join(tmp, 'named-tunnel-creds.json');
+  const tunnelConfig = path.join(tmp, 'oauth-tunnel-config.yml');
+  const tunnelExe = path.join(tmp, process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared');
+  fs.writeFileSync(tunnelCreds, '{"TunnelID":"synthetic"}\n', 'utf8');
+  fs.writeFileSync(tunnelConfig, 'tunnel: synthetic\ningress: []\n', 'utf8');
+  fs.writeFileSync(tunnelExe, '', 'utf8');
+  const tunnelReady = await evaluateReadiness(
+    basePacket({
+      external_secret_store_path: secretFile,
+      required_secret_names: ['I2_EXAMPLE_NAME'],
+      callback_or_redirect_expected: 'https://oauth-diagnostics.bhfos.com/oauth/callback',
+      callback_or_redirect_actual: 'https://oauth-diagnostics.bhfos.com/oauth/callback',
+      required_local_port: undefined,
+      tunnel: {
+        required: true,
+        class: 'cloudflare_named',
+        stable_hostname: 'oauth-diagnostics.bhfos.com',
+        public_redirect_uri: 'https://oauth-diagnostics.bhfos.com/oauth/callback',
+        local_listener_uri: 'http://127.0.0.1:8765/oauth/callback',
+        credentials_path: tunnelCreds,
+        executable_path: tunnelExe,
+        config_path: tunnelConfig,
+        path_only_config_attested: true,
+        catch_all_deny_attested: true,
+        start_command: 'cloudflared tunnel --config <outside> run',
+        stop_command: 'helper stop()',
+        closure_verification_command: 'GET public callback fail-closed after stop',
+        stop_after_run_and_closure_procedure_present: true,
+      },
+    }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  pass(
+    results,
+    'tunnel_packet_ready',
+    tunnelReady.verdict === 'FOUNDER_RUN_READY',
+    tunnelReady.failed.join(',')
+  );
+
+  const tunnelBadHost = await evaluateReadiness(
+    basePacket({
+      callback_or_redirect_expected: 'https://oauth-diagnostics.bhfos.com/oauth/callback',
+      callback_or_redirect_actual: 'https://oauth-diagnostics.bhfos.com/oauth/callback',
+      tunnel: {
+        required: true,
+        class: 'cloudflare_named',
+        stable_hostname: 'random-abc.trycloudflare.com',
+        public_redirect_uri: 'https://oauth-diagnostics.bhfos.com/oauth/callback',
+        local_listener_uri: 'http://127.0.0.1:8765/oauth/callback',
+        credentials_path: tunnelCreds,
+        executable_path: tunnelExe,
+        config_path: tunnelConfig,
+        path_only_config_attested: true,
+        catch_all_deny_attested: true,
+        start_command: 'cloudflared tunnel run',
+        stop_command: 'stop',
+        closure_verification_command: 'closure verify',
+        stop_after_run_and_closure_procedure_present: true,
+      },
+    }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  pass(
+    results,
+    'tunnel_random_hostname_blocked',
+    tunnelBadHost.verdict === 'FOUNDER_RUN_BLOCKED' &&
+      (tunnelBadHost.failed.includes('tunnel_stable_hostname_pinned') ||
+        tunnelBadHost.failed.includes('tunnel_no_random_or_quick_hostname'))
+  );
 
   const report = formatReport(happy);
   pass(results, 'report_has_status_contract', /TECHNICAL RESULT:/.test(report) && /GOVERNANCE STATUS:/.test(report) && /AUTHORIZED NEXT STATE:/.test(report));
@@ -257,16 +328,22 @@ export async function runSelfTests() {
   const envDoc = fs.readFileSync(path.join(repoRoot, 'docs/governance/ENVIRONMENT_ACCEPTANCE.md'), 'utf8');
   const oauthPathSteps = [
     'protected launcher',
-    'SHA verification',
-    'clean-worktree verification',
-    'secret-store discovery',
-    'secret-name presence check',
-    'browser executable validation',
-    'authorize URL construction',
-    'callback listener startup',
-    'callback URI contract',
-    'safe output',
-    'token-store destination',
+    'exact SHA verification',
+    'clean worktree verification',
+    'external secret store',
+    'browser',
+    'public HTTPS redirect URI',
+    'named tunnel',
+    'path-only routing',
+    'local callback',
+    'state validation',
+    'PKCE validation',
+    'local code exchange',
+    'external token-store write',
+    'tunnel shutdown',
+    'public callback closure',
+    'post-run governance status',
+    'oauth-diagnostics.bhfos.com',
   ];
   pass(
     results,
