@@ -309,6 +309,10 @@ Phase 1 is **complete** when:
 | S5 | `ml/p1-s5-job-to-invoice` | `F:\Dev\BHFOS-ml-p1-s5` |
 | S6 | `ml/p1-s6-uat-acceptance` (docs/evidence) | `F:\Dev\BHFOS-ml-p1-s6` |
 
+Slice 1 merge baseline: `2b62bf35dd2cc32ac30808ba36b3ad93ff1547ab`.
+See `ML-P1_SLICE1_CLOSEOUT_AND_RESIDUAL_DISPOSITION.md` and
+`ML-P1_SLICE2_DECISION_PACKET.md` (docs only — coding not authorized by those docs alone).
+
 Base each slice on the **then-current** `origin/main` after prior slice merge (anti-delay: no full replan).
 
 ---
