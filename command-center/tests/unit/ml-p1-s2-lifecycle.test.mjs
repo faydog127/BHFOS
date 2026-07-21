@@ -288,6 +288,7 @@ describe('ML-P1 S2 remediation source guards', () => {
     assert.match(mig, /ml_p1_s2_job_gate_is_off/);
     assert.match(mig, /trg_ml_p1_s2_require_job_gate_off_on_accept/);
     assert.match(mig, /Quotes draft updatable by tenant/);
+    assert.match(mig, /Quotes draft insertable by tenant/);
     assert.match(mig, /ML_P1_S2_QUOTE_EXPIRED/);
     assert.match(mig, /app_user_roles/);
     assert.equal(/user_metadata/i.test(mig), false);

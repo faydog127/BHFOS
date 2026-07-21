@@ -618,6 +618,7 @@ GRANT EXECUTE ON FUNCTION public.ml_p1_s2_quote_approve_public(text, text, text)
 -- ---------------------------------------------------------------------------
 -- RLS: authenticated users may update draft quotes only while status stays draft.
 -- Lifecycle status changes go through SECURITY DEFINER RPCs.
+-- INSERT similarly restricted to draft (deny direct insert of issued/accepted/etc.).
 -- ---------------------------------------------------------------------------
 DROP POLICY IF EXISTS "Quotes updatable by tenant" ON public.quotes;
 CREATE POLICY "Quotes draft updatable by tenant"
@@ -630,6 +631,18 @@ USING (
   )
   AND lower(coalesce(status, 'draft')) = 'draft'
 )
+WITH CHECK (
+  (
+    tenant_id = (auth.jwt() -> 'app_metadata' ->> 'tenant_id')
+    OR user_id = auth.uid()
+  )
+  AND lower(coalesce(status, 'draft')) = 'draft'
+);
+
+DROP POLICY IF EXISTS "Quotes writable by authenticated users" ON public.quotes;
+CREATE POLICY "Quotes draft insertable by tenant"
+ON public.quotes
+FOR INSERT
 WITH CHECK (
   (
     tenant_id = (auth.jwt() -> 'app_metadata' ->> 'tenant_id')
