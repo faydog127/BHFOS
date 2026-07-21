@@ -70,7 +70,7 @@ S6 depends on S1–S5 acceptance evidence. No parallel Tier-3 money-state slices
 | KI-02 Customer/property/address lineage | **Resolved in S1** (P1 authority rules); B-023 rewrite **explicitly deferred** |
 | KI-03 UUID↔bigint | **Required before S1** (document safe join; no name linking); unification **explicitly deferred** |
 | KI-04 Address field mismatch | **Fixed during S1** (correct `address_line_1` mapping on P1 path) |
-| KI-05 Tenant / money-writer | **Required every slice** (tenant tests); money-writer inventory **proven by S5**, watched from S1 |
+| KI-05 Tenant context / money-writer | **V1 every slice:** authn + role + TVG context DENY; money-writer inventory **proven by S5**. **Cross-tenant multi-tenant → V2** |
 | KI-06 payment_status divergence | **Designed in S4/S5** (invoice authority); **fixed during S5** |
 | KI-07 Alternate paid writers | **Proven by S5** (inventory); no paid mutation in S1–S4 |
 | KI-08 Admin auth fallback | **Fixed during each slice** touching money-state endpoints; **blocking for S1+** on new endpoints |
@@ -105,8 +105,8 @@ S6 depends on S1–S5 acceptance evidence. No parallel Tier-3 money-state slices
 
 | Slice | Instrument now | Gates exercised |
 | --- | --- | --- |
-| S1 | Customer find/create time; estimate create time; taps; Notes escape diary; dup customer attempts; tenant deny count; audit completeness on quote draft create | G-02 (slice events), G-03, G-06 partial, G-07 baseline start |
-| S2 | Approval rate inputs; abandoned; audit on issue/approve/revise; unauthorized transition attempts | G-02, G-03, G-05 (issue/approve atomicity) |
+| S1 | Customer find/create time; estimate create time; taps; Notes escape diary; dup customer attempts; authz deny count; audit completeness on quote draft create | G-02 (slice events), G-03 **V1** (role/authn/context), G-06 partial, G-07 baseline start |
+| S2 | Approval rate inputs; abandoned; audit on issue/approve/revise; unauthorized **role** attempts | G-02, G-03 **V1** (role/authn), G-05 (issue/approve atomicity) |
 | S3 | Approval→job time; dup job under retry; lineage quote→job; partial tx under failure | G-01 partial, G-04 jobs, G-05, G-02 |
 | S4 | Job complete time; evidence completeness; Notes escape; failed transitions; tech help requests | G-06, G-02, G-13/14 metrics |
 | S5 | Completion→invoice time; lineage 100%; dup invoice retry; void reason coverage; writer inventory | G-01, G-04 invoices, G-05, G-09 |
@@ -143,9 +143,9 @@ S6 depends on S1–S5 acceptance evidence. No parallel Tier-3 money-state slices
 
 ## 7. Security and authorization plan
 
-- Deny-by-default; least privilege; matrix from Money-State Design Contract §11.
-- Tenant on every money-entity write from S1.
-- No UI-only auth; negative cross-tenant tests each slice (G-03).
+- Deny-by-default; least privilege; **role** matrix from Money-State Design Contract §11.
+- **V1 tenancy:** single-tenant TVG — require valid TVG tenant context on money writes (missing/malformed → DENY). Multi-tenant / cross-tenant isolation is **V2**.
+- No UI-only auth; V1 negatives each slice: unauthorized **role**, unauthenticated access (G-03 V1 clause). Cross-tenant G-03 is **V2 only**.
 - Secrets never in logs; audit events without token/PII payloads.
 - Single money-writer proven S5 (G-09); no paid mutation S1–S4.
 
@@ -208,7 +208,7 @@ lead (authoritative customer for P1)
 | Failure | No orphan quote without tenant/customer; rollback create |
 | KPI | Time find/create customer; time create draft; taps; escape diary; tenant denies |
 | Acceptance | Draft quote on `quotes` only; legacy estimates create blocked on P1 path; tenant negatives pass; audit present; mobile smoke |
-| Blocking gates | G-02 (slice), G-03, G-08 for S1 critical KIs, start G-07 baseline |
+| Blocking gates | G-02 (slice), G-03 **V1** (role/authn/context), G-08 for S1 critical KIs, start G-07 baseline |
 | Reviewers | Product, UX/Field, Data, Security, Architecture |
 | Branch/worktree | See Slice 1 Decision Packet |
 | Evidence | Screenshots/IDs (no secrets); test log; KI checklist |
@@ -227,7 +227,7 @@ lead (authoritative customer for P1)
 | KI | KI-01 remainder; KI-12; KI-08; KI-15 |
 | Deferred | send-estimate; job |
 | Migration | Likely state/version/approval tables — separate auth if needed |
-| Gates | G-02, G-03, G-05 on issue/approve |
+| Gates | G-02, G-03 **V1** (role/authn), G-05 on issue/approve |
 | Stop | Before accept→job |
 | Next | S2 accepted → S3 packet |
 
@@ -277,7 +277,7 @@ lead (authoritative customer for P1)
 | --- | --- |
 | Business objective | Prove office + Founder + technician mobile path USABLE under gates |
 | Roles | Founder, Technician, Office, reviewers |
-| Scope | Real-device tests; repeated-click; forced-failure; cross-tenant negatives; lineage verification; audit completeness; task-time baselines→caps; Notes escape testing; recovery/exceptions; blocking KPI review; UX/Field review disposition |
+| Scope | Real-device tests; repeated-click; forced-failure; **V1** unauthorized-role/unauthenticated negatives; lineage verification; audit completeness; task-time baselines→caps; Notes escape testing; recovery/exceptions; blocking KPI review; UX/Field review disposition. **Cross-tenant suite = V2** |
 | Non-scope | New product features; live pay; TIS; G2.3 reopen |
 | Gates | **All G-01–G-10** |
 | Stop | Phase 1 complete definition met or residual-risk acceptances signed |
@@ -310,6 +310,7 @@ Phase 1 is **complete** when:
 | S6 | `ml/p1-s6-uat-acceptance` (docs/evidence) | `F:\Dev\BHFOS-ml-p1-s6` |
 
 Slice 1 merge baseline: `2b62bf35dd2cc32ac30808ba36b3ad93ff1547ab`.
+**V1 tenancy:** single-tenant The Vent Guys; multi-tenant / cross-tenant = V2.
 See `ML-P1_SLICE1_CLOSEOUT_AND_RESIDUAL_DISPOSITION.md` and
 `ML-P1_SLICE2_DECISION_PACKET.md` (docs only — coding not authorized by those docs alone).
 

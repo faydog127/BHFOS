@@ -98,16 +98,22 @@ Phase 1 does **not** require full field FSM. Minimum for lock path:
 | Issue invoice | Yes | No default | Yes | Yes |
 | Void invoice | No | No | Yes + reason | Yes + reason |
 | Mark paid | **Canonical writer only** | No | No | No (except break-glass + reason + audit) |
-| Cross-tenant access | Never | Never | Never | Never |
+| Cross-org / multi-tenant access | **V2** — N/A to V1 single-tenant TVG freeze | — | — | — |
+
+**V1 note:** BHFOS V1 is single-tenant for The Vent Guys. The §11 matrix above is
+**role** authorization among TVG users. Multi-tenant / cross-tenant isolation is
+a **V2** architecture item and is not an ML-P1 acceptance requirement.
 
 UI hiding is **not** authorization. Every money-state action authorized server-side.
 
 ## 12. Server-side deny-by-default
 
 - Unknown transition → DENY.
-- Missing tenant / actor → DENY.
-- Agent- or client-supplied project/tenant override → DENY.
-- No admin tenant fallback on money-state endpoints.
+- Missing actor → DENY.
+- Missing or malformed **TVG tenant context** → DENY (V1 integrity — not multi-tenant isolation).
+- Agent- or client-supplied context override that bypasses session → DENY.
+- No admin silent tenant-context fallback on money-state endpoints.
+- **V2:** cross-tenant DENY when multi-tenant is authorized (not V1 ML-P1 gate).
 
 ## 13. Minimum audit event fields
 

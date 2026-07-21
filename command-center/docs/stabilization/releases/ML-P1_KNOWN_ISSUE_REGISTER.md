@@ -60,18 +60,19 @@ Timing classes: `P1_BLOCKING` | `P1_MUST_DESIGN` | `P1_FIX_DURING` | `DEFER_SIGN
 | Owner | Money-loop implementer |
 | Completion test | P1 path reads/writes hosted `address_line_1` (or documented alias); smoke shows non-empty service address |
 
-## KI-05 — Tenant isolation / money-writer watch (B-003)
+## KI-05 — Tenant context / money-writer watch (B-003)
 
 | Field | Value |
 | --- | --- |
 | Evidence | `V1_STABILIZATION_BACKLOG.md` B-003; handshake P0-01; Pillar P1-GR-003/005 |
 | Affected workflow | All money-state writes; listing; admin APIs |
-| Risk | Cross-tenant exposure; wrong-tenant money mutation — existential |
-| Safe to defer? | **No** for negative tests and writer inventory |
-| Deferral rationale | N/A — watch item requires continuous gate; any new leak is immediate stop |
-| Timing | `P1_BLOCKING` (negative tenant tests + writer proof) |
-| Owner | Security / Architecture Guard |
-| Completion test | Automated negative cross-tenant cases = 0 unauthorized access; money-writer inventory lists exactly one paid-state writer |
+| Risk | **V1:** unauthorized role/unauthenticated write; missing/malformed TVG tenant context; alternate money writers. **V2:** cross-tenant exposure (multi-tenant) |
+| Safe to defer? | **No** for V1 authn/role/context DENY + money-writer inventory. **Yes (signed to V2)** for multi-tenant / cross-tenant isolation |
+| Deferral rationale | **Founder V1 decision:** BHFOS V1 is single-tenant TVG only. Cross-tenant isolation is V2 architecture, not ML-P1 / V1 freeze |
+| Timing | `P1_BLOCKING` (authn + role + TVG context DENY + writer watch); `DEFER_SIGNED` → **V2** (cross-tenant / multi-tenant RLS) |
+| Owner | Security / Architecture Guard (V1); V2 architecture owner (cross-tenant) |
+| Completion test (V1) | Unauthorized-role and unauthenticated money-path negatives = DENY; missing/malformed TVG context = DENY; money-writer inventory lists exactly one paid-state writer (by S5) |
+| Completion test (V2) | Automated cross-tenant read/write negatives = 0 unauthorized access when multi-tenant is authorized |
 
 ## KI-06 — Invoice vs job `payment_status` divergence (B-008)
 
