@@ -4,7 +4,6 @@
  * No migrations. No issue/approve/job/invoice.
  */
 
-import { assertEstimatesCreateAllowed } from '../lib/mlP1S1EstimatesDeny.js';
 import {
   assertStableCustomerLink,
   resolveP1ServiceAddress,
@@ -83,9 +82,6 @@ export function createMlP1S1QuoteDraftService(deps) {
     correlationId = null,
   }) {
     startKpiTimer('create_draft_quote');
-    // This service never writes `estimates` (KI-01). Call sites that still
-    // attempt estimates.create must use assertEstimatesCreateAllowed separately.
-    void assertEstimatesCreateAllowed;
 
     const tenantId = resolveWriteTenantId({
       sessionTenantId,
@@ -306,9 +302,6 @@ export function createMlP1S1QuoteDraftService(deps) {
   }
 
   async function findDuplicateCustomers({ tenantId, input, limit = 8 }) {
-    const { buildDuplicateCustomerFilters, sortDuplicateCandidates } = await import(
-      '@/lib/mlP1S1DuplicateCustomer.js'
-    );
     const built = buildDuplicateCustomerFilters(input);
     if (!built.ok) return { ok: false, reason: built.reason, matches: [] };
     const { data, error } = await supabase
