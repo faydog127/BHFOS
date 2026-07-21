@@ -98,11 +98,11 @@ Phase 1 does **not** require full field FSM. Minimum for lock path:
 | Issue invoice | Yes | No default | Yes | Yes |
 | Void invoice | No | No | Yes + reason | Yes + reason |
 | Mark paid | **Canonical writer only** | No | No | No (except break-glass + reason + audit) |
-| Cross-org / multi-tenant access | **V2** — N/A to V1 single-tenant TVG freeze | — | — | — |
+| Shared multi-tenant / cross-tenant access | **NOT APPLICABLE** — V2 is dedicated instance per company; shared multi-tenancy removed | — | — | — |
 
-**V1 note:** BHFOS V1 is single-tenant for The Vent Guys. The §11 matrix above is
-**role** authorization among TVG users. Multi-tenant / cross-tenant isolation is
-a **V2** architecture item and is not an ML-P1 acceptance requirement.
+**V1 note:** BHFOS V1 is single-company for The Vent Guys. §11 is **internal role**
+authorization. **V2 note:** White-label dedicated instances — not shared-tenant RLS.
+See `BHFOS_V1_V2_PRODUCT_BOUNDARY.md`.
 
 UI hiding is **not** authorization. Every money-state action authorized server-side.
 
@@ -110,10 +110,10 @@ UI hiding is **not** authorization. Every money-state action authorized server-s
 
 - Unknown transition → DENY.
 - Missing actor → DENY.
-- Missing or malformed **TVG tenant context** → DENY (V1 integrity — not multi-tenant isolation).
+- Missing or malformed **TVG company/tenant context** → DENY (single-company integrity).
 - Agent- or client-supplied context override that bypasses session → DENY.
-- No admin silent tenant-context fallback on money-state endpoints.
-- **V2:** cross-tenant DENY when multi-tenant is authorized (not V1 ML-P1 gate).
+- No admin silent context fallback on money-state endpoints.
+- Shared multi-tenant cross-org DENY suites → **NOT APPLICABLE** under current V1/V2 model.
 
 ## 13. Minimum audit event fields
 
@@ -147,16 +147,32 @@ High-value history should be append-only (events not overwritten).
 - Optimistic concurrency or equivalent on quote/invoice version rows.
 - Duplicate-event protection for future webhooks (design now).
 
-## 16. Future payment readiness (no live pay implementation)
+## 16. Payment / Stripe (V1 in scope — slice placement separate)
 
-Design **must not block**:
+**Product authority:** Stripe payment processing is **in V1** (`BHFOS_V1_V2_PRODUCT_BOUNDARY.md`).
+Earlier “no live pay in Phase 1” planning language is **superseded**.
 
-- partial payments, deposits, failed payments, refunds, chargebacks, credits
-- payment allocation and payment↔invoice reconciliation
-- idempotent payment requests
-- provider webhook retries and duplicate-event protection
+Design and implementation must support (minimum operational V1):
 
-Phase 1 **does not** implement live Stripe expansion; public-pay proof remains historical. New payment code requires separate Founder auth.
+- payment initiation and status  
+- payment confirmation  
+- failed payment handling  
+- duplicate payment protection  
+- webhook idempotency  
+- reconciliation  
+- refunds or void handling at minimum operational level  
+- audit history  
+- customer communication  
+- failure escalation  
+
+Public-pay + webhook spine already exists in code; gaps must be closed before V1
+freeze / USABLE. New payment code still requires normal Founder auth per PR/SHA.
+
+Also preserve readiness for (may deepen after minimum):
+
+- partial payments, deposits, credits  
+- payment allocation detail  
+- provider webhook retries (already partially present)
 
 ## 17. Explicitly not required in Phase 1
 

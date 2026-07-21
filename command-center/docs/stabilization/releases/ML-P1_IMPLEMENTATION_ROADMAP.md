@@ -29,7 +29,10 @@ Create/find customer
   → office + mobile end-to-end acceptance
 ```
 
-**In Phase 1:** Live payment **execution** remains out. Payment-readiness constraints from the Money-State Design Contract **must** be preserved.
+**In Phase 1 / V1 freeze:** Live **Stripe payment processing is in scope for V1**
+(see `BHFOS_V1_V2_PRODUCT_BOUNDARY.md`). Money Loop **slices S1–S4** still stop
+before payment execution; payment hardening and autonomous follow-up are scheduled
+in payment/follow-up oriented work — not treated as “V2-only.”
 
 **USABLE** requires gates G-01–G-10 (Blocking Acceptance Gates). CI green ≠ USABLE.
 
@@ -70,7 +73,7 @@ S6 depends on S1–S5 acceptance evidence. No parallel Tier-3 money-state slices
 | KI-02 Customer/property/address lineage | **Resolved in S1** (P1 authority rules); B-023 rewrite **explicitly deferred** |
 | KI-03 UUID↔bigint | **Required before S1** (document safe join; no name linking); unification **explicitly deferred** |
 | KI-04 Address field mismatch | **Fixed during S1** (correct `address_line_1` mapping on P1 path) |
-| KI-05 Tenant context / money-writer | **V1 every slice:** authn + role + TVG context DENY; money-writer inventory **proven by S5**. **Cross-tenant multi-tenant → V2** |
+| KI-05 Company context / money-writer | **V1 every slice:** authn + role + TVG context DENY; money-writer inventory by payment slice. **Shared multi-tenant / cross-tenant → NOT APPLICABLE** |
 | KI-06 payment_status divergence | **Designed in S4/S5** (invoice authority); **fixed during S5** |
 | KI-07 Alternate paid writers | **Proven by S5** (inventory); no paid mutation in S1–S4 |
 | KI-08 Admin auth fallback | **Fixed during each slice** touching money-state endpoints; **blocking for S1+** on new endpoints |
@@ -143,11 +146,13 @@ S6 depends on S1–S5 acceptance evidence. No parallel Tier-3 money-state slices
 
 ## 7. Security and authorization plan
 
-- Deny-by-default; least privilege; **role** matrix from Money-State Design Contract §11.
-- **V1 tenancy:** single-tenant TVG — require valid TVG tenant context on money writes (missing/malformed → DENY). Multi-tenant / cross-tenant isolation is **V2**.
-- No UI-only auth; V1 negatives each slice: unauthorized **role**, unauthenticated access (G-03 V1 clause). Cross-tenant G-03 is **V2 only**.
+- Deny-by-default; least privilege; **internal role** matrix from Money-State §11.
+- **V1:** single-company TVG — require valid TVG context on money writes.
+- **V2 product model:** dedicated white-label instance per company (`BHFOS_V1_V2_PRODUCT_BOUNDARY.md`). **Shared multi-tenancy removed** from V2 scope.
+- No UI-only auth; V1 negatives: unauthorized **role**, unauthenticated access (G-03). Cross-tenant suites **N/A**.
 - Secrets never in logs; audit events without token/PII payloads.
-- Single money-writer proven S5 (G-09); no paid mutation S1–S4.
+- Single money-writer proven by payment-oriented slice (G-09); Stripe **in V1**.
+- Autonomous follow-up **in V1** (separate from this security bullet list; see product boundary).
 
 ---
 
@@ -264,11 +269,9 @@ lead (authoritative customer for P1)
 | --- | --- |
 | Business objective | Invoice from approved+completed scope with full lineage; issued immutability; payment-ready |
 | Roles | Office, Manager; Admin void+reason |
-| Scope | Generate from completed scope; quote→job→invoice lineage; draft/issued; issued immutability; numbering; taxes/fees/discounts/credits/deposits/adjustments as needed for P1; void/correction reasons; partial completion; dup invoice prevention; atomicity; financial audit; reconciliation-ready; **future payment readiness without live pay** |
-| Non-scope | Live Stripe/pay execution; send-estimate |
-| KI | KI-06, KI-07, KI-11 (visible fail), KI-15, G-09 |
-| Gates | G-01, G-04 invoices, G-05, G-09, G-02 |
-| Stop | Before live pay; before claiming Phase 1 USABLE |
+| Non-scope | Live Stripe/pay execution **in this slice** (Stripe remains **in V1** — schedule payment slice); send-estimate product |
+| Scope | Generate from completed scope; quote→job→invoice lineage; draft/issued; issued immutability; numbering; taxes/fees/discounts/credits/deposits/adjustments as needed for P1; void/correction reasons; partial completion; dup invoice prevention; atomicity; financial audit; reconciliation-ready; **hand off to V1 Stripe payment work** |
+| Stop | Before claiming Phase 1 USABLE without payment+follow-up evidence; invoice slice may stop before pay **execution** only if a named payment slice immediately follows |
 | Next | S5 accepted → S6 packet |
 
 ### SLICE 6 — End-to-end UAT and Phase 1 acceptance
@@ -292,9 +295,11 @@ Phase 1 is **complete** when:
 1. S1–S5 implementation slices accepted with evidence.  
 2. S6 proves G-01–G-10 (or Founder signs residual-risk waivers per gate).  
 3. Known-Issue Register shows all `P1_BLOCKING` items fixed or signed.  
-4. Single money-writer proven; no live pay claimed as done.  
-5. send-estimate remains deferred unless a new packet includes it.  
-6. Founder declares Phase 1 USABLE — not CI alone.
+4. Single money-writer proven; **Stripe payment path in V1** evidenced.  
+5. Autonomous follow-up minimum in V1 evidenced (or Founder residual signed).  
+6. send-estimate remains deferred unless a packet includes it.  
+7. Founder declares Phase 1 / V1 USABLE — not CI alone.  
+8. Shared multi-tenancy is **not** a completion requirement.
 
 ---
 
@@ -309,21 +314,23 @@ Phase 1 is **complete** when:
 | S5 | `ml/p1-s5-job-to-invoice` | `F:\Dev\BHFOS-ml-p1-s5` |
 | S6 | `ml/p1-s6-uat-acceptance` (docs/evidence) | `F:\Dev\BHFOS-ml-p1-s6` |
 
-Slice 1 merge baseline: `2b62bf35dd2cc32ac30808ba36b3ad93ff1547ab`.
-**V1 tenancy:** single-tenant The Vent Guys; multi-tenant / cross-tenant = V2.
-See `ML-P1_SLICE1_CLOSEOUT_AND_RESIDUAL_DISPOSITION.md` and
-`ML-P1_SLICE2_DECISION_PACKET.md` (docs only — coding not authorized by those docs alone).
+**V1:** single-company The Vent Guys. **V2:** dedicated white-label instance per company — shared multi-tenancy **removed**.
+See `BHFOS_V1_V2_PRODUCT_BOUNDARY.md`, `ML-P1_SLICE1_CLOSEOUT_AND_RESIDUAL_DISPOSITION.md`,
+and `ML-P1_SLICE2_DECISION_PACKET.md` (docs only — coding not authorized by those docs alone).
 
 Base each slice on the **then-current** `origin/main` after prior slice merge (anti-delay: no full replan).
 
 ---
 
-## 14. Explicit program non-scope (all slices)
+## 14. Explicit program non-scope (clarify)
 
-- Live payment execution  
-- send-estimate  
-- TIS / Pillar 2–4  
+- Shared multi-tenancy / cross-tenant shared-runtime (removed from V1 and V2)  
+- TIS / Pillar 2–4 (unless separately authorized)  
 - G2.3 reopen  
 - Full offline sync  
 - UUID↔bigint unification migration  
-- Full property multi-tenant rewrite  
+- Full property multi-company rewrite  
+- Visual workflow builder (unless value-proved)  
+
+**Not “out of V1”:** Stripe payment processing; autonomous follow-up (placement in slices TBD).  
+**Still slice-scoped:** send-estimate product may remain deferred from early money-loop slices until scheduled.

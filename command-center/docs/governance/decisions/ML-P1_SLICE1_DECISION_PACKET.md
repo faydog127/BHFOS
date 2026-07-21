@@ -117,8 +117,8 @@ Do not ship destructive migrations under this packet.
 - KI-01/02/04 progress evidenced; KI-03 pattern documented  
 - No issue/approve/job/invoice code paths shipped as “done”
 
-Maps to roadmap gates: G-02 (slice), G-03 **V1** (role/authn/TVG context — not cross-tenant), G-08 (S1 critical), G-07 baseline **start**.
-V1 is single-tenant TVG; cross-tenant G-03 is V2 (see Slice 1 closeout amendment).
+Maps to roadmap gates: G-02 (slice), G-03 (role/authn/TVG context — **not** cross-tenant), G-08 (S1 critical), G-07 baseline **start**.
+Shared multi-tenancy removed from V1/V2 product model — see `BHFOS_V1_V2_PRODUCT_BOUNDARY.md`.
 
 ## KPI instrumentation (Slice 1)
 

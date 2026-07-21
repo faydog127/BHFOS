@@ -37,7 +37,7 @@
 | DB unique constraint on draft idempotency key | **Deferred** — process-local inflight lock + notes marker; cross-process race needs migration |
 | Role matrix enforcement for draft create | **Documented gap** — `actorRole` recorded as `office`; CRM auth assumed; server role check not in S1 |
 | G-03 live RLS negatives | Helper unit tests only |
-| Residual (amended) | G-03 **cross-tenant** suite = **N/A to V1** (single-tenant TVG → V2). V1 keeps unauthorized-role / unauthenticated / malformed TVG-context DENY |
+| Residual (amended) | Cross-tenant G-03 = **NOT APPLICABLE** (shared multi-tenancy removed from V1/V2). V1 keeps unauthorized-role / unauthenticated / malformed TVG-context DENY. Stripe + autonomous follow-up = **in V1** (not this slice) |
 
 ## KI mapping progress
 

@@ -25,32 +25,26 @@ CI green ≠ USABLE.
 
 **Fail:** Any required transition without complete event.
 
-## G-03 — Authorization negatives (V1) / Cross-tenant (V2)
+## G-03 — Authorization negatives (V1 single-company)
 
-### V1 (ML-P1 / BHFOS V1 freeze) — single-tenant TVG
-
-**Authoritative product decision:** BHFOS V1 is operated solely for **The Vent
-Guys**. Multi-tenant support and cross-tenant isolation are **V2** and are
-**not** part of the V1 freeze or ML-P1 acceptance standard.
+**Authoritative product decision:** BHFOS V1 operates for **The Vent Guys** only.
+**V2** is white-label **dedicated instance per company**. **Shared multi-tenancy
+is removed from V2 scope.** Cross-tenant isolation suites are **NOT APPLICABLE**
+to V1 or to V2 Money Loop acceptance.
 
 **V1 require:**
 
 - Unauthenticated access to money-path actions → **DENY**
-- Unauthorized **role** for the action (per Money-State §11) → **DENY**
-- Missing or malformed TVG tenant context on money writes → **DENY**
+- Unauthorized **internal role** for the action (Money-State §11) → **DENY**
+- Missing or malformed TVG company/tenant context on money writes → **DENY**
 
 **V1 proof:** Automated negatives for the three cases above; zero unauthorized successes.
 
 **V1 fail:** Any unauthorized success on those V1 cases.
 
-**V1 explicitly does not require:** Cross-tenant / multi-tenant RLS negative suites.
+**Explicitly not required (V1 or V2 Money Loop):** Cross-tenant / shared-multi-tenant RLS negative suites; tenant-switching tests.
 
-### V2 (future) — multi-tenant architecture
-
-**V2 require (when multi-tenant is authorized):** Zero unauthorized cross-tenant
-access in negative tests (read/write across tenant boundary on money entities =
-DENY). Tracked as a V2 architecture planning item — not an ML-P1 / V1 USABLE
-blocker.
+**V2 instance platform (separate from Money Loop gates):** Dedicated-instance isolation is achieved by **separate deployment + data environment**, not shared-tenant RLS. Ops readiness for instance isolation is tracked under dedicated-instance operations — not G-03 cross-tenant.
 
 ## G-04 — Duplicate job/invoice under retry
 
