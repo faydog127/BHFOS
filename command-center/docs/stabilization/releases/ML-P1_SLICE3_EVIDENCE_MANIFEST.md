@@ -9,9 +9,10 @@
 | Coding auth base SHA | `ef2470715ddf90c34a77416183eb5b2421bd6373` (main) |
 | Branch / worktree | `ml/p1-s3-quote-to-job` / `F:\Dev\BHFOS-ml-p1-s3` |
 | PR | [#84](https://github.com/faydog127/BHFOS/pull/84) |
-| **Frozen review head** | *(set at packet freeze — see Decision Packet)* |
+| **Frozen review head** | `dce50d19cffec132bc2eec12eaadfdbe665ded1c` |
 | Prior freeze (remediated) | `7fde2f4f2811b9074a1be2816b2b7ad3d4889656` |
 | Migration file | `command-center/supabase/migrations/20260721200000_ml_p1_s3_canonical_job_writer.sql` |
+| Migration SHA-256 | `B618AF707546150773784B71728BE75CE27C0A2B6D7814CF43EEFD41626579B1` |
 | Data objects changed (proposed, not applied) | `jobs.source_quote_version`; `ml_p1_s3_ensure_job_for_accepted_quote`; rewired `ml_p1_s2_quote_lifecycle` / `ml_p1_s2_quote_approve_public`; neutralized `ensure_job…` + WO trigger; dropped gate belt; jobs INSERT RLS `quote_id IS NULL` |
 | Tests executed | `node --test tests/unit/ml-p1-s2-lifecycle.test.mjs tests/unit/ml-p1-s3-job-writer.test.mjs` — **36/36 pass** |
 | Tests skipped + reason | Live prod apply / edge deploy / DB concurrency against production — **not authorized** (A3) |
