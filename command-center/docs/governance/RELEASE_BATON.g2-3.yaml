@@ -1,47 +1,33 @@
 ---
-# Release Baton — BHFOS Operating Model v2.2
+# Release Baton — G2.3 (CLOSED)
+# G2.3 Stabilization Exit Review: minimum safe baseline met at 6bc8db4…
+# Next program: ML-P1 planning — see RELEASE_BATON.ml-p1.yaml
 
 release_id: "G2.3"
-current_phase: "G2.3B-B2D"
+current_phase: "closed"
 governance_version: "v2.2"
 risk_tier: "Tier 3"
-status: "in_progress"
-current_owner: "Architecture Guard (OAuth helper) → Founder (App create + helper run after AG)"
+status: "closed"
+current_owner: "none"
 decision_packet_path: "command-center/docs/governance/decisions/G2.3B-B2D_DECISION_PACKET.md"
-founder_steps_path: "command-center/docs/governance/cursor-environments/production-diagnostics/SUPABASE_OAUTH_FOUNDER_STEPS.md"
 
-completed_phase: "G2.3B-B2C"
-g2_3b_b1_merge_sha: "9cd1084aeeaa3a72936fc7abdc4317804af4208c"
-g2_3b_b2c_merge_sha: "9ba22c28a9f878bb760428d8ffe7e2c072c55141"
-g2_3b_b2c_approved_head_sha: "818f12d2832f7034de7e27e7ba2cd8f4fcbf416a"
-g2_3b_b2c_pr: 54
-base_sha: "9ba22c28a9f878bb760428d8ffe7e2c072c55141"
-pr_number: 56
-head_sha: ""
+completed_phase: "G2.3B-B3"
+g2_3_exit_review: "complete_minimum_safe_baseline"
+exit_baseline_sha: "6bc8db4f46bb604c0a3e4c9631985e8314616a8d"
+g2_3b_b3_pr: 63
+g2_3b_b3_merge_sha: "6bc8db4f46bb604c0a3e4c9631985e8314616a8d"
 
-check_status: "pending_pr56_oauth_helper_head"
-architecture_guard_status: "required_on_oauth_helper_before_founder_run"
-owner_checkpoint: "b2d_option_a_authorized_oauth_helper_awaiting_ag_before_founder_run"
+reopen_authorization: "none — G2.3 reopen forbidden under ML-P1 planning auth"
+b4_b5_status: "deferred"
+hostinger_i2_status: "READ_ONLY_CAPABILITY_UNAVAILABLE_deferred"
+issue_55_status: "deferred"
 
-b2c_authorization: "granted + merged"
-b2c_app_authorization: "granted + Founder provisioning complete (attested)"
-merge_authorization_b2c: "granted — merge commit 9ba22c28a9f878bb760428d8ffe7e2c072c55141"
-supabase_credential_authorization: "granted-by-Founder — G2.3B-B2D Option A (Projects Read / projects:read only; adapter ref lock; residual token-scope risk acknowledged)"
-hostinger_credential_authorization: "none"
-merge_authorization_pr56: "none — awaiting AG on OAuth helper + Founder exact head-SHA auth"
+carry_forward_to_ml_p1:
+  - "Release Baton hygiene refresh (this closeout)"
+  - "Windows node adapter exit-code anomaly after successful HTTP (diagnostics; not money-loop core)"
 
-github_i2_status: "app_provisioned_launcher_on_main_live_connection_is_b3"
-hostinger_i2_status: "READ_ONLY_CAPABILITY_UNAVAILABLE"
-supabase_i2_status: "option_a_authorized_helper_implemented_tokens_not_issued_in_repo"
-repo_visibility_flag: "PUBLIC — issue #55 deferred"
-issue_55_status: "deferred_until_g2_3_v1_operational"
+next_phase: "ML-P1 planning_only"
+next_owner: "Orchestrator"
+next_baton_path: "command-center/docs/governance/RELEASE_BATON.ml-p1.yaml"
 
-blockers:
-  - "Protected OAuth helper: Architecture Guard APPROVE_FOR_FINAL_DECISION_PACKET required before Founder runs authorize command"
-  - "Founder: create OAuth app (Projects Read only) + place Client ID/secret in Diagnostics env; then one helper command + browser consent"
-  - "PR #56 merge authorization required to land closeout + helper on main"
-  - "Live connection proof: B3 (separate auth) — not authorized by Option A"
-  - "Hostinger I2: READ_ONLY_CAPABILITY_UNAVAILABLE (Diagnostics)"
-
-next_phase: "Architecture Guard on OAuth helper → Founder helper run → names-only attestation"
-next_owner: "Architecture Guard"
+blockers: []
