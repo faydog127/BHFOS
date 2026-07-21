@@ -6,26 +6,35 @@ G2.3B-B2D.**
 
 ## Guarantees
 
-- Hard endpoint allowlist (`allowlist.json`) — initially project metadata + health only
+- Hard endpoint allowlist (`allowlist.json`) — project metadata + health + **bounded catalog**
 - Hard project-ref lock: `wwyxohjnyqnegzbxtuxs` (adapter isolation; **not** a claim that the OAuth token is project-scoped)
 - No agent-controlled URL, path, query, project ref, or HTTP method bypass
 - No function-body retrieval; Edge Function ops deferred
 - No agent-provided log SQL
-- No SQL execution / database queries
+- **No agent-supplied SQL**; catalog uses adapter-owned SELECT templates only
+- Catalog transport: `POST .../database/query/read-only` only (writable `/database/query` DENY)
 - No secrets or API-key retrieval
 - No Auth-user access
 - No function deploy/mutation
-- No migrations or configuration changes
+- No migrations apply or configuration changes
 - No project listing / org listing / network restrictions / network bans / upgrade surfaces via adapter
 - OAuth access token via `I2_SUPABASE_OAUTH_ACCESS_TOKEN` env only — never CLI argv, never returned to the agent
+- Audit log for catalog ops (operation/time/params/result_class)
 
 ## Commands
 
 ```bash
 node tools/supabase-diagnostics-adapter/cli.mjs --self-test
 npm run test:supabase-diagnostics-adapter
+
+# Dry-run catalog (no network):
+node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_rls_flags --schema=public --table=estimates
+
+# Live catalog (requires database_read-scoped token — separate Founder scope auth):
+node tools/supabase-diagnostics-adapter/cli.mjs catalog catalog_rls_flags --schema=public --table=estimates
 ```
 
+See `docs/governance/I2_CATALOG_METADATA_CAPABILITY.md`.
 ## Credential issuance
 
 Requires Founder Decision Packet **G2.3B-B2D Option A** after Architecture Guard

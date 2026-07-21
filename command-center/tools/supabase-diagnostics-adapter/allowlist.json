@@ -1,14 +1,13 @@
 {
-  "version": 2,
+  "version": 3,
   "management_api_base": "https://api.supabase.com",
   "production_project_ref": "wwyxohjnyqnegzbxtuxs",
-  "documentation_verified_at": "2026-07-17",
+  "documentation_verified_at": "2026-07-21",
   "notes": [
     "B2D: project isolation is adapter-enforced via fixed production_project_ref. OAuth token is NOT claimed project-scoped.",
-    "Dashboard OAuth scope for Option A is Projects Read (wire: projects:read). Do not treat Management API ids (projects_read, project_admin_read) as interchangeable Dashboard choices.",
-    "Projects Read may enable additional project-related reads (network restrictions/bans, upgrade eligibility, listing). Adapter must still expose only allowlisted operations.",
-    "Health endpoint GET /v1/projects/{ref}/health verified in official Management API docs (2026-07-17).",
-    "B3: project_health uses an adapter-owned fixed query services=db&services=auth&services=rest (Management API requires services). Agent-supplied or arbitrary query strings remain DENY."
+    "v3: bounded catalog-metadata via POST .../database/query/read-only with adapter-owned SQL templates only. Agent SQL prohibited.",
+    "Live catalog requires OAuth database_read (separate Founder credential/scope provisioning). Adapter fails closed without it.",
+    "Writable POST .../database/query remains prohibited. execute-sql Edge Function remains prohibited."
   ],
   "allowed_path_prefixes": [
     "/v1/projects/{ref}"
@@ -19,8 +18,7 @@
       "method": "GET",
       "pathTemplate": "/v1/projects/{ref}",
       "docs": "https://supabase.com/docs/reference/api/v1-get-project",
-      "oauth_app_scope": "projects:read",
-      "management_api_permission_ids_note": "Endpoint FGA docs may cite projects_read / related ids; those are not Dashboard OAuth scope strings"
+      "oauth_app_scope": "projects:read"
     },
     "project_health": {
       "status": "allowed",
@@ -28,8 +26,7 @@
       "pathTemplate": "/v1/projects/{ref}/health",
       "fixedQuery": "services=db&services=auth&services=rest",
       "docs": "https://supabase.com/docs/reference/api/v1-get-project-health",
-      "oauth_app_scope": "projects:read",
-      "note": "Adapter appends fixedQuery only; agent cannot supply or alter the services list. Non-sensitive health metadata under Option A allowlist."
+      "oauth_app_scope": "projects:read"
     },
     "edge_function_inventory": {
       "status": "deferred",
@@ -42,7 +39,7 @@
       "status": "unavailable",
       "method": "GET",
       "pathTemplate": "/v1/projects/{ref}/database/migrations",
-      "reason": "Official docs mark partner-gated; treat unavailable until account-level capability proven",
+      "reason": "Use catalog_migration_history (read-only SQL templates) instead of Management migrations list/apply",
       "oauth_app_scope": "database:read"
     },
     "bounded_logs": {
@@ -53,11 +50,18 @@
       "oauth_app_scope": "analytics:read"
     }
   },
+  "catalog_transport": {
+    "method": "POST",
+    "pathTemplate": "/v1/projects/{ref}/database/query/read-only",
+    "oauth_permission": "database_read",
+    "agent_sql": false,
+    "row_data": false,
+    "mutation": false
+  },
   "prohibited_path_substrings": [
     "/body",
     "/secrets",
     "/api-keys",
-    "/database",
     "/functions",
     "/analytics",
     "/network-restrictions",
@@ -74,5 +78,6 @@
   ],
   "prohibited_exact_paths": [
     "/v1/projects"
-  ]
+  ],
+  "prohibited_database_paths_except_readonly_query": true
 }
