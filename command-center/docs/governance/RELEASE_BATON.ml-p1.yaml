@@ -1,0 +1,45 @@
+---
+# Release Baton — Money Loop Phase 1 (ML-P1)
+# Status: planning_only. No implementation/deploy/migration authorized by this baton.
+
+release_id: "ML-P1"
+current_phase: "planning"
+governance_version: "v2.2"
+risk_tier: "Tier 3"
+status: "planning_only"
+current_owner: "Orchestrator"
+release_brief_path: "command-center/docs/stabilization/releases/ML-P1_BRIEF.md"
+decision_packet_path: "command-center/docs/governance/decisions/ML-P1_DECISION_PACKET.md"
+
+prior_release: "G2.3"
+prior_release_exit: "complete_minimum_safe_baseline"
+g2_3_reopen: "forbidden"
+baseline_sha: "6bc8db4f46bb604c0a3e4c9631985e8314616a8d"
+base_sha: "6bc8db4f46bb604c0a3e4c9631985e8314616a8d"
+pr_number: 64
+head_sha: ""  # GitHub authoritative — record exact head at Founder merge auth
+
+check_status: "pending_ci"
+architecture_guard_status: "not_required_for_planning_docs"
+uat_status: "NOT_APPLICABLE"
+owner_checkpoint: "planning_transition_authorized"
+
+merge_authorization: "none"
+deployment_authorization: "none"
+migration_authorization: "none"
+production_test_authorization: "none"
+implementation_authorization: "none — separate Founder auth required"
+
+canonical_loop: "lead → quote → accept → job → invoice → payment → receipt"
+phase_1_focus: "Appendix A evidence formalization; DR ratify/defer (job-state, send-estimate); quote→pay lock bound"
+
+carry_forward_hygiene:
+  - "Release Baton refresh (G2.3 closed → ML-P1 planning_only)"
+  - "Windows node adapter exit anomaly after successful HTTP (diagnostics hygiene; no B3 re-run required)"
+
+blockers:
+  - "Founder merge auth required for planning-docs PR (exact PR + head SHA)"
+  - "Implementation not authorized until separate Founder Decision Packet"
+
+next_phase: "Founder merge of planning docs → separate auth for Phase 1 implementation slices"
+next_owner: "Founder (merge auth) → Orchestrator"
