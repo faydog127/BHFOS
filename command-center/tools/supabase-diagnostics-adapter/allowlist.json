@@ -7,7 +7,8 @@
     "B2D: project isolation is adapter-enforced via fixed production_project_ref. OAuth token is NOT claimed project-scoped.",
     "Dashboard OAuth scope for Option A is Projects Read (wire: projects:read). Do not treat Management API ids (projects_read, project_admin_read) as interchangeable Dashboard choices.",
     "Projects Read may enable additional project-related reads (network restrictions/bans, upgrade eligibility, listing). Adapter must still expose only allowlisted operations.",
-    "Health endpoint GET /v1/projects/{ref}/health verified in official Management API docs (2026-07-17)."
+    "Health endpoint GET /v1/projects/{ref}/health verified in official Management API docs (2026-07-17).",
+    "B3: project_health uses an adapter-owned fixed query services=db&services=auth&services=rest (Management API requires services). Agent-supplied or arbitrary query strings remain DENY."
   ],
   "allowed_path_prefixes": [
     "/v1/projects/{ref}"
@@ -25,9 +26,10 @@
       "status": "allowed",
       "method": "GET",
       "pathTemplate": "/v1/projects/{ref}/health",
+      "fixedQuery": "services=db&services=auth&services=rest",
       "docs": "https://supabase.com/docs/reference/api/v1-get-project-health",
       "oauth_app_scope": "projects:read",
-      "note": "Included only as verified non-sensitive health metadata under Option A allowlist"
+      "note": "Adapter appends fixedQuery only; agent cannot supply or alter the services list. Non-sensitive health metadata under Option A allowlist."
     },
     "edge_function_inventory": {
       "status": "deferred",
