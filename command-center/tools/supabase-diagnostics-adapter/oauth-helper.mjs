@@ -304,15 +304,25 @@ export function validateCallbackRequest({
 }
 
 /**
- * Assert token response scopes ⊆ allowed (projects:read only).
- * Omitted/empty scope is fail-closed (explicit decision — do not treat as OK).
+ * Assert token response scopes when the `scope` field is present.
+ *
+ * When omitted/empty: Management API OpenAPI `OAuthTokenResponse` has no `scope`
+ * property (`additionalProperties: false`), so omission is a platform-attested
+ * schema gap — not unconditional OK. Callers must run
+ * `attestPreStoreCapabilities` before any durable token write.
+ *
+ * When present: fail-closed ⊆ ALLOWED_SCOPES (`projects:read` only). No invented
+ * normalization (e.g. projects.read / rest).
  */
 export function assertTokenScopes(scopeField) {
   if (scopeField === undefined || scopeField === null || String(scopeField).trim() === '') {
-    throw new OAuthHelperError(
-      'DENY: token response missing scope; expected projects:read',
-      'MISSING_SCOPE'
-    );
+    return {
+      omitted: true,
+      scopes: [],
+      platformAttestedOmission: true,
+      reason:
+        'OAuthTokenResponse OpenAPI omits scope (additionalProperties:false); require pre-store capability attestation',
+    };
   }
   const parts = String(scopeField)
     .split(/[\s,]+/)
@@ -332,7 +342,124 @@ export function assertTokenScopes(scopeField) {
       'MISSING_PROJECTS_READ'
     );
   }
-  return { omitted: false, scopes: parts };
+  return { omitted: false, scopes: parts, platformAttestedOmission: false };
+}
+
+/**
+ * Out-of-ceiling probe path under the locked production ref.
+ * Must match a prohibited_path_substrings entry in allowlist.json (adapter-enforced).
+ */
+export function attestationOutOfCeilingPath(ref = PRODUCTION_PROJECT_REF) {
+  return `/v1/projects/${ref}/api-keys`;
+}
+
+/**
+ * Pre-store capability attestation with the ephemeral access token.
+ * Required before any durable env/token write (especially when scope is omitted).
+ *
+ * - Allowlisted GET /v1/projects/{production_ref} must succeed
+ * - At least one out-of-ceiling probe (api-keys) must NOT succeed
+ * Fail → do not store tokens.
+ *
+ * Reuses adapter allowlist/deny helpers; fetch is injected (no live network in tests).
+ */
+export async function attestPreStoreCapabilities(
+  accessToken,
+  {
+    fetchImpl = globalThis.fetch,
+    resolveAllowedPathFn,
+    assertNotProhibitedFn,
+    managementApiBase = 'https://api.supabase.com',
+  } = {}
+) {
+  if (!accessToken || typeof accessToken !== 'string') {
+    throw new OAuthHelperError(
+      'DENY: pre-store attestation requires ephemeral access token',
+      'ATTEST_MISSING_TOKEN'
+    );
+  }
+  if (typeof fetchImpl !== 'function') {
+    throw new OAuthHelperError('DENY: fetch unavailable for pre-store attestation', 'ATTEST_FETCH');
+  }
+
+  let resolveAllowedPath = resolveAllowedPathFn;
+  let assertNotProhibited = assertNotProhibitedFn;
+  if (!resolveAllowedPath || !assertNotProhibited) {
+    const adapter = await import('./adapter.mjs');
+    resolveAllowedPath = resolveAllowedPath || adapter.resolveAllowedPath;
+    assertNotProhibited = assertNotProhibited || adapter.assertNotProhibited;
+  }
+
+  const { method, path: allowPath, ref } = resolveAllowedPath('project_status', {});
+  if (ref !== PRODUCTION_PROJECT_REF || allowPath !== `/v1/projects/${PRODUCTION_PROJECT_REF}`) {
+    throw new OAuthHelperError(
+      'DENY: attestation allowlisted path mismatch',
+      'ATTEST_ALLOW_PATH'
+    );
+  }
+
+  const probePath = attestationOutOfCeilingPath(ref);
+  try {
+    assertNotProhibited(probePath);
+    throw new OAuthHelperError(
+      'DENY: attestation out-of-ceiling probe path is not prohibited by allowlist',
+      'ATTEST_PROBE_CONFIG'
+    );
+  } catch (e) {
+    if (e instanceof OAuthHelperError) throw e;
+    if (!/DENY/.test(String(e && e.message ? e.message : e))) {
+      throw new OAuthHelperError(
+        'DENY: attestation probe allowlist check failed unexpectedly',
+        'ATTEST_PROBE_CONFIG'
+      );
+    }
+  }
+
+  const base = String(managementApiBase || 'https://api.supabase.com').replace(/\/$/, '');
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    Accept: 'application/json',
+  };
+
+  let allowRes;
+  try {
+    allowRes = await fetchImpl(`${base}${allowPath}`, { method, headers });
+  } catch {
+    throw new OAuthHelperError(
+      'DENY: pre-store capability attestation failed (allowlisted GET unreachable)',
+      'ATTEST_ALLOW_FAILED'
+    );
+  }
+  if (!allowRes || !allowRes.ok) {
+    const status = allowRes && typeof allowRes.status === 'number' ? allowRes.status : 'n/a';
+    throw new OAuthHelperError(
+      `DENY: pre-store capability attestation failed (allowlisted GET HTTP ${status})`,
+      'ATTEST_ALLOW_FAILED'
+    );
+  }
+
+  let probeRes;
+  try {
+    probeRes = await fetchImpl(`${base}${probePath}`, { method: 'GET', headers });
+  } catch {
+    throw new OAuthHelperError(
+      'DENY: pre-store capability attestation failed (out-of-ceiling probe unreachable)',
+      'ATTEST_PROBE_UNREACHABLE'
+    );
+  }
+  if (probeRes && probeRes.ok) {
+    throw new OAuthHelperError(
+      'DENY: pre-store capability attestation failed (out-of-ceiling probe succeeded)',
+      'ATTEST_CEILING_BREACH'
+    );
+  }
+
+  return {
+    allowlistedOk: true,
+    outOfCeilingDenied: true,
+    allowPath,
+    probePath,
+  };
 }
 
 export function computeExpiryIso(expiresIn, nowMs = Date.now()) {

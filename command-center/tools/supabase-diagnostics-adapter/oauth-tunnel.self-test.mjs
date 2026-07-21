@@ -301,6 +301,38 @@ export async function runTunnelSelfTests() {
     pass(results, 'closure_failure_blocks', e.code === 'TUNNEL_CLOSURE_FAILED');
   }
 
+  // --- 502/530 after stop counts as public callback closed ---
+  let killed502 = false;
+  const closed502Ctrl = createTunnelController({
+    env: {
+      [TUNNEL_SECRET_NAMES.credentialsFile]: credsOutside,
+      [TUNNEL_SECRET_NAMES.tunnelId]: 'synthetic',
+      [TUNNEL_SECRET_NAMES.cloudflaredExecutable]: fakeBin,
+    },
+    repoRoot,
+    readinessGate: 'FOUNDER_RUN_READY',
+    existsSyncFn: (p) => p === fakeBin || p === credsOutside || fs.existsSync(p),
+    spawnFn: () => ({
+      killed: false,
+      kill() {
+        killed502 = true;
+        this.killed = true;
+      },
+    }),
+    fetchImpl: async () => {
+      if (!killed502) return { status: 400 };
+      return { status: 502 };
+    },
+    sleepFn: async () => {},
+    configDir: tmp,
+  });
+  await closed502Ctrl.runWithTunnel(async () => 'ok');
+  pass(
+    results,
+    'closure_502_treated_as_closed',
+    closed502Ctrl.getState().publicClosed === true
+  );
+
   pass(results, 'fetch_probe_used', fetchCalls >= 1);
 
   try {

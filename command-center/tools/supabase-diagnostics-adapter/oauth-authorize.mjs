@@ -43,6 +43,7 @@ import {
   validateCallbackRequest,
   buildTokenExchangeRequest,
   assertTokenScopes,
+  attestPreStoreCapabilities,
   computeExpiryIso,
   writeTokenSecretsToEnvFile,
   wipeTransient,
@@ -154,7 +155,7 @@ async function exchangeCode({ secrets, code, codeVerifier, fetchImpl = fetch }) 
     throw new Error(`DENY: token exchange failed (HTTP ${res.status})`);
   }
 
-  assertTokenScopes(json.scope);
+  const scopeInfo = assertTokenScopes(json.scope);
   if (!json.access_token || !json.refresh_token) {
     throw new Error('DENY: token response missing access_token or refresh_token');
   }
@@ -164,6 +165,7 @@ async function exchangeCode({ secrets, code, codeVerifier, fetchImpl = fetch }) 
     accessToken: json.access_token,
     refreshToken: json.refresh_token,
     tokenExpiry: expiry,
+    scopeInfo,
   };
 }
 
@@ -216,6 +218,13 @@ async function runAuthorizeExchange() {
     transient.refreshToken = tokens.refreshToken;
     console.log('token exchange completed');
     console.log('token values not displayed');
+    if (tokens.scopeInfo && tokens.scopeInfo.omitted) {
+      console.log('scope omitted (platform-attested OAuthTokenResponse); attesting capabilities');
+    }
+
+    // Pre-store capability attestation — fail closed; never store on failure.
+    await attestPreStoreCapabilities(tokens.accessToken);
+    console.log('pre-store capability attestation ok');
 
     let existingMap = secrets.fileMap || Object.create(null);
     try {
