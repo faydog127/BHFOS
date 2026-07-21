@@ -107,6 +107,8 @@ function mapRpcError(error) {
     err.code = 'ML_P1_S2_QUOTE_NOT_FOUND';
   } else if (/ML_P1_S2_MISSING_TOKEN/i.test(msg)) {
     err.code = 'ML_P1_S2_MISSING_TOKEN';
+  } else if (/ML_P1_S2_QUOTE_EXPIRED/i.test(msg)) {
+    err.code = 'ML_P1_S2_QUOTE_EXPIRED';
   } else if (/ML_P1_S2_UNKNOWN_ACTION/i.test(msg)) {
     err.code = 'ML_P1_S2_UNKNOWN_ACTION';
   } else {

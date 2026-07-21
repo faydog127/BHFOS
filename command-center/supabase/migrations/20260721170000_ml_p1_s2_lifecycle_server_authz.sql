@@ -39,23 +39,44 @@ SET search_path = public
 AS $$
 DECLARE
   v_role text;
+  v_tenant text;
 BEGIN
   IF auth.uid() IS NULL THEN
     RETURN 'unauthenticated';
   END IF;
 
-  SELECT r.role INTO v_role
-  FROM public.app_user_roles r
-  WHERE r.user_id = auth.uid()
-  ORDER BY r.created_at DESC NULLS LAST
-  LIMIT 1;
+  -- Tenant from app_metadata only (never user-writable JWT claims).
+  v_tenant := nullif(btrim(coalesce(
+    auth.jwt() -> 'app_metadata' ->> 'tenant_id',
+    ''
+  )), '');
+
+  -- Prefer tenant-scoped role row when tenant_id column/value present.
+  BEGIN
+    IF v_tenant IS NOT NULL THEN
+      SELECT r.role INTO v_role
+      FROM public.app_user_roles r
+      WHERE r.user_id = auth.uid()
+        AND r.tenant_id IS NOT DISTINCT FROM v_tenant
+      ORDER BY r.created_at DESC NULLS LAST
+      LIMIT 1;
+    END IF;
+  EXCEPTION
+    WHEN undefined_column THEN
+      v_role := NULL;
+  END;
 
   IF v_role IS NULL OR btrim(v_role) = '' THEN
-    v_role := coalesce(
-      auth.jwt() -> 'app_metadata' ->> 'role',
-      auth.jwt() -> 'user_metadata' ->> 'role',
-      'viewer'
-    );
+    SELECT r.role INTO v_role
+    FROM public.app_user_roles r
+    WHERE r.user_id = auth.uid()
+    ORDER BY r.created_at DESC NULLS LAST
+    LIMIT 1;
+  END IF;
+
+  -- Fail closed: no app_user_roles row ⇒ no money-state role (ignore JWT role claims).
+  IF v_role IS NULL OR btrim(v_role) = '' THEN
+    RETURN 'unauthenticated';
   END IF;
 
   RETURN public.ml_p1_s2_normalize_role(v_role);
@@ -213,7 +234,7 @@ BEGIN
 
   v_jwt_tenant := nullif(btrim(coalesce(
     auth.jwt() -> 'app_metadata' ->> 'tenant_id',
-    auth.jwt() -> 'user_metadata' ->> 'tenant_id'
+    ''
   )), '');
   IF v_jwt_tenant IS NULL THEN
     RAISE EXCEPTION 'ML_P1_S2_TENANT_DENY: missing TVG tenant context'
@@ -456,6 +477,7 @@ DECLARE
   v_now timestamptz := now();
   v_corr text := coalesce(nullif(btrim(p_correlation_id), ''), gen_random_uuid()::text);
   v_updated int;
+  v_expiry timestamptz;
 BEGIN
   IF auth.uid() IS NOT NULL THEN
     RAISE EXCEPTION 'ML_P1_S2_ROLE_DENY: authenticated sessions cannot use public-token approve'
@@ -489,7 +511,7 @@ BEGIN
       USING ERRCODE = '42501';
   END IF;
 
-  -- Idempotent replay: already accepted
+  -- Idempotent replay: already accepted (before expiry deny)
   IF public.normalize_quote_status(v_quote.status) = 'accepted' THEN
     RETURN jsonb_build_object(
       'action', 'approve',
@@ -498,6 +520,22 @@ BEGIN
       'correlationId', v_corr,
       'quote', to_jsonb(v_quote)
     );
+  END IF;
+
+  -- Expiry parity with public-quote-approve edge (valid_until end-of-day, else sent_at+7d).
+  IF v_quote.valid_until IS NOT NULL THEN
+    v_expiry := ((v_quote.valid_until::date + 1)::timestamp AT TIME ZONE 'UTC') - interval '1 second';
+  ELSIF v_quote.sent_at IS NOT NULL THEN
+    v_expiry := v_quote.sent_at + interval '7 days';
+  ELSE
+    v_expiry := NULL;
+  END IF;
+
+  IF v_expiry IS NOT NULL
+     AND v_now > v_expiry
+     AND lower(coalesce(v_quote.status, '')) NOT IN ('approved', 'accepted', 'paid', 'declined', 'rejected', 'expired') THEN
+    RAISE EXCEPTION 'ML_P1_S2_QUOTE_EXPIRED: quote has expired and cannot be approved'
+      USING ERRCODE = 'P0001';
   END IF;
 
   PERFORM public.ml_p1_s2_assert_transition('approve', v_quote.status);
