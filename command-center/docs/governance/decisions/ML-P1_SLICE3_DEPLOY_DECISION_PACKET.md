@@ -1,17 +1,20 @@
 # Decision Packet — ML-P1 Slice 3 Production Deploy (Edge + Hostinger)
 
-> Reduced AI Development Assurance Pilot. **Packet preparation only — do not deploy.**  
-> Migration already applied and I2-verified; **do not reapply**.
+> Reduced AI Development Assurance Pilot.  
+> Migration already applied and I2-verified; **do not reapply**.  
+> **Deploy executed 2026-07-21** under Founder authorization (see post-evidence).
 
 ---
 
 ## Disposition
 
-# **SLICE3_READY_FOR_DEPLOY_AUTH**
+# **SLICE3_DEPLOY_EXECUTED — IDENTITY PASS / MONEY-PATH OPERATOR PENDING**
 
-Authorize coordinated deploy of (1) three Supabase Edge Functions and (2) Hostinger
-static frontend built from the exact main tip below. Does **not** authorize Slice 4,
+Founder authorized coordinated deploy of (1) three Supabase Edge Functions and (2)
+Hostinger static frontend from tip `5cd7360…`. Does **not** authorize Slice 4,
 Stripe, invoices, autonomous follow-up, TIS, G2.3, or migration re-apply.
+
+Evidence: `docs/stabilization/releases/ML-P1_SLICE3_DEPLOY_POST_EVIDENCE.md`
 
 ---
 
@@ -143,4 +146,4 @@ Client calls `ml_p1_s2_quote_lifecycle` / `ml_p1_s2_quote_approve_public` only; 
 
 ## Hard locks
 
-No deploy under this packet alone · no migration re-apply · no Slice 4 · no Stripe · no invoices · no autonomous follow-up · no TIS · no G2.3
+No migration re-apply · no Slice 4 · no Stripe · no invoices · no autonomous follow-up · no TIS · no G2.3
