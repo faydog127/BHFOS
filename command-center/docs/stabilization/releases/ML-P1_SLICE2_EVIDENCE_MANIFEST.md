@@ -9,7 +9,7 @@
 | Coding auth base SHA | `caacdc071db3e3333b7109a526681d99f9bb8356` |
 | Prior freeze | `773e3f5d0d9a66eccaffeb277162bad007b29e73` |
 | Branch / worktree | `ml/p1-s2-quote-issue-approval` / `F:\Dev\BHFOS-ml-p1-s2` |
-| Head SHA | _(filled at new freeze after push)_ |
+| Head SHA | `45e8c78ae302ceacb906944478ee02aa121ef743` |
 | Files changed | `public-quote-approve` (no jobs); `20260721170000_ml_p1_s2_lifecycle_server_authz.sql`; lifecycle service → RPC; tests; evidence |
 | Data objects changed | **Proposed (not applied):** RPCs `ml_p1_s2_quote_lifecycle`, `ml_p1_s2_quote_approve_public`; accept blocked unless `auto_create_job_on_quote_acceptance` explicitly false; draft-only UPDATE RLS; prior R-S1-02 migration unchanged |
 | Tests executed | `npm run test:ml-p1-s2-helpers` (17/17); `npm run test:ml-p1-s1-helpers` (15/15) |
