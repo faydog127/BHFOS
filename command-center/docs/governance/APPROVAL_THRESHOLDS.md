@@ -17,17 +17,22 @@ The system may proceed without human interruption for:
 - local proof runs
 - artifact generation
 - structured failure packet generation
-- documentation drafts (non-canonical)
+- documentation drafts (including Decision Packets and governance drafts)
 - local test reruns
 - patch iteration within retry/cost limits
-- review synthesis for non-release decisions
+- review synthesis and review dispatch
+- Category A / B work in
+  [`FOUNDER_DELEGATED_AUTHORITY_POLICY.md`](./FOUNDER_DELEGATED_AUTHORITY_POLICY.md)
+  (repository evidence, approved read-only metadata checks, planning, safe
+  preparation, proceed-and-notify actions)
 
 ## Human approval required
 A human decider is required for:
 - production deployment in trigger domains
 - accepted risk
 - override usage
-- doctrine changes
+- doctrine changes (adoption of new standing-authority policy onto `main` counts
+  as a governance merge — Founder merge authorization still required)
 - break-glass operations
 - irreversible data mutation
 - any claim of `P0-02: PRODUCTION-VALIDATED`
@@ -35,9 +40,14 @@ A human decider is required for:
   `LOW-RISK_CONTROL_PLANE_CORRECTION` merge that meets every eligibility gate in
   `LOW_RISK_CONTROL_PLANE_CORRECTION.md` (Founder exact PR/SHA merge remains
   mandatory outside that lane, and for activating the lane itself)
+- Category C actions in
+  [`FOUNDER_DELEGATED_AUTHORITY_POLICY.md`](./FOUNDER_DELEGATED_AUTHORITY_POLICY.md)
+  (migration apply, production mutation, new implementation slice, financial /
+  security / customer-facing changes, etc.)
 - Founder terminal / OAuth / credential / dashboard / protected-launcher actions
   until `FOUNDER_RUN_READINESS` returns `FOUNDER_RUN_READY`
-  (`FOUNDER_RUN_READINESS.md`)
+  (`FOUNDER_RUN_READINESS.md`) — and such asks must not be used for Category A
+  metadata work the Orchestrator should perform on an approved path
 
 ## Delegated merge (narrow exception)
 Release Agent may omit Founder merge authorization **only** when

@@ -66,7 +66,8 @@ Roles: **PO** = Production Operator · **PD** = Production Diagnostics ·
 | Deployment (approved SHA) | R | P | R | P | P | P | S | A |
 | Rollback (predefined) | R | P | R (containment) | P | P | P | S | A |
 | Migrations | S | P | S | P | P | P | S | S |
-| Database reads | S | S | S | P | P | P | P | A |
+| Database reads (customer / payment / message **rows**) | S | S | S | P | P | P | P | A |
+| Database **metadata** only (RLS flags, policies, grants, schema objects; no row data; approved path) | R | A | R | P | P | P | P | A |
 | Database writes | S | P | S | P | P | P | P | S |
 | Environment configuration | S | P | S | P | P | P | P | S |
 | Secrets (values) | P | P | P | P | P | P | P | S |
@@ -100,11 +101,14 @@ self-authorizes; never reads secret values.**
 ### Production Diagnostics (PD)
 **Read-only by default.** May read logs, deployment status, Supabase/Edge Function
 diagnostics, auth-failure signals, database and migration **state** (read),
+**schema/RLS/policy/grant metadata** on approved paths (no customer row data),
 environment fingerprints, deployed build identity, browser/network errors, and
-health checks. May **not** deploy, write data, run migrations, change
+health checks — including Orchestrator-coordinated Category A checks per
+[`FOUNDER_DELEGATED_AUTHORITY_POLICY.md`](./FOUNDER_DELEGATED_AUTHORITY_POLICY.md).
+May **not** deploy, write data, run migrations, change
 secrets/security controls, send customer communications, or perform financial
 actions. Any repair returns to Builder or Production Operator under a **new exact
-authorization**.
+authorization**. Customer/payment/message **row** reads remain **S**.
 
 ### Production Incident Commander (IC)
 Coordination authority during an **active declared incident** (P0/P1/qualifying

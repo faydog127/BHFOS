@@ -51,6 +51,7 @@ role must **consolidate and simplify** (see §7, Founder Burden stop condition).
 | [`INCIDENT_AND_PRODUCTION_READINESS.md`](./INCIDENT_AND_PRODUCTION_READINESS.md) | P0–P3 incident model, Incident Commander, drift, readiness baseline, synthetic-data rules, fire-drill plan. |
 | [`AGENT_PILOT_SCORECARD.md`](./AGENT_PILOT_SCORECARD.md) | Lightweight, agent-maintained effectiveness scorecard. |
 | [`FOUNDER_RUN_READINESS.md`](./FOUNDER_RUN_READINESS.md) | Mandatory gate before Founder terminal/OAuth/credential/dashboard actions. |
+| [`FOUNDER_DELEGATED_AUTHORITY_POLICY.md`](./FOUNDER_DELEGATED_AUTHORITY_POLICY.md) | Categories A/B/C — when Orchestrator proceeds without Founder interruption vs Category C auth. |
 | [`ENVIRONMENT_ACCEPTANCE.md`](./ENVIRONMENT_ACCEPTANCE.md) | Platform-path acceptance when OS/browser/OAuth/path behavior matters. |
 | [`LOW_RISK_CONTROL_PLANE_CORRECTION.md`](./LOW_RISK_CONTROL_PLANE_CORRECTION.md) | Bounded lane for delegated merge of low-risk control-plane corrections. |
 | [`templates/RELEASE_BATON.template.yaml`](./templates/RELEASE_BATON.template.yaml) | Machine-readable release-state artifact (per active release). |
@@ -233,6 +234,13 @@ completed, and the Ledger entry is written by an agent.
 - **One unchanged release must not produce repeated approval requests.**
 - The founder is **never asked to repeat data** already available in the brief,
   the Baton, GitHub, CI, the Ledger, or verification evidence.
+- **Delegated authority:** Routine read-only, reversible, non-destructive work
+  proceeds under standing authority per
+  [`FOUNDER_DELEGATED_AUTHORITY_POLICY.md`](./FOUNDER_DELEGATED_AUTHORITY_POLICY.md)
+  (Categories A/B). Do **not** interrupt the Founder for metadata checks,
+  planning drafts, review dispatch, or other Category A/B work. Category C
+  (merge, migration apply, deploy, new slice, financial/security mutation, etc.)
+  still requires explicit Founder authorization.
 
 ### Founder interruption protocol
 
