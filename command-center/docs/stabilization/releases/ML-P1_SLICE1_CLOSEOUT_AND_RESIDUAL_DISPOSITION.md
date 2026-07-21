@@ -24,12 +24,12 @@
 
 | ID | Residual | Class | Rationale |
 | --- | --- | --- | --- |
-| **R-S1-01** | Server DENY on `estimates` INSERT | **Before Slice 2 coding** | Canonical money path only: (1) prevent deprecated `estimates` writes; (2) enforce canonical `quotes`; (3) prevent alternate money writer. **Not** tenant isolation |
+| **R-S1-01** | Server DENY on `estimates` INSERT | **CLOSED** | Applied + I2-verified; see `ML-P1_RS101_CLOSEOUT.md`. Do not re-apply for migration-history gap alone. |
 | **R-S1-02** | Draft idempotency UNIQUE | **Inside Slice 2** | KI-13 / Contract §7·§15 |
 | **R-S1-03** | Server internal **role** matrix | **Inside Slice 2** | TVG role authz for issue/approve |
 | **R-S1-04** | Cross-tenant G-03 | **NOT APPLICABLE** | Shared multi-tenancy removed |
 
-| Blocks S2 coding | **R-S1-01** |
+| Blocks S2 coding | **None remaining** (R-S1-01 CLOSED) |
 | Blocks S2 acceptance | **R-S1-02**, **R-S1-03** (+ G-02, G-05, role/authn/context negatives) |
 | Blocks S2 deploy | Same as acceptance |
 | Migrations | R-S1-01 (before S2); R-S1-02 (in S2); R-S1-03 maybe |
