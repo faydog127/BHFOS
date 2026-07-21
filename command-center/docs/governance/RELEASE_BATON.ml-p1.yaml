@@ -3,7 +3,7 @@
 # Status: planning_only. No implementation/deploy/migration authorized by this baton.
 
 release_id: "ML-P1"
-current_phase: "planning_correction"
+current_phase: "implementation_roadmap"
 governance_version: "v2.2"
 risk_tier: "Tier 3"
 status: "planning_only"
@@ -11,6 +11,9 @@ current_owner: "Orchestrator"
 release_brief_path: "command-center/docs/stabilization/releases/ML-P1_BRIEF.md"
 decision_packet_path: "command-center/docs/governance/decisions/ML-P1_DECISION_PACKET.md"
 planning_correction_packet_path: "command-center/docs/governance/decisions/ML-P1_PLANNING_CORRECTION_DECISION_PACKET.md"
+implementation_roadmap_path: "command-center/docs/stabilization/releases/ML-P1_IMPLEMENTATION_ROADMAP.md"
+slice1_decision_packet_path: "command-center/docs/governance/decisions/ML-P1_SLICE1_DECISION_PACKET.md"
+planning_correction_merge_sha: "8d8ac06b7e64f2b8e92b04c76d7d7094c631831d"
 known_issue_register_path: "command-center/docs/stabilization/releases/ML-P1_KNOWN_ISSUE_REGISTER.md"
 kpi_scorecard_path: "command-center/docs/stabilization/releases/ML-P1_KPI_SCORECARD.md"
 blocking_gates_path: "command-center/docs/stabilization/releases/ML-P1_BLOCKING_ACCEPTANCE_GATES.md"
@@ -60,8 +63,9 @@ carry_forward_hygiene:
   - "Windows node adapter exit anomaly after successful HTTP (diagnostics hygiene; KI-17)"
 
 blockers:
-  - "Founder merge auth required for planning-correction PR (exact PR + head SHA)"
-  - "Implementation not authorized until separate Founder Decision Packet after correction merge"
+  - "Founder acceptance of ML-P1 Implementation Roadmap"
+  - "Separate Founder authorization of Slice 1 Decision Packet before any coding"
+  - "Slices 2-6 not authorized; live pay / send-estimate / TIS / G2.3 reopen forbidden"
 
-next_phase: "Founder merge of planning correction → eligible to draft implementation Decision Packet (still requires separate auth)"
-next_owner: "Founder (merge auth) → Orchestrator"
+next_phase: "Founder accepts roadmap → optional docs merge → exact Slice 1 implementation auth"
+next_owner: "Founder → Orchestrator"
