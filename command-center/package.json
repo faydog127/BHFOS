@@ -36,7 +36,7 @@
     "test:founder-run-readiness": "node tools/founder-run-readiness.mjs --self-test",
     "test:control-plane-lane": "node tools/control-plane-lane-activation.mjs --self-test",
     "test:cursor-role-isolation": "node tools/verify-cursor-role-isolation.mjs",
-    "test:supabase-diagnostics-adapter": "node tools/supabase-diagnostics-adapter/cli.mjs --self-test",
+    "test:supabase-diagnostics-adapter": "node tools/supabase-diagnostics-adapter/cli.mjs --self-test && node tools/supabase-diagnostics-adapter/catalog.self-test.mjs",
     "test:supabase-oauth-helper": "node tools/supabase-diagnostics-adapter/oauth-authorize.mjs --self-test",
     "test:supabase-oauth-tunnel": "node tools/supabase-diagnostics-adapter/oauth-tunnel.self-test.mjs",
     "test:supabase-oauth-launcher-preflight": "node tools/supabase-diagnostics-adapter/oauth-launcher-preflight.self-test.mjs",
