@@ -24,6 +24,7 @@ import {
   READ_ONLY_QUERY_PATH_SUFFIX,
   listCatalogOperations,
   resolveCatalogSql,
+  sanitizeCatalogResponseBody,
 } from './catalog-ops.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -350,6 +351,7 @@ export async function invokeCatalog(operationId, rawParams = {}, { agentRef, dry
   }
 
   const masked = JSON.parse(maskPayload(typeof body === 'string' ? body : JSON.stringify(body)));
+  const sanitizedBody = sanitizeCatalogResponseBody(resolved.operation, masked);
   const resultClass = res.ok ? 'ok' : 'error';
   appendAuditLog({
     operation: resolved.operation,
@@ -366,8 +368,11 @@ export async function invokeCatalog(operationId, rawParams = {}, { agentRef, dry
     ref,
     params: resolved.params,
     description: resolved.description,
-    classification: 'catalog_metadata',
-    body: masked,
+    classification:
+      resolved.operation === 'catalog_quotes_s2_active_unique_conflict_counts'
+        ? 'catalog_aggregate'
+        : 'catalog_metadata',
+    body: sanitizedBody,
   };
 }
 
