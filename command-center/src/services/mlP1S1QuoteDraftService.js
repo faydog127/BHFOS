@@ -13,9 +13,16 @@ import {
   ML_P1_S1_EVENT_TYPES,
 } from '../lib/mlP1S1AuditEvents.js';
 import { assertTenantMatch, resolveWriteTenantId } from '../lib/mlP1S1Tenant.js';
+import {
+  buildDuplicateCustomerFilters,
+  sortDuplicateCandidates,
+} from '../lib/mlP1S1DuplicateCustomer.js';
 import { endKpiTimer, incrementKpi, startKpiTimer } from '../lib/mlP1S1Kpi.js';
 
 const DRAFT_STATUS = 'draft';
+
+/** Process-local in-flight locks to collapse concurrent double-submit for same idem key. */
+const inflightDraftCreates = new Map();
 
 function newCorrelationId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
@@ -69,18 +76,20 @@ export function createMlP1S1QuoteDraftService(deps) {
   /**
    * Create or return existing draft quote (idempotent).
    */
-  async function createDraftQuote({
-    lead,
-    form = null,
-    lineItems = [],
-    sessionTenantId = null,
-    urlTenantId = null,
-    defaultTenantId = null,
-    actorId = null,
-    actorRole = 'office',
-    idempotencyKey = null,
-    correlationId = null,
-  }) {
+  async function createDraftQuote(args) {
+    const {
+      lead,
+      form = null,
+      lineItems = [],
+      sessionTenantId = null,
+      urlTenantId = null,
+      defaultTenantId = null,
+      actorId = null,
+      actorRole = 'office',
+      idempotencyKey = null,
+      correlationId = null,
+    } = args || {};
+
     startKpiTimer('create_draft_quote');
 
     const tenantId = resolveWriteTenantId({
@@ -105,106 +114,122 @@ export function createMlP1S1QuoteDraftService(deps) {
 
     const corr = correlationId || newCorrelationId();
     const idem = idempotencyKey || corr;
+    const lockKey = `${tenantId}:${lead.id}:${idem}`;
 
-    const existing = await findDraftByIdempotency({
-      tenantId,
-      leadId: lead.id,
-      idempotencyKey: idem,
-    });
-    if (existing) {
-      incrementKpi('draft_idempotent_hit');
+    if (inflightDraftCreates.has(lockKey)) {
+      incrementKpi('draft_idempotent_inflight');
+      const shared = await inflightDraftCreates.get(lockKey);
       endKpiTimer('create_draft_quote');
-      return {
-        quote: existing,
-        items: [],
-        idempotent: true,
-        correlationId: corr,
-        audit: { skipped: true, reason: 'idempotent_reuse' },
-      };
+      return { ...shared, idempotent: true };
     }
 
-    const marker = `s1-idem:${idem}`;
-    const subtotal = (lineItems || []).reduce(
-      (sum, item) => sum + Number(item.quantity || 1) * Number(item.unit_price || item.price || 0),
-      0,
-    );
-
-    const quotePayload = {
-      lead_id: lead.id,
-      tenant_id: tenantId,
-      status: DRAFT_STATUS,
-      service_address: serviceAddress,
-      customer_name:
-        [lead.first_name, lead.last_name].filter(Boolean).join(' ') || lead.company || null,
-      customer_email: lead.email || null,
-      customer_phone: lead.phone || null,
-      subtotal,
-      total: subtotal,
-      tax: 0,
-      notes: marker,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    assertStableCustomerLink(quotePayload);
-
-    const { data: quote, error: quoteError } = await supabase
-      .from('quotes')
-      .insert([quotePayload])
-      .select('*')
-      .single();
-    if (quoteError) throw quoteError;
-
-    let items = [];
-    if (lineItems?.length) {
-      const rows = lineItems.map((item, index) => {
-        const qty = Number(item.quantity || 1);
-        const unit = Number(item.unit_price || item.price || 0);
-        return {
-          quote_id: quote.id,
-          description: item.description || item.name || `Item ${index + 1}`,
-          quantity: qty,
-          unit_price: unit,
-          total_price: qty * unit,
-        };
+    const run = (async () => {
+      const existing = await findDraftByIdempotency({
+        tenantId,
+        leadId: lead.id,
+        idempotencyKey: idem,
       });
-      const { data: insertedItems, error: itemsError } = await supabase
-        .from('quote_items')
-        .insert(rows)
-        .select('*');
-      if (itemsError) {
-        // Best-effort compensation without migration: delete draft quote
-        await supabase.from('quotes').delete().eq('id', quote.id).eq('tenant_id', tenantId);
-        throw itemsError;
+      if (existing) {
+        incrementKpi('draft_idempotent_hit');
+        return {
+          quote: existing,
+          items: [],
+          idempotent: true,
+          correlationId: corr,
+          audit: { skipped: true, reason: 'idempotent_reuse' },
+        };
       }
-      items = insertedItems || [];
+
+      const marker = `s1-idem:${idem}`;
+      const subtotal = (lineItems || []).reduce(
+        (sum, item) => sum + Number(item.quantity || 1) * Number(item.unit_price || item.price || 0),
+        0,
+      );
+
+      const quotePayload = {
+        lead_id: lead.id,
+        tenant_id: tenantId,
+        status: DRAFT_STATUS,
+        service_address: serviceAddress,
+        customer_name:
+          [lead.first_name, lead.last_name].filter(Boolean).join(' ') || lead.company || null,
+        customer_email: lead.email || null,
+        customer_phone: lead.phone || null,
+        subtotal,
+        total: subtotal,
+        tax: 0,
+        notes: marker,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      assertStableCustomerLink(quotePayload);
+
+      const { data: quote, error: quoteError } = await supabase
+        .from('quotes')
+        .insert([quotePayload])
+        .select('*')
+        .single();
+      if (quoteError) throw quoteError;
+
+      let items = [];
+      if (lineItems?.length) {
+        const rows = lineItems.map((item, index) => {
+          const qty = Number(item.quantity || 1);
+          const unit = Number(item.unit_price || item.price || 0);
+          return {
+            quote_id: quote.id,
+            description: item.description || item.name || `Item ${index + 1}`,
+            quantity: qty,
+            unit_price: unit,
+            total_price: qty * unit,
+          };
+        });
+        const { data: insertedItems, error: itemsError } = await supabase
+          .from('quote_items')
+          .insert(rows)
+          .select('*');
+        if (itemsError) {
+          await supabase.from('quotes').delete().eq('id', quote.id).eq('tenant_id', tenantId);
+          throw itemsError;
+        }
+        items = insertedItems || [];
+      }
+
+      const auditRow = buildMoneyStateAuditEvent({
+        tenantId,
+        recordId: quote.id,
+        recordType: 'quote',
+        actorId,
+        actorRole,
+        previousState: null,
+        newState: DRAFT_STATUS,
+        sourceAction: 'ml_p1_s1.create_draft_quote',
+        correlationId: corr,
+        success: true,
+        related: { quote_id: quote.id, lead_id: lead.id },
+        eventType: ML_P1_S1_EVENT_TYPES.DRAFT_CREATED,
+      });
+      const audit = await emitAudit(auditRow);
+
+      incrementKpi('draft_created');
+
+      return {
+        quote,
+        items,
+        idempotent: false,
+        correlationId: corr,
+        audit,
+      };
+    })();
+
+    inflightDraftCreates.set(lockKey, run);
+    try {
+      const result = await run;
+      endKpiTimer('create_draft_quote');
+      return result;
+    } finally {
+      inflightDraftCreates.delete(lockKey);
     }
-
-    const auditRow = buildMoneyStateAuditEvent({
-      tenantId,
-      recordId: quote.id,
-      recordType: 'quote',
-      actorId,
-      actorRole,
-      previousState: null,
-      newState: DRAFT_STATUS,
-      sourceAction: 'ml_p1_s1.create_draft_quote',
-      correlationId: corr,
-      success: true,
-      related: { quote_id: quote.id, lead_id: lead.id },
-      eventType: ML_P1_S1_EVENT_TYPES.DRAFT_CREATED,
-    });
-    const audit = await emitAudit(auditRow);
-
-    incrementKpi('draft_created');
-    endKpiTimer('create_draft_quote');
-
-    return {
-      quote,
-      items,
-      idempotent: false,
-      correlationId: corr,
-      audit,
-    };
   }
 
   /**
@@ -212,13 +237,18 @@ export function createMlP1S1QuoteDraftService(deps) {
    */
   async function updateDraftQuote({
     quoteId,
-    tenantId,
+    sessionTenantId = null,
+    urlTenantId = null,
+    tenantId: _ignoredCallerTenant = null,
     patch = {},
     lineItems = null,
     actorId = null,
     actorRole = 'office',
     correlationId = null,
   }) {
+    void _ignoredCallerTenant;
+    const tenantId = resolveWriteTenantId({ sessionTenantId, urlTenantId });
+
     const { data: existing, error: loadError } = await supabase
       .from('quotes')
       .select('*')
@@ -231,6 +261,7 @@ export function createMlP1S1QuoteDraftService(deps) {
       err.code = 'ML_P1_S1_QUOTE_NOT_FOUND';
       throw err;
     }
+    assertTenantMatch(existing.tenant_id, tenantId);
     if (String(existing.status || '').toLowerCase() !== DRAFT_STATUS) {
       const err = new Error('DENY: Slice 1 may only update draft quotes');
       err.code = 'ML_P1_S1_NOT_DRAFT';
@@ -244,6 +275,7 @@ export function createMlP1S1QuoteDraftService(deps) {
     };
     delete next.id;
     delete next.tenant_id;
+    delete next.lead_id; // never allow lead nulling / reassignment via S1 update
 
     const { data: quote, error: updError } = await supabase
       .from('quotes')
@@ -301,19 +333,29 @@ export function createMlP1S1QuoteDraftService(deps) {
     return { quote, items, correlationId: corr };
   }
 
-  async function findDuplicateCustomers({ tenantId, input, limit = 8 }) {
+  async function findDuplicateCustomers({
+    sessionTenantId = null,
+    urlTenantId = null,
+    tenantId: _ignored = null,
+    input,
+    limit = 8,
+  }) {
+    void _ignored;
+    const tenantId = resolveWriteTenantId({ sessionTenantId, urlTenantId });
     const built = buildDuplicateCustomerFilters(input);
     if (!built.ok) return { ok: false, reason: built.reason, matches: [] };
     const { data, error } = await supabase
       .from('leads')
-      .select('id, tenant_id, first_name, last_name, company, phone, email, address, property_formatted_address')
+      .select(
+        'id, tenant_id, first_name, last_name, company, phone, email, address, property_formatted_address',
+      )
       .eq('tenant_id', tenantId)
       .or(built.filters.join(','))
       .limit(limit);
     if (error) throw error;
     const matches = sortDuplicateCandidates(input, data || []);
     if (matches.length) incrementKpi('duplicate_customer_hit');
-    return { ok: true, matches };
+    return { ok: true, matches, tenantId };
   }
 
   return {

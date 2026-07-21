@@ -268,27 +268,12 @@ const EstimateEditorModal = ({ isOpen, onClose, onEstimateCreated }) => {
         updated_at: new Date().toISOString()
       };
 
-      // 4. Insert — ML-P1 Slice 1: legacy estimates create is DENY (use canonical quotes)
+      // 4. ML-P1 Slice 1: legacy estimates create is DENY (use canonical quotes).
+      // No insert is attempted — dead insert removed. Server RLS still requires
+      // a separately authorized additive migration (see Slice 1 evidence residual).
+      void payload;
       assertEstimatesCreateAllowed('EstimateEditorModal.save');
       incrementKpi('estimates_create_deny');
-      const { data, error } = await supabase.from('estimates').insert(payload).select().single();
-
-      if (error) throw error;
-
-      toast({ title: "Success", description: "Estimate created successfully." });
-      if (onEstimateCreated) onEstimateCreated(data);
-      onClose();
-      
-      // Reset State
-      setStep(1);
-      setSelectedLead(null);
-      setLineItems([]);
-      setSearchTerm('');
-      setIsCreatingNewCustomer(false);
-      setNewCustomer({ firstName: '', lastName: '', email: '', phone: '', company: '', address: '' });
-      setAppliedDiscount(null);
-      setDiscountCode('');
-
     } catch (err) {
       console.error(err);
       toast({ variant: "destructive", title: "Error", description: err.message });

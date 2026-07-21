@@ -3,10 +3,17 @@
  * Baseline-first: timings are recorded; targets not invented here.
  */
 
-const g = typeof globalThis !== 'undefined' ? globalThis : {};
+/* Avoid globalThis (eslint no-undef under react-app). Prefer window, then Node global. */
+function rootObject() {
+  if (typeof window !== 'undefined') return window;
+  if (typeof global !== 'undefined') return global;
+  return {};
+}
+
 const STORE_KEY = '__ML_P1_S1_KPI_STORE__';
 
 function store() {
+  const g = rootObject();
   if (!g[STORE_KEY]) {
     g[STORE_KEY] = {
       timers: Object.create(null),
@@ -18,6 +25,7 @@ function store() {
 }
 
 export function resetMlP1S1KpiStore() {
+  const g = rootObject();
   g[STORE_KEY] = {
     timers: Object.create(null),
     counters: Object.create(null),

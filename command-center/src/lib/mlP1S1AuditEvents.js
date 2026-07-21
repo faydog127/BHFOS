@@ -13,6 +13,11 @@ export const ML_P1_S1_EVENT_TYPES = Object.freeze({
   DUP_CUSTOMER_HIT: 'kpi.duplicate_customer_hit',
 });
 
+function newEventId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return `s1-evt-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 /**
  * Build append-only event row (no secrets / tokens).
  */
@@ -48,8 +53,11 @@ export function buildMoneyStateAuditEvent({
     throw err;
   }
 
+  const resolvedEventId = eventId || newEventId();
+  const resolvedCorrelation = correlationId || newEventId();
+
   const payload = {
-    event_id: eventId || null,
+    event_id: resolvedEventId,
     record_id: recordId || null,
     record_type: recordType,
     tenant_id: tenantId,
@@ -59,8 +67,9 @@ export function buildMoneyStateAuditEvent({
     new_state: newState,
     reason: reason || null,
     source_action: sourceAction,
-    correlation_id: correlationId || null,
+    correlation_id: resolvedCorrelation,
     success: Boolean(success),
+    timestamp: new Date().toISOString(),
     quote_id: related.quote_id || recordId || null,
     lead_id: related.lead_id || null,
     // Slice 1: no job/invoice ids
@@ -71,17 +80,19 @@ export function buildMoneyStateAuditEvent({
   return {
     tenant_id: tenantId,
     entity_type: recordType,
-    entity_id: recordId || correlationId || 'unknown',
+    entity_id: recordId || resolvedCorrelation || 'unknown',
     event_type: eventType,
     actor_type: actorRole,
     actor_id: actorId,
     payload,
-    created_at: new Date().toISOString(),
+    created_at: payload.timestamp,
   };
 }
 
 export function assertAuditPayloadComplete(payload = {}) {
   const required = [
+    'event_id',
+    'record_id',
     'record_type',
     'tenant_id',
     'actor_role',
@@ -89,9 +100,11 @@ export function assertAuditPayloadComplete(payload = {}) {
     'source_action',
     'correlation_id',
     'success',
+    'timestamp',
   ];
   const missing = required.filter((k) => payload[k] === undefined || payload[k] === null || payload[k] === '');
-  // success may be false; still required key present
+  // actor_id may be null for anonymous edge cases; require key present
+  if (!Object.prototype.hasOwnProperty.call(payload, 'actor_id')) missing.push('actor_id');
   if (payload.success === undefined) missing.push('success');
   return { ok: missing.length === 0, missing };
 }

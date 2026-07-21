@@ -2,11 +2,10 @@
  * ML-P1 Slice 1 — Mobile-first customer find/create + draft quote (canonical quotes only).
  * Does not issue, approve, convert to job, or invoice.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
 import { getTenantId, resolveTenantIdFromSession, tenantPath } from '@/lib/tenantUtils';
-import { DEFAULT_TENANT_ID } from '@/config/tenantDefaults';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
@@ -19,6 +18,7 @@ import {
   describeLeadIntakeDbError,
 } from '@/lib/leadIntakeContract';
 import { createMlP1S1QuoteDraftService } from '@/services/mlP1S1QuoteDraftService';
+import { resolveWriteTenantId, isTenantDenyError } from '@/lib/mlP1S1Tenant';
 import {
   endKpiTimer,
   getKpiSnapshot,
@@ -68,13 +68,13 @@ export default function MlP1S1DraftQuotePage() {
 
   const bumpTap = () => setTapCount((n) => n + 1);
 
-  const sessionTenantPromise = useMemo(() => resolveTenantIdFromSession(), []);
-
   const runSearch = async () => {
     bumpTap();
     startKpiTimer('find_customer');
     setSearching(true);
     try {
+      const sessionTenantId = await resolveTenantIdFromSession();
+      const tenantId = resolveWriteTenantId({ sessionTenantId, urlTenantId });
       const q = search.trim();
       if (!q) {
         setResults([]);
@@ -85,7 +85,7 @@ export default function MlP1S1DraftQuotePage() {
         .select(
           'id, tenant_id, first_name, last_name, company, phone, email, address, property_formatted_address',
         )
-        .eq('tenant_id', urlTenantId)
+        .eq('tenant_id', tenantId)
         .or(
           `first_name.ilike.%${q}%,last_name.ilike.%${q}%,company.ilike.%${q}%,phone.ilike.%${q}%,email.ilike.%${q}%,address.ilike.%${q}%`,
         )
@@ -117,11 +117,13 @@ export default function MlP1S1DraftQuotePage() {
     startKpiTimer('create_customer');
     setCreating(true);
     try {
-      const sessionTenantId = await sessionTenantPromise;
-      const validation = assertLeadIntakeValid(form);
+      const sessionTenantId = await resolveTenantIdFromSession();
+      const tenantId = resolveWriteTenantId({ sessionTenantId, urlTenantId });
+      assertLeadIntakeValid(form);
       if (!force) {
         const dup = await draftService.findDuplicateCustomers({
-          tenantId: urlTenantId,
+          sessionTenantId,
+          urlTenantId,
           input: form,
         });
         if (dup.ok && dup.matches?.length) {
@@ -135,19 +137,11 @@ export default function MlP1S1DraftQuotePage() {
       }
 
       const payload = buildLeadIntakeInsertPayload(form, {
-        tenantId: urlTenantId,
+        tenantId,
         source: 'ml_p1_s1',
       });
       const { data, error } = await supabase.from('leads').insert(payload).select('*').single();
       if (error) throw error;
-      if (sessionTenantId && data.tenant_id && sessionTenantId !== data.tenant_id) {
-        // Should not happen; surface if it does
-        toast({
-          variant: 'destructive',
-          title: 'Tenant mismatch',
-          description: 'Created lead tenant does not match session.',
-        });
-      }
       setSelectedLead(data);
       setDuplicates([]);
       setStep(2);
@@ -156,7 +150,7 @@ export default function MlP1S1DraftQuotePage() {
     } catch (error) {
       toast({
         variant: 'destructive',
-        title: 'Could not create customer',
+        title: isTenantDenyError(error) ? 'Tenant deny' : 'Could not create customer',
         description: describeLeadIntakeDbError(error) || error.message,
       });
     } finally {
@@ -184,7 +178,6 @@ export default function MlP1S1DraftQuotePage() {
         ],
         sessionTenantId,
         urlTenantId,
-        defaultTenantId: DEFAULT_TENANT_ID,
         actorId: user?.id || null,
         actorRole: 'office',
         idempotencyKey: idemKey,

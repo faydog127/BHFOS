@@ -105,24 +105,38 @@ describe('ML-P1 S1 identity / address', () => {
 });
 
 describe('ML-P1 S1 tenant', () => {
-  it('prefers session tenant and denies mismatch', () => {
+  it('requires session tenant and denies URL-only / default fallback', () => {
     assert.equal(resolveWriteTenantId({ sessionTenantId: 'tvg' }), 'tvg');
+    assert.equal(
+      resolveWriteTenantId({ sessionTenantId: 'tvg', urlTenantId: 'tvg' }),
+      'tvg',
+    );
     assert.throws(
       () => resolveWriteTenantId({ sessionTenantId: 'tvg', urlTenantId: 'other' }),
       (err) => err.code === TENANT_DENY_CODE,
     );
+    assert.throws(
+      () => resolveWriteTenantId({ urlTenantId: 'tvg' }),
+      (err) => err.code === TENANT_DENY_CODE,
+    );
+    assert.throws(
+      () => resolveWriteTenantId({ defaultTenantId: 'tvg' }),
+      (err) => err.code === TENANT_DENY_CODE,
+    );
   });
 
-  it('blocks cross-tenant row access', () => {
+  it('blocks cross-tenant and null-tenant row access', () => {
     assert.throws(() => assertTenantMatch('a', 'b'), (err) => isTenantDenyError(err));
+    assert.throws(() => assertTenantMatch(null, 'tvg'), (err) => isTenantDenyError(err));
   });
 });
 
 describe('ML-P1 S1 audit', () => {
-  it('builds complete payload fields', () => {
+  it('builds complete payload fields including event_id', () => {
     const row = buildMoneyStateAuditEvent({
       tenantId: 'tvg',
       recordId: 'q1',
+      actorId: 'user-1',
       actorRole: 'office',
       sourceAction: 'test',
       correlationId: 'c1',
@@ -130,8 +144,10 @@ describe('ML-P1 S1 audit', () => {
       related: { lead_id: 'l1' },
     });
     assert.equal(row.event_type, ML_P1_S1_EVENT_TYPES.DRAFT_CREATED);
+    assert.ok(row.payload.event_id);
+    assert.ok(row.payload.timestamp);
     const check = assertAuditPayloadComplete(row.payload);
-    assert.equal(check.ok, true);
+    assert.equal(check.ok, true, `missing: ${check.missing?.join(',')}`);
   });
 });
 
@@ -148,7 +164,7 @@ describe('ML-P1 S1 KPI', () => {
   });
 });
 
-describe('ML-P1 S1 draft service idempotency + tenant', () => {
+describe('ML-P1 S1 draft service idempotency + tenant + dup', () => {
   it('reuses draft on matching idempotency key without second insert', async () => {
     const inserts = [];
     const fakeExisting = {
@@ -197,6 +213,7 @@ describe('ML-P1 S1 draft service idempotency + tenant', () => {
     const svc = createMlP1S1QuoteDraftService({ supabase });
     const result = await svc.createDraftQuote({
       lead: { id: 'lead-1', tenant_id: 'tvg', address: '1 Main St' },
+      sessionTenantId: 'tvg',
       urlTenantId: 'tvg',
       idempotencyKey: 'abc',
     });
@@ -205,16 +222,72 @@ describe('ML-P1 S1 draft service idempotency + tenant', () => {
     assert.equal(inserts.length, 0);
   });
 
-  it('denies missing tenant', async () => {
+  it('denies missing session tenant', async () => {
     const svc = createMlP1S1QuoteDraftService({
       supabase: { from: () => ({}) },
     });
     await assert.rejects(
       () =>
         svc.createDraftQuote({
-          lead: { id: 'lead-1', address: '1 Main' },
+          lead: { id: 'lead-1', tenant_id: 'tvg', address: '1 Main' },
+          urlTenantId: 'tvg',
         }),
       (err) => err.code === TENANT_DENY_CODE,
     );
+  });
+
+  it('findDuplicateCustomers uses imported helpers (no ReferenceError)', async () => {
+    const supabase = {
+      from() {
+        return {
+          select() {
+            return this;
+          },
+          eq() {
+            return this;
+          },
+          or() {
+            return this;
+          },
+          limit() {
+            return this;
+          },
+          then(resolve) {
+            return Promise.resolve({
+              data: [{ id: 'lead-2', phone: '3215551212', tenant_id: 'tvg' }],
+              error: null,
+            }).then(resolve);
+          },
+        };
+      },
+    };
+    // Make awaitable query builder
+    const qb = {
+      select() {
+        return this;
+      },
+      eq() {
+        return this;
+      },
+      or() {
+        return this;
+      },
+      limit() {
+        return Promise.resolve({
+          data: [{ id: 'lead-2', phone: '3215551212', tenant_id: 'tvg' }],
+          error: null,
+        });
+      },
+    };
+    const svc = createMlP1S1QuoteDraftService({
+      supabase: { from: () => qb },
+    });
+    const result = await svc.findDuplicateCustomers({
+      sessionTenantId: 'tvg',
+      urlTenantId: 'tvg',
+      input: { phone: '3215551212' },
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.matches[0].id, 'lead-2');
   });
 });
