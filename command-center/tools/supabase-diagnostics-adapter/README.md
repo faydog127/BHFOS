@@ -32,6 +32,7 @@ node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_rls_fl
 
 # Live catalog (requires database_read-scoped token — separate Founder scope auth):
 node tools/supabase-diagnostics-adapter/cli.mjs catalog catalog_rls_flags --schema=public --table=estimates
+node tools/supabase-diagnostics-adapter/cli.mjs catalog catalog_quotes_s2_active_unique_conflict_counts
 ```
 
 See `docs/governance/I2_CATALOG_METADATA_CAPABILITY.md`.

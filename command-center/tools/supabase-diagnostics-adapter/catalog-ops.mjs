@@ -224,8 +224,71 @@ FROM supabase_migrations.schema_migrations
 ORDER BY version;
 `.trim(),
   },
+
+  /**
+   * Aggregate-only precheck for ML-P1 S2 proposed
+   * quotes_tenant_lead_active_unique (includes issued).
+   * Hard-locked to public.quotes — no agent table/predicate params.
+   * Returns conflict counts only (no tenant/lead/row payloads).
+   */
+  catalog_quotes_s2_active_unique_conflict_counts: {
+    id: 'catalog_quotes_s2_active_unique_conflict_counts',
+    description:
+      'Aggregate conflict counts for proposed S2 quotes active unique (tenant_id, lead_id) including issued — no row data',
+    params: [],
+    buildSql: () => `
+SELECT
+  COUNT(*)::bigint AS conflict_group_count,
+  COALESCE(SUM(grp.cnt), 0)::bigint AS conflicting_row_count
+FROM (
+  SELECT q.tenant_id, q.lead_id, COUNT(*)::bigint AS cnt
+  FROM public.quotes q
+  WHERE q.lead_id IS NOT NULL
+    AND lower(coalesce(q.status, 'draft')) IN (
+      'draft',
+      'pending_review',
+      'sent',
+      'viewed',
+      'issued'
+    )
+  GROUP BY q.tenant_id, q.lead_id
+  HAVING COUNT(*) > 1
+) grp;
+`.trim(),
+  },
 });
 
+/** Response keys allowed for aggregate uniqueness precheck (fail-closed strip). */
+export const QUOTES_S2_ACTIVE_UNIQUE_AGGREGATE_KEYS = Object.freeze([
+  'conflict_group_count',
+  'conflicting_row_count',
+]);
+
+/**
+ * Strip catalog response bodies that must never leak row-level business data.
+ * @param {string} operationId
+ * @param {unknown} body
+ */
+export function sanitizeCatalogResponseBody(operationId, body) {
+  if (operationId !== 'catalog_quotes_s2_active_unique_conflict_counts') {
+    return body;
+  }
+  if (!Array.isArray(body) || body.length === 0) {
+    return [
+      {
+        conflict_group_count: 0,
+        conflicting_row_count: 0,
+      },
+    ];
+  }
+  const row = body[0] && typeof body[0] === 'object' ? body[0] : {};
+  const out = {};
+  for (const key of QUOTES_S2_ACTIVE_UNIQUE_AGGREGATE_KEYS) {
+    const n = Number(row[key]);
+    out[key] = Number.isFinite(n) ? n : 0;
+  }
+  return [out];
+}
 /**
  * Resolve and validate a catalog operation; return fixed SQL.
  * @param {string} operationId
