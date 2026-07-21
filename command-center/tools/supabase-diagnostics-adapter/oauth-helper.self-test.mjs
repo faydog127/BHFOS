@@ -28,6 +28,8 @@ import {
   assertTokenScopes,
   attestPreStoreCapabilities,
   attestationOutOfCeilingPath,
+  extractPlatformPermission,
+  formatAttestationFailure,
   computeExpiryIso,
   writeTokenSecretsToEnvFile,
   wipeTransient,
@@ -42,6 +44,7 @@ import {
   resolveWindowsBrowserExecutable,
   callbackListenArgs,
 } from './oauth-helper.mjs';
+import { READ_ONLY_QUERY_PATH_SUFFIX, resolveCatalogSql } from './catalog-ops.mjs';
 
 function pass(results, test, ok, detail) {
   results.push({ test, pass: Boolean(ok), ...(detail ? { detail: String(detail).slice(0, 120) } : {}) });
@@ -214,6 +217,18 @@ export async function runSelfTests() {
   } catch (e) {
     pass(results, 'database_write_rejected', e.code === 'UNEXPECTED_SCOPE');
   }
+  try {
+    assertTokenScopes('projects:read');
+    pass(results, 'projects_read_without_database_read_denied', false);
+  } catch (e) {
+    pass(results, 'projects_read_without_database_read_denied', e.code === 'MISSING_DATABASE_READ');
+  }
+  try {
+    assertTokenScopes('database:read');
+    pass(results, 'database_read_without_projects_read_denied', false);
+  } catch (e) {
+    pass(results, 'database_read_without_projects_read_denied', e.code === 'MISSING_PROJECTS_READ');
+  }
   const omitted = assertTokenScopes('');
   const omittedUndef = assertTokenScopes(undefined);
   pass(
@@ -225,16 +240,40 @@ export async function runSelfTests() {
       Array.isArray(omitted.scopes) &&
       omitted.scopes.length === 0
   );
-  pass(results, 'allowed_scope_ok', assertTokenScopes('projects:read').scopes.includes('projects:read'));
   const both = assertTokenScopes('projects:read database:read');
   pass(
     results,
     'allowed_scopes_projects_and_database_read',
     both.scopes.includes('projects:read') && both.scopes.includes('database:read')
   );
+  pass(
+    results,
+    'extract_platform_permission',
+    extractPlatformPermission(
+      'OAuth token missing required scopes (project_admin_read) for GET /v1/projects/x'
+    ) === 'project_admin_read'
+  );
+  pass(
+    results,
+    'format_attestation_failure_safe',
+    formatAttestationFailure({
+      capability: 'projects_read',
+      httpStatus: 403,
+      platformPermission: 'project_admin_read',
+    }) ===
+      'DENY: pre-store attestation failed capability=projects_read http=403 platform_permission=project_admin_read' &&
+      !/eyJ|Bearer|access_token|refresh_token/i.test(
+        formatAttestationFailure({
+          capability: 'database_read',
+          httpStatus: 403,
+          platformPermission: 'database_read',
+        })
+      )
+  );
 
   // --- pre-store capability attestation (injected fetch; no live network) ---
   const allowPath = `/v1/projects/${PRODUCTION_PROJECT_REF}`;
+  const catalogPath = `/v1/projects/${PRODUCTION_PROJECT_REF}${READ_ONLY_QUERY_PATH_SUFFIX}`;
   const probePath = attestationOutOfCeilingPath();
   pass(
     results,
@@ -248,46 +287,151 @@ export async function runSelfTests() {
     ref: PRODUCTION_PROJECT_REF,
     operation: 'project_status',
   });
-  const mockAssertProhibited = (p) => {
-    if (String(p).includes('/api-keys')) {
+  const mockAssertProhibited = (p, opts = {}) => {
+    const s = String(p);
+    if (s.includes('/api-keys')) {
       throw new Error(`DENY: prohibited path pattern "/api-keys" in ${p}`);
     }
+    if (s.includes('/database/query') && !s.endsWith('/database/query/read-only')) {
+      throw new Error(`DENY: writable database query prohibited`);
+    }
+    if (s.endsWith('/database/query/read-only') && !opts.allowCatalogReadOnly) {
+      throw new Error('DENY: catalog read-only requires allowCatalogReadOnly');
+    }
   };
+  const mockResolveCatalog = (op, params) => resolveCatalogSql(op, params);
+  const jsonRes = (ok, status, body = '') => ({
+    ok,
+    status,
+    text: async () => body,
+  });
 
   try {
     await attestPreStoreCapabilities('tok_ephemeral_attest_ok', {
-      fetchImpl: async (url) => {
-        if (String(url).endsWith(allowPath)) return { ok: true, status: 200 };
-        if (String(url).endsWith(probePath)) return { ok: false, status: 403 };
-        return { ok: false, status: 404 };
+      fetchImpl: async (url, init) => {
+        const u = String(url);
+        if (u.endsWith(allowPath) && (!init || init.method === 'GET' || !init.method)) {
+          return jsonRes(true, 200);
+        }
+        if (u.endsWith(catalogPath) && init && init.method === 'POST') {
+          const body = typeof init.body === 'string' ? init.body : '';
+          if (!body.includes('"query"') || /INSERT|UPDATE|DELETE/i.test(body)) {
+            return jsonRes(false, 400, 'bad catalog body');
+          }
+          return jsonRes(true, 201);
+        }
+        if (u.endsWith(probePath)) return jsonRes(false, 403);
+        return jsonRes(false, 404);
       },
       resolveAllowedPathFn: mockResolveAllowed,
       assertNotProhibitedFn: mockAssertProhibited,
+      resolveCatalogSqlFn: mockResolveCatalog,
     });
-    pass(results, 'attestation_allow_ok_probe_denied', true);
+    pass(results, 'attestation_dual_ok_probe_denied', true);
   } catch (e) {
-    pass(results, 'attestation_allow_ok_probe_denied', false, e && e.message);
+    pass(results, 'attestation_dual_ok_probe_denied', false, e && e.message);
   }
 
   try {
-    await attestPreStoreCapabilities('tok_ephemeral_attest_allow_fail', {
-      fetchImpl: async (url) => {
-        if (String(url).endsWith(allowPath)) return { ok: false, status: 401 };
-        return { ok: false, status: 403 };
+    await attestPreStoreCapabilities('tok_ephemeral_projects_only', {
+      fetchImpl: async (url, init) => {
+        const u = String(url);
+        if (u.endsWith(allowPath)) return jsonRes(true, 200);
+        if (u.endsWith(catalogPath)) {
+          return jsonRes(
+            false,
+            403,
+            'OAuth token missing required scopes (database_read) for POST catalog'
+          );
+        }
+        return jsonRes(false, 403);
       },
       resolveAllowedPathFn: mockResolveAllowed,
       assertNotProhibitedFn: mockAssertProhibited,
+      resolveCatalogSqlFn: mockResolveCatalog,
+    });
+    pass(results, 'attestation_projects_without_database_denied', false);
+  } catch (e) {
+    pass(
+      results,
+      'attestation_projects_without_database_denied',
+      e.code === 'ATTEST_CATALOG_FAILED' &&
+        e.capability === 'database_read' &&
+        e.platformPermission === 'database_read' &&
+        e.httpStatus === 403
+    );
+  }
+
+  try {
+    await attestPreStoreCapabilities('tok_ephemeral_database_only', {
+      fetchImpl: async (url) => {
+        const u = String(url);
+        if (u.endsWith(allowPath)) {
+          return jsonRes(
+            false,
+            403,
+            'OAuth token missing required scopes (project_admin_read) for GET project'
+          );
+        }
+        if (u.endsWith(catalogPath)) return jsonRes(true, 201);
+        return jsonRes(false, 403);
+      },
+      resolveAllowedPathFn: mockResolveAllowed,
+      assertNotProhibitedFn: mockAssertProhibited,
+      resolveCatalogSqlFn: mockResolveCatalog,
+    });
+    pass(results, 'attestation_database_without_projects_denied', false);
+  } catch (e) {
+    pass(
+      results,
+      'attestation_database_without_projects_denied',
+      e.code === 'ATTEST_ALLOW_FAILED' &&
+        e.capability === 'projects_read' &&
+        e.platformPermission === 'project_admin_read' &&
+        e.httpStatus === 403
+    );
+  }
+
+  let writeCalledAfterFail = false;
+  try {
+    await attestPreStoreCapabilities('tok_ephemeral_attest_allow_fail', {
+      fetchImpl: async (url) => {
+        if (String(url).endsWith(allowPath)) return jsonRes(false, 401);
+        return jsonRes(false, 403);
+      },
+      resolveAllowedPathFn: mockResolveAllowed,
+      assertNotProhibitedFn: mockAssertProhibited,
+      resolveCatalogSqlFn: mockResolveCatalog,
+    });
+    writeCalledAfterFail = true;
+    writeTokenSecretsToEnvFile({
+      filePath: path.join(os.tmpdir(), 'should-not-write.env'),
+      existingMap: {},
+      accessToken: 'should-not-store',
+      refreshToken: 'should-not-store',
+      tokenExpiry: new Date().toISOString(),
+      writeFileSync: () => {
+        writeCalledAfterFail = true;
+      },
+      renameSync: () => {},
+      mkdirSync: () => {},
     });
     pass(results, 'attestation_allow_fail_no_store', false);
   } catch (e) {
-    pass(results, 'attestation_allow_fail_no_store', e.code === 'ATTEST_ALLOW_FAILED');
+    pass(
+      results,
+      'attestation_allow_fail_no_store',
+      e.code === 'ATTEST_ALLOW_FAILED' && writeCalledAfterFail === false
+    );
+    pass(results, 'token_material_absent_after_failed_attestation', writeCalledAfterFail === false);
   }
 
   try {
     await attestPreStoreCapabilities('tok_ephemeral_attest_ceiling', {
-      fetchImpl: async () => ({ ok: true, status: 200 }),
+      fetchImpl: async () => jsonRes(true, 200),
       resolveAllowedPathFn: mockResolveAllowed,
       assertNotProhibitedFn: mockAssertProhibited,
+      resolveCatalogSqlFn: mockResolveCatalog,
     });
     pass(results, 'attestation_ceiling_breach_denied', false);
   } catch (e) {
