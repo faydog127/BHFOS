@@ -24,12 +24,16 @@ const IMMUTABLE_CONTENT = new Set([
 
 export const ML_P1_S2_TRANSITIONS = Object.freeze({
   issue: { from: new Set(['draft']), to: ML_P1_S2_STATUSES.ISSUED },
-  approve: { from: new Set(['issued']), to: ML_P1_S2_STATUSES.APPROVED },
-  reject: { from: new Set(['issued', 'draft']), to: ML_P1_S2_STATUSES.REJECTED },
-  expire: { from: new Set(['issued']), to: ML_P1_S2_STATUSES.EXPIRED },
+  approve: { from: new Set(['issued', 'sent', 'viewed']), to: ML_P1_S2_STATUSES.APPROVED },
+  reject: { from: new Set(['issued', 'draft', 'sent', 'viewed']), to: ML_P1_S2_STATUSES.REJECTED },
+  expire: { from: new Set(['issued', 'sent', 'viewed']), to: ML_P1_S2_STATUSES.EXPIRED },
   revise: {
-    from: new Set(['issued', 'rejected', 'expired']),
+    from: new Set(['issued', 'rejected', 'expired', 'sent', 'viewed']),
     to: ML_P1_S2_STATUSES.REVISED,
+  },
+  ensure_job: {
+    from: new Set(['approved', 'accepted']),
+    to: ML_P1_S2_STATUSES.ACCEPTED,
   },
 });
 
@@ -103,7 +107,13 @@ function mapRpcError(error) {
     err.code = 'ML_P1_S2_TRANSITION_DENY';
   } else if (/ML_P1_S2_JOB_GATE_REQUIRED/i.test(msg)) {
     err.code = 'ML_P1_S2_JOB_GATE_REQUIRED';
-  } else if (/ML_P1_S2_QUOTE_NOT_FOUND/i.test(msg)) {
+  } else if (/ML_P1_S3_ADDRESS_REQUIRED/i.test(msg)) {
+    err.code = 'ML_P1_S3_ADDRESS_REQUIRED';
+  } else if (/ML_P1_S3_VERSION_MISMATCH/i.test(msg)) {
+    err.code = 'ML_P1_S3_VERSION_MISMATCH';
+  } else if (/ML_P1_S3_STATUS_DENY/i.test(msg)) {
+    err.code = 'ML_P1_S3_STATUS_DENY';
+  } else if (/ML_P1_S2_QUOTE_NOT_FOUND|ML_P1_S3_QUOTE_NOT_FOUND/i.test(msg)) {
     err.code = 'ML_P1_S2_QUOTE_NOT_FOUND';
   } else if (/ML_P1_S2_MISSING_TOKEN/i.test(msg)) {
     err.code = 'ML_P1_S2_MISSING_TOKEN';
@@ -120,6 +130,7 @@ function mapRpcError(error) {
 
 function normalizeRpcResult(data) {
   const payload = data && typeof data === 'object' ? data : {};
+  const jobId = payload.jobId ?? payload.job_id ?? null;
   return {
     quote: payload.quote || null,
     action: payload.action,
@@ -127,7 +138,9 @@ function normalizeRpcResult(data) {
     correlationId: payload.correlationId || null,
     audit: { ok: true, server: true },
     idempotent: Boolean(payload.idempotent),
-    jobCreated: false, // Slice 2 hard stop — never claim job create
+    // Slice 3: surface server job ensure result (approve path only creates jobs).
+    jobCreated: Boolean(payload.jobCreated ?? payload.job_created),
+    jobId: jobId ? String(jobId) : null,
   };
 }
 
@@ -211,6 +224,12 @@ export function createMlP1S2QuoteLifecycleService(deps) {
     rejectQuote: (args) => callLifecycleRpc({ ...args, action: 'reject' }),
     expireQuote: (args) => callLifecycleRpc({ ...args, action: 'expire' }),
     reviseQuote: (args) => callLifecycleRpc({ ...args, action: 'revise' }),
+    ensureJobForQuote: (args) =>
+      callLifecycleRpc({
+        ...args,
+        action: 'ensure_job',
+        approvalMethod: args.approvalMethod || 'admin_break_glass',
+      }),
     approveByPublicToken,
     assertTransitionAllowed,
     assertQuoteMutableForEdit,

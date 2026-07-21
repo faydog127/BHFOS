@@ -1,7 +1,7 @@
 /**
- * ML-P1 Slice 2 — Office quote lifecycle actions (issue / revise / reject / expire).
+ * ML-P1 Slice 2/3 — Office quote lifecycle actions (issue / revise / reject / expire).
  * Approve uses customer path or admin break-glass with reason.
- * Does not create jobs or invoices.
+ * Slice 3: break-glass approve ensures exactly one job server-side (no invoice / field).
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -33,6 +33,8 @@ export default function MlP1S2QuoteLifecyclePage() {
   const [rejectReason, setRejectReason] = useState('');
   const [breakGlassReason, setBreakGlassReason] = useState('');
   const [validUntil, setValidUntil] = useState('');
+  const [jobStatus, setJobStatus] = useState(null); // { jobId, jobCreated, idempotent } | { error }
+  const [linkedJob, setLinkedJob] = useState(null);
 
   const actorRole = role || 'viewer';
   const actorId = user?.id || null;
@@ -53,6 +55,13 @@ export default function MlP1S2QuoteLifecyclePage() {
       if (data.valid_until) {
         setValidUntil(String(data.valid_until).slice(0, 10));
       }
+      const { data: jobRow } = await supabase
+        .from('jobs')
+        .select('id, work_order_number, status, source_quote_version')
+        .eq('quote_id', id)
+        .eq('tenant_id', sessionTenantId)
+        .maybeSingle();
+      setLinkedJob(jobRow || null);
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -81,12 +90,34 @@ export default function MlP1S2QuoteLifecyclePage() {
         actorRole: isAdmin ? 'admin' : actorRole,
       });
       setQuote(result.quote);
+      if (result.action === 'approve' || result.action === 'ensure_job') {
+        setJobStatus({
+          jobId: result.jobId || null,
+          jobCreated: Boolean(result.jobCreated),
+          idempotent: Boolean(result.idempotent),
+        });
+        if (result.jobId) {
+          setLinkedJob((prev) => ({
+            ...(prev || {}),
+            id: result.jobId,
+          }));
+        }
+      }
       toast({
         title: `${label} complete`,
         description: result.superseded
           ? `New draft ${result.quote.id} (v${result.quote.quote_version})`
-          : `Status: ${result.quote.status}`,
+          : result.action === 'approve' || result.action === 'ensure_job'
+            ? result.jobId
+              ? result.jobCreated
+                ? `Job created: ${result.jobId}`
+                : `Job ensured (existing): ${result.jobId}`
+              : 'Approve recorded but no jobId returned — use Ensure job'
+            : `Status: ${result.quote.status}`,
       });
+      if ((result.action === 'approve' || result.action === 'ensure_job') && !result.jobId) {
+        setJobStatus({ error: 'ML_P1_S3_JOB_ID_MISSING' });
+      }
       if (result.action === 'revise' && result.quote?.id) {
         navigate(tenantPath(`estimates/p1-lifecycle/${result.quote.id}`));
       }
@@ -95,6 +126,9 @@ export default function MlP1S2QuoteLifecyclePage() {
         isRoleAuthzDeniedError(error) || isTenantDenyError(error)
           ? error.message
           : error.message || `${label} failed`;
+      if (/approve|ensure job/i.test(label)) {
+        setJobStatus({ error: error.code || msg });
+      }
       toast({ variant: 'destructive', title: `${label} denied`, description: msg });
     } finally {
       setBusy(false);
@@ -130,7 +164,7 @@ export default function MlP1S2QuoteLifecyclePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Quote lifecycle (Slice 2)</CardTitle>
+          <CardTitle className="text-lg">Quote lifecycle (Slice 2/3)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <div>
@@ -154,7 +188,7 @@ export default function MlP1S2QuoteLifecyclePage() {
             </div>
           </div>
           <p className="text-xs text-slate-500">
-            Job creation is deferred (S3). Approval does not create a job or invoice.
+            Approve ensures exactly one job server-side. No invoice or field scheduling here.
           </p>
         </CardContent>
       </Card>
@@ -193,7 +227,7 @@ export default function MlP1S2QuoteLifecyclePage() {
         </Card>
       )}
 
-      {status === 'issued' && (
+      {(['issued', 'sent', 'viewed'].includes(status)) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Issued actions</CardTitle>
@@ -283,9 +317,63 @@ export default function MlP1S2QuoteLifecyclePage() {
       )}
 
       {(status === 'accepted' || status === 'approved') && (
-        <p className="text-sm text-slate-600">
-          Quote approved. Accept→job is Slice 3 — not available here.
-        </p>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Job status</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {jobStatus?.error ? (
+              <p className="text-red-700">Last approve error: {jobStatus.error}</p>
+            ) : linkedJob?.id || jobStatus?.jobId ? (
+              <>
+                <p>
+                  {jobStatus?.jobCreated
+                    ? 'Job created'
+                    : jobStatus?.idempotent
+                      ? 'Idempotent (existing)'
+                      : 'Job linked'}
+                </p>
+                <div className="font-mono text-xs break-all">
+                  {linkedJob?.id || jobStatus?.jobId}
+                </div>
+                {linkedJob?.work_order_number ? (
+                  <p className="text-slate-600">WO {linkedJob.work_order_number}</p>
+                ) : null}
+              </>
+            ) : (
+              <p className="text-slate-600">
+                Quote approved. No linked job yet — use Ensure job (admin break-glass).
+              </p>
+            )}
+            {isAdmin && !(linkedJob?.id || jobStatus?.jobId) && (
+              <div className="space-y-2 border-t pt-3">
+                <Label>Ensure job (reason required)</Label>
+                <Input
+                  value={breakGlassReason}
+                  onChange={(e) => setBreakGlassReason(e.target.value)}
+                  placeholder="reason_code"
+                />
+                <Button
+                  className="w-full"
+                  disabled={busy || !breakGlassReason.trim()}
+                  onClick={() =>
+                    runAction(
+                      (args) =>
+                        lifecycle.ensureJobForQuote({
+                          ...args,
+                          actorRole: 'admin',
+                          reasonCode: breakGlassReason.trim(),
+                        }),
+                      'Ensure job',
+                    )
+                  }
+                >
+                  Ensure job
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
   );

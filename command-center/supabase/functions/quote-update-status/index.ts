@@ -1,7 +1,6 @@
 import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
 import { getTenantIdFromClaims, getVerifiedClaims } from '../_shared/auth.ts';
 import { buildCorsHeaders, readJson } from '../_shared/publicUtils.ts';
-import { closeFollowUpTasks } from '../_shared/taskUtils.ts';
 
 const respondJson = (body: Record<string, unknown>, status: number, headers: Record<string, string>) =>
   new Response(JSON.stringify(body), {
@@ -48,11 +47,23 @@ Deno.serve(async (req) => {
   }
 
   const normalizedStatus = String(status).toLowerCase();
-  const updateData: Record<string, unknown> = { status };
 
+  // ML-P1 S3: quote-update-status must not accept money quotes / create jobs.
+  // Accept/approve goes through ml_p1_s2_quote_lifecycle or public-quote-approve RPC only.
   if (['accepted', 'approved'].includes(normalizedStatus)) {
-    updateData.accepted_at = new Date().toISOString();
+    return respondJson(
+      {
+        error:
+          'Accept/approve is not allowed via quote-update-status. Use lifecycle or public-quote-approve.',
+        code: 'ML_P1_S3_STATUS_PATH_DENY',
+        job_created: false,
+      },
+      403,
+      cors.headers,
+    );
   }
+
+  const updateData: Record<string, unknown> = { status };
 
   if (['rejected', 'declined'].includes(normalizedStatus)) {
     updateData.rejected_at = new Date().toISOString();
@@ -69,14 +80,6 @@ Deno.serve(async (req) => {
 
   if (error || !quote) {
     return respondJson({ error: error?.message || 'Quote not found' }, 404, cors.headers);
-  }
-
-  if (['accepted', 'approved'].includes(normalizedStatus)) {
-    await closeFollowUpTasks({
-      tenantId: quote.tenant_id || jwtTenantId,
-      sourceType: 'quote',
-      sourceId: quote.id,
-    });
   }
 
   return respondJson({ quote }, 200, cors.headers);

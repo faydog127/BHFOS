@@ -487,12 +487,15 @@ const ProposalList = () => {
                         </Button>
                       )}
 
-                      {(quote.status === 'sent' || quote.status === 'viewed') && (
+                      {(quote.status === 'sent' || quote.status === 'viewed' || quote.status === 'issued') && (
                         <Button
                           variant="outline"
                           size="sm"
                           className="flex-1 min-w-[8rem] border-green-200 text-green-700 hover:bg-green-50"
-                          onClick={() => handleUpdateStatus(quote.id, 'accepted')}
+                          onClick={() =>
+                            navigate(tenantPath(`estimates/p1-lifecycle/${quote.id}`, resolvedTenantId))
+                          }
+                          title="Open lifecycle to approve (creates job server-side)"
                         >
                           <Check className="mr-2 h-4 w-4" /> Accept
                         </Button>
@@ -625,14 +628,16 @@ const ProposalList = () => {
                               </Button>
                             )}
 
-                            {(quote.status === 'sent' || quote.status === 'viewed') && (
+                            {(quote.status === 'sent' || quote.status === 'viewed' || quote.status === 'issued') && (
                               <>
                                 <Button
                                   variant="outline"
                                   size="icon"
                                   className="h-8 w-8 text-green-600 border-green-200 hover:bg-green-50"
-                                  onClick={() => handleUpdateStatus(quote.id, 'accepted')}
-                                  title="Mark Accepted"
+                                  onClick={() =>
+                                    navigate(tenantPath(`estimates/p1-lifecycle/${quote.id}`, resolvedTenantId))
+                                  }
+                                  title="Open lifecycle to approve (creates job server-side)"
                                 >
                                   <Check className="w-4 h-4" />
                                 </Button>
