@@ -38,6 +38,7 @@ const AppointmentSchedulerPage = React.lazy(() => import('@/pages/crm/appointmen
 const ProposalList = React.lazy(() => import('@/pages/crm/proposals/ProposalList'));
 const ProposalBuilder = React.lazy(() => import('@/pages/crm/proposals/ProposalBuilder'));
 const MlP1S1DraftQuotePage = React.lazy(() => import('@/pages/crm/MlP1S1DraftQuotePage'));
+const MlP1S2QuoteLifecyclePage = React.lazy(() => import('@/pages/crm/MlP1S2QuoteLifecyclePage'));
 const InvoicesPage = React.lazy(() => import('@/pages/crm/Invoices'));
 const ContactsPage = React.lazy(() => import('@/pages/crm/ContactsPage'));
 const CallConsolePage = React.lazy(() => import('@/pages/crm/CallConsole'));
@@ -335,6 +336,7 @@ const CRMRoutes = () => (
       {/* ML-P1 Slice 1: mobile-first customer + draft quote (canonical quotes only) */}
       <Route path="estimates/p1-draft" element={<FeatureGuard flag="enableEstimates"><MlP1S1DraftQuotePage /></FeatureGuard>} />
       <Route path="estimates/new" element={<FeatureGuard flag="enableEstimates"><MlP1S1DraftQuotePage /></FeatureGuard>} />
+      <Route path="estimates/p1-lifecycle/:id" element={<FeatureGuard flag="enableEstimates"><MlP1S2QuoteLifecyclePage /></FeatureGuard>} />
       <Route path="estimates/:id" element={<FeatureGuard flag="enableEstimates"><ProposalBuilder /></FeatureGuard>} />
       <Route path="quotes/*" element={<EstimateAliasRedirect />} />
       <Route path="proposals/*" element={<EstimateAliasRedirect />} />

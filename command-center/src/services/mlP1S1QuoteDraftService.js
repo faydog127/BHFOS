@@ -53,15 +53,32 @@ export function createMlP1S1QuoteDraftService(deps) {
   }
 
   /**
-   * Find existing draft by idempotency key stored in notes prefix or customer_notes.
-   * Uses correlation marker `s1-idem:` in notes field when present.
+   * Find existing draft by R-S1-02 idempotency_key column, with notes-marker fallback.
    */
   async function findDraftByIdempotency({ tenantId, leadId, idempotencyKey }) {
     if (!idempotencyKey) return null;
+
+    const { data: byKey, error: keyErr } = await supabase
+      .from('quotes')
+      .select(
+        'id, status, lead_id, tenant_id, notes, idempotency_key, service_address, total_amount, total, created_at',
+      )
+      .eq('tenant_id', tenantId)
+      .eq('lead_id', leadId)
+      .eq('status', DRAFT_STATUS)
+      .eq('idempotency_key', idempotencyKey)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    // Column may be absent until S2 migration is applied — fall through on schema errors.
+    if (!keyErr && byKey) return byKey;
+
     const marker = `s1-idem:${idempotencyKey}`;
     const { data, error } = await supabase
       .from('quotes')
-      .select('id, status, lead_id, tenant_id, notes, service_address, total, created_at')
+      .select(
+        'id, status, lead_id, tenant_id, notes, service_address, total_amount, total, created_at',
+      )
       .eq('tenant_id', tenantId)
       .eq('lead_id', leadId)
       .eq('status', DRAFT_STATUS)
@@ -156,20 +173,66 @@ export function createMlP1S1QuoteDraftService(deps) {
         customer_email: lead.email || null,
         customer_phone: lead.phone || null,
         subtotal,
-        total: subtotal,
-        tax: 0,
+        total_amount: subtotal,
+        tax_amount: 0,
+        // R-S1-02 column (ignored until migration applied if PostgREST rejects — retry without)
+        idempotency_key: idem,
         notes: marker,
+        quote_version: 1,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
       assertStableCustomerLink(quotePayload);
 
-      const { data: quote, error: quoteError } = await supabase
+      let { data: quote, error: quoteError } = await supabase
         .from('quotes')
         .insert([quotePayload])
         .select('*')
         .single();
-      if (quoteError) throw quoteError;
+      // Pre-migration: strip S2 columns and retry once.
+      if (
+        quoteError &&
+        /idempotency_key|quote_version|total_amount|tax_amount/i.test(
+          String(quoteError.message || quoteError.details || ''),
+        )
+      ) {
+        const legacy = {
+          ...quotePayload,
+          total: subtotal,
+          tax: 0,
+        };
+        delete legacy.idempotency_key;
+        delete legacy.quote_version;
+        delete legacy.total_amount;
+        delete legacy.tax_amount;
+        const retry = await supabase.from('quotes').insert([legacy]).select('*').single();
+        quote = retry.data;
+        quoteError = retry.error;
+      }
+      if (quoteError) {
+        // Unique violation on idempotency → reuse existing
+        if (
+          quoteError.code === '23505' ||
+          /unique|duplicate/i.test(String(quoteError.message || ''))
+        ) {
+          const reused = await findDraftByIdempotency({
+            tenantId,
+            leadId: lead.id,
+            idempotencyKey: idem,
+          });
+          if (reused) {
+            incrementKpi('draft_idempotent_hit');
+            return {
+              quote: reused,
+              items: [],
+              idempotent: true,
+              correlationId: corr,
+              audit: { skipped: true, reason: 'idempotent_unique_reuse' },
+            };
+          }
+        }
+        throw quoteError;
+      }
 
       let items = [];
       if (lineItems?.length) {
