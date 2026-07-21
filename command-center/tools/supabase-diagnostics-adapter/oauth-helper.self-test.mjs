@@ -26,6 +26,8 @@ import {
   buildTokenExchangeRequest,
   validateCallbackRequest,
   assertTokenScopes,
+  attestPreStoreCapabilities,
+  attestationOutOfCeilingPath,
   computeExpiryIso,
   writeTokenSecretsToEnvFile,
   wipeTransient,
@@ -206,13 +208,79 @@ export async function runSelfTests() {
   } catch (e) {
     pass(results, 'unexpected_scope_rejected', e.code === 'UNEXPECTED_SCOPE');
   }
-  try {
-    assertTokenScopes('');
-    pass(results, 'omitted_scope_fail_closed', false);
-  } catch (e) {
-    pass(results, 'omitted_scope_fail_closed', e.code === 'MISSING_SCOPE');
-  }
+  const omitted = assertTokenScopes('');
+  const omittedUndef = assertTokenScopes(undefined);
+  pass(
+    results,
+    'omitted_scope_platform_attested',
+    omitted.omitted === true &&
+      omitted.platformAttestedOmission === true &&
+      omittedUndef.omitted === true &&
+      Array.isArray(omitted.scopes) &&
+      omitted.scopes.length === 0
+  );
   pass(results, 'allowed_scope_ok', assertTokenScopes('projects:read').scopes.includes('projects:read'));
+
+  // --- pre-store capability attestation (injected fetch; no live network) ---
+  const allowPath = `/v1/projects/${PRODUCTION_PROJECT_REF}`;
+  const probePath = attestationOutOfCeilingPath();
+  pass(
+    results,
+    'attestation_probe_path_is_api_keys',
+    probePath === `/v1/projects/${PRODUCTION_PROJECT_REF}/api-keys`
+  );
+
+  const mockResolveAllowed = () => ({
+    method: 'GET',
+    path: allowPath,
+    ref: PRODUCTION_PROJECT_REF,
+    operation: 'project_status',
+  });
+  const mockAssertProhibited = (p) => {
+    if (String(p).includes('/api-keys')) {
+      throw new Error(`DENY: prohibited path pattern "/api-keys" in ${p}`);
+    }
+  };
+
+  try {
+    await attestPreStoreCapabilities('tok_ephemeral_attest_ok', {
+      fetchImpl: async (url) => {
+        if (String(url).endsWith(allowPath)) return { ok: true, status: 200 };
+        if (String(url).endsWith(probePath)) return { ok: false, status: 403 };
+        return { ok: false, status: 404 };
+      },
+      resolveAllowedPathFn: mockResolveAllowed,
+      assertNotProhibitedFn: mockAssertProhibited,
+    });
+    pass(results, 'attestation_allow_ok_probe_denied', true);
+  } catch (e) {
+    pass(results, 'attestation_allow_ok_probe_denied', false, e && e.message);
+  }
+
+  try {
+    await attestPreStoreCapabilities('tok_ephemeral_attest_allow_fail', {
+      fetchImpl: async (url) => {
+        if (String(url).endsWith(allowPath)) return { ok: false, status: 401 };
+        return { ok: false, status: 403 };
+      },
+      resolveAllowedPathFn: mockResolveAllowed,
+      assertNotProhibitedFn: mockAssertProhibited,
+    });
+    pass(results, 'attestation_allow_fail_no_store', false);
+  } catch (e) {
+    pass(results, 'attestation_allow_fail_no_store', e.code === 'ATTEST_ALLOW_FAILED');
+  }
+
+  try {
+    await attestPreStoreCapabilities('tok_ephemeral_attest_ceiling', {
+      fetchImpl: async () => ({ ok: true, status: 200 }),
+      resolveAllowedPathFn: mockResolveAllowed,
+      assertNotProhibitedFn: mockAssertProhibited,
+    });
+    pass(results, 'attestation_ceiling_breach_denied', false);
+  } catch (e) {
+    pass(results, 'attestation_ceiling_breach_denied', e.code === 'ATTEST_CEILING_BREACH');
+  }
 
   // --- authorize URL / PKCE S256 / ampersands ---
   const url = buildAuthorizeUrl({

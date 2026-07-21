@@ -419,19 +419,24 @@ export function createTunnelController(options = {}) {
           method: 'GET',
           redirect: 'manual',
         });
+        // Cloudflare edge errors after tunnel stop mean the public callback is closed.
+        if (res && (res.status === 502 || res.status === 530)) {
+          publicClosed = true;
+          return { status: status('public_callback_closed'), closed: true };
+        }
         // If still getting helper-like responses after stop, not closed yet.
         if (res && (res.status === 200 || res.status === 400 || res.status === 404)) {
           await sleepFn(250);
           continue;
         }
-        // Unexpected success statuses also fail closed until timeout.
+        // Other statuses: keep polling until timeout (do not claim closed).
         await sleepFn(250);
       } catch {
         publicClosed = true;
         return { status: status('public_callback_closed'), closed: true };
       }
     }
-    // Still reachable after stop → governance-blocked condition
+    // Still reachable after stop → surface failure (do not swallow as closed)
     publicClosed = false;
     throw new OAuthTunnelError(
       'DENY: public callback still reachable after tunnel stop',
