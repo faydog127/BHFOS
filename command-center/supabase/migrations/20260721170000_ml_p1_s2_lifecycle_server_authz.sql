@@ -2,8 +2,10 @@
 -- accept blocked unless job-create gate is explicitly off, atomic revise,
 -- concurrent-safe approve.
 --
--- Authority: Founder S2 remediation auth for PR #78 blockers.
+-- Authority: Founder S2 remediation auth for PR #78 blockers + A2 prod-readiness
+-- remediation (notes/live-schema + pre-S3 paid→job deny).
 -- Does NOT authorize production apply (separate A3). No Stripe/job/invoice product.
+-- Does NOT add public.quotes.notes (column absent in production; not required by S2 model).
 
 BEGIN;
 
@@ -301,11 +303,17 @@ BEGIN
 
     INSERT INTO public.quotes (
       lead_id, tenant_id, status, service_address, customer_name, customer_email, customer_phone,
-      subtotal, total_amount, tax_amount, notes, quote_version, supersedes_quote_id, created_at, updated_at
+      subtotal, total_amount, tax_amount, tax_rate, header_text, footer_text, fulfillment_mode,
+      estimate_id, user_id, inspection_id, inspection_revision, line_items,
+      quote_version, supersedes_quote_id, created_at, updated_at
     ) VALUES (
       v_quote.lead_id, v_tenant, 'draft', v_quote.service_address, v_quote.customer_name,
       v_quote.customer_email, v_quote.customer_phone, v_quote.subtotal, v_amount,
-      coalesce(v_quote.tax_amount, 0), v_quote.notes, v_next_version, v_quote.id, v_now, v_now
+      coalesce(v_quote.tax_amount, 0), coalesce(v_quote.tax_rate, 0),
+      v_quote.header_text, v_quote.footer_text, v_quote.fulfillment_mode,
+      v_quote.estimate_id, v_quote.user_id, v_quote.inspection_id, v_quote.inspection_revision,
+      coalesce(v_quote.line_items, '[]'::jsonb),
+      v_next_version, v_quote.id, v_now, v_now
     )
     RETURNING * INTO v_draft;
 
