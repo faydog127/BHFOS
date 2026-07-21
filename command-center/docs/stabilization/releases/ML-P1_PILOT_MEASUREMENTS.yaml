@@ -7,7 +7,7 @@ pilot_id: REDUCED_AI_DEVELOPMENT_ASSURANCE
 governance_doc: command-center/docs/governance/REDUCED_AI_DEVELOPMENT_ASSURANCE_PILOT.md
 closeout_doc: command-center/docs/stabilization/releases/ML-P1_PILOT_CLOSEOUT.md
 slices: [ML-P1-S2, ML-P1-S3]
-status: pending_docs_merge
+status: active
 
 # Judge by: delivery predictability, Founder interruptions, remediation cycles,
 # escaped defects, executed evidence quality, governance burden.
@@ -29,6 +29,29 @@ measurements:
   - id: M5
     name: Governance time as percentage of total slice effort
     unit: percent
+
+# Non-slice A0/A1 activity (does not replace slices_log)
+a0_a1_activity:
+  - id: RS101_A0_LIVE_POSTURE_2026-07-21
+    authority: A0
+    main_sha: 0211ca691118fc1265b1849a6e3cfab80abdc445
+    migration: 20260721120000_ml_p1_rs101_deny_estimates_insert.sql
+    migration_sha256: 385404e1986012d83a75a3bc199f3b8b266cd1fa9d4befe77789d0f27598fcb2
+    disposition: LIVE_CHECK_UNAVAILABLE
+    m1_founder_interruptions_requested: 0
+    m2: n/a_not_slice_impl
+    m3: n/a_not_slice_impl
+    m4: n/a_not_slice_impl
+    m5: n/a_not_slice_impl
+    approved_paths_used:
+      - I2_adapter_self_test
+      - I2_adapter_deny_migration_list
+      - I2_adapter_project_health_live
+    unavailable_capability: database_catalog_metadata_sql
+    notes: >
+      Live DB health ACTIVE_HEALTHY via project-health. No approved path for
+      pg_class/pg_policy/grants. execute-sql not used. July 10 dump not used
+      as apply authority. Source-only: no estimates INSERT in app/edge at main.
 
 pre_pilot_baseline:
   description: null # e.g. ML-P1-S1 PR67 + docs PRs 68-71
