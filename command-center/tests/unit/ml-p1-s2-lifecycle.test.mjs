@@ -61,7 +61,11 @@ describe('ML-P1 S2 transitions + immutability helpers', () => {
   it('allows Money-State happy path transitions only', () => {
     assertTransitionAllowed('issue', 'draft');
     assertTransitionAllowed('approve', 'issued');
+    assertTransitionAllowed('approve', 'sent');
+    assertTransitionAllowed('approve', 'viewed');
+    assertTransitionAllowed('ensure_job', 'accepted');
     assert.throws(() => assertTransitionAllowed('approve', 'draft'), (e) => e.code === 'ML_P1_S2_TRANSITION_DENY');
+    assert.throws(() => assertTransitionAllowed('ensure_job', 'issued'), (e) => e.code === 'ML_P1_S2_TRANSITION_DENY');
   });
 
   it('blocks in-place edit of issued/approved content', () => {
@@ -316,7 +320,7 @@ describe('ML-P1 S2 lifecycle service via server RPC', () => {
 });
 
 describe('ML-P1 S2 remediation source guards', () => {
-  it('public-quote-approve does not insert jobs; passes through RPC job fields', () => {
+  it('public-quote-approve does not insert jobs; fails closed without writer RPC', () => {
     const edgePath = path.join(
       __dirname,
       '../../supabase/functions/public-quote-approve/index.ts',
@@ -325,8 +329,10 @@ describe('ML-P1 S2 remediation source guards', () => {
     assert.equal(/from\('jobs'\)/.test(src), false);
     assert.equal(/ML_P1_S2_JOB_GATE_REQUIRED/.test(src), false);
     assert.match(src, /ml_p1_s2_quote_approve_public/);
+    assert.match(src, /ML_P1_S3_WRITER_REQUIRED/);
     assert.match(src, /job_created:\s*rpcJobCreated/);
     assert.match(src, /job_id:\s*rpcJobId/);
+    assert.equal(/continue with direct update/i.test(src), false);
   });
 
   it('server authz migration defines RPC + gate-off accept trigger + draft-only RLS', () => {

@@ -69,6 +69,18 @@ describe('ML-P1 S3 migration source guards', () => {
     const writerCalls = [...mig.matchAll(/ml_p1_s3_ensure_job_for_accepted_quote/g)];
     assert.ok(writerCalls.length >= 5, `expected multiple writer call sites, got ${writerCalls.length}`);
   });
+
+  it('rejects cross-tenant job squat and pins total_amount on idempotent hit', () => {
+    assert.match(mig, /ML_P1_S3_TENANT_DENY: existing job tenant mismatch/);
+    assert.match(mig, /total_amount = v_amount/);
+    assert.match(mig, /quote_id IS NULL/);
+  });
+
+  it('allows sent/viewed approve and ensure_job repair', () => {
+    assert.match(mig, /WHEN 'approve' THEN v_status IN \('issued', 'sent', 'viewed'\)/);
+    assert.match(mig, /WHEN 'ensure_job'/);
+    assert.match(mig, /office_break_glass_ensure/);
+  });
 });
 
 describe('ML-P1 S3 edge / UI source guards', () => {
@@ -82,6 +94,17 @@ describe('ML-P1 S3 edge / UI source guards', () => {
     assert.equal(/closeFollowUpTasks/.test(src), false);
   });
 
+  it('kanban-move cannot insert quote-linked jobs or accept via status write', () => {
+    const src = fs.readFileSync(
+      path.join(root, 'supabase/functions/kanban-move/index.ts'),
+      'utf8',
+    );
+    assert.match(src, /ML_P1_S3_JOB_REQUIRED/);
+    assert.match(src, /ML_P1_S3_STATUS_PATH_DENY/);
+    assert.equal(/\.insert\(richInsert\)/.test(src), false);
+    assert.equal(/status:\s*'accepted'/.test(src), false);
+  });
+
   it('ProposalList Accept navigates to lifecycle (no quote-update-status accept)', () => {
     const src = fs.readFileSync(
       path.join(root, 'src/pages/crm/proposals/ProposalList.jsx'),
@@ -91,7 +114,7 @@ describe('ML-P1 S3 edge / UI source guards', () => {
     assert.match(src, /estimates\/p1-lifecycle\//);
   });
 
-  it('lifecycle page shows job status surface', () => {
+  it('lifecycle page shows job status surface and ensure-job repair', () => {
     const src = fs.readFileSync(
       path.join(root, 'src/pages/crm/MlP1S2QuoteLifecyclePage.jsx'),
       'utf8',
@@ -99,6 +122,8 @@ describe('ML-P1 S3 edge / UI source guards', () => {
     assert.match(src, /Job status/);
     assert.match(src, /jobCreated/);
     assert.match(src, /Idempotent \(existing\)/);
+    assert.match(src, /ensureJobForQuote/);
+    assert.match(src, /sent.*viewed|viewed.*sent/s);
   });
 });
 

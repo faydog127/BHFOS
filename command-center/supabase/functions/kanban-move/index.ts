@@ -175,6 +175,8 @@ const getOrCreateQuoteForLead = async (lead: Record<string, unknown>) => {
 };
 
 const getOrCreateJobForQuote = async (quote: Record<string, unknown>) => {
+  // ML-P1 S3: quote-linked jobs are created only by ml_p1_s3_ensure_job_for_accepted_quote.
+  // Kanban may attach to an existing job; it must not insert independently.
   const { data: existing } = await supabaseAdmin
     .from('jobs')
     .select('id, status, quote_id, tenant_id')
@@ -184,51 +186,9 @@ const getOrCreateJobForQuote = async (quote: Record<string, unknown>) => {
 
   if (existing?.id) return existing;
 
-  const nowIso = new Date().toISOString();
-  const workOrderNumber = await allocateWorkOrderNumber(String(quote.tenant_id ?? ''), quote.quote_number, nowIso);
-  const serviceAddress = await resolveLeadServiceAddress(String(quote.tenant_id ?? ''), asString(quote.lead_id));
-  const richInsert: Record<string, unknown> = {
-    quote_id: quote.id,
-    lead_id: quote.lead_id ?? null,
-    tenant_id: quote.tenant_id,
-    status: 'scheduled',
-    total_amount: quote.total_amount ?? 0,
-    quote_number: asTracking(quote.quote_number) || null,
-    work_order_number: workOrderNumber,
-    job_number: workOrderNumber,
-    payment_status: 'unpaid',
-    service_address: serviceAddress,
-    created_at: nowIso,
-    updated_at: nowIso,
-  };
-
-  let { data, error } = await supabaseAdmin
-    .from('jobs')
-    .insert(richInsert)
-    .select('id, status, quote_id, tenant_id')
-    .single();
-
-  if (error && isMissingColumnError(error)) {
-    const fallbackInsert = await supabaseAdmin
-      .from('jobs')
-      .insert({
-        quote_id: quote.id,
-        lead_id: quote.lead_id ?? null,
-        tenant_id: quote.tenant_id,
-        status: 'scheduled',
-        total_amount: quote.total_amount ?? 0,
-        created_at: nowIso,
-        updated_at: nowIso,
-      })
-      .select('id, status, quote_id, tenant_id')
-      .single();
-
-    data = fallbackInsert.data;
-    error = fallbackInsert.error;
-  }
-
-  if (error || !data) throw error || new Error('Failed to create job');
-  return data;
+  throw new Error(
+    'ML_P1_S3_JOB_REQUIRED: quote has no job; approve via lifecycle/public-quote-approve first',
+  );
 };
 
 const getOrCreateInvoiceForJob = async (job: Record<string, unknown>) => {
@@ -534,20 +494,16 @@ Deno.serve(async (req) => {
         return respondJson({ error: viewedError.message }, 500, cors.headers);
       }
     } else if (['quote_sent', 'quote_viewed'].includes(fromColumnKey) && toColumnKey === 'quote_accepted') {
-      const { error: acceptedError } = await supabaseAdmin
-        .from('quotes')
-        .update({ status: 'accepted', accepted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-        .eq('id', quote.id)
-        .eq('tenant_id', jwtTenantId);
-      if (acceptedError) {
-        return respondJson({ error: acceptedError.message }, 500, cors.headers);
-      }
-
-      await closeFollowUpTasks({
-        tenantId: quote.tenant_id,
-        sourceType: 'quote',
-        sourceId: quote.id,
-      });
+      // ML-P1 S3: accept→job only via canonical approve RPCs — not kanban status write.
+      return respondJson(
+        {
+          error:
+            'ML_P1_S3_STATUS_PATH_DENY: accept quote via lifecycle or public-quote-approve (creates job)',
+          code: 'ML_P1_S3_STATUS_PATH_DENY',
+        },
+        403,
+        cors.headers,
+      );
     } else if (fromColumnKey === 'quote_accepted' && toColumnKey === 'job_scheduled') {
       const job = await getOrCreateJobForQuote(quote);
       const { error: quoteUpdateError } = await supabaseAdmin

@@ -24,12 +24,16 @@ const IMMUTABLE_CONTENT = new Set([
 
 export const ML_P1_S2_TRANSITIONS = Object.freeze({
   issue: { from: new Set(['draft']), to: ML_P1_S2_STATUSES.ISSUED },
-  approve: { from: new Set(['issued']), to: ML_P1_S2_STATUSES.APPROVED },
-  reject: { from: new Set(['issued', 'draft']), to: ML_P1_S2_STATUSES.REJECTED },
-  expire: { from: new Set(['issued']), to: ML_P1_S2_STATUSES.EXPIRED },
+  approve: { from: new Set(['issued', 'sent', 'viewed']), to: ML_P1_S2_STATUSES.APPROVED },
+  reject: { from: new Set(['issued', 'draft', 'sent', 'viewed']), to: ML_P1_S2_STATUSES.REJECTED },
+  expire: { from: new Set(['issued', 'sent', 'viewed']), to: ML_P1_S2_STATUSES.EXPIRED },
   revise: {
-    from: new Set(['issued', 'rejected', 'expired']),
+    from: new Set(['issued', 'rejected', 'expired', 'sent', 'viewed']),
     to: ML_P1_S2_STATUSES.REVISED,
+  },
+  ensure_job: {
+    from: new Set(['approved', 'accepted']),
+    to: ML_P1_S2_STATUSES.ACCEPTED,
   },
 });
 
@@ -220,6 +224,12 @@ export function createMlP1S2QuoteLifecycleService(deps) {
     rejectQuote: (args) => callLifecycleRpc({ ...args, action: 'reject' }),
     expireQuote: (args) => callLifecycleRpc({ ...args, action: 'expire' }),
     reviseQuote: (args) => callLifecycleRpc({ ...args, action: 'revise' }),
+    ensureJobForQuote: (args) =>
+      callLifecycleRpc({
+        ...args,
+        action: 'ensure_job',
+        approvalMethod: args.approvalMethod || 'admin_break_glass',
+      }),
     approveByPublicToken,
     assertTransitionAllowed,
     assertQuoteMutableForEdit,

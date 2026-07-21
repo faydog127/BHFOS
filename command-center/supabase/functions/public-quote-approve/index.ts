@@ -764,37 +764,50 @@ Deno.serve(async (req) => {
       );
     }
 
-    // If RPC missing (pre-A3), continue with direct update — still no job create.
+    // S3: approve requires canonical RPC (approve+job same txn). No fallback approve.
     const rpcMissing = /Could not find the function|function .* does not exist|PGRST202/i.test(
       String(rpcAttempt.error?.message || ''),
     );
-    if (!rpcMissing) {
-      await logPublicEvent({
-        kind: 'public_quote_approve',
-        tenantId,
-        quoteId: existingQuote.id,
-        token,
-        status: 'rpc_error',
-        ip,
-        userAgent,
-        metadata: { run_id: runId, error: rpcAttempt.error?.message },
-      });
-      return respondJson(
-        {
-          error: rpcAttempt.error?.message || 'Approve failed',
-          code: 'ML_P1_S2_APPROVE_FAILED',
-          job_created: false,
-        },
-        409,
-        cors.headers,
-      );
-    }
+    await logPublicEvent({
+      kind: 'public_quote_approve',
+      tenantId,
+      quoteId: existingQuote.id,
+      token,
+      status: rpcMissing ? 'writer_required' : 'rpc_error',
+      ip,
+      userAgent,
+      metadata: { run_id: runId, error: rpcAttempt.error?.message, slice: 'ml-p1-s3' },
+    });
+    return respondJson(
+      {
+        error: rpcMissing
+          ? 'Quote approve requires Slice 3 canonical job writer RPC (migration not applied).'
+          : rpcAttempt.error?.message || 'Approve failed',
+        code: rpcMissing ? 'ML_P1_S3_WRITER_REQUIRED' : 'ML_P1_S2_APPROVE_FAILED',
+        job_created: false,
+      },
+      rpcMissing ? 503 : 409,
+      cors.headers,
+    );
   }
 
+  // Decline-only path below (approve never falls through).
   if (!isDecline) {
+    return respondJson(
+      {
+        error: 'Approve must use ml_p1_s2_quote_approve_public',
+        code: 'ML_P1_S3_WRITER_REQUIRED',
+        job_created: false,
+      },
+      503,
+      cors.headers,
+    );
+  }
+
+  {
     const amount = asNumber(existingQuote.total_amount);
-    patch.approved_amount = amount;
-    patch.approved_by_actor_id = null;
+    // decline path does not set approved_amount
+    void amount;
   }
 
   let updateQuery = supabaseAdmin
@@ -803,11 +816,6 @@ Deno.serve(async (req) => {
     .eq('id', existingQuote.id)
     .eq('tenant_id', tenantId)
     .eq('public_token', token);
-
-  // Concurrent-safe approve: only transition from issued.
-  if (!isDecline) {
-    updateQuery = updateQuery.eq('status', 'issued');
-  }
 
   const { data, error } = await updateQuery
     .select(`
@@ -835,30 +843,6 @@ Deno.serve(async (req) => {
     .maybeSingle();
 
   if (error || !data) {
-    // Idempotent approve replay
-    if (!isDecline) {
-      const { data: again } = await supabaseAdmin
-        .from('quotes')
-        .select('*')
-        .eq('id', existingQuote.id)
-        .eq('tenant_id', tenantId)
-        .maybeSingle();
-      const againStatus = asString(again?.status).toLowerCase();
-      if (again && ['approved', 'accepted'].includes(againStatus)) {
-        return respondJson(
-          {
-            quote: again,
-            quote_result: 'approved',
-            invoice_id: null,
-            invoice_token: null,
-            job_created: false,
-            idempotent: true,
-          },
-          200,
-          cors.headers,
-        );
-      }
-    }
     await logPublicEvent({
       kind: 'public_quote_approve',
       tenantId,
@@ -877,7 +861,7 @@ Deno.serve(async (req) => {
     tenantId,
     quoteId: data.id,
     token,
-    status: isDecline ? 'rejected' : 'approved',
+    status: 'rejected',
     ip,
     userAgent,
     metadata: { run_id: runId },
@@ -885,43 +869,21 @@ Deno.serve(async (req) => {
 
   const actorType = 'public';
 
-  if (isDecline) {
-    if (
-      !(await hasEvent({
-        entityType: 'quote',
-        entityId: data.id,
-        eventType: 'QuoteDeclined',
-      }))
-    ) {
-      await logMoneyLoopEvent({
-        tenantId,
-        entityType: 'quote',
-        entityId: data.id,
-        eventType: 'QuoteDeclined',
-        actorType,
-        payload: { run_id: runId },
-      });
-    }
-  } else {
-    if (
-      !(await hasEvent({
-        entityType: 'quote',
-        entityId: data.id,
-        eventType: 'QuoteAccepted',
-      }))
-    ) {
-      await logMoneyLoopEvent({
-        tenantId,
-        entityType: 'quote',
-        entityId: data.id,
-        eventType: 'QuoteAccepted',
-        actorType,
-        payload: { run_id: runId, job_created: false, slice: 'ml-p1-s2' },
-      });
-    }
-
-    // ML-P1 S2 hard stop: NO job creation, NO schedule-job task, NO invoice.
-    // Accept→job remains Slice 3.
+  if (
+    !(await hasEvent({
+      entityType: 'quote',
+      entityId: data.id,
+      eventType: 'QuoteDeclined',
+    }))
+  ) {
+    await logMoneyLoopEvent({
+      tenantId,
+      entityType: 'quote',
+      entityId: data.id,
+      eventType: 'QuoteDeclined',
+      actorType,
+      payload: { run_id: runId },
+    });
   }
 
   resolvedInvoiceId = null;
@@ -930,7 +892,7 @@ Deno.serve(async (req) => {
   const acceptHeader = (req.headers.get('accept') || '').toLowerCase();
   if (req.method === 'GET' || acceptHeader.includes('text/html')) {
     const resultParams = {
-      approved: !isDecline,
+      approved: false,
       quoteId: data.id,
       token,
       tenantId,
@@ -944,7 +906,7 @@ Deno.serve(async (req) => {
   return respondJson(
     {
       quote: data,
-      quote_result: isDecline ? 'rejected' : 'approved',
+      quote_result: 'rejected',
       invoice_id: resolvedInvoiceId,
       invoice_token: resolvedInvoiceToken,
       job_created: false,

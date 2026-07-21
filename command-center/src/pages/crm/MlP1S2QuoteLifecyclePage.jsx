@@ -107,12 +107,17 @@ export default function MlP1S2QuoteLifecyclePage() {
         title: `${label} complete`,
         description: result.superseded
           ? `New draft ${result.quote.id} (v${result.quote.quote_version})`
-          : result.action === 'approve' && result.jobId
-            ? result.jobCreated
-              ? `Job created: ${result.jobId}`
-              : `Job ensured (existing): ${result.jobId}`
+          : result.action === 'approve' || result.action === 'ensure_job'
+            ? result.jobId
+              ? result.jobCreated
+                ? `Job created: ${result.jobId}`
+                : `Job ensured (existing): ${result.jobId}`
+              : 'Approve recorded but no jobId returned — use Ensure job'
             : `Status: ${result.quote.status}`,
       });
+      if ((result.action === 'approve' || result.action === 'ensure_job') && !result.jobId) {
+        setJobStatus({ error: 'ML_P1_S3_JOB_ID_MISSING' });
+      }
       if (result.action === 'revise' && result.quote?.id) {
         navigate(tenantPath(`estimates/p1-lifecycle/${result.quote.id}`));
       }
@@ -222,7 +227,7 @@ export default function MlP1S2QuoteLifecyclePage() {
         </Card>
       )}
 
-      {status === 'issued' && (
+      {(['issued', 'sent', 'viewed'].includes(status)) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Issued actions</CardTitle>
@@ -337,8 +342,35 @@ export default function MlP1S2QuoteLifecyclePage() {
               </>
             ) : (
               <p className="text-slate-600">
-                Quote approved. No linked job yet — retry break-glass approve if create failed.
+                Quote approved. No linked job yet — use Ensure job (admin break-glass).
               </p>
+            )}
+            {isAdmin && !(linkedJob?.id || jobStatus?.jobId) && (
+              <div className="space-y-2 border-t pt-3">
+                <Label>Ensure job (reason required)</Label>
+                <Input
+                  value={breakGlassReason}
+                  onChange={(e) => setBreakGlassReason(e.target.value)}
+                  placeholder="reason_code"
+                />
+                <Button
+                  className="w-full"
+                  disabled={busy || !breakGlassReason.trim()}
+                  onClick={() =>
+                    runAction(
+                      (args) =>
+                        lifecycle.ensureJobForQuote({
+                          ...args,
+                          actorRole: 'admin',
+                          reasonCode: breakGlassReason.trim(),
+                        }),
+                      'Ensure job',
+                    )
+                  }
+                >
+                  Ensure job
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>

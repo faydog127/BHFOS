@@ -97,10 +97,23 @@ BEGIN
       USING ERRCODE = 'P0001';
   END IF;
 
-  -- Idempotent path: existing quote-linked job.
+  -- Fail closed on cross-tenant squat (quote_id unique is global).
   SELECT * INTO v_job
   FROM public.jobs
   WHERE quote_id = v_quote.id
+    AND tenant_id IS DISTINCT FROM v_quote.tenant_id
+  LIMIT 1;
+
+  IF FOUND THEN
+    RAISE EXCEPTION 'ML_P1_S3_TENANT_DENY: existing job tenant mismatch for quote'
+      USING ERRCODE = '42501';
+  END IF;
+
+  -- Idempotent path: existing quote-linked job (same tenant).
+  SELECT * INTO v_job
+  FROM public.jobs
+  WHERE quote_id = v_quote.id
+    AND tenant_id IS NOT DISTINCT FROM v_quote.tenant_id
   LIMIT 1;
 
   IF FOUND THEN
@@ -111,11 +124,14 @@ BEGIN
         USING ERRCODE = '22023';
     END IF;
 
-    -- Backfill empty address / missing version pin only (no pricing drift).
+    -- Re-pin lineage + money snapshot from approved quote (no silent financial drift).
     UPDATE public.jobs
     SET
       updated_at = v_now,
       source_quote_version = coalesce(source_quote_version, v_version),
+      total_amount = v_amount,
+      quote_number = coalesce(v_quote.quote_number, quote_number),
+      lead_id = coalesce(v_quote.lead_id, lead_id),
       service_address = CASE
         WHEN service_address IS NULL OR btrim(service_address) = '' THEN v_service_address
         ELSE service_address
@@ -348,6 +364,33 @@ BEGIN
 END;
 $$;
 
+-- Allow legacy sent/viewed statuses as approve-eligible; add ensure_job repair action.
+CREATE OR REPLACE FUNCTION public.ml_p1_s2_assert_transition(p_action text, p_status text)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_action text := lower(btrim(coalesce(p_action, '')));
+  v_status text := lower(btrim(coalesce(p_status, '')));
+  v_ok boolean := false;
+BEGIN
+  v_ok := CASE v_action
+    WHEN 'issue' THEN v_status = 'draft'
+    WHEN 'approve' THEN v_status IN ('issued', 'sent', 'viewed')
+    WHEN 'reject' THEN v_status IN ('issued', 'draft', 'sent', 'viewed')
+    WHEN 'expire' THEN v_status IN ('issued', 'sent', 'viewed')
+    WHEN 'revise' THEN v_status IN ('issued', 'rejected', 'expired', 'sent', 'viewed')
+    WHEN 'ensure_job' THEN v_status IN ('approved', 'accepted')
+    ELSE false
+  END;
+
+  IF NOT v_ok THEN
+    RAISE EXCEPTION 'ML_P1_S2_TRANSITION_DENY: cannot % quote in status "%"', v_action, p_status
+      USING ERRCODE = '22023';
+  END IF;
+END;
+$$;
+
 -- ---------------------------------------------------------------------------
 -- Wire approve RPCs: remove gate checks; call canonical writer in-txn.
 -- ---------------------------------------------------------------------------
@@ -418,6 +461,8 @@ BEGIN
 
   IF v_action = 'approve' THEN
     v_capability := 'quote.approve_break_glass';
+  ELSIF v_action = 'ensure_job' THEN
+    v_capability := 'quote.approve_break_glass';
   ELSIF v_action = 'issue' THEN
     v_capability := 'quote.issue';
   ELSIF v_action = 'revise' THEN
@@ -432,6 +477,25 @@ BEGIN
 
   PERFORM public.ml_p1_s2_assert_capability(v_capability, v_role, p_reason_code);
   PERFORM public.ml_p1_s2_assert_transition(v_action, v_quote.status);
+
+  -- Repair path: accepted/approved without job (or idempotent re-ensure).
+  IF v_action = 'ensure_job' THEN
+    IF public.normalize_quote_status(v_quote.status) IS DISTINCT FROM 'accepted' THEN
+      RAISE EXCEPTION 'ML_P1_S3_STATUS_DENY: ensure_job requires accepted quote'
+        USING ERRCODE = '22023';
+    END IF;
+    v_job := public.ml_p1_s3_ensure_job_for_accepted_quote(
+      v_quote.id, v_corr, v_role, 'office_break_glass_ensure'
+    );
+    RETURN jsonb_build_object(
+      'action', 'ensure_job',
+      'jobCreated', coalesce((v_job->>'created')::boolean, false),
+      'idempotent', coalesce((v_job->>'idempotent')::boolean, true),
+      'jobId', v_job->>'job_id',
+      'correlationId', v_corr,
+      'quote', to_jsonb(v_quote)
+    );
+  END IF;
 
   IF v_action = 'revise' THEN
     v_next_version := coalesce(v_quote.quote_version, 1) + 1;
@@ -527,7 +591,7 @@ BEGIN
         updated_at = v_now
     WHERE id = v_quote.id
       AND tenant_id = v_tenant
-      AND lower(status) = 'issued'
+      AND lower(status) IN ('issued', 'sent', 'viewed')
     RETURNING * INTO v_quote;
   ELSIF v_action = 'reject' THEN
     UPDATE public.quotes
@@ -537,7 +601,7 @@ BEGIN
         updated_at = v_now
     WHERE id = v_quote.id
       AND tenant_id = v_tenant
-      AND lower(status) IN ('issued', 'draft')
+      AND lower(status) IN ('issued', 'draft', 'sent', 'viewed')
     RETURNING * INTO v_quote;
   ELSIF v_action = 'expire' THEN
     UPDATE public.quotes
@@ -546,7 +610,7 @@ BEGIN
         updated_at = v_now
     WHERE id = v_quote.id
       AND tenant_id = v_tenant
-      AND lower(status) = 'issued'
+      AND lower(status) IN ('issued', 'sent', 'viewed')
     RETURNING * INTO v_quote;
   END IF;
 
@@ -717,7 +781,7 @@ BEGIN
   WHERE id = v_quote.id
     AND tenant_id = v_quote.tenant_id
     AND public_token::text = v_token
-    AND lower(status) = 'issued'
+    AND lower(status) IN ('issued', 'sent', 'viewed')
   RETURNING * INTO v_quote;
 
   GET DIAGNOSTICS v_updated = ROW_COUNT;
@@ -788,5 +852,19 @@ BEGIN
   );
 END;
 $$;
+
+-- Deny authenticated client INSERT of quote-linked jobs (canonical writer is SECURITY DEFINER).
+DROP POLICY IF EXISTS "Jobs are insertable by tenant" ON public.jobs;
+CREATE POLICY "Jobs are insertable by tenant"
+  ON public.jobs
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    tenant_id = coalesce(
+      auth.jwt() -> 'app_metadata' ->> 'tenant_id',
+      auth.jwt() -> 'user_metadata' ->> 'tenant_id'
+    )
+    AND quote_id IS NULL
+  );
 
 COMMIT;
