@@ -87,9 +87,11 @@ const productionEnv = {
   SUPABASE_URL: fileEnv.SUPABASE_URL || fileEnv.VITE_SUPABASE_URL || '',
   VITE_LOCAL_DEV_AUTH_EMAIL: '',
   VITE_LOCAL_DEV_AUTH_PASSWORD: '',
-  // Explicitly blank any disallowed frontend secret variables.
-  VITE_OPENAI_API_KEY: '',
 };
+
+// Defense in depth: never inject disallowed frontend secret env names into Vite,
+// even as empty strings (Vite would otherwise embed the name in the client bundle).
+delete productionEnv.VITE_OPENAI_API_KEY;
 
 // Fail fast: these are required runtime config values.
 if (

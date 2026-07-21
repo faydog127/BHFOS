@@ -34,8 +34,15 @@ const SecretsManager = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // 1. Load Integrations Config
-    setIntegrations(brandConfig.integrations || []);
+    // 1. Load client-managed integrations only. Backend-only vendor secrets
+    // (LLM providers, service role, etc.) must never appear in this UI.
+    const clientIntegrations = (brandConfig.integrations || []).filter(
+      (item) =>
+        !item.backend_only &&
+        typeof item.key_name === 'string' &&
+        item.key_name.startsWith('VITE_')
+    );
+    setIntegrations(clientIntegrations);
 
     // 2. Load Overrides from DB
     const loadData = async () => {
@@ -264,7 +271,7 @@ const SecretsManager = () => {
               <label className="text-sm font-medium">New API Secret</label>
               <Input 
                 type="password" 
-                placeholder="sk-..." 
+                placeholder="Paste new client-exposed secret" 
                 value={newKey}
                 onChange={(e) => setNewKey(e.target.value)}
               />
