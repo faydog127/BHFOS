@@ -8,7 +8,7 @@
 | Authorized slice / scope | **ML-P1-S2 A2 prod-readiness remediation** â€” remove `quotes.notes` dependency; revise RPC live-schema; gate accept **and** paid job creation; neutralize WO-on-accept job path; preserve gate default-off, RLS, R-S1-03, audit |
 | Coding auth base SHA | `cbc557727c017c0b0a46f4f1c90b992953724392` (PR #78 merge) |
 | Branch / worktree | `ml/p1-s2-prod-readiness-remediation` / `F:\Dev\BHFOS-ml-p1-s2-prod-readiness` |
-| Head SHA | `6a37dba3d659ad731c332d0794477ca79126d5b5` |
+| Head SHA | `7233e049082dcbd8de0fe0ca098bef7f323ec76f` |
 | Files changed | `20260721160000_ml_p1_s2_quote_lifecycle_rs102.sql`; `20260721170000_ml_p1_s2_lifecycle_server_authz.sql`; unit tests; evidence / Decision Packet |
 | Data objects changed | **Proposed (not applied):** same S2 objects; paidâ†’job now deferred when gate off; `trg_emit_wo_on_quote_accept` neutralized; revise INSERT uses live columns only (no `notes`) |
 | Tests executed | `npm run test:ml-p1-s2-helpers` (22/22); `npm run test:ml-p1-s1-helpers` (15/15) |
