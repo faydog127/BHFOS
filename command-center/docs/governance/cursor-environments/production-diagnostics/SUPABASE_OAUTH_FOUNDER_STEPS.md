@@ -88,11 +88,13 @@ Production Diagnostics worktree at the approved merge SHA:
 ```bash
 cd command-center
 set I2_FOUNDER_RUN_READINESS_VERDICT=FOUNDER_RUN_READY
+set I2_OAUTH_EXPECTED_SHA=<exact approved merge SHA>
 node tools/supabase-diagnostics-adapter/oauth-authorize.mjs
 ```
 
 The helper will:
 
+- verify exact SHA + clean worktree + external secret store + tunnel assets + port
 - start the Named Tunnel
 - bind **only** `127.0.0.1:8765` (plain HTTP local listener)
 - open Edge/Chrome via an approved absolute path (URL as one argv; no explorer/cmd/PATH)

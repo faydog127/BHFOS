@@ -244,7 +244,11 @@ export async function runSelfTests() {
 
   // OAuth tunnel packet — credentials outside repo + exact public redirect
   const tunnelCreds = path.join(tmp, 'named-tunnel-creds.json');
+  const tunnelConfig = path.join(tmp, 'oauth-tunnel-config.yml');
+  const tunnelExe = path.join(tmp, process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared');
   fs.writeFileSync(tunnelCreds, '{"TunnelID":"synthetic"}\n', 'utf8');
+  fs.writeFileSync(tunnelConfig, 'tunnel: synthetic\ningress: []\n', 'utf8');
+  fs.writeFileSync(tunnelExe, '', 'utf8');
   const tunnelReady = await evaluateReadiness(
     basePacket({
       external_secret_store_path: secretFile,
@@ -259,7 +263,13 @@ export async function runSelfTests() {
         public_redirect_uri: 'https://oauth-diagnostics.bhfos.com/oauth/callback',
         local_listener_uri: 'http://127.0.0.1:8765/oauth/callback',
         credentials_path: tunnelCreds,
+        executable_path: tunnelExe,
+        config_path: tunnelConfig,
         path_only_config_attested: true,
+        catch_all_deny_attested: true,
+        start_command: 'cloudflared tunnel --config <outside> run',
+        stop_command: 'helper stop()',
+        closure_verification_command: 'GET public callback fail-closed after stop',
         stop_after_run_and_closure_procedure_present: true,
       },
     }),
@@ -283,7 +293,13 @@ export async function runSelfTests() {
         public_redirect_uri: 'https://oauth-diagnostics.bhfos.com/oauth/callback',
         local_listener_uri: 'http://127.0.0.1:8765/oauth/callback',
         credentials_path: tunnelCreds,
+        executable_path: tunnelExe,
+        config_path: tunnelConfig,
         path_only_config_attested: true,
+        catch_all_deny_attested: true,
+        start_command: 'cloudflared tunnel run',
+        stop_command: 'stop',
+        closure_verification_command: 'closure verify',
         stop_after_run_and_closure_procedure_present: true,
       },
     }),
@@ -293,7 +309,8 @@ export async function runSelfTests() {
     results,
     'tunnel_random_hostname_blocked',
     tunnelBadHost.verdict === 'FOUNDER_RUN_BLOCKED' &&
-      tunnelBadHost.failed.includes('tunnel_stable_hostname_pinned')
+      (tunnelBadHost.failed.includes('tunnel_stable_hostname_pinned') ||
+        tunnelBadHost.failed.includes('tunnel_no_random_or_quick_hostname'))
   );
 
   const report = formatReport(happy);
@@ -311,18 +328,21 @@ export async function runSelfTests() {
   const envDoc = fs.readFileSync(path.join(repoRoot, 'docs/governance/ENVIRONMENT_ACCEPTANCE.md'), 'utf8');
   const oauthPathSteps = [
     'protected launcher',
-    'SHA verification',
-    'clean-worktree verification',
-    'secret-store discovery',
-    'secret-name presence check',
-    'browser executable validation',
-    'authorize URL construction',
-    'callback listener startup',
-    'callback URI contract',
-    'safe output',
-    'token-store destination',
-    'tunnel stop after every authorize attempt',
-    'public callback closure verification',
+    'exact SHA verification',
+    'clean worktree verification',
+    'external secret store',
+    'browser',
+    'public HTTPS redirect URI',
+    'named tunnel',
+    'path-only routing',
+    'local callback',
+    'state validation',
+    'PKCE validation',
+    'local code exchange',
+    'external token-store write',
+    'tunnel shutdown',
+    'public callback closure',
+    'post-run governance status',
     'oauth-diagnostics.bhfos.com',
   ];
   pass(

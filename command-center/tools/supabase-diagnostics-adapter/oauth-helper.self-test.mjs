@@ -103,6 +103,13 @@ export async function runSelfTests() {
     'http_loopback_not_used_as_oauth_redirect',
     REDIRECT_URI !== 'http://127.0.0.1:8765/oauth/callback'
   );
+  pass(
+    results,
+    'http_public_redirect_scheme_rejected_by_contract',
+    assertSplitRedirectContract() === true &&
+      !PUBLIC_REDIRECT_URI.startsWith('http://') &&
+      PUBLIC_REDIRECT_URI.startsWith('https://')
+  );
 
   // --- listener bind loopback only ---
   const listenArgs = callbackListenArgs();

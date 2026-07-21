@@ -35,26 +35,25 @@ For an OAuth-style Founder action under the Cloudflare Named Tunnel design, the
 minimum acceptance path is:
 
 1. protected launcher
-2. SHA verification
-3. clean-worktree verification
-4. secret-store discovery (`I2_DIAGNOSTICS_SECRET_ENV_FILE` outside repo)
-5. secret-name presence check (values not displayed)
-6. browser executable validation (approved absolute paths)
-7. authorize URL construction with public HTTPS redirect
-   (`https://oauth-diagnostics.bhfos.com/oauth/callback`)
-8. callback listener startup (`http://127.0.0.1:8765/oauth/callback`)
-9. callback URI contract (public HTTPS redirect split from local HTTP listener)
-10. tunnel executable present (approved absolute path / pinned)
-11. tunnel credentials path outside repository (presence only)
-12. named tunnel id configured (`I2_CLOUDFLARE_TUNNEL_ID`)
-13. path-only forward contract (`/oauth/callback` only + catch-all deny)
-14. Host rewrite to `127.0.0.1:8765` attested
-15. tunnel start gated on `FOUNDER_RUN_READY`
-16. tunnel health / public callback path probe (no query strings logged)
-17. tunnel stop after every authorize attempt (success or failure)
-18. public callback closure verification after stop
-19. safe output (no codes / state / PKCE / secrets / tokens)
-20. token-store destination (approved external Diagnostics env file only)
+2. exact SHA verification
+3. clean worktree verification
+4. external secret store (`I2_DIAGNOSTICS_SECRET_ENV_FILE` outside repo)
+5. browser (approved absolute Edge/Chrome path)
+6. public HTTPS redirect URI (`https://oauth-diagnostics.bhfos.com/oauth/callback`)
+7. named tunnel (Cloudflare Named Tunnel; stable FQDN only)
+8. path-only routing (`/oauth/callback` only + catch-all deny + Host rewrite)
+9. local callback (`http://127.0.0.1:8765/oauth/callback`)
+10. state validation (single-use)
+11. PKCE validation (S256)
+12. local code exchange
+13. external token-store write (Diagnostics env file only; values not displayed)
+14. tunnel shutdown after every authorize attempt
+15. public callback closure verification
+16. post-run governance status (safe status lines only)
+
+Supporting checks on the same path: secret-name presence (values not displayed),
+tunnel executable/config/credential presence outside the repository, local port
+availability, and `FOUNDER_RUN_READY` gate before tunnel start.
 
 Record the acceptance run command and exit status in the FOUNDER_RUN_READINESS
 packet (fields 15–16). Do not ask the Founder to execute until that path passes.
@@ -65,6 +64,7 @@ packet (fields 15–16). Do not ask the Founder to execute until that path passe
 cd command-center
 npm run test:supabase-oauth-helper
 npm run test:supabase-oauth-tunnel
+npm run test:supabase-oauth-launcher-preflight
 npm run test:founder-run-readiness
 ```
 

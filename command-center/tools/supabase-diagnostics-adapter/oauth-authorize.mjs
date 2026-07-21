@@ -53,10 +53,16 @@ import {
   callbackListenArgs,
 } from './oauth-helper.mjs';
 import { createTunnelController, formatTunnelStatus } from './oauth-tunnel.mjs';
+import {
+  runLauncherPreflight,
+  formatPreflightStatus,
+} from './oauth-launcher-preflight.mjs';
 import { runSelfTests } from './oauth-helper.self-test.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/** command-center root (git checks use repo root via env or parent). */
 const ADAPTER_ROOT = path.resolve(__dirname, '..', '..');
+const REPO_ROOT = path.resolve(ADAPTER_ROOT, '..');
 
 /**
  * Open an approved browser without printing the URL (contains state / PKCE).
@@ -191,12 +197,15 @@ async function runAuthorizeExchange() {
     console.log(`Local listener: ${LOCAL_LISTENER_URI}`);
     console.log(`Callback path: ${CALLBACK_PATH}`);
     console.log('Opening browser for Founder consent (Projects Read only)…');
+    console.log('browser opened');
 
     const callbackPromise = waitForCallback({ expectedState: transient.state });
     openBrowser(authorizeUrl);
 
     const { code } = await callbackPromise;
     transient.code = code;
+    console.log('callback received');
+    console.log('state validated');
 
     const tokens = await exchangeCode({
       secrets,
@@ -205,6 +214,8 @@ async function runAuthorizeExchange() {
     });
     transient.accessToken = tokens.accessToken;
     transient.refreshToken = tokens.refreshToken;
+    console.log('token exchange completed');
+    console.log('token values not displayed');
 
     let existingMap = secrets.fileMap || Object.create(null);
     try {
@@ -245,9 +256,33 @@ async function runAuthorizeExchange() {
 async function authorizeMain() {
   // Live authorize requires FOUNDER_RUN_READY from Orchestrator before invoke.
   const gate = process.env.I2_FOUNDER_RUN_READINESS_VERDICT;
-  if (gate !== 'FOUNDER_RUN_READY') {
-    console.error(
-      'DENY: set I2_FOUNDER_RUN_READINESS_VERDICT=FOUNDER_RUN_READY after FOUNDER_RUN_READY packet'
+  const gitRoot = process.env.I2_OAUTH_GIT_ROOT
+    ? path.resolve(process.env.I2_OAUTH_GIT_ROOT)
+    : REPO_ROOT;
+
+  let preflight;
+  try {
+    preflight = await runLauncherPreflight({
+      repoRoot: gitRoot,
+      env: process.env,
+      readinessGate: gate,
+    });
+    console.log(preflight.status);
+    console.log('preflight complete');
+  } catch (e) {
+    const safe = redactSecrets(e && e.message ? e.message : String(e));
+    console.error(safe);
+    console.log(
+      formatPreflightStatus({
+        exact_sha: false,
+        clean_worktree: false,
+        external_secret_store: false,
+        tunnel_executable: false,
+        tunnel_config: false,
+        tunnel_credentials: false,
+        local_port: false,
+        readiness_gate: gate === 'FOUNDER_RUN_READY',
+      })
     );
     console.log(
       formatStatusResult({
@@ -260,7 +295,7 @@ async function authorizeMain() {
     );
     console.log(
       formatTunnelStatus({
-        phase: 'blocked_readiness',
+        phase: 'blocked_preflight',
         started: false,
         stopped: false,
         healthOk: false,
@@ -273,13 +308,20 @@ async function authorizeMain() {
 
   const tunnel = createTunnelController({
     env: process.env,
-    repoRoot: ADAPTER_ROOT,
+    repoRoot: gitRoot,
     readinessGate: gate,
   });
 
   try {
-    const status = await tunnel.runWithTunnel(async () => runAuthorizeExchange());
+    const status = await tunnel.runWithTunnel(async () => {
+      console.log('tunnel started');
+      console.log('tunnel health ok');
+      console.log('callback path verified');
+      return runAuthorizeExchange();
+    });
     console.log(status);
+    console.log('tunnel stopped');
+    console.log('public callback closed');
     console.log(tunnel.status('complete'));
   } catch (e) {
     const safe = redactSecrets(e && e.message ? e.message : String(e));
@@ -314,6 +356,7 @@ Protected local helper. Secrets from Diagnostics env only. Never prints tokens.
 
 Requires:
   I2_FOUNDER_RUN_READINESS_VERDICT=FOUNDER_RUN_READY
+  I2_OAUTH_EXPECTED_SHA=<exact 40-char HEAD>
   I2_DIAGNOSTICS_SECRET_ENV_FILE
   I2_SUPABASE_OAUTH_CLIENT_ID
   I2_SUPABASE_OAUTH_CLIENT_SECRET (if issued)
@@ -321,6 +364,9 @@ Requires:
   I2_CLOUDFLARE_TUNNEL_CREDENTIALS_FILE (outside repo)
   I2_CLOUDFLARE_TUNNEL_ID
   I2_CLOUDFLARED_EXECUTABLE (optional absolute path)
+
+Sequencing: preflight (SHA/clean/secrets/tunnel/port) → tunnel up →
+authorize → tunnel down → public callback closure
 
 Public redirect: ${PUBLIC_REDIRECT_URI}
 Local listener:  ${LOCAL_LISTENER_URI} (${CALLBACK_HOST}:${CALLBACK_PORT})
@@ -332,18 +378,27 @@ Local listener:  ${LOCAL_LISTENER_URI} (${CALLBACK_HOST}:${CALLBACK_PORT})
     const result = await runSelfTests();
     const { runTunnelSelfTests } = await import('./oauth-tunnel.self-test.mjs');
     const tunnelResult = await runTunnelSelfTests();
-    const dumped = JSON.stringify({ oauth: result, tunnel: tunnelResult });
+    const { runLauncherPreflightSelfTests } = await import(
+      './oauth-launcher-preflight.self-test.mjs'
+    );
+    const preflightResult = await runLauncherPreflightSelfTests();
+    const dumped = JSON.stringify({
+      oauth: result,
+      tunnel: tunnelResult,
+      preflight: preflightResult,
+    });
     if (/access_token|refresh_token|Bearer\s+[A-Za-z0-9._-]{20,}/i.test(dumped)) {
       console.error('DENY: self-test output contained secret-shaped material');
       process.exit(1);
     }
-    const ok = result.ok && tunnelResult.ok;
+    const ok = result.ok && tunnelResult.ok && preflightResult.ok;
     console.log(
       JSON.stringify(
         {
           ok,
           oauthFailed: result.failed.map((f) => f.test),
           tunnelFailed: tunnelResult.failed.map((f) => f.test),
+          preflightFailed: preflightResult.failed.map((f) => f.test),
         },
         null,
         2

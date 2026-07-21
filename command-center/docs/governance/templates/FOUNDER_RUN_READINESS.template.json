@@ -28,7 +28,13 @@
     "public_redirect_uri": "https://oauth-diagnostics.bhfos.com/oauth/callback",
     "local_listener_uri": "http://127.0.0.1:8765/oauth/callback",
     "credentials_path": "C:/Users/<founder>/AppData/Local/BHFOS/production-diagnostics/tunnel/<credentials>.json",
+    "executable_path": "C:/Program Files/cloudflared/cloudflared.exe",
+    "config_path": "C:/Users/<founder>/AppData/Local/BHFOS/production-diagnostics/tunnel/oauth-tunnel-config.yml",
     "path_only_config_attested": true,
+    "catch_all_deny_attested": true,
+    "start_command": "cloudflared tunnel --config <outside-repo-config> run",
+    "stop_command": "SIGTERM to cloudflared child (helper stop())",
+    "closure_verification_command": "GET https://oauth-diagnostics.bhfos.com/oauth/callback must fail closed after stop",
     "stop_after_run_and_closure_procedure_present": true
   },
   "platform_acceptance_tests_passed": true,

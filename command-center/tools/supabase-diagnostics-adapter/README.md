@@ -55,8 +55,10 @@ Inventory names (values never in repo):
 ```bash
 npm run test:supabase-oauth-helper
 npm run test:supabase-oauth-tunnel
+npm run test:supabase-oauth-launcher-preflight
 # Live authorize only after FOUNDER_RUN_READY:
 # set I2_FOUNDER_RUN_READINESS_VERDICT=FOUNDER_RUN_READY
+# set I2_OAUTH_EXPECTED_SHA=<exact SHA>
 node tools/supabase-diagnostics-adapter/oauth-authorize.mjs
 ```
 
