@@ -10,6 +10,7 @@ import {
   hasEvent,
   logMoneyLoopEvent,
 } from '../_shared/moneyLoopUtils.ts';
+import { closeFollowUpTasks } from '../_shared/taskUtils.ts';
 
 const respondJson = (body: Record<string, unknown>, status: number, headers: Record<string, string>) =>
   new Response(JSON.stringify(body), {
@@ -736,6 +737,12 @@ Deno.serve(async (req) => {
           },
         });
       }
+
+      await closeFollowUpTasks({
+        tenantId,
+        sourceType: 'quote',
+        sourceId: String(rpcQuote.id || existingQuote.id),
+      });
 
       const acceptHeaderRpc = (req.headers.get('accept') || '').toLowerCase();
       if (req.method === 'GET' || acceptHeaderRpc.includes('text/html')) {

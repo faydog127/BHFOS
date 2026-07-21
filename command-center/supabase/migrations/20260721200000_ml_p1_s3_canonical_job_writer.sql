@@ -41,6 +41,7 @@ DECLARE
   v_service_address text;
   v_amount numeric;
   v_version int;
+  v_wo text;
 BEGIN
   IF p_quote_id IS NULL THEN
     RAISE EXCEPTION 'ML_P1_S3_QUOTE_REQUIRED: quote_id required'
@@ -69,6 +70,7 @@ BEGIN
 
   v_version := coalesce(v_quote.quote_version, 1);
   v_amount := coalesce(v_quote.approved_amount, v_quote.total_amount, 0);
+  v_wo := public.next_work_order_number(v_quote.tenant_id, coalesce(v_quote.created_at, v_now));
 
   -- Resolve service address (quote snapshot, else lead+property). Fail closed.
   v_service_address := nullif(btrim(coalesce(v_quote.service_address, '')), '');
@@ -177,6 +179,7 @@ BEGIN
       total_amount,
       service_address,
       work_order_number,
+      job_number,
       source_quote_version
     ) VALUES (
       v_quote.tenant_id,
@@ -187,7 +190,8 @@ BEGIN
       'unpaid',
       v_amount,
       v_service_address,
-      public.next_work_order_number(v_quote.tenant_id, coalesce(v_quote.created_at, v_now)),
+      v_wo,
+      v_wo,
       v_version
     )
     ON CONFLICT (quote_id) WHERE quote_id IS NOT NULL
@@ -199,15 +203,41 @@ BEGIN
   END;
 
   IF v_job_id IS NULL THEN
-    SELECT id INTO v_job_id
+    SELECT * INTO v_job
     FROM public.jobs
     WHERE quote_id = v_quote.id
     LIMIT 1;
 
-    IF v_job_id IS NULL THEN
+    IF NOT FOUND THEN
       RAISE EXCEPTION 'ML_P1_S3_JOB_ENSURE_FAILED: could not create or load job for quote'
         USING ERRCODE = 'P0001';
     END IF;
+
+    IF v_job.tenant_id IS DISTINCT FROM v_quote.tenant_id THEN
+      RAISE EXCEPTION 'ML_P1_S3_TENANT_DENY: existing job tenant mismatch for quote'
+        USING ERRCODE = '42501';
+    END IF;
+
+    IF v_job.source_quote_version IS NOT NULL
+       AND v_job.source_quote_version IS DISTINCT FROM v_version THEN
+      RAISE EXCEPTION 'ML_P1_S3_VERSION_MISMATCH: existing job pinned to version %; quote is %',
+        v_job.source_quote_version, v_version
+        USING ERRCODE = '22023';
+    END IF;
+
+    UPDATE public.jobs
+    SET
+      updated_at = v_now,
+      source_quote_version = coalesce(source_quote_version, v_version),
+      total_amount = v_amount,
+      quote_number = coalesce(v_quote.quote_number, quote_number),
+      lead_id = coalesce(v_quote.lead_id, lead_id),
+      service_address = CASE
+        WHEN service_address IS NULL OR btrim(service_address) = '' THEN v_service_address
+        ELSE service_address
+      END
+    WHERE id = v_job.id
+    RETURNING id INTO v_job_id;
 
     v_created := false;
     v_idempotent := true;

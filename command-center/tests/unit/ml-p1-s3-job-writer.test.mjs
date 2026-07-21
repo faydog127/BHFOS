@@ -74,6 +74,10 @@ describe('ML-P1 S3 migration source guards', () => {
     assert.match(mig, /ML_P1_S3_TENANT_DENY: existing job tenant mismatch/);
     assert.match(mig, /total_amount = v_amount/);
     assert.match(mig, /quote_id IS NULL/);
+    // ON CONFLICT recovery must re-check tenant
+    assert.ok(
+      (mig.match(/ML_P1_S3_TENANT_DENY: existing job tenant mismatch for quote/g) || []).length >= 2,
+    );
   });
 
   it('allows sent/viewed approve and ensure_job repair', () => {

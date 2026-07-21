@@ -90,7 +90,7 @@ export default function MlP1S2QuoteLifecyclePage() {
         actorRole: isAdmin ? 'admin' : actorRole,
       });
       setQuote(result.quote);
-      if (result.action === 'approve') {
+      if (result.action === 'approve' || result.action === 'ensure_job') {
         setJobStatus({
           jobId: result.jobId || null,
           jobCreated: Boolean(result.jobCreated),
@@ -126,7 +126,7 @@ export default function MlP1S2QuoteLifecyclePage() {
         isRoleAuthzDeniedError(error) || isTenantDenyError(error)
           ? error.message
           : error.message || `${label} failed`;
-      if (label.toLowerCase().includes('approve')) {
+      if (/approve|ensure job/i.test(label)) {
         setJobStatus({ error: error.code || msg });
       }
       toast({ variant: 'destructive', title: `${label} denied`, description: msg });
