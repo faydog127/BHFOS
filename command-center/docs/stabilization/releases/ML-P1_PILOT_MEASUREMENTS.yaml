@@ -1,0 +1,47 @@
+# ML-P1 Reduced Assurance Pilot — Measurements
+# Slice 2 and Slice 3 only. Simple durable file — not an analytics platform.
+# Update at slice closeout (and optionally at merge packet).
+
+pilot_id: REDUCED_AI_DEVELOPMENT_ASSURANCE
+governance_doc: command-center/docs/governance/REDUCED_AI_DEVELOPMENT_ASSURANCE_PILOT.md
+slices: [ML-P1-S2, ML-P1-S3]
+status: pending_docs_merge
+
+measurements:
+  - id: M1
+    name: Founder interruptions and approval requests
+    unit: count
+  - id: M2
+    name: Elapsed time from slice authorization to reviewed PR
+    unit: hours
+  - id: M3
+    name: Number of remediation rounds
+    unit: count
+  - id: M4
+    name: Defects caught before merge versus after merge
+    unit: count_pair # before / after
+  - id: M5
+    name: Governance time as percentage of total slice effort
+    unit: percent
+
+slices_log:
+  ML-P1-S2:
+    founder_interruptions: null
+    elapsed_auth_to_reviewed_pr_hours: null
+    remediation_rounds: null
+    defects_before_merge: null
+    defects_after_merge: null
+    governance_time_percent: null
+    notes: ""
+  ML-P1-S3:
+    founder_interruptions: null
+    elapsed_auth_to_reviewed_pr_hours: null
+    remediation_rounds: null
+    defects_before_merge: null
+    defects_after_merge: null
+    governance_time_percent: null
+    notes: ""
+
+exit_review:
+  due: after_slice_3_acceptance
+  controls_eval: [] # each control -> STANDARDIZE | ADJUST | REMOVE

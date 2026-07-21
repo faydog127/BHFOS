@@ -52,12 +52,14 @@ role must **consolidate and simplify** (see §7, Founder Burden stop condition).
 | [`AGENT_PILOT_SCORECARD.md`](./AGENT_PILOT_SCORECARD.md) | Lightweight, agent-maintained effectiveness scorecard. |
 | [`FOUNDER_RUN_READINESS.md`](./FOUNDER_RUN_READINESS.md) | Mandatory gate before Founder terminal/OAuth/credential/dashboard actions. |
 | [`FOUNDER_DELEGATED_AUTHORITY_POLICY.md`](./FOUNDER_DELEGATED_AUTHORITY_POLICY.md) | Categories A/B/C — when Orchestrator proceeds without Founder interruption vs Category C auth. |
+| [`REDUCED_AI_DEVELOPMENT_ASSURANCE_PILOT.md`](./REDUCED_AI_DEVELOPMENT_ASSURANCE_PILOT.md) | S2–S3 pilot: A0–A3, risk-based review, evidence manifest, sentinels, measurements. |
 | [`ENVIRONMENT_ACCEPTANCE.md`](./ENVIRONMENT_ACCEPTANCE.md) | Platform-path acceptance when OS/browser/OAuth/path behavior matters. |
 | [`LOW_RISK_CONTROL_PLANE_CORRECTION.md`](./LOW_RISK_CONTROL_PLANE_CORRECTION.md) | Bounded lane for delegated merge of low-risk control-plane corrections. |
 | [`templates/RELEASE_BATON.template.yaml`](./templates/RELEASE_BATON.template.yaml) | Machine-readable release-state artifact (per active release). |
 | [`templates/DECISION_PACKET.template.md`](./templates/DECISION_PACKET.template.md) | One consolidated founder-facing decision surface per routine release. |
 | [`templates/RELEASE_LEDGER.template.yaml`](./templates/RELEASE_LEDGER.template.yaml) | Persistent, append-only record of releases and production actions. |
 | [`templates/AGENT_STATUS_REPORT.template.md`](./templates/AGENT_STATUS_REPORT.template.md) | TECHNICAL RESULT / GOVERNANCE STATUS / AUTHORIZED NEXT STATE contract. |
+| [`templates/EVIDENCE_MANIFEST.template.md`](./templates/EVIDENCE_MANIFEST.template.md) | Lightweight per-implementation-PR evidence (S2–S3 pilot). |
 
 Prior canon that remains authoritative: [`AI_ROLES.md`](./AI_ROLES.md),
 [`APPROVAL_THRESHOLDS.md`](./APPROVAL_THRESHOLDS.md), the machine gate
