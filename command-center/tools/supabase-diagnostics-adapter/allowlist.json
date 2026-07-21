@@ -6,7 +6,7 @@
   "notes": [
     "B2D: project isolation is adapter-enforced via fixed production_project_ref. OAuth token is NOT claimed project-scoped.",
     "v3: bounded catalog-metadata via POST .../database/query/read-only with adapter-owned SQL templates only. Agent SQL prohibited.",
-    "Live catalog requires OAuth database_read (A3: enable Database Read on Diagnostics OAuth app + re-consent; token-store ALLOWED_SCOPES = projects:read + database:read only).",
+    "Live catalog / token-store require dual attestation: Projects Read (project_admin_read via project_status) AND Database Read (database_read via bounded catalog). ALLOWED_SCOPES = projects:read + database:read only.",
     "Writable POST .../database/query remains prohibited. execute-sql Edge Function remains prohibited."
   ],
   "allowed_path_prefixes": [

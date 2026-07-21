@@ -59,11 +59,55 @@ const SECRET_NAMES = {
 export { SECRET_NAMES };
 
 export class OAuthHelperError extends Error {
-  constructor(message, code = 'OAUTH_HELPER_DENY') {
+  /**
+   * @param {string} message
+   * @param {string} [code]
+   * @param {{ capability?: string, httpStatus?: number|string, platformPermission?: string|null }} [details]
+   */
+  constructor(message, code = 'OAUTH_HELPER_DENY', details = undefined) {
     super(message);
     this.name = 'OAuthHelperError';
     this.code = code;
+    if (details && typeof details === 'object') {
+      if (details.capability) this.capability = details.capability;
+      if (details.httpStatus !== undefined) this.httpStatus = details.httpStatus;
+      if (details.platformPermission !== undefined) {
+        this.platformPermission = details.platformPermission;
+      }
+    }
   }
+}
+
+/**
+ * Extract platform FGA permission name from a Management API error body.
+ * Never returns token material.
+ * @param {unknown} bodyText
+ * @returns {string|null}
+ */
+export function extractPlatformPermission(bodyText) {
+  const s = typeof bodyText === 'string' ? bodyText : '';
+  const m = s.match(/missing required scopes?\s*\(([^)]+)\)/i);
+  if (!m) return null;
+  const first = String(m[1])
+    .split(/[\s,]+/)
+    .map((p) => p.trim())
+    .filter(Boolean)[0];
+  return first || null;
+}
+
+/**
+ * Safe, non-secret attestation failure line for console / Founder reports.
+ * @param {{ capability: string, httpStatus?: number|string, platformPermission?: string|null }} info
+ */
+export function formatAttestationFailure(info) {
+  const capability = String(info.capability || 'unknown');
+  const httpStatus =
+    info.httpStatus === undefined || info.httpStatus === null ? 'n/a' : String(info.httpStatus);
+  const perm =
+    info.platformPermission && String(info.platformPermission).trim()
+      ? String(info.platformPermission).trim()
+      : 'unavailable';
+  return `DENY: pre-store attestation failed capability=${capability} http=${httpStatus} platform_permission=${perm}`;
 }
 
 /** Base64url without padding (PKCE / OAuth). */
@@ -313,10 +357,9 @@ export function validateCallbackRequest({
  * `attestPreStoreCapabilities` before any durable token write.
  *
  * When present: fail-closed ⊆ ALLOWED_SCOPES (`projects:read` + `database:read`
- * only). No invented normalization (e.g. projects.read / rest). `projects:read`
- * remains mandatory when scope is present; `database:read` is allowed (required
- * at the Management API for catalog read-only) but not forced here because the
- * platform may omit the scope field entirely.
+ * only). No invented normalization (e.g. projects.read / rest). Both
+ * `projects:read` and `database:read` are mandatory when scope is present.
+ * When omitted, dual pre-store capability attestation is required instead.
  */
 export function assertTokenScopes(scopeField) {
   if (scopeField === undefined || scopeField === null || String(scopeField).trim() === '') {
@@ -346,6 +389,12 @@ export function assertTokenScopes(scopeField) {
       'MISSING_PROJECTS_READ'
     );
   }
+  if (!parts.includes('database:read')) {
+    throw new OAuthHelperError(
+      'DENY: token response scope must include database:read',
+      'MISSING_DATABASE_READ'
+    );
+  }
   return { omitted: false, scopes: parts, platformAttestedOmission: false };
 }
 
@@ -361,11 +410,14 @@ export function attestationOutOfCeilingPath(ref = PRODUCTION_PROJECT_REF) {
  * Pre-store capability attestation with the ephemeral access token.
  * Required before any durable env/token write (especially when scope is omitted).
  *
- * - Allowlisted GET /v1/projects/{production_ref} must succeed
- * - At least one out-of-ceiling probe (api-keys) must NOT succeed
- * Fail → do not store tokens.
+ * Both must succeed (fail-closed; no store on either failure):
+ * - Allowlisted GET /v1/projects/{production_ref} → Projects Read / project_admin_read
+ * - Bounded catalog POST .../database/query/read-only (adapter-owned SELECT) →
+ *   Database Read / database_read
+ * - Out-of-ceiling probe (api-keys) must NOT succeed
  *
- * Reuses adapter allowlist/deny helpers; fetch is injected (no live network in tests).
+ * Reuses adapter allowlist/deny + catalog templates; fetch is injected (no live
+ * network in tests). Never logs tokens or row payloads.
  */
 export async function attestPreStoreCapabilities(
   accessToken,
@@ -373,6 +425,7 @@ export async function attestPreStoreCapabilities(
     fetchImpl = globalThis.fetch,
     resolveAllowedPathFn,
     assertNotProhibitedFn,
+    resolveCatalogSqlFn,
     managementApiBase = 'https://api.supabase.com',
   } = {}
 ) {
@@ -388,10 +441,15 @@ export async function attestPreStoreCapabilities(
 
   let resolveAllowedPath = resolveAllowedPathFn;
   let assertNotProhibited = assertNotProhibitedFn;
+  let resolveCatalogSql = resolveCatalogSqlFn;
+  const catalogOps = await import('./catalog-ops.mjs');
   if (!resolveAllowedPath || !assertNotProhibited) {
     const adapter = await import('./adapter.mjs');
     resolveAllowedPath = resolveAllowedPath || adapter.resolveAllowedPath;
     assertNotProhibited = assertNotProhibited || adapter.assertNotProhibited;
+  }
+  if (!resolveCatalogSql) {
+    resolveCatalogSql = catalogOps.resolveCatalogSql;
   }
 
   const { method, path: allowPath, ref } = resolveAllowedPath('project_status', {});
@@ -399,6 +457,29 @@ export async function attestPreStoreCapabilities(
     throw new OAuthHelperError(
       'DENY: attestation allowlisted path mismatch',
       'ATTEST_ALLOW_PATH'
+    );
+  }
+
+  const catalogPath = `/v1/projects/${ref}${catalogOps.READ_ONLY_QUERY_PATH_SUFFIX}`;
+  try {
+    assertNotProhibited(catalogPath, { allowCatalogReadOnly: true });
+  } catch {
+    throw new OAuthHelperError(
+      'DENY: attestation catalog path rejected by allowlist',
+      'ATTEST_CATALOG_PATH'
+    );
+  }
+
+  let catalogResolved;
+  try {
+    catalogResolved = resolveCatalogSql('catalog_relation_exists', {
+      schema: 'public',
+      table: 'estimates',
+    });
+  } catch {
+    throw new OAuthHelperError(
+      'DENY: attestation catalog template resolution failed',
+      'ATTEST_CATALOG_TEMPLATE'
     );
   }
 
@@ -425,20 +506,75 @@ export async function attestPreStoreCapabilities(
     Accept: 'application/json',
   };
 
+  async function readBodySafe(res) {
+    if (!res || typeof res.text !== 'function') return '';
+    try {
+      const t = await res.text();
+      return typeof t === 'string' ? t.slice(0, 500) : '';
+    } catch {
+      return '';
+    }
+  }
+
   let allowRes;
   try {
     allowRes = await fetchImpl(`${base}${allowPath}`, { method, headers });
   } catch {
     throw new OAuthHelperError(
-      'DENY: pre-store capability attestation failed (allowlisted GET unreachable)',
-      'ATTEST_ALLOW_FAILED'
+      formatAttestationFailure({
+        capability: 'projects_read',
+        httpStatus: 'unreachable',
+        platformPermission: null,
+      }),
+      'ATTEST_ALLOW_FAILED',
+      { capability: 'projects_read', httpStatus: 'unreachable', platformPermission: null }
     );
   }
   if (!allowRes || !allowRes.ok) {
     const status = allowRes && typeof allowRes.status === 'number' ? allowRes.status : 'n/a';
+    const body = await readBodySafe(allowRes);
+    const platformPermission = extractPlatformPermission(body);
     throw new OAuthHelperError(
-      `DENY: pre-store capability attestation failed (allowlisted GET HTTP ${status})`,
-      'ATTEST_ALLOW_FAILED'
+      formatAttestationFailure({
+        capability: 'projects_read',
+        httpStatus: status,
+        platformPermission,
+      }),
+      'ATTEST_ALLOW_FAILED',
+      { capability: 'projects_read', httpStatus: status, platformPermission }
+    );
+  }
+
+  let catalogRes;
+  try {
+    catalogRes = await fetchImpl(`${base}${catalogPath}`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: catalogResolved.sql }),
+    });
+  } catch {
+    throw new OAuthHelperError(
+      formatAttestationFailure({
+        capability: 'database_read',
+        httpStatus: 'unreachable',
+        platformPermission: null,
+      }),
+      'ATTEST_CATALOG_FAILED',
+      { capability: 'database_read', httpStatus: 'unreachable', platformPermission: null }
+    );
+  }
+  if (!catalogRes || !catalogRes.ok) {
+    const status = catalogRes && typeof catalogRes.status === 'number' ? catalogRes.status : 'n/a';
+    const body = await readBodySafe(catalogRes);
+    const platformPermission = extractPlatformPermission(body);
+    throw new OAuthHelperError(
+      formatAttestationFailure({
+        capability: 'database_read',
+        httpStatus: status,
+        platformPermission,
+      }),
+      'ATTEST_CATALOG_FAILED',
+      { capability: 'database_read', httpStatus: status, platformPermission }
     );
   }
 
@@ -460,8 +596,11 @@ export async function attestPreStoreCapabilities(
 
   return {
     allowlistedOk: true,
+    catalogOk: true,
     outOfCeilingDenied: true,
     allowPath,
+    catalogPath,
+    catalogOperation: catalogResolved.operation,
     probePath,
   };
 }

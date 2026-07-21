@@ -59,9 +59,9 @@ Inventory names (values never in repo):
 - Tunnel credentials outside the repository
 - Tunnel stops after every authorize attempt; public callback closure verified
 - Windows browser launch uses approved Edge/Chrome **absolute** paths only
-- Token `scope` when **present**: fail-closed ⊆ `projects:read` + `database:read` only (`UNEXPECTED_SCOPE` DENY otherwise; `projects:read` still required)
-- Token `scope` when **omitted/empty**: platform-attested OpenAPI omission (`OAuthTokenResponse` has no `scope`; `additionalProperties: false`) — **not** unconditional OK
-- Before any durable token write: pre-store capability attestation (allowlisted `GET /v1/projects/wwyxohjnyqnegzbxtuxs` must succeed; out-of-ceiling probe e.g. `/api-keys` must not)
+- Token `scope` when **present**: fail-closed ⊆ `projects:read` + `database:read` only; **both** required (`UNEXPECTED_SCOPE` / `MISSING_*` DENY otherwise)
+- Token `scope` when **omitted/empty**: platform-attested OpenAPI omission — dual pre-store attestation required (projects GET + bounded catalog POST) before any durable token write
+- Pre-store attestation fails closed unless both Projects Read (`project_admin_read`) and Database Read (`database_read`) succeed; safe failure reports capability + HTTP status + platform permission name only
 - Quarantined tokens from failed attempts (including PR #58) must be replaced before B3
 
 ```bash

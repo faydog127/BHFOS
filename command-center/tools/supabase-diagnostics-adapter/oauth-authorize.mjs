@@ -48,6 +48,7 @@ import {
   writeTokenSecretsToEnvFile,
   wipeTransient,
   formatStatusResult,
+  formatAttestationFailure,
   redactSecrets,
   parseEnvFile,
   buildBrowserLaunchSpec,
@@ -198,7 +199,7 @@ async function runAuthorizeExchange() {
     console.log(`Public redirect: ${PUBLIC_REDIRECT_URI}`);
     console.log(`Local listener: ${LOCAL_LISTENER_URI}`);
     console.log(`Callback path: ${CALLBACK_PATH}`);
-    console.log('Opening browser for Founder consent (Projects Read only)…');
+    console.log('Opening browser for Founder consent (Projects Read + Database Read only)…');
     console.log('browser opened');
 
     const callbackPromise = waitForCallback({ expectedState: transient.state });
@@ -333,8 +334,18 @@ async function authorizeMain() {
     console.log('public callback closed');
     console.log(tunnel.status('complete'));
   } catch (e) {
-    const safe = redactSecrets(e && e.message ? e.message : String(e));
-    console.error(safe);
+    if (e && e.capability) {
+      console.error(
+        formatAttestationFailure({
+          capability: e.capability,
+          httpStatus: e.httpStatus,
+          platformPermission: e.platformPermission,
+        })
+      );
+    } else {
+      const safe = redactSecrets(e && e.message ? e.message : String(e));
+      console.error(safe);
+    }
     console.log(
       formatStatusResult({
         completed: false,
