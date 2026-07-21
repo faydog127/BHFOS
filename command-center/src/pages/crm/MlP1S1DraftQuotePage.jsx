@@ -417,7 +417,8 @@ export default function MlP1S1DraftQuotePage() {
           <CardContent className="space-y-3 text-sm">
             <p>Quote id: {lastQuoteId}</p>
             <p className="text-slate-500">
-              Slice 1 stops here — issue, approve, job, and invoice are not authorized.
+              Draft saved. Use Slice 2 lifecycle to issue / revise / reject / expire.
+              Job and invoice remain unauthorized.
             </p>
             <p className="text-xs text-slate-400">
               Taps this session: {tapCount}. KPI timers:{' '}
@@ -429,6 +430,14 @@ export default function MlP1S1DraftQuotePage() {
             </p>
             <Button
               type="button"
+              className="w-full"
+              onClick={() => navigate(tenantPath(`estimates/p1-lifecycle/${lastQuoteId}`))}
+            >
+              Open Slice 2 lifecycle
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
               className="w-full"
               onClick={() => navigate(tenantPath(`/crm/estimates/${lastQuoteId}`))}
             >

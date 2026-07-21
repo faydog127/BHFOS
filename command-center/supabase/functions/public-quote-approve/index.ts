@@ -7,7 +7,6 @@ import {
   readJson,
 } from '../_shared/publicUtils.ts';
 import {
-  createMoneyLoopTask,
   hasEvent,
   logMoneyLoopEvent,
 } from '../_shared/moneyLoopUtils.ts';
@@ -490,8 +489,9 @@ Deno.serve(async (req) => {
     String(action).toLowerCase()
   );
 
+  // ML-P1 S2: Money-State reject vocabulary; approve uses approved→accepted normalize.
   const patch: Record<string, unknown> = {
-    status: isDecline ? 'declined' : 'approved',
+    status: isDecline ? 'rejected' : 'approved',
   };
 
   let resolvedInvoiceId: string | null = null;
@@ -501,6 +501,7 @@ Deno.serve(async (req) => {
     patch.rejected_at = new Date().toISOString();
   } else {
     patch.accepted_at = new Date().toISOString();
+    patch.approval_method = 'public_token';
   }
 
   let fetchQuery = supabaseAdmin
@@ -681,11 +682,156 @@ Deno.serve(async (req) => {
     );
   }
 
-  const { data, error } = await supabaseAdmin
+  // ML-P1 S2: prefer server RPC for approve (role/transition/gate/idempotency).
+  // Fail closed on approve if job-create gate is not explicitly off (eliminates pre-A3 auto-job).
+  if (!isDecline) {
+    const { data: gateRow, error: gateErr } = await supabaseAdmin
+      .from('global_config')
+      .select('value')
+      .eq('key', 'auto_create_job_on_quote_acceptance')
+      .maybeSingle();
+
+    const gateValue = String(gateRow?.value ?? 'true')
+      .trim()
+      .toLowerCase();
+    const gateOff = ['0', 'false', 'no', 'off'].includes(gateValue);
+    if (gateErr || !gateOff) {
+      await logPublicEvent({
+        kind: 'public_quote_approve',
+        tenantId,
+        quoteId: existingQuote.id,
+        token,
+        status: 'job_gate_required',
+        ip,
+        userAgent,
+        metadata: { run_id: runId, gate_value: gateRow?.value ?? null, error: gateErr?.message },
+      });
+      return respondJson(
+        {
+          error:
+            'Quote approval is deferred until job auto-create is disabled (ML-P1 S2 gate).',
+          code: 'ML_P1_S2_JOB_GATE_REQUIRED',
+          job_created: false,
+        },
+        503,
+        cors.headers,
+      );
+    }
+
+    // Prefer SECURITY DEFINER RPC when migration applied (service_role / anon path).
+    const rpcAttempt = await supabaseAdmin.rpc('ml_p1_s2_quote_approve_public', {
+      p_public_token: token,
+      p_correlation_id: runId,
+      p_approval_method: 'public_token',
+    });
+
+    if (!rpcAttempt.error && rpcAttempt.data) {
+      const rpcPayload = rpcAttempt.data as Record<string, unknown>;
+      const rpcQuote = (rpcPayload.quote || {}) as Record<string, unknown>;
+      await logPublicEvent({
+        kind: 'public_quote_approve',
+        tenantId,
+        quoteId: rpcQuote.id || existingQuote.id,
+        token,
+        status: 'approved',
+        ip,
+        userAgent,
+        metadata: {
+          run_id: runId,
+          via: 'ml_p1_s2_quote_approve_public',
+          idempotent: Boolean(rpcPayload.idempotent),
+        },
+      });
+
+      if (
+        !(await hasEvent({
+          entityType: 'quote',
+          entityId: String(rpcQuote.id || existingQuote.id),
+          eventType: 'QuoteAccepted',
+        }))
+      ) {
+        await logMoneyLoopEvent({
+          tenantId,
+          entityType: 'quote',
+          entityId: String(rpcQuote.id || existingQuote.id),
+          eventType: 'QuoteAccepted',
+          actorType: 'public',
+          payload: { run_id: runId, job_created: false, slice: 'ml-p1-s2' },
+        });
+      }
+
+      const acceptHeaderRpc = (req.headers.get('accept') || '').toLowerCase();
+      if (req.method === 'GET' || acceptHeaderRpc.includes('text/html')) {
+        const resultUrl = buildQuoteResultUrl({
+          approved: true,
+          quoteId: String(rpcQuote.id || existingQuote.id),
+          token,
+          tenantId,
+          invoiceToken: null,
+        });
+        return Response.redirect(resultUrl, 302);
+      }
+
+      return respondJson(
+        {
+          quote: rpcQuote,
+          quote_result: 'approved',
+          invoice_id: null,
+          invoice_token: null,
+          job_created: false,
+          idempotent: Boolean(rpcPayload.idempotent),
+        },
+        200,
+        cors.headers,
+      );
+    }
+
+    // If RPC missing (pre-A3), continue with direct update — still no job create.
+    const rpcMissing = /Could not find the function|function .* does not exist|PGRST202/i.test(
+      String(rpcAttempt.error?.message || ''),
+    );
+    if (!rpcMissing) {
+      await logPublicEvent({
+        kind: 'public_quote_approve',
+        tenantId,
+        quoteId: existingQuote.id,
+        token,
+        status: 'rpc_error',
+        ip,
+        userAgent,
+        metadata: { run_id: runId, error: rpcAttempt.error?.message },
+      });
+      return respondJson(
+        {
+          error: rpcAttempt.error?.message || 'Approve failed',
+          code: 'ML_P1_S2_APPROVE_FAILED',
+          job_created: false,
+        },
+        409,
+        cors.headers,
+      );
+    }
+  }
+
+  if (!isDecline) {
+    const amount = asNumber(existingQuote.total_amount);
+    patch.approved_amount = amount;
+    patch.approved_by_actor_id = null;
+  }
+
+  let updateQuery = supabaseAdmin
     .from('quotes')
     .update(patch)
     .eq('id', existingQuote.id)
     .eq('tenant_id', tenantId)
+    .eq('public_token', token);
+
+  // Concurrent-safe approve: only transition from issued.
+  if (!isDecline) {
+    updateQuery = updateQuery.eq('status', 'issued');
+  }
+
+  const { data, error } = await updateQuery
     .select(`
       id,
       lead_id,
@@ -703,11 +849,38 @@ Deno.serve(async (req) => {
       estimate_id,
       accepted_at,
       rejected_at,
-      tenant_id
+      tenant_id,
+      approved_amount,
+      approval_method,
+      quote_version
     `)
     .maybeSingle();
 
   if (error || !data) {
+    // Idempotent approve replay
+    if (!isDecline) {
+      const { data: again } = await supabaseAdmin
+        .from('quotes')
+        .select('*')
+        .eq('id', existingQuote.id)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+      const againStatus = asString(again?.status).toLowerCase();
+      if (again && ['approved', 'accepted'].includes(againStatus)) {
+        return respondJson(
+          {
+            quote: again,
+            quote_result: 'approved',
+            invoice_id: null,
+            invoice_token: null,
+            job_created: false,
+            idempotent: true,
+          },
+          200,
+          cors.headers,
+        );
+      }
+    }
     await logPublicEvent({
       kind: 'public_quote_approve',
       tenantId,
@@ -718,7 +891,7 @@ Deno.serve(async (req) => {
       userAgent,
       metadata: { run_id: runId, error: error?.message || 'not_found' },
     });
-    return respondJson({ error: 'Not found' }, 404, cors.headers);
+    return respondJson({ error: 'Not found', job_created: false }, 404, cors.headers);
   }
 
   await logPublicEvent({
@@ -726,7 +899,7 @@ Deno.serve(async (req) => {
     tenantId,
     quoteId: data.id,
     token,
-    status: isDecline ? 'declined' : 'approved',
+    status: isDecline ? 'rejected' : 'approved',
     ip,
     userAgent,
     metadata: { run_id: runId },
@@ -765,234 +938,16 @@ Deno.serve(async (req) => {
         entityId: data.id,
         eventType: 'QuoteAccepted',
         actorType,
-        payload: { run_id: runId },
+        payload: { run_id: runId, job_created: false, slice: 'ml-p1-s2' },
       });
     }
 
-    const nowIso = new Date().toISOString();
-    const workOrderNumber = await allocateWorkOrderNumber(tenantId, data.quote_number, nowIso);
-    const quoteServiceAddress = await resolveQuoteServiceAddress(tenantId, data.id);
-    const leadServiceAddress = await resolveLeadServiceAddress(tenantId, data.lead_id ?? null);
-    const customerTypeSnapshot = await resolveLeadCustomerType(tenantId, data.lead_id ?? null);
-    const paymentTerms = defaultPaymentTermsForCustomerType(customerTypeSnapshot);
-    const resolvedServiceAddress = quoteServiceAddress || leadServiceAddress;
-    const totalAmount = asNumber(data.total_amount) ?? 0;
-
-    // Gotcha #4: Use INSERT...ON CONFLICT to handle job creation race condition
-    let jobId: string | null = null;
-    let jobCreated = false;
-
-    const baseJobInsert = {
-      quote_id: data.id,
-      lead_id: data.lead_id ?? null,
-      tenant_id: tenantId,
-      status: 'unscheduled',
-      created_at: nowIso,
-      updated_at: nowIso,
-    };
-
-    const richJobInsert: Record<string, unknown> = {
-      ...baseJobInsert,
-      work_order_number: workOrderNumber,
-      job_number: workOrderNumber,
-      quote_number: asTracking(data.quote_number) || null,
-      total_amount: totalAmount,
-      payment_status: 'unpaid',
-      service_address: resolvedServiceAddress,
-      customer_type_snapshot: customerTypeSnapshot,
-      payment_terms: paymentTerms,
-    };
-
-    let { data: newJob, error: insertError } = await supabaseAdmin
-      .from('jobs')
-      .insert(richJobInsert)
-      .select('id,status,work_order_number,service_address')
-      .maybeSingle();
-
-    // Backward compatibility: if schema is behind, retry with base payload.
-    if (insertError && isMissingColumnError(insertError as { code?: string; message?: string })) {
-      const fallbackInsert = await supabaseAdmin
-        .from('jobs')
-        .insert(baseJobInsert)
-        .select('id,status')
-        .maybeSingle();
-      newJob = fallbackInsert.data as typeof newJob;
-      insertError = fallbackInsert.error;
-    }
-
-    if (insertError) {
-      // Check if it's a unique violation (job already exists)
-      if (insertError.code === '23505') {
-        // Job already exists, fetch it
-        const { data: existingJob } = await supabaseAdmin
-          .from('jobs')
-          .select('id, status, work_order_number, service_address, customer_type_snapshot, payment_terms')
-          .eq('tenant_id', tenantId)
-          .eq('quote_id', data.id)
-          .maybeSingle();
-
-        jobId = existingJob?.id ?? null;
-        if (jobId) {
-          const patchExisting: Record<string, unknown> = {
-            status: 'unscheduled',
-            updated_at: nowIso,
-          };
-          if (!asString(existingJob?.work_order_number) && workOrderNumber) {
-            patchExisting.work_order_number = workOrderNumber;
-            patchExisting.job_number = workOrderNumber;
-          }
-          if (!asString(existingJob?.service_address) && resolvedServiceAddress) {
-            patchExisting.service_address = resolvedServiceAddress;
-          }
-          if (!(existingJob as Record<string, unknown> | null)?.customer_type_snapshot) {
-            patchExisting.customer_type_snapshot = customerTypeSnapshot;
-          }
-          if (!(existingJob as Record<string, unknown> | null)?.payment_terms) {
-            patchExisting.payment_terms = paymentTerms;
-          }
-
-          const existingUpdate = await supabaseAdmin
-            .from('jobs')
-            .update(patchExisting)
-            .eq('id', jobId);
-
-          if (existingUpdate.error && isMissingColumnError(existingUpdate.error as { code?: string; message?: string })) {
-            await supabaseAdmin
-              .from('jobs')
-              .update({ status: 'unscheduled', updated_at: nowIso })
-              .eq('id', jobId);
-          }
-        }
-      } else {
-        // Unexpected error
-        console.error('Job insert failed:', insertError);
-      }
-    } else {
-      jobId = newJob?.id ?? null;
-      jobCreated = true;
-
-      // If schema was partial during insert, attempt metadata patch opportunistically.
-      if (jobId) {
-        const metadataPatch = await supabaseAdmin
-          .from('jobs')
-          .update({
-            work_order_number: workOrderNumber,
-            job_number: workOrderNumber,
-            quote_number: asTracking(data.quote_number) || null,
-            total_amount: totalAmount,
-            payment_status: 'unpaid',
-            service_address: resolvedServiceAddress,
-            customer_type_snapshot: customerTypeSnapshot,
-            payment_terms: paymentTerms,
-            updated_at: nowIso,
-          })
-          .eq('id', jobId);
-
-        if (metadataPatch.error && isMissingColumnError(metadataPatch.error as { code?: string; message?: string })) {
-          // Ignore; base row already exists and approval flow should continue.
-        }
-      }
-    }
-
-    if (
-      jobId &&
-      jobCreated &&
-      !(await hasEvent({
-        entityType: 'job',
-        entityId: jobId,
-        eventType: 'JobCreated',
-      }))
-    ) {
-      await logMoneyLoopEvent({
-        tenantId,
-        entityType: 'job',
-        entityId: jobId,
-        eventType: 'JobCreated',
-        actorType: 'system',
-        payload: { quoteId: data.id, run_id: runId },
-      });
-    }
-
-    // Phase-1 billing lock: quote approval creates/updates work order only.
-    // Invoice issuance is now gated by work-order progression + billing controls in CRM.
-    let invoiceId: string | null = null;
-
-    if (jobId) {
-      await createMoneyLoopTask({
-        tenantId,
-        sourceType: 'job',
-        sourceId: jobId,
-        title: 'Schedule Job',
-        leadId: data.lead_id ?? null,
-        metadata: { quoteId: data.id },
-      });
-    }
-
-    // Gap 6: Lead progression on quote accept
-    if (data.lead_id) {
-      const nowIsoForLead = new Date().toISOString();
-      const leadUpdateCandidates: Array<Record<string, unknown>> = [
-        { status: 'scheduled', stage: 'scheduled', pipeline_stage: 'scheduled', updated_at: nowIsoForLead },
-        { status: 'scheduled', stage: 'scheduled', pipeline_stage: 'scheduled' },
-        { status: 'scheduled', pipeline_stage: 'scheduled' },
-        { status: 'scheduled', stage: 'scheduled' },
-        { status: 'scheduled' },
-      ];
-
-      let leadUpdated = false;
-      for (const patchCandidate of leadUpdateCandidates) {
-        const leadUpdate = await supabaseAdmin
-          .from('leads')
-          .update(patchCandidate)
-          .eq('id', data.lead_id);
-
-        if (!leadUpdate.error) {
-          leadUpdated = true;
-          break;
-        }
-
-        if (!isMissingColumnError(leadUpdate.error as { code?: string; message?: string })) {
-          console.warn('Unable to update lead status on quote approval:', leadUpdate.error.message || leadUpdate.error);
-          break;
-        }
-      }
-
-      if (!leadUpdated) {
-        console.warn('Lead status update skipped due schema mismatch; quote approval continued.');
-      }
-
-      await logMoneyLoopEvent({
-        tenantId,
-        entityType: 'lead',
-        entityId: data.lead_id,
-        eventType: 'LeadUpdated',
-        actorType: 'system',
-        payload: { status: 'scheduled', quote_id: data.id },
-      });
-    }
-
-    await supabaseAdmin
-      .from('crm_tasks')
-      .update({ status: 'completed', updated_at: new Date().toISOString() })
-      .eq('tenant_id', tenantId)
-      .eq('type', 'follow_up')
-      .eq('source_type', 'quote')
-      .eq('source_id', data.id)
-      .in('status', ['open', 'new', 'pending', 'PENDING', 'in-progress']);
-
-    resolvedInvoiceId = invoiceId;
+    // ML-P1 S2 hard stop: NO job creation, NO schedule-job task, NO invoice.
+    // Accept→job remains Slice 3.
   }
 
-  if (resolvedInvoiceId) {
-    const { data: invoiceTokenRow } = await supabaseAdmin
-      .from('invoices')
-      .select('public_token')
-      .eq('id', resolvedInvoiceId)
-      .eq('tenant_id', tenantId)
-      .maybeSingle();
-
-    resolvedInvoiceToken = asString(invoiceTokenRow?.public_token) || null;
-  }
+  resolvedInvoiceId = null;
+  resolvedInvoiceToken = null;
 
   const acceptHeader = (req.headers.get('accept') || '').toLowerCase();
   if (req.method === 'GET' || acceptHeader.includes('text/html')) {
@@ -1011,9 +966,10 @@ Deno.serve(async (req) => {
   return respondJson(
     {
       quote: data,
-      quote_result: isDecline ? 'declined' : 'approved',
+      quote_result: isDecline ? 'rejected' : 'approved',
       invoice_id: resolvedInvoiceId,
       invoice_token: resolvedInvoiceToken,
+      job_created: false,
     },
     200,
     cors.headers,
