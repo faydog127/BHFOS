@@ -25,6 +25,13 @@ const allowlistPath = path.join(here, 'allowlist.json');
 /** Hard-coded production project ref — adapter isolation boundary (not token ACL). */
 export const PRODUCTION_PROJECT_REF = 'wwyxohjnyqnegzbxtuxs';
 
+/**
+ * Adapter-owned fixed query for project_health only.
+ * Management API GET /v1/projects/{ref}/health requires `services` (array enum).
+ * Never accept agent-supplied query strings.
+ */
+export const PROJECT_HEALTH_FIXED_QUERY = 'services=db&services=auth&services=rest';
+
 export function loadAllowlist() {
   return JSON.parse(fs.readFileSync(allowlistPath, 'utf8'));
 }
@@ -76,17 +83,22 @@ export function resolveAllowedPath(operation, { agentRef } = {}) {
   }
 
   const ref = resolveProductionProjectRef({ agentRef });
-  const built = op.pathTemplate.replace('{ref}', ref);
+  let built = op.pathTemplate.replace('{ref}', ref);
+  if (operation === 'project_health') {
+    built = `${built}?${PROJECT_HEALTH_FIXED_QUERY}`;
+  }
 
-  if (list.prohibited_exact_paths?.includes(built)) {
-    throw new Error(`DENY: exact path prohibited: ${built}`);
+  const pathOnly = built.split('?')[0];
+
+  if (list.prohibited_exact_paths?.includes(pathOnly)) {
+    throw new Error(`DENY: exact path prohibited: ${pathOnly}`);
   }
 
   const exactOk = Object.values(list.operations).some(
-    (o) => o.status === 'allowed' && o.pathTemplate.replace('{ref}', ref) === built
+    (o) => o.status === 'allowed' && o.pathTemplate.replace('{ref}', ref) === pathOnly
   );
   if (!exactOk) {
-    throw new Error(`DENY: path not on allowlist: ${built}`);
+    throw new Error(`DENY: path not on allowlist: ${pathOnly}`);
   }
 
   assertNotProhibited(built);
@@ -96,7 +108,10 @@ export function resolveAllowedPath(operation, { agentRef } = {}) {
 /** Paths that must never be requested. */
 export function assertNotProhibited(requestPath) {
   const list = loadAllowlist();
-  const pathOnly = String(requestPath).split('?')[0];
+  const raw = String(requestPath);
+  const qIdx = raw.indexOf('?');
+  const pathOnly = qIdx === -1 ? raw : raw.slice(0, qIdx);
+  const query = qIdx === -1 ? '' : raw.slice(qIdx + 1);
 
   if (list.prohibited_exact_paths?.includes(pathOnly)) {
     throw new Error(`DENY: exact path prohibited: ${pathOnly}`);
@@ -107,12 +122,16 @@ export function assertNotProhibited(requestPath) {
   }
 
   for (const pattern of list.prohibited_path_substrings) {
-    if (requestPath.includes(pattern)) {
+    if (raw.includes(pattern)) {
       throw new Error(`DENY: prohibited path pattern "${pattern}" in ${requestPath}`);
     }
   }
 
-  if (String(requestPath).includes('?')) {
+  if (qIdx !== -1) {
+    const allowedHealthPath = `/v1/projects/${PRODUCTION_PROJECT_REF}/health`;
+    if (pathOnly === allowedHealthPath && query === PROJECT_HEALTH_FIXED_QUERY) {
+      return;
+    }
     throw new Error('DENY: query strings are not permitted on adapter requests');
   }
 }
@@ -200,18 +219,76 @@ export function selfTest() {
   const results = [];
   const goodRef = PRODUCTION_PROJECT_REF;
   const badRef = 'abcdefghijklmnopqrst';
+  const list = loadAllowlist();
 
-  for (const op of ['project_status', 'project_health']) {
-    try {
-      const r = resolveAllowedPath(op, {});
-      results.push({
-        test: `allow_${op}`,
-        pass: r.ref === goodRef && r.path.includes(goodRef) && r.method === 'GET',
-        path: r.path,
-      });
-    } catch (e) {
-      results.push({ test: `allow_${op}`, pass: false, error: String(e.message || e) });
-    }
+  results.push({
+    test: 'allowlist_health_fixed_query_matches_constant',
+    pass:
+      list.operations?.project_health?.fixedQuery === PROJECT_HEALTH_FIXED_QUERY,
+  });
+
+  try {
+    const r = resolveAllowedPath('project_status', {});
+    results.push({
+      test: 'allow_project_status',
+      pass:
+        r.ref === goodRef &&
+        r.path === `/v1/projects/${goodRef}` &&
+        r.method === 'GET' &&
+        !r.path.includes('?'),
+      path: r.path,
+    });
+  } catch (e) {
+    results.push({ test: 'allow_project_status', pass: false, error: String(e.message || e) });
+  }
+
+  try {
+    const r = resolveAllowedPath('project_health', {});
+    const expected = `/v1/projects/${goodRef}/health?${PROJECT_HEALTH_FIXED_QUERY}`;
+    results.push({
+      test: 'allow_project_health_fixed_query',
+      pass: r.ref === goodRef && r.path === expected && r.method === 'GET',
+      path: r.path,
+    });
+  } catch (e) {
+    results.push({
+      test: 'allow_project_health_fixed_query',
+      pass: false,
+      error: String(e.message || e),
+    });
+  }
+
+  try {
+    assertNotProhibited(`/v1/projects/${goodRef}/health?services=storage`);
+    results.push({ test: 'deny_agent_health_query', pass: false, error: 'expected deny' });
+  } catch (e) {
+    results.push({
+      test: 'deny_agent_health_query',
+      pass: /DENY/.test(String(e.message || e)),
+    });
+  }
+
+  try {
+    assertNotProhibited(`/v1/projects/${goodRef}?foo=bar`);
+    results.push({ test: 'deny_arbitrary_query', pass: false, error: 'expected deny' });
+  } catch (e) {
+    results.push({
+      test: 'deny_arbitrary_query',
+      pass: /DENY/.test(String(e.message || e)),
+    });
+  }
+
+  try {
+    assertNotProhibited(
+      `/v1/projects/${goodRef}/health?${PROJECT_HEALTH_FIXED_QUERY}`
+    );
+    results.push({ test: 'allow_fixed_health_query_assert', pass: true });
+  } catch (e) {
+    results.push({
+      test: 'allow_fixed_health_query_assert',
+      pass: false,
+      error: String(e.message || e),
+    });
   }
 
   try {
@@ -298,7 +375,16 @@ export function selfTest() {
       test: 'dry_run_locked_ref',
       pass: out.ref === goodRef && out.path === `/v1/projects/${goodRef}`,
     });
-    const failed = results.filter((r) => !r.pass);
-    return { ok: failed.length === 0, results, failed };
+    return invokeAllowlisted('project_health', { dryRun: true }).then((healthOut) => {
+      results.push({
+        test: 'dry_run_project_health_fixed_query',
+        pass:
+          healthOut.ref === goodRef &&
+          healthOut.path ===
+            `/v1/projects/${goodRef}/health?${PROJECT_HEALTH_FIXED_QUERY}`,
+      });
+      const failed = results.filter((r) => !r.pass);
+      return { ok: failed.length === 0, results, failed };
+    });
   });
 }
