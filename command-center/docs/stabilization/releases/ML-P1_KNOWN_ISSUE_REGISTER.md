@@ -60,18 +60,19 @@ Timing classes: `P1_BLOCKING` | `P1_MUST_DESIGN` | `P1_FIX_DURING` | `DEFER_SIGN
 | Owner | Money-loop implementer |
 | Completion test | P1 path reads/writes hosted `address_line_1` (or documented alias); smoke shows non-empty service address |
 
-## KI-05 — Tenant isolation / money-writer watch (B-003)
+## KI-05 — Company context / money-writer watch (B-003)
 
 | Field | Value |
 | --- | --- |
-| Evidence | `V1_STABILIZATION_BACKLOG.md` B-003; handshake P0-01; Pillar P1-GR-003/005 |
+| Evidence | `V1_STABILIZATION_BACKLOG.md` B-003; handshake P0-01; Pillar P1-GR-003/005; `BHFOS_V1_V2_PRODUCT_BOUNDARY.md` |
 | Affected workflow | All money-state writes; listing; admin APIs |
-| Risk | Cross-tenant exposure; wrong-tenant money mutation — existential |
-| Safe to defer? | **No** for negative tests and writer inventory |
-| Deferral rationale | N/A — watch item requires continuous gate; any new leak is immediate stop |
-| Timing | `P1_BLOCKING` (negative tenant tests + writer proof) |
+| Risk | Unauthorized role/unauthenticated write; missing/malformed TVG company context; alternate money writers |
+| Safe to defer? | **No** for V1 authn/role/context DENY + money-writer inventory |
+| Deferral rationale | **Shared multi-tenancy / cross-tenant isolation:** **REMOVED** from V1 and V2 product model (dedicated-instance V2). Do not track as deferred multi-tenant work |
+| Timing | `P1_BLOCKING` (authn + role + TVG context DENY + writer watch); cross-tenant suite = **NOT APPLICABLE** |
 | Owner | Security / Architecture Guard |
-| Completion test | Automated negative cross-tenant cases = 0 unauthorized access; money-writer inventory lists exactly one paid-state writer |
+| Completion test (V1) | Unauthorized-role and unauthenticated money-path negatives = DENY; missing/malformed TVG context = DENY; money-writer inventory lists exactly one paid-state writer (by payment slice / S5+) |
+| Completion test (cross-tenant) | **N/A** — shared multi-tenancy removed |
 
 ## KI-06 — Invoice vs job `payment_status` divergence (B-008)
 
@@ -95,7 +96,7 @@ Timing classes: `P1_BLOCKING` | `P1_MUST_DESIGN` | `P1_FIX_DURING` | `DEFER_SIGN
 | Risk | Bypass of canonical writer; duplicate/conflicted paid state |
 | Safe to defer? | **No** |
 | Deferral rationale | N/A — single money writer is ML-P1 invariant |
-| Timing | `P1_BLOCKING` |
+| Timing | `P1_BLOCKING` — **proven in S5b** |
 | Owner | Money-loop owner + Architecture Guard |
 | Completion test | Inventory of code paths that set paid/amount_paid/balance; only canonical writer mutates; alternate paths DENY or removed from P1 surface |
 
@@ -136,7 +137,7 @@ Timing classes: `P1_BLOCKING` | `P1_MUST_DESIGN` | `P1_FIX_DURING` | `DEFER_SIGN
 | Deferral rationale | Column backfill is migration (separate auth); application queries for P1 must still enforce tenant via lead/job/invoice which carry tenant |
 | Timing | `P1_MUST_DESIGN` (enforce via money entities) / `DEFER_SIGNED` (property/tech column backfill) |
 | Owner | Data + Security |
-| Completion test | Negative listing/read tests cannot fetch other-tenant money entities; documented reliance on lead/job/invoice tenant |
+| Completion test | Money-entity queries always scoped to the operating company context; no reliance on shared multi-tenant RLS. (Cross-tenant suite **N/A** under dedicated-instance V2 model.) |
 
 ## KI-11 — Follow-up / automation fragility
 
@@ -145,11 +146,11 @@ Timing classes: `P1_BLOCKING` | `P1_MUST_DESIGN` | `P1_FIX_DURING` | `DEFER_SIGN
 | Evidence | Backlog B-019; historical UAT invoice follow-up / `trg_money_loop_invoice_followups` repairs |
 | Affected workflow | Post-invoice tasks; customer chase; automation |
 | Risk | Missed follow-ups; work escapes to Notes/text; silent trigger failures |
-| Safe to defer? | **Yes for full task UX**, if exceptions are visible |
-| Deferral rationale | Rich follow-up product is not required to prove quote→pay; unowned silent automation failure is not acceptable — need visible failure or disable |
-| Timing | `P1_FIX_DURING` (fail visible / no silent break) / `DEFER_SIGNED` (full task surface) |
+| Safe to defer? | **No** for V1 autonomous follow-up minimum + failure visibility |
+| Deferral rationale | **Superseded:** Autonomous follow-up is **in V1** (`BHFOS_V1_V2_PRODUCT_BOUNDARY.md`). Unowned silent automation failure remains unacceptable. Full visual workflow builder not assumed |
+| Timing | `P1_BLOCKING` (visible fail + V1 follow-up minimum in **S6**); visual builder = not in V1 |
 | Owner | Ops automation owner |
-| Completion test | Forced automation failure surfaces in exception log/queue; P1 pay path does not depend on hidden follow-up success |
+| Completion test | Forced automation failure surfaces in exception log/queue; V1 follow-up journeys run without routine manual push; opt-out/retry/audit present |
 
 ## KI-12 — Incomplete event doctrine (A-LOCK PARTIAL)
 

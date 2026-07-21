@@ -1,8 +1,8 @@
 # ML-P1 Minimum Money-State Design Contract
 
-> Planning correction artifact. **Does not authorize implementation or live pay.**
-> Defines the minimum rules any Phase 1 implementation slice must satisfy.
-> Not a full enterprise FSM or payment platform.
+> Planning correction artifact. **Does not authorize implementation by itself.**
+> Stripe payment processing is **in V1** (slice **S5b**). Autonomous follow-up is
+> **in V1** (slice **S6**). See `BHFOS_V1_V2_PRODUCT_BOUNDARY.md` and roadmap.
 
 Canonical loop: **lead → quote → accept → job (×1) → invoice → payment → receipt/close**.
 
@@ -98,16 +98,22 @@ Phase 1 does **not** require full field FSM. Minimum for lock path:
 | Issue invoice | Yes | No default | Yes | Yes |
 | Void invoice | No | No | Yes + reason | Yes + reason |
 | Mark paid | **Canonical writer only** | No | No | No (except break-glass + reason + audit) |
-| Cross-tenant access | Never | Never | Never | Never |
+| Shared multi-tenant / cross-tenant access | **NOT APPLICABLE** — V2 is dedicated instance per company; shared multi-tenancy removed | — | — | — |
+
+**V1 note:** BHFOS V1 is single-company for The Vent Guys. §11 is **internal role**
+authorization. **V2 note:** White-label dedicated instances — not shared-tenant RLS.
+See `BHFOS_V1_V2_PRODUCT_BOUNDARY.md`.
 
 UI hiding is **not** authorization. Every money-state action authorized server-side.
 
 ## 12. Server-side deny-by-default
 
 - Unknown transition → DENY.
-- Missing tenant / actor → DENY.
-- Agent- or client-supplied project/tenant override → DENY.
-- No admin tenant fallback on money-state endpoints.
+- Missing actor → DENY.
+- Missing or malformed **TVG company/tenant context** → DENY (single-company integrity).
+- Agent- or client-supplied context override that bypasses session → DENY.
+- No admin silent context fallback on money-state endpoints.
+- Shared multi-tenant cross-org DENY suites → **NOT APPLICABLE** under current V1/V2 model.
 
 ## 13. Minimum audit event fields
 
@@ -141,16 +147,32 @@ High-value history should be append-only (events not overwritten).
 - Optimistic concurrency or equivalent on quote/invoice version rows.
 - Duplicate-event protection for future webhooks (design now).
 
-## 16. Future payment readiness (no live pay implementation)
+## 16. Payment / Stripe (V1 in scope — slice placement separate)
 
-Design **must not block**:
+**Product authority:** Stripe payment processing is **in V1** (`BHFOS_V1_V2_PRODUCT_BOUNDARY.md`).
+Earlier “no live pay in Phase 1” planning language is **superseded**.
 
-- partial payments, deposits, failed payments, refunds, chargebacks, credits
-- payment allocation and payment↔invoice reconciliation
-- idempotent payment requests
-- provider webhook retries and duplicate-event protection
+Design and implementation must support (minimum operational V1):
 
-Phase 1 **does not** implement live Stripe expansion; public-pay proof remains historical. New payment code requires separate Founder auth.
+- payment initiation and status  
+- payment confirmation  
+- failed payment handling  
+- duplicate payment protection  
+- webhook idempotency  
+- reconciliation  
+- refunds or void handling at minimum operational level  
+- audit history  
+- customer communication  
+- failure escalation  
+
+Public-pay + webhook spine already exists in code; gaps must be closed before V1
+freeze / USABLE. New payment code still requires normal Founder auth per PR/SHA.
+
+Also preserve readiness for (may deepen after minimum):
+
+- partial payments, deposits, credits  
+- payment allocation detail  
+- provider webhook retries (already partially present)
 
 ## 17. Explicitly not required in Phase 1
 

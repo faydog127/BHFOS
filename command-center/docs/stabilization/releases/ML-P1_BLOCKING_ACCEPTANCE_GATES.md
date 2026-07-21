@@ -25,13 +25,26 @@ CI green ≠ USABLE.
 
 **Fail:** Any required transition without complete event.
 
-## G-03 — Cross-tenant negative authorization
+## G-03 — Authorization negatives (V1 single-company)
 
-**Require:** Zero unauthorized cross-tenant access in negative tests.
+**Authoritative product decision:** BHFOS V1 operates for **The Vent Guys** only.
+**V2** is white-label **dedicated instance per company**. **Shared multi-tenancy
+is removed from V2 scope.** Cross-tenant isolation suites are **NOT APPLICABLE**
+to V1 or to V2 Money Loop acceptance.
 
-**Proof:** Automated tests for read/write across tenant boundary on money entities = DENY; zero successes.
+**V1 require:**
 
-**Fail:** Any unauthorized success.
+- Unauthenticated access to money-path actions → **DENY**
+- Unauthorized **internal role** for the action (Money-State §11) → **DENY**
+- Missing or malformed TVG company/tenant context on money writes → **DENY**
+
+**V1 proof:** Automated negatives for the three cases above; zero unauthorized successes.
+
+**V1 fail:** Any unauthorized success on those V1 cases.
+
+**Explicitly not required (V1 or V2 Money Loop):** Cross-tenant / shared-multi-tenant RLS negative suites; tenant-switching tests.
+
+**V2 instance platform (separate from Money Loop gates):** Dedicated-instance isolation is achieved by **separate deployment + data environment**, not shared-tenant RLS. Ops readiness for instance isolation is tracked under dedicated-instance operations — not G-03 cross-tenant.
 
 ## G-04 — Duplicate job/invoice under retry
 
@@ -75,9 +88,9 @@ CI green ≠ USABLE.
 
 ## G-09 — Single money-writer invariant
 
-**Require:** Single money-writer invariant proven.
+**Require:** Single money-writer invariant proven (**Slice S5b**).
 
-**Proof:** Writer inventory of all paths that mutate paid/amount_paid/balance_due/invoice paid status; exactly one canonical writer; negatives for alternates.
+**Proof:** Writer inventory of all paths that mutate paid/amount_paid/balance_due/invoice paid status; exactly one canonical Stripe/settlement writer; negatives for alternates.
 
 **Fail:** Second writer can mark paid, or inventory incomplete.
 
