@@ -27,7 +27,8 @@ Merge authorization only. **A3 apply / Hostinger deploy / Slice 4 remain separat
 | Branch / worktree | `ml/p1-s3-quote-to-job` / `F:\Dev\BHFOS-ml-p1-s3` |
 | Coding auth base | `ef2470715ddf90c34a77416183eb5b2421bd6373` |
 | Prior freeze (remediated) | `7fde2f4f2811b9074a1be2816b2b7ad3d4889656` |
-| **Frozen PR head** | `dce50d19cffec132bc2eec12eaadfdbe665ded1c` |
+| **Code freeze (lanes)** | `dce50d19cffec132bc2eec12eaadfdbe665ded1c` |
+| **PR tip (includes this packet)** | `ae18a05aa8f9d7562d6e5191615296b1e4fd13bf` |
 
 ## Operational problem
 
@@ -102,13 +103,13 @@ See `command-center/docs/stabilization/releases/ML-P1_SLICE3_PILOT_M1_M5.md` —
 
 ## Recommendation
 
-**Authorize merge of PR #84 at `dce50d19cffec132bc2eec12eaadfdbe665ded1c`.**
+**Authorize merge of PR #84 at tip `ae18a05aa8f9d7562d6e5191615296b1e4fd13bf`** (code freeze `dce50d19cffec132bc2eec12eaadfdbe665ded1c` + this packet).
 
 Do **not** apply migration or deploy under this packet. Next Founder line (separate): **A3** production apply + edge deploy + post-apply verification, then only later Slice 4 field execution.
 
 ## Exact authorization requested
 
-> **Yes — merge auth only** for PR #84 at exact head `dce50d19cffec132bc2eec12eaadfdbe665ded1c`.
+> **Yes — merge auth only** for PR #84 at exact tip `ae18a05aa8f9d7562d6e5191615296b1e4fd13bf` (reviewed code freeze `dce50d19cffec132bc2eec12eaadfdbe665ded1c`).
 
 Optional follow-on (yes/no; not authorized by this packet):
 

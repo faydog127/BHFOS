@@ -9,7 +9,7 @@
 | Coding auth base SHA | `ef2470715ddf90c34a77416183eb5b2421bd6373` (main) |
 | Branch / worktree | `ml/p1-s3-quote-to-job` / `F:\Dev\BHFOS-ml-p1-s3` |
 | PR | [#84](https://github.com/faydog127/BHFOS/pull/84) |
-| **Frozen review head** | `dce50d19cffec132bc2eec12eaadfdbe665ded1c` |
+| **Frozen review head** | Code: `dce50d19cffec132bc2eec12eaadfdbe665ded1c` · Tip: `ae18a05aa8f9d7562d6e5191615296b1e4fd13bf` |
 | Prior freeze (remediated) | `7fde2f4f2811b9074a1be2816b2b7ad3d4889656` |
 | Migration file | `command-center/supabase/migrations/20260721200000_ml_p1_s3_canonical_job_writer.sql` |
 | Migration SHA-256 | `B618AF707546150773784B71728BE75CE27C0A2B6D7814CF43EEFD41626579B1` |
