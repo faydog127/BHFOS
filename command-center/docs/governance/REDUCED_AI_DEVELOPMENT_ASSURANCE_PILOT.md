@@ -197,7 +197,7 @@ level. Escalate only for defined consequential conditions.
 | Milestone | Action |
 | --- | --- |
 | Now (on `main`) | Pilot active for S2/S3 |
-| After Slice 3 acceptance | Evaluate every control: STANDARDIZE / ADJUST / REMOVE |
+| After Slice 3 acceptance | Formal closeout per §11 — STANDARDIZE / ADJUST / REMOVE; Founder decides permanence |
 | Before that review | Do **not** make the pilot permanent |
 
 ---
@@ -213,6 +213,81 @@ The pilot must **not**:
 - alter the approved Money Loop roadmap  
 - independently authorize migration, deploy, or production mutation  
 - authorize Stripe, autonomous follow-up, TIS, or G2.3  
+
+---
+
+## 11. End-of-pilot performance evaluation
+
+After **Slice 3 acceptance**, perform a formal pilot closeout. Do **not** make the
+pilot permanent automatically. Fill
+[`../stabilization/releases/ML-P1_PILOT_CLOSEOUT.md`](../stabilization/releases/ML-P1_PILOT_CLOSEOUT.md)
+and complete `exit_review` in
+[`../stabilization/releases/ML-P1_PILOT_MEASUREMENTS.yaml`](../stabilization/releases/ML-P1_PILOT_MEASUREMENTS.yaml).
+
+### Baseline
+
+Compare Slice 2 and Slice 3 results against the most relevant **pre-pilot**
+baseline from recent BHFOS work (e.g. ML-P1 Slice 1 / PR #67 review cycle,
+governance PR #68–#71 interruption pattern). Record the chosen baseline SHA/PR
+set and why it is comparable.
+
+### Controls to evaluate (separately)
+
+1. Delegated authority (A0–A3 / limited docs-merge)  
+2. Risk-based review  
+3. Evidence manifest  
+4. Independent adversarial testing  
+5. Sentinel cases  
+6. Process measurement  
+
+### Per-control report fields
+
+| Field | Content |
+| --- | --- |
+| Intended benefit | What the control was supposed to improve |
+| Actual evidence | Measured facts, not preference |
+| Effect on development time | Faster / slower / unchanged (with numbers when available) |
+| Effect on Founder interruptions | Count/delta vs baseline |
+| Effect on remediation and defects | Rounds; pre-merge vs post-merge defects |
+| Manual effort introduced | Minutes per PR / slice |
+| Duplicated effort or review overlap | Where methods/roles overlapped without new evidence |
+| Failures or unintended consequences | |
+| Recommendation | **STANDARDIZE** \| **ADJUST** \| **REMOVE** |
+
+### Decision rules
+
+**STANDARDIZE** when the control reduced Founder interruptions, rework, escaped
+defects, or elapsed time — **or** materially improved evidence quality at low
+administrative cost.
+
+**ADJUST** when the control showed value but created avoidable friction,
+duplication, or excessive manual effort.
+
+**REMOVE** when the control created measurable delay or administrative work,
+did not prevent a material defect, did not reduce Founder involvement, **and**
+did not improve evidence quality.
+
+### Judge by (and not by)
+
+| Judge by | Do **not** judge by |
+| --- | --- |
+| Faster or more predictable delivery | Number of documents created |
+| Fewer unnecessary Founder interruptions | Number of reviews performed |
+| Fewer remediation cycles | Number of tests added |
+| Fewer escaped defects | Number of process steps completed |
+| Stronger **executed** evidence | |
+| Lower governance burden | |
+
+### Closeout outputs (required)
+
+PILOT CLOSEOUT RESULT · PRE-PILOT BASELINE · SLICE 2 RESULTS · SLICE 3 RESULTS ·
+CONTROL-BY-CONTROL EVALUATION · BENEFITS OBSERVED · ADVERSE EFFECTS ·
+FOUNDER INTERRUPTION CHANGE · DELIVERY-TIME CHANGE · DEFECT AND REMEDIATION
+CHANGE · GOVERNANCE-COST CHANGE · STANDARDIZE / ADJUST / REMOVE DECISIONS ·
+RECOMMENDED PERMANENT OPERATING MODEL · FOUNDER DECISION REQUIRED
+
+Founder must explicitly authorize any permanent adoption of STANDARDIZE
+controls. Until then, pilot remains temporary.
 
 ---
 

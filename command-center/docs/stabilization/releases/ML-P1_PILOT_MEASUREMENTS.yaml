@@ -1,11 +1,17 @@
 # ML-P1 Reduced Assurance Pilot — Measurements
 # Slice 2 and Slice 3 only. Simple durable file — not an analytics platform.
 # Update at slice closeout (and optionally at merge packet).
+# Formal evaluation: REDUCED_AI_DEVELOPMENT_ASSURANCE_PILOT.md §11 + ML-P1_PILOT_CLOSEOUT.md
 
 pilot_id: REDUCED_AI_DEVELOPMENT_ASSURANCE
 governance_doc: command-center/docs/governance/REDUCED_AI_DEVELOPMENT_ASSURANCE_PILOT.md
+closeout_doc: command-center/docs/stabilization/releases/ML-P1_PILOT_CLOSEOUT.md
 slices: [ML-P1-S2, ML-P1-S3]
 status: pending_docs_merge
+
+# Judge by: delivery predictability, Founder interruptions, remediation cycles,
+# escaped defects, executed evidence quality, governance burden.
+# Do NOT judge by: doc count, review count, test count, process-step count.
 
 measurements:
   - id: M1
@@ -23,6 +29,16 @@ measurements:
   - id: M5
     name: Governance time as percentage of total slice effort
     unit: percent
+
+pre_pilot_baseline:
+  description: null # e.g. ML-P1-S1 PR67 + docs PRs 68-71
+  founder_interruptions: null
+  elapsed_auth_to_reviewed_pr_hours: null
+  remediation_rounds: null
+  defects_before_merge: null
+  defects_after_merge: null
+  governance_time_percent: null
+  notes: ""
 
 slices_log:
   ML-P1-S2:
@@ -44,4 +60,25 @@ slices_log:
 
 exit_review:
   due: after_slice_3_acceptance
-  controls_eval: [] # each control -> STANDARDIZE | ADJUST | REMOVE
+  auto_permanize: false
+  controls_eval:
+    - control: delegated_authority
+      recommendation: null # STANDARDIZE | ADJUST | REMOVE
+      evidence: ""
+    - control: risk_based_review
+      recommendation: null
+      evidence: ""
+    - control: evidence_manifest
+      recommendation: null
+      evidence: ""
+    - control: independent_adversarial_testing
+      recommendation: null
+      evidence: ""
+    - control: sentinel_cases
+      recommendation: null
+      evidence: ""
+    - control: process_measurement
+      recommendation: null
+      evidence: ""
+  founder_decision_required: true
+  permanent_model_authorized: false
