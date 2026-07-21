@@ -16,10 +16,10 @@ prior_release_exit: "complete_minimum_safe_baseline"
 g2_3_reopen: "forbidden"
 baseline_sha: "6bc8db4f46bb604c0a3e4c9631985e8314616a8d"
 base_sha: "6bc8db4f46bb604c0a3e4c9631985e8314616a8d"
-pr_number: null
-head_sha: ""
+pr_number: 64
+head_sha: ""  # GitHub authoritative — record exact head at Founder merge auth
 
-check_status: "pending_planning_pr"
+check_status: "pending_ci"
 architecture_guard_status: "not_required_for_planning_docs"
 uat_status: "NOT_APPLICABLE"
 owner_checkpoint: "planning_transition_authorized"

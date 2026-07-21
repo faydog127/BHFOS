@@ -17,7 +17,7 @@
 - **Prior program:** `G2.3` — Stabilization Exit Review complete (minimum safe baseline); **closed, no reopen**
 - **Risk tier:** **Tier 3** (money-loop / financial domain) — this packet authorizes **planning docs only**
 - **Pinned baseline SHA:** `6bc8db4f46bb604c0a3e4c9631985e8314616a8d`
-- **PR and approved SHA:** `#<fill after PR open>` @ `<fill after PR open>` (base `origin/main` `6bc8db4f46bb604c0a3e4c9631985e8314616a8d`)
+- **PR and approved SHA:** `#64` @ `<exact head SHA at Founder merge auth — GitHub authoritative>` (base `origin/main` `6bc8db4f46bb604c0a3e4c9631985e8314616a8d`)
 
 ## Operational problem
 G2.3 reached a minimum safe diagnostics baseline, but the Money Loop remains
