@@ -1,0 +1,24 @@
+---
+description: Intra-scope auto-continue after Founder Category C authorization
+alwaysApply: true
+---
+
+# Founder intra-scope auto-continue
+
+Once the Founder authorizes a slice, deployment, migration, or bounded remediation scope, continue through all previously defined gates inside that scope without asking for repeated approval, when every required condition is met and nothing material changed.
+
+When predefined checks pass → proceed to the next authorized action and report the result.
+
+Stop and return to the Founder only when:
+
+- scope expands;
+- exact artifact or SHA changes outside the reviewed lineage;
+- a new migration, deployment target, payment action, customer communication, destructive action, or product decision was not already included;
+- a required check fails;
+- material risk changes;
+- rollback is unavailable;
+- or safe execution is otherwise uncertain.
+
+Do not ask the Founder to re-authorize an action that was already conditionally authorized and whose conditions are now satisfied.
+
+Do not invent new Category C actions (deploy, apply, merge, payments, etc.) that were never in the authorized line.

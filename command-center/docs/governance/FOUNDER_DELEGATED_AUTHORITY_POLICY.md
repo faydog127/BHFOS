@@ -148,6 +148,46 @@ Require Founder authorization before:
 
 ---
 
+## Intra-scope auto-continue (after Category C authorization)
+
+Once the Founder authorizes a slice, deployment, migration, or bounded remediation
+**scope**, the Orchestrator may continue through all **previously defined gates
+inside that scope** without returning for repeated approval, provided every
+required condition has been met and no material scope, artifact, risk, or
+production-impact change has occurred.
+
+When all predefined checks pass → **proceed automatically** to the next
+authorized action and **report the result**.
+
+**Stop and return to the Founder only when:**
+
+- scope expands;
+- the exact artifact or SHA changes outside the reviewed lineage;
+- a new migration, deployment target, payment action, customer communication,
+  destructive action, or product decision was **not** already included;
+- a required check fails;
+- material risk changes;
+- rollback is unavailable;
+- or safe execution is otherwise uncertain.
+
+**Do not** ask the Founder to re-authorize an action that was already
+conditionally authorized and whose conditions have now been satisfied.
+
+Examples (Slice 3 pattern):
+
+| Founder line already given | Auto-continue when conditions met |
+| --- | --- |
+| Merge auth at exact tip | Merge (no second ask) |
+| A3 migration apply at exact SHA | Prepare package → Founder SQL apply if Diagnostics cannot write → I2 post-apply |
+| Deploy auth at exact tip + Edge set + Hostinger | Edge deploy → Hostinger deploy → post-deploy verification |
+
+First Category C authorization for a new consequential action (e.g. deploy after
+only merge/apply were authorized) is still required. Auto-continue applies
+**within** that authorization's defined gates, not across unrelated Category C
+surfaces.
+
+---
+
 ## Guardrails
 
 1. Standing authority does **not** permit bypassing an unavailable capability through an unsafe tool (e.g. banned `execute-sql`, service-role mutation, Dashboard write).  
@@ -159,6 +199,7 @@ Require Founder authorization before:
 7. Do not turn routine Category A/B work into Founder approval gates.  
 8. Do not confuse Category B notification with Category C authorization.  
 9. `FOUNDER_RUN_READINESS` remains mandatory before asking the Founder to run terminals, OAuth consent, credential entry, dashboards, or protected launchers — and those asks should be rare under this policy.  
+10. Intra-scope auto-continue does **not** invent new Category C actions outside the authorized line.  
 
 ---
 
