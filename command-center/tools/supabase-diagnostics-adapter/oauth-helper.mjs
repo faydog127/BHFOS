@@ -21,7 +21,8 @@ export const LOCAL_LISTENER_URI = `http://${CALLBACK_HOST}:${CALLBACK_PORT}${CAL
 export const REDIRECT_URI = PUBLIC_REDIRECT_URI;
 export const AUTHORIZE_URL = 'https://api.supabase.com/v1/oauth/authorize';
 export const TOKEN_URL = 'https://api.supabase.com/v1/oauth/token';
-export const ALLOWED_SCOPES = new Set(['projects:read']);
+/** Token-store ceiling: Projects Read + Database Read only (no Write / no other scopes). */
+export const ALLOWED_SCOPES = new Set(['projects:read', 'database:read']);
 
 /** Listener bind contract — host must be loopback IP only (not 0.0.0.0). */
 export const CALLBACK_BIND = Object.freeze({
@@ -311,8 +312,11 @@ export function validateCallbackRequest({
  * schema gap — not unconditional OK. Callers must run
  * `attestPreStoreCapabilities` before any durable token write.
  *
- * When present: fail-closed ⊆ ALLOWED_SCOPES (`projects:read` only). No invented
- * normalization (e.g. projects.read / rest).
+ * When present: fail-closed ⊆ ALLOWED_SCOPES (`projects:read` + `database:read`
+ * only). No invented normalization (e.g. projects.read / rest). `projects:read`
+ * remains mandatory when scope is present; `database:read` is allowed (required
+ * at the Management API for catalog read-only) but not forced here because the
+ * platform may omit the scope field entirely.
  */
 export function assertTokenScopes(scopeField) {
   if (scopeField === undefined || scopeField === null || String(scopeField).trim() === '') {

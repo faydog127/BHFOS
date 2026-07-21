@@ -208,6 +208,12 @@ export async function runSelfTests() {
   } catch (e) {
     pass(results, 'unexpected_scope_rejected', e.code === 'UNEXPECTED_SCOPE');
   }
+  try {
+    assertTokenScopes('projects:read database:write');
+    pass(results, 'database_write_rejected', false);
+  } catch (e) {
+    pass(results, 'database_write_rejected', e.code === 'UNEXPECTED_SCOPE');
+  }
   const omitted = assertTokenScopes('');
   const omittedUndef = assertTokenScopes(undefined);
   pass(
@@ -220,6 +226,12 @@ export async function runSelfTests() {
       omitted.scopes.length === 0
   );
   pass(results, 'allowed_scope_ok', assertTokenScopes('projects:read').scopes.includes('projects:read'));
+  const both = assertTokenScopes('projects:read database:read');
+  pass(
+    results,
+    'allowed_scopes_projects_and_database_read',
+    both.scopes.includes('projects:read') && both.scopes.includes('database:read')
+  );
 
   // --- pre-store capability attestation (injected fetch; no live network) ---
   const allowPath = `/v1/projects/${PRODUCTION_PROJECT_REF}`;
