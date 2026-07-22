@@ -1,6 +1,6 @@
 # Remediation Review — ML-P1 Slice 4 R-S4-06 (emit actor_id uuid)
 
-Frozen head: "b6118c83aecf6c3c22985bf28b2d4045afa80e9a"  
+Frozen head: `25185d88f908500e41954a3e2591fece1b1f3eb7`  
 Migration: `20260722140000_ml_p1_s4_emit_actor_id_uuid.sql`  
 SHA-256 (LF): `6F13129B4F934E48C165CB1390828AD9FF4A61E44FB29F15442732897531F776`
 
