@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Verdict | **APPROVE** (SOURCE-ONLY + unit EXECUTED) |
-| Frozen head | *(PR tip)* |
+| Frozen head | e6138dd7afc7a0e4b6c630c6132e56eeaf5da631 |
 | Evidence class | SOURCE-ONLY for policy embedding; EXECUTED for PD-S4-02 client matrix |
 
 ## Findings

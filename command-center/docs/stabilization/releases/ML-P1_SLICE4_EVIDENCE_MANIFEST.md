@@ -6,7 +6,7 @@
 | Coding auth base SHA | `24cec0e4d168a17384a5c16616c41e637a713fdc` (main / PR #93 planning) |
 | Branch / worktree | `ml/p1-s4-job-execution` / `F:\Dev\BHFOS-ml-p1-s4` |
 | Ratified PDs | 01=B · 02=A · 03=C · 04=B · 05=accept · 06=A |
-| **Frozen review head** | *(set at PR tip after commit)* |
+| **Frozen review head** | e6138dd7afc7a0e4b6c630c6132e56eeaf5da631 |
 | Migrations | see checksum table below |
 | Tests executed | `node --test tests/unit/ml-p1-s4-execution.test.mjs` — **11/11 pass** |
 | Tests skipped + reason | Live DB concurrency / production apply / Hostinger deploy / photo storage upload E2E — **not authorized** (A3) |
