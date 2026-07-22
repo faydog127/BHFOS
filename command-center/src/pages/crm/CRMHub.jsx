@@ -192,8 +192,8 @@ const CRMHub = () => {
           )}
           {flags.enableEstimates && (
             <Button variant="outline" asChild>
-              <Link to={`/${tenantId}/crm/estimates/new`}>
-                <Plus className="mr-2 h-4 w-4" /> New Estimate
+              <Link to={`/${tenantId}/crm/quotes/new`}>
+                <Plus className="mr-2 h-4 w-4" /> New Quote
               </Link>
             </Button>
           )}
@@ -207,8 +207,8 @@ const CRMHub = () => {
           icon={TrendingUp}
           color="text-emerald-500"
           loading={loading}
-          subtext={`${performance.wonQuotes}/${performance.actionedQuotes} actioned estimates won`}
-          link={`/${tenantId}/crm/estimates?status=accepted`}
+          subtext={`${performance.wonQuotes}/${performance.actionedQuotes} actioned quotes won`}
+          link={`/${tenantId}/crm/quotes?status=accepted`}
         />
         <StatCard
           title="Money Generated"
@@ -232,13 +232,13 @@ const CRMHub = () => {
         )}
         {flags.enableEstimates && (
           <StatCard 
-            title="Estimates" 
+            title="Quotes" 
             value={stats.quotes} 
             icon={FileText} 
             color="text-orange-500" 
             loading={loading}
             subtext="Waiting Approval / Expired"
-            link={`/${tenantId}/crm/estimates?status=waiting_approval,expired`}
+            link={`/${tenantId}/crm/quotes?status=waiting_approval,expired`}
           />
         )}
         {flags.enableJobs && (

@@ -5,6 +5,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { Helmet } from 'react-helmet';
 import { supabase } from '@/lib/customSupabaseClient';
 import { getTenantId, resolveTenantIdFromSession, tenantPath } from '@/lib/tenantUtils';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
@@ -119,7 +120,7 @@ export default function MlP1S2QuoteLifecyclePage() {
         setJobStatus({ error: 'ML_P1_S3_JOB_ID_MISSING' });
       }
       if (result.action === 'revise' && result.quote?.id) {
-        navigate(tenantPath(`estimates/p1-lifecycle/${result.quote.id}`));
+        navigate(tenantPath(`/crm/quotes/p1-lifecycle/${result.quote.id}`));
       }
     } catch (error) {
       const msg =
@@ -146,7 +147,7 @@ export default function MlP1S2QuoteLifecyclePage() {
   if (!quote) {
     return (
       <div className="mx-auto max-w-lg p-4">
-        <Button variant="ghost" onClick={() => navigate(tenantPath('estimates'))}>
+        <Button variant="ghost" onClick={() => navigate(tenantPath('/crm/quotes'))}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Button>
         <p className="mt-4 text-sm text-slate-600">Quote not found.</p>
@@ -158,13 +159,16 @@ export default function MlP1S2QuoteLifecyclePage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-4 p-4 pb-16">
-      <Button variant="ghost" size="sm" onClick={() => navigate(tenantPath('estimates'))}>
-        <ArrowLeft className="mr-2 h-4 w-4" /> Estimates
+      <Helmet>
+        <title>Quote Lifecycle | CRM</title>
+      </Helmet>
+      <Button variant="ghost" size="sm" onClick={() => navigate(tenantPath('/crm/quotes'))}>
+        <ArrowLeft className="mr-2 h-4 w-4" /> Quotes
       </Button>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Quote lifecycle (Slice 2/3)</CardTitle>
+          <CardTitle className="text-lg">Quote lifecycle</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <div>

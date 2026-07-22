@@ -1081,7 +1081,7 @@ const ProposalBuilder = () => {
         .from('leads')
         .update({
           last_contact_at: new Date().toISOString(),
-          status: 'Estimate Sent'
+          status: 'Quote Sent'
         })
         .eq('id', pendingOverridePayload.lead_id);
 
@@ -1459,7 +1459,7 @@ const ProposalBuilder = () => {
                        description: data.error || 'Cost snapshot missing. Admin acknowledgement and reason are required.'
                      });
                      if (!id) {
-                       navigate(tenantPath(`/crm/estimates/${quoteId}`, resolvedTenantId));
+                       navigate(tenantPath(`/crm/quotes/${quoteId}`, resolvedTenantId));
                      }
                      return;
                  }
@@ -1495,7 +1495,7 @@ const ProposalBuilder = () => {
                  // Update lead status
                  await supabase.from('leads').update({
                      last_contact_at: new Date().toISOString(),
-                     status: 'Estimate Sent'
+                     status: 'Quote Sent'
                  }).eq('id', proposal.lead_id);
                  
              } catch (err) {
@@ -1515,7 +1515,7 @@ const ProposalBuilder = () => {
         clearBuilderDraft(PROPOSAL_BUILDER_DRAFT_KEY, activeTenantId, id || 'new');
 
         if (!id || isReleasedEdit || quoteId !== id) {
-          navigate(tenantPath(`/crm/estimates/${quoteId}`, resolvedTenantId));
+          navigate(tenantPath(`/crm/quotes/${quoteId}`, resolvedTenantId));
         } else {
           setProposal(prev => ({ ...prev, status: finalStatus, quote_number: persistedQuoteNumber }));
         }
@@ -1604,7 +1604,7 @@ const ProposalBuilder = () => {
     <div className="mx-auto max-w-5xl space-y-6 pb-24 lg:pb-20">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-            <Button variant="ghost" className="self-start" onClick={() => navigate(tenantPath('/crm/estimates', resolvedTenantId))}><ArrowLeft className="w-5 h-5" /></Button>
+            <Button variant="ghost" className="self-start" onClick={() => navigate(tenantPath('/crm/quotes', resolvedTenantId))}><ArrowLeft className="w-5 h-5" /></Button>
             <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                    <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">{id ? `Edit Quote #${proposal.quote_number}` : 'New Quote'}</h1>

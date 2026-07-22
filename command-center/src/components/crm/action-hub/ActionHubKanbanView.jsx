@@ -78,7 +78,7 @@ const ActionHubKanbanView = ({ items = [], isLoading, onMove }) => {
                 break;
             }
             case 'quote': {
-                navigate(tenantPath(`/crm/estimates/${card.entity_id}`, resolvedTenantId));
+                navigate(tenantPath(`/crm/quotes/${card.entity_id}`, resolvedTenantId));
                 break;
             }
             case 'invoice': {

@@ -118,15 +118,15 @@ export default function InspectionDeliveryPanel({ tenantId, inspection, quote, r
         )}
 
         <div className="border-t border-slate-200 pt-4">
-          <div className="mb-1 font-semibold">Estimate</div>
-          <p className="mb-3 text-xs text-slate-500">Pricing, price-book selection, approval, and estimate delivery are managed in Estimates.</p>
+          <div className="mb-1 font-semibold">Quote</div>
+          <p className="mb-3 text-xs text-slate-500">Pricing, price-book selection, approval, and quote delivery are managed in Quotes.</p>
           {quote?.id ? (
             <Button asChild variant="outline" className="w-full">
-              <Link to={`/${tenantId}/crm/estimates/${quote.id}`}>Open Linked Estimate</Link>
+              <Link to={`/${tenantId}/crm/quotes/p1-lifecycle/${quote.id}`}>Open Linked Quote</Link>
             </Button>
           ) : (
             <Button asChild variant="outline" className="w-full">
-              <Link to={`/${tenantId}/crm/estimates/new?inspection_id=${inspection.id}`}>Create Estimate</Link>
+              <Link to={`/${tenantId}/crm/quotes/new?inspection_id=${inspection.id}`}>Create Quote</Link>
             </Button>
           )}
         </div>

@@ -60,7 +60,7 @@ const KanbanCard = ({ id, card, onClick, isOverlay }) => {
     const resolvedTenantId = card?.tenant_id;
 
     if (card.entity_type === 'quote') {
-      navigate(tenantPath(`/crm/estimates/${card.entity_id}`, resolvedTenantId));
+      navigate(tenantPath(`/crm/quotes/${card.entity_id}`, resolvedTenantId));
       return;
     }
 

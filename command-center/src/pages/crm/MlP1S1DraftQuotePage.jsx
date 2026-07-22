@@ -4,6 +4,7 @@
  */
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet';
 import { supabase } from '@/lib/customSupabaseClient';
 import { getTenantId, resolveTenantIdFromSession, tenantPath } from '@/lib/tenantUtils';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
@@ -204,6 +205,9 @@ export default function MlP1S1DraftQuotePage() {
 
   return (
     <div className="mx-auto max-w-lg px-3 py-4 pb-24 space-y-4">
+      <Helmet>
+        <title>New Quote | CRM</title>
+      </Helmet>
       <div className="flex items-center gap-2">
         <Button
           type="button"
@@ -211,15 +215,15 @@ export default function MlP1S1DraftQuotePage() {
           size="icon"
           onClick={() => {
             bumpTap();
-            navigate(tenantPath('/crm/estimates'));
+            navigate(tenantPath('/crm/quotes'));
           }}
-          aria-label="Back"
+          aria-label="Back to Quotes"
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">P1 Draft Quote</h1>
-          <p className="text-xs text-slate-500">Slice 1 — customer + draft only (no issue/approve)</p>
+          <h1 className="text-lg font-semibold text-slate-900">New Quote</h1>
+          <p className="text-xs text-slate-500">Find or create a customer, then save a draft quote</p>
         </div>
       </div>
 
@@ -431,7 +435,7 @@ export default function MlP1S1DraftQuotePage() {
             <Button
               type="button"
               className="w-full"
-              onClick={() => navigate(tenantPath(`estimates/p1-lifecycle/${lastQuoteId}`))}
+              onClick={() => navigate(tenantPath(`/crm/quotes/p1-lifecycle/${lastQuoteId}`))}
             >
               Open Slice 2 lifecycle
             </Button>
@@ -439,9 +443,9 @@ export default function MlP1S1DraftQuotePage() {
               type="button"
               variant="outline"
               className="w-full"
-              onClick={() => navigate(tenantPath(`/crm/estimates/${lastQuoteId}`))}
+              onClick={() => navigate(tenantPath(`/crm/quotes/${lastQuoteId}`))}
             >
-              Open in estimates list editor (existing)
+              Open in quotes list editor (existing)
             </Button>
           </CardContent>
         </Card>

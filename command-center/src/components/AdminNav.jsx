@@ -32,7 +32,7 @@ const AdminNav = () => {
     { to: "/crm/leads", icon: Users, label: "Leads" },
     { to: "/crm/customers", icon: Users, label: "Customers" },
     { to: "/crm/partners", icon: Home, label: "Partners" },
-    { to: "/crm/estimates", icon: Calculator, label: "Estimates" },
+    { to: "/crm/quotes", icon: Calculator, label: "Quotes" },
     { to: "/crm/invoices", icon: FileText, label: "Invoices" },
     { to: "/crm/reporting", icon: BarChart, label: "Reports" },
     { to: "/crm/settings", icon: Settings, label: "Settings" },
