@@ -47,6 +47,9 @@ export default function TechJobExecutionPanel({ job, tenantId, onUpdated }) {
   const [coPriceBookId, setCoPriceBookId] = useState('');
   const [coUnitCents, setCoUnitCents] = useState('0');
   const [makeSafeSummary, setMakeSafeSummary] = useState('');
+  const [makeSafeReason, setMakeSafeReason] = useState('unsafe_condition');
+  const [makeSafeNotify, setMakeSafeNotify] = useState('in_person');
+  const [makeSafeAction, setMakeSafeAction] = useState('secure_component');
   const [changeOrders, setChangeOrders] = useState([]);
   const [blockers, setBlockers] = useState(job?.completion_blockers || []);
   const [photos, setPhotos] = useState(
@@ -185,17 +188,28 @@ export default function TechJobExecutionPanel({ job, tenantId, onUpdated }) {
   };
 
   const recordMakeSafe = () => {
-    if (!makeSafeSummary.trim()) {
-      toast({ variant: 'destructive', title: 'Summary required' });
+    const before = photos.find((p) => p.kind === 'before');
+    const after = photos.find((p) => p.kind === 'after');
+    if (!makeSafeSummary.trim() || !before || !after) {
+      toast({
+        variant: 'destructive',
+        title: 'Make-safe incomplete',
+        description: 'Summary plus before/after uploaded evidence are required.',
+      });
       return;
     }
     run(
       () =>
         service.recordMakeSafe(job.id, {
-          actionType: 'secure_component',
+          actionType: makeSafeAction,
           summary: makeSafeSummary.trim(),
+          reasonCode: makeSafeReason,
+          customerNotificationMethod: makeSafeNotify,
+          evidenceBeforeRef: before.object_path || before.url,
+          evidenceAfterRef: after.object_path || after.url,
+          evidenceRefs: [before, after],
         }),
-      'Make-safe recorded (non-billable)',
+      'Make-safe recorded (non-billable, pending office review)',
     );
   };
 
@@ -292,10 +306,25 @@ export default function TechJobExecutionPanel({ job, tenantId, onUpdated }) {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="text-xs text-slate-500">
-            Stop / disconnect / secure / document / advise only. Not billable. No repair or replace until CO approved.
+            Allowlist only. Zero billable value. Requires before/after evidence + customer notification. Enters office review queue. Separate approved CO required for billable repair.
           </div>
+          <select className="h-10 w-full rounded-md border px-2 text-sm" value={makeSafeAction} onChange={(e) => setMakeSafeAction(e.target.value)}>
+            <option value="stop_equipment">Stop unsafe equipment</option>
+            <option value="disconnect_appliance">Disconnect unsafe appliance</option>
+            <option value="secure_component">Secure unsafe vent/component</option>
+            <option value="document_condition">Document condition</option>
+            <option value="advise_customer">Advise customer not to operate</option>
+          </select>
+          <Input placeholder="Reason code" value={makeSafeReason} onChange={(e) => setMakeSafeReason(e.target.value)} />
+          <select className="h-10 w-full rounded-md border px-2 text-sm" value={makeSafeNotify} onChange={(e) => setMakeSafeNotify(e.target.value)}>
+            <option value="in_person">Customer notified in person</option>
+            <option value="phone">Customer notified by phone</option>
+            <option value="sms">Customer notified by SMS</option>
+            <option value="email">Customer notified by email</option>
+            <option value="other">Other approved notification</option>
+          </select>
           <Textarea
-            placeholder="Make-safe summary"
+            placeholder="Make-safe summary / action performed"
             value={makeSafeSummary}
             onChange={(e) => setMakeSafeSummary(e.target.value)}
           />

@@ -566,17 +566,13 @@ Deno.serve(async (req) => {
     const fromColumnKey = jobColumnKey(job.status);
     if (!fromColumnKey) {
       if (toColumnKey === 'invoice_open') {
-        const invoice = await getOrCreateInvoiceForJob(job);
         return respondJson(
           {
-            ok: true,
-            entity_type: 'invoice',
-            entity_id: invoice.id,
-            column_key: 'invoice_open',
-            transformed_from: { entity_type: 'job', entity_id: job.id },
+            error: 'ML_P1_S4_INVOICE_PATH_DENY: invoicing is Slice 5; kanban invoice create disabled',
+            code: 'ML_P1_S4_INVOICE_PATH_DENY',
           },
-          200,
-          cors.headers
+          409,
+          cors.headers,
         );
       }
 
@@ -587,45 +583,24 @@ Deno.serve(async (req) => {
       return respondJson({ ok: true, entity_type: 'job', entity_id: job.id, column_key: fromColumnKey }, 200, cors.headers);
     }
 
+    // ML-P1 S4: kanban is not an independent job execution / invoice writer.
     if (fromColumnKey === 'job_scheduled' && toColumnKey === 'job_completed') {
-      const { error: jobUpdateError } = await supabaseAdmin
-        .from('jobs')
-        .update({ status: 'completed', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-        .eq('id', job.id)
-        .eq('tenant_id', jwtTenantId);
-      if (jobUpdateError) {
-        return respondJson({ error: jobUpdateError.message }, 500, cors.headers);
-      }
-    } else if (fromColumnKey === 'job_completed' && toColumnKey === 'invoice_open') {
-      const invoice = await getOrCreateInvoiceForJob(job);
-      const { error: jobUpdateError } = await supabaseAdmin
-        .from('jobs')
-        .update({ status: 'invoiced', updated_at: new Date().toISOString() })
-        .eq('id', job.id)
-        .eq('tenant_id', jwtTenantId);
-      if (jobUpdateError) {
-        return respondJson({ error: jobUpdateError.message }, 500, cors.headers);
-      }
-
-      await supabaseAdmin.from('kanban_status_events').insert({
-        entity_type: 'job',
-        entity_id: job.id,
-        from_stage: fromColumnKey,
-        to_stage: toColumnKey,
-        actor_id: actorId,
-        metadata: { next_entity_type: 'invoice', next_entity_id: invoice.id },
-      });
-
       return respondJson(
         {
-          ok: true,
-          entity_type: 'invoice',
-          entity_id: invoice.id,
-          column_key: 'invoice_open',
-          transformed_from: { entity_type: 'job', entity_id: job.id },
+          error: 'ML_P1_S4_USE_CANONICAL_WRITER: complete jobs via ml_p1_s4_job_transition',
+          code: 'ML_P1_S4_USE_CANONICAL_WRITER',
         },
-        200,
-        cors.headers
+        409,
+        cors.headers,
+      );
+    } else if (fromColumnKey === 'job_completed' && toColumnKey === 'invoice_open') {
+      return respondJson(
+        {
+          error: 'ML_P1_S4_INVOICE_PATH_DENY: invoicing is Slice 5; kanban invoice create disabled',
+          code: 'ML_P1_S4_INVOICE_PATH_DENY',
+        },
+        409,
+        cors.headers,
       );
     } else {
       return respondJson({ error: 'Invalid job transition' }, 400, cors.headers);

@@ -24,7 +24,9 @@ export default function OfficeJobExecutionPanel({ job, tenantId, technicians = [
   const [reopenReason, setReopenReason] = useState('');
   const [cancelReason, setCancelReason] = useState('');
   const [bgReason, setBgReason] = useState('');
-  const [bgProof, setBgProof] = useState('');
+  const [bgEvidenceType, setBgEvidenceType] = useState('recorded_verbal');
+  const [bgEvidenceRef, setBgEvidenceRef] = useState('');
+  const [bgAuthAt, setBgAuthAt] = useState('');
   const [changeOrders, setChangeOrders] = useState([]);
   const [blockers, setBlockers] = useState([]);
 
@@ -147,10 +149,27 @@ export default function OfficeJobExecutionPanel({ job, tenantId, technicians = [
                     value={bgReason}
                     onChange={(e) => setBgReason(e.target.value)}
                   />
-                  <Textarea
-                    placeholder="Customer auth proof (required)"
-                    value={bgProof}
-                    onChange={(e) => setBgProof(e.target.value)}
+                  <select
+                    className="h-10 rounded-md border px-2 text-sm"
+                    value={bgEvidenceType}
+                    onChange={(e) => setBgEvidenceType(e.target.value)}
+                  >
+                    <option value="recorded_verbal">Recorded verbal</option>
+                    <option value="email">Email</option>
+                    <option value="sms">SMS</option>
+                    <option value="signed_document">Signed document</option>
+                    <option value="portal_token">Portal token</option>
+                    <option value="other_approved">Other approved</option>
+                  </select>
+                  <Input
+                    placeholder="Immutable evidence reference (storage path / message id)"
+                    value={bgEvidenceRef}
+                    onChange={(e) => setBgEvidenceRef(e.target.value)}
+                  />
+                  <Input
+                    type="datetime-local"
+                    value={bgAuthAt}
+                    onChange={(e) => setBgAuthAt(e.target.value)}
                   />
                   <Button
                     size="sm"
@@ -160,7 +179,9 @@ export default function OfficeJobExecutionPanel({ job, tenantId, technicians = [
                         () =>
                           service.transitionChangeOrder(co.id, 'approve_break_glass', {
                             reason: bgReason,
-                            customerAuthProof: bgProof,
+                            customerAuthEvidenceType: bgEvidenceType,
+                            customerAuthEvidenceRef: bgEvidenceRef,
+                            customerAuthAt: bgAuthAt ? new Date(bgAuthAt).toISOString() : new Date().toISOString(),
                           }),
                         'Break-glass approved',
                       )

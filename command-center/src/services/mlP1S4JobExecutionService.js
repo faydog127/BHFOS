@@ -84,13 +84,29 @@ export function createMlP1S4JobExecutionService({ supabase } = {}) {
       return data;
     },
 
-    recordMakeSafe: async (jobId, { actionType, summary, evidenceRefs = [], clientMutationId } = {}) => {
+    recordMakeSafe: async (
+      jobId,
+      {
+        actionType,
+        summary,
+        evidenceRefs = [],
+        reasonCode,
+        customerNotificationMethod,
+        evidenceBeforeRef,
+        evidenceAfterRef,
+        clientMutationId,
+      } = {},
+    ) => {
       const { data, error } = await supabase.rpc('ml_p1_s4_record_make_safe', {
         p_job_id: jobId,
         p_action_type: actionType,
         p_summary: summary,
         p_client_mutation_id: clientMutationId || newMutationId(),
         p_evidence_refs: evidenceRefs,
+        p_reason_code: reasonCode,
+        p_customer_notification_method: customerNotificationMethod,
+        p_evidence_before_ref: evidenceBeforeRef,
+        p_evidence_after_ref: evidenceAfterRef,
       });
       if (error) rpcError(error, 'Make-safe record failed');
       return data;
@@ -110,15 +126,47 @@ export function createMlP1S4JobExecutionService({ supabase } = {}) {
       return data;
     },
 
-    transitionChangeOrder: async (changeOrderId, action, { reason = null, customerAuthProof = null, clientMutationId } = {}) => {
+    transitionChangeOrder: async (
+      changeOrderId,
+      action,
+      {
+        reason = null,
+        customerAuthProof = null,
+        customerAuthEvidenceType = null,
+        customerAuthEvidenceRef = null,
+        customerAuthAt = null,
+        clientMutationId,
+      } = {},
+    ) => {
       const { data, error } = await supabase.rpc('ml_p1_s4_change_order_transition', {
         p_change_order_id: changeOrderId,
         p_action: action,
         p_client_mutation_id: clientMutationId || newMutationId(),
         p_reason: reason,
         p_customer_auth_proof: customerAuthProof,
+        p_customer_auth_evidence_type: customerAuthEvidenceType,
+        p_customer_auth_evidence_ref: customerAuthEvidenceRef,
+        p_customer_auth_at: customerAuthAt,
       });
       if (error) rpcError(error, `Change order ${action} failed`);
+      return data;
+    },
+
+    correctTimeEvent: async (
+      jobId,
+      sourceEventId,
+      { reason, correctedStartedAt = null, correctedEndedAt = null, correctedMiles = null, clientMutationId } = {},
+    ) => {
+      const { data, error } = await supabase.rpc('ml_p1_s4_correct_time_event', {
+        p_job_id: jobId,
+        p_source_event_id: sourceEventId,
+        p_client_mutation_id: clientMutationId || newMutationId(),
+        p_reason: reason,
+        p_corrected_started_at: correctedStartedAt,
+        p_corrected_ended_at: correctedEndedAt,
+        p_corrected_miles: correctedMiles,
+      });
+      if (error) rpcError(error, 'Time correction failed');
       return data;
     },
 

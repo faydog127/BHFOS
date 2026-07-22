@@ -68,13 +68,34 @@ describe('ML-P1 S4 migration source guards', () => {
 
 describe('ML-P1 S4 edge invoice-on-complete gate', () => {
   const edge = read('supabase/functions/work-order-update/index.ts');
+  const kanban = read('supabase/functions/kanban-move/index.ts');
+  const jobService = read('src/services/jobService.js');
+  const amend = read('supabase/migrations/20260722130000_ml_p1_s4_control_amendment.sql');
 
   it('disables invoice-on-complete and denies legacy execution writer path', () => {
     assert.match(edge, /ML_P1_S4_INVOICE_ON_COMPLETE_ENABLED = false/);
     assert.match(edge, /ML_P1_S4_USE_CANONICAL_WRITER/);
     assert.match(edge, /ml_p1_s4_invoice_on_complete_disabled/);
-    // completion path must not call ensure when flag false
     assert.match(edge, /if \(ML_P1_S4_INVOICE_ON_COMPLETE_ENABLED\)/);
+  });
+
+  it('denies kanban job completion and invoice create writers', () => {
+    assert.match(kanban, /ML_P1_S4_USE_CANONICAL_WRITER/);
+    assert.match(kanban, /ML_P1_S4_INVOICE_PATH_DENY/);
+    assert.equal(/status:\s*'completed'/.test(kanban), false);
+  });
+
+  it('denies local direct jobs.update fallback', () => {
+    assert.match(jobService, /ML_P1_S4_ALT_WRITER_DENY/);
+    assert.equal(/\.from\('jobs'\)\s*\n\s*\.update\(nextPatch\)/.test(jobService), false);
+  });
+
+  it('control amendment encodes make-safe / break-glass / operational time', () => {
+    assert.match(amend, /ML_P1_S4_MAKE_SAFE_EVIDENCE_REQUIRED/);
+    assert.match(amend, /ML_P1_S4_BREAK_GLASS_EVIDENCE_REQUIRED/);
+    assert.match(amend, /record_class = 'operational_only'/);
+    assert.match(amend, /pending_office_review/);
+    assert.match(amend, /ml_p1_s4_correct_time_event/);
   });
 });
 

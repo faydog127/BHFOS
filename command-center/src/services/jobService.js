@@ -119,53 +119,11 @@ const findLocalSchedulingConflict = async (jobId, tenantId, mergedPatch) => {
   }) || null;
 };
 
-const updateWorkOrderLocally = async (jobId, nextPatch, tenantId) => {
-  const { data: existingJob, error: existingJobError } = await supabase
-    .from('jobs')
-    .select('id, status, scheduled_start, scheduled_end, service_address, technician_id')
-    .eq('id', jobId)
-    .eq('tenant_id', tenantId)
-    .maybeSingle();
-
-  if (existingJobError) throw existingJobError;
-  if (!existingJob) throw new Error('Work order not found.');
-
-  const mergedPatch = {
-    ...existingJob,
-    ...nextPatch,
-  };
-
-  if (['scheduled', 'en_route', 'in_progress'].includes(String(mergedPatch.status || '').toLowerCase())) {
-    if (!mergedPatch.scheduled_start) {
-      throw new Error('Scheduled start is required before dispatching this work order.');
-    }
-    const addressValidation = getDispatchAddressValidation(mergedPatch.service_address);
-    if (!addressValidation.hasDispatchableAddress) {
-      throw new Error('Service address must include street, city, and state before dispatching this work order.');
-    }
-  }
-
-  const conflict = await findLocalSchedulingConflict(jobId, tenantId, mergedPatch);
-  if (conflict) {
-    throw new Error(`Scheduling conflict with ${conflict.work_order_number || 'another work order'} (${conflict.status || 'scheduled'}).`);
-  }
-
-  const { data, error } = await supabase
-    .from('jobs')
-    .update(nextPatch)
-    .eq('id', jobId)
-    .eq('tenant_id', tenantId)
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  return {
-    success: true,
-    job: data,
-    invoice: null,
-    invoiceResult: null,
-  };
+/** Legacy direct jobs.update path — denied under ML-P1 S4 (no independent writer). */
+const updateWorkOrderLocally = async () => {
+  throw new Error(
+    'ML_P1_S4_ALT_WRITER_DENY: direct jobs.update is forbidden; use ml_p1_s4_* RPCs via jobService/S4 service',
+  );
 };
 
 export const jobService = {
@@ -333,20 +291,20 @@ export const jobService = {
   },
 
   /**
-   * Mark a job as complete.
-   * Completion authority lives in the work-order-update edge function.
-   * It creates a draft invoice for founder review instead of auto-sending.
+   * Mark a job as complete via ML-P1 S4 canonical writer.
+   * Does not create invoices (Slice 5).
    */
   async completeJob(jobId, notes) {
-    const result = await this.updateWorkOrder(jobId, {
-        status: normalizeJobStatus('completed'),
-        completed_at: new Date().toISOString(),
-        technician_notes: notes,
-      });
-
-    if (!result.success) return result;
-
-    return { success: true, data: result.job };
+    try {
+      const svc = s4Service();
+      if (notes) {
+        await svc.upsertEvidence(jobId, { technicianNotes: notes });
+      }
+      const data = await svc.completeFinalize(jobId, { reason: 'jobService.completeJob' });
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   },
 
   /**
