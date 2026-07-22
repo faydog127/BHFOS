@@ -11,7 +11,7 @@
 
 ## Disposition
 
-See closeout companion: final disposition recorded after remediation merge + Hostinger redeploy.
+**`SLICES_1_3_COHERENCE_PASS`** — see `ML-P1_SLICES_1_3_COHERENCE_CLOSEOUT.md`.
 
 ## 1. Canonical terminology map
 
