@@ -1,32 +1,50 @@
 # ML-P1 Slice 4 — Planning Design (machines, auth, CO, UI, migration, tests)
 
 > Companion to `ML-P1_SLICE4_DECISION_PACKET.md`.  
-> Names marked **PROPOSED** pending Founder ratification of open product decisions.  
+> **Founder-ratified 2026-07-22** (PD-S4-01…06). Policy sections below are binding.  
 > Live aliases preferred where they already exist in DB/edge.
 
-Base: `2a03d876126329a5c97b36fce4414b1c91e56f3c`
+Base: `2a03d876126329a5c97b36fce4414b1c91e56f3c`  
+Disposition: `SLICE4_READY_TO_AUTHORIZE_CODING` (coding not started)
 
 ---
 
-## 1. Canonical job execution state machine (PROPOSED)
+## 0. Ratified product policy (binding)
+
+| PD | Decision |
+| --- | --- |
+| PD-S4-01 | **B** Make-safe only: stop equipment, disconnect unsafe appliance, secure unsafe vent/component, document, advise not to operate. No repair/replacement/billable extra until CO approved. Draft emergency CO; non-billable until approved. |
+| PD-S4-02 | **A** Tech never self-approves CO |
+| PD-S4-03 | **C** Optional customer ack; office waiver; tech must document why ack missing |
+| PD-S4-04 | **B** Price-book only for tech; free-form price needs office approval before customer sees/approves |
+| PD-S4-05 | Founder wording below; Dispatched = derived |
+| PD-S4-06 | **A** Customer required for every billable/material CO; office break-glass needs reason + proof of customer auth (verbal/email/text). Block complete while pending. Rejected never billable. Rejected CO does **not** block complete if unused and original scope done. |
+| Invoice | **Disable/gate** invoice-on-complete in S4 |
+
+---
+
+## 1. Canonical job execution state machine (RATIFIED language)
 
 ### 1.1 Vocabulary reconciliation
 
-| Founder candidate | Live / S4 proposed storage value | UI label (Work Order) | Notes |
-| --- | --- | --- | --- |
-| created | `unscheduled` | Unscheduled | Post–Slice 3 create |
-| (office queue) | `pending_schedule` | Needs schedule | Keep live |
-| scheduled | `scheduled` | Scheduled | Requires window and/or intent |
-| dispatched | *derived* or alias | Dispatched | **PROPOSED:** not a separate DB status — means `scheduled` + assigned tech + appointment window set |
-| on_the_way | `en_route` | On the way | Keep live token |
-| arrived | `arrived` **NEW** | Arrived | Add to contract |
-| in_progress | `in_progress` | In progress | Keep |
-| paused | `on_hold` | Paused | Keep live token; UI says Paused |
-| no_access | `no_access` **NEW** | No access | Add; requires reason |
-| reschedule_required | `reschedule_required` **NEW** | Reschedule required | Add; requires reason |
-| cancelled | `cancelled` | Cancelled | Terminal (with reopen break-glass separate) |
-| completion_pending | `completion_pending` **NEW** | Completion pending | Tech submitted; office/system validating evidence |
-| completed | `completed` | Completed | Terminal for S4; **no invoice create** |
+**Founder product sequence:**  
+Created → Scheduled → On the way → Arrived → In progress → Paused → No access / Reschedule required → Completion pending → Completed → Cancelled
+
+| Founder label | Live / S4 storage value | Notes |
+| --- | --- | --- |
+| Created | `unscheduled` | Post–Slice 3 create (UI may say Created) |
+| (office queue) | `pending_schedule` | Needs schedule — keep live |
+| Scheduled | `scheduled` | Requires window and/or intent |
+| Dispatched | *derived* | **Not** a tech action — `scheduled` + assigned tech + appointment confirmed |
+| On the way | `en_route` | Keep live token |
+| Arrived | `arrived` **NEW** | Add to contract |
+| In progress | `in_progress` | Keep |
+| Paused | `on_hold` | Keep live token; UI says Paused |
+| No access | `no_access` **NEW** | Requires reason |
+| Reschedule required | `reschedule_required` **NEW** | Requires reason |
+| Completion pending | `completion_pending` **NEW** | Evidence / office validation |
+| Completed | `completed` | Terminal for S4; **no invoice create** |
+| Cancelled | `cancelled` | Terminal (reopen = office break-glass) |
 
 **Out of S4 writable FSM (operational/invoice layer):** `ready_to_invoice`, `invoiced`, `open`, `closed`, `started`, `pending` — normalize/read-only aliases only; S5 owns invoice stage.
 
@@ -82,16 +100,17 @@ Roles (extend S2 normalize): `admin`, `office`/`csr`, `dispatcher`, `technician`
 | Complete / submit completion | Y | Y | N default | Y | N | N | N | N |
 | Reopen completed | Break-glass + reason | Break-glass + reason | N | N | N | N | N | N |
 | Propose change order | Y | Y | N | Y | N | N | Per policy | N |
-| Approve change order (customer) | — | — | — | N | N | N | N | Token path |
-| Approve change order (office) | Y | Y‡ | N | **PD-S4-02** | N | N | N | N |
-| Break-glass CO approve | Y + reason | Admin-equivalent + reason | N | N | N | N | N | N |
-| Set CO prices | **PD-S4-04** | **PD-S4-04** | N | Propose only default | N | N | N | N |
+| Approve change order (customer) | — | — | — | N | N | N | N | Token path (required for billable/material) |
+| Approve change order (office) | Y* | Y* | N | **N** | N | N | N | N |
+| Break-glass CO approve | Y + reason + proof | Y + reason + proof | N | N | N | N | N | N |
+| Set CO prices | Office free-form OK | Office free-form OK | N | Price book only | N | N | N | N |
 | Edit time/mileage correction | Y | Y + reason | Y + reason | Own events + reason (limited window) | N | N | N | N |
 | View job / evidence | Y | Y | Y | Assigned | N | Y read | Scoped | Own job token |
 
 \* Tech may propose reschedule → office/dispatcher confirms.  
 † Office/dispatcher field actions are break-glass when not assigned tech.  
-‡ Office approve of CO may still require customer path for material deltas — **PD**.
+\* Office CO approve follows PD-S4-06 (customer required; break-glass needs reason + proof of customer authorization).  
+‡ *(removed — see PD ratification §0)*
 
 UI hiding ≠ authorization. Server DENY-by-default.
 
@@ -162,7 +181,7 @@ All actions: idempotency key (job_id + action + client_mutation_id); duplicate t
 
 ## 6. Evidence and completion contract
 
-### Required for completion (PROPOSED defaults — signature is **PD-S4-03**)
+### Required for completion (RATIFIED)
 
 | Artifact | Required? | Storage |
 | --- | --- | --- |
@@ -173,9 +192,9 @@ All actions: idempotency key (job_id + action + client_mutation_id); duplicate t
 | Customer-facing summary | Y | `customer_summary` |
 | Checklist | Y all required items true | `execution_checklist` |
 | Parts/materials | Y if used; else explicit “none” | new `job_materials` or checklist section |
-| Signature / acknowledgement | **PD-S4-03** | deferred until decided |
+| Signature / acknowledgement | **Optional (PD-S4-03)**; if missing, tech documents why; office may waive with reason | signature / ack fields |
 | Approved CO scope | All approved COs accounted | CO ledger |
-| Rejected/unapproved CO work | Must be absent from billable completion set | gate |
+| Rejected/unapproved CO work | Must be absent from billable completion set; rejected unused CO does **not** block complete | gate |
 
 **Blockers** list returned by `ml_p1_s4_completion_readiness(job_id)`; complete DENY if any blocker.
 
@@ -223,46 +242,60 @@ superseded → terminal
 
 Immutable after `approved` / `rejected` / `cancelled` / `superseded`.
 
-### 7.3 CO approval matrix
+### 7.3 CO approval matrix (RATIFIED)
 
 | Actor | Propose | Approve | Reject | Break-glass approve |
 | --- | --- | --- | --- | --- |
-| Technician (assigned) | Y | **PD-S4-02** default **N** | N | N |
-| Office/CSR | Y | Y (policy) | Y | If admin-equivalent + reason |
-| Admin | Y | Y | Y | Y + reason |
-| Customer (token) | N | Y (public CO approve) | Y | N |
+| Technician (assigned) | Y | **N** (PD-S4-02) | N | N |
+| Office/CSR | Y | Y only with customer path or break-glass | Y | Break-glass: reason + documented proof of customer authorization (verbal/email/text) (PD-S4-06) |
+| Admin | Y | Y (same customer/break-glass rules) | Y | Y + reason + proof |
+| Customer (token) | N | Y (required for every billable/material CO) | Y | N |
 | Dispatcher / Viewer / Partner | N / read | N | N | N |
 
-Repeated approve → idempotent return same approval. Concurrent approve → one winner; loser gets already_approved.
+**Pricing (PD-S4-04):** Tech selects price-book services/qty/options only. Free-form price requires office approval **before** customer sees or approves.
+
+Repeated approve → idempotent. Concurrent approve → one winner.
 
 ### 7.4 Billing readiness handoff (S5)
 
 - Approved CO deltas are the **only** additive billable scope beyond original quote version.
 - Rejected/cancelled/draft/proposed/pending → **not billable**.
 - S5 invoice generation must read CO ledger; S4 only marks completion readiness including CO accounting.
+- **S4 does not create invoices** (invoice-on-complete disabled/gated).
 
-### 7.5 Emergency / safety exception
+### 7.5 Emergency / safety exception (RATIFIED PD-S4-01 = B)
 
-**Not invented.** See Decision Packet **PD-S4-01**. Until decided: server DENY any scope outside approved quote + approved COs.
+**Make-safe allowlist only:**
+
+- stop equipment  
+- disconnect unsafe appliance  
+- secure unsafe vent/component  
+- document condition (+ photos as required)  
+- advise customer not to operate  
+
+**Not allowed before CO approval:** repair, replacement, billable extra work.
+
+Server creates/attaches an emergency make-safe CO draft; remains **non-billable until approved**.
 
 ---
 
-## 8. Job completion rules
+## 8. Job completion rules (RATIFIED)
 
 Completion allowed iff:
 
 1. Job in `in_progress` or `completion_pending`.
 2. Original approved quote scope completed or explicitly waived items with office reason.
 3. Every **approved** CO accounted (done / N/A with reason).
-4. No pending/proposed CO blocking (policy: block complete while `pending_approval` — **recommended Y**).
-5. Evidence contract pass.
-6. Technician notes present.
-7. No unresolved blockers.
-8. Actor authorized.
-9. `completed_at` set server-side once; audit `JobCompleted`.
-10. Idempotent: second complete returns same `completed_at` / job id.
+4. **No CO in `pending_approval`** (block complete while pending — PD-S4-06).
+5. Rejected COs: **not billable**; do **not** block complete if rejected work was **not performed**.
+6. Evidence contract pass; optional customer ack per PD-S4-03 (if missing: tech reason; office may waive).
+7. Technician notes present.
+8. No unresolved blockers.
+9. Actor authorized.
+10. `completed_at` set server-side once; audit `JobCompleted`.
+11. Idempotent: second complete returns same `completed_at` / job id.
 
-**S4 does not create invoices.** Remove/disable invoice branch in `work-order-update` for S4 writer.
+**S4 does not create invoices.** Disable/gate invoice branch in `work-order-update` for S4 path.
 
 ---
 
