@@ -1,0 +1,239 @@
+{
+  "disposition": "SLICE4_PRODUCTION_VALIDATION_PASS",
+  "runTag": "S4-SYNTH-1784701231153",
+  "techEmail": "synth.tech.s4@example.invalid",
+  "officeEmail": "synth.office.s4@example.invalid",
+  "techUid": "8eadcdd3-0723-4a95-bc03-4d69a6281f1d",
+  "officeUid": "e8a4c5ed-a3f3-4817-b7ac-6e8d617fe3ce",
+  "techRosterId": "02743912-4123-4764-81ac-e9a3af7dc8ee",
+  "results": [
+    {
+      "name": "credential_emails",
+      "ok": true,
+      "detail": {
+        "tech": "synth.tech.s4@example.invalid",
+        "office": "synth.office.s4@example.invalid"
+      }
+    },
+    {
+      "name": "office_role",
+      "ok": true,
+      "detail": "office"
+    },
+    {
+      "name": "technician_role",
+      "ok": true,
+      "detail": "technician"
+    },
+    {
+      "name": "technician_roster_link",
+      "ok": true,
+      "detail": {
+        "id": "02743912-4123-4764-81ac-e9a3af7dc8ee",
+        "user_id": "8eadcdd3-0723-4a95-bc03-4d69a6281f1d",
+        "email": "synth.tech.s4@example.invalid",
+        "full_name": "S4 Synthetic Technician",
+        "is_active": true
+      }
+    },
+    {
+      "name": "office_login",
+      "ok": true,
+      "detail": "e8a4c5ed-a3f3-4817-b7ac-6e8d617fe3ce"
+    },
+    {
+      "name": "tech_login",
+      "ok": true,
+      "detail": "8eadcdd3-0723-4a95-bc03-4d69a6281f1d"
+    },
+    {
+      "name": "create_synthetic_lead",
+      "ok": true,
+      "detail": "457240dd-9199-422d-8d6f-c4b81ae7aff6"
+    },
+    {
+      "name": "create_synthetic_job",
+      "ok": true,
+      "detail": {
+        "jobId": "514edaed-2cd6-4387-9255-484e3420df44",
+        "status": "unscheduled"
+      }
+    },
+    {
+      "name": "office_assign_schedule",
+      "ok": true,
+      "detail": {
+        "job_id": "514edaed-2cd6-4387-9255-484e3420df44",
+        "status": "scheduled",
+        "scheduled_end": "2026-07-22T09:20:32.532+00:00",
+        "technician_id": "02743912-4123-4764-81ac-e9a3af7dc8ee",
+        "scheduled_start": "2026-07-22T07:20:32.532+00:00",
+        "execution_row_version": 2
+      }
+    },
+    {
+      "name": "office_assign_audit_actor_uuid",
+      "ok": true,
+      "detail": {
+        "actor": "e8a4c5ed-a3f3-4817-b7ac-6e8d617fe3ce",
+        "event": {
+          "actor_id": "e8a4c5ed-a3f3-4817-b7ac-6e8d617fe3ce",
+          "event_type": "JobAssignedScheduled"
+        }
+      }
+    },
+    {
+      "name": "tech_transition_on_my_way",
+      "ok": true,
+      "detail": "en_route"
+    },
+    {
+      "name": "tech_transition_audit_actor_uuid",
+      "ok": true,
+      "detail": {
+        "actor_id": "8eadcdd3-0723-4a95-bc03-4d69a6281f1d",
+        "event_type": "JobTransition_on_my_way"
+      }
+    },
+    {
+      "name": "tech_transition_arrive",
+      "ok": true,
+      "detail": "arrived"
+    },
+    {
+      "name": "tech_transition_start",
+      "ok": true,
+      "detail": "in_progress"
+    },
+    {
+      "name": "tech_co_propose",
+      "ok": true,
+      "detail": {
+        "status": "pending_approval",
+        "change_order_id": "96ee27c3-336b-4054-b3b7-3f40ef849e7b",
+        "source_quote_id": null,
+        "free_form_pricing": false,
+        "source_quote_version": null,
+        "financial_delta_cents": 0
+      }
+    },
+    {
+      "name": "tech_self_approve_deny",
+      "ok": true,
+      "detail": "ML_P1_S4_ROLE_DENY: role \"technician\" cannot perform co.approve_break_glass"
+    },
+    {
+      "name": "office_co_break_glass_approve",
+      "ok": true,
+      "detail": {
+        "status": "approved",
+        "to_status": "approved",
+        "from_status": "pending_approval",
+        "quote_mutated": false,
+        "approval_method": "break_glass",
+        "change_order_id": "96ee27c3-336b-4054-b3b7-3f40ef849e7b",
+        "invoice_mutated": false,
+        "financial_delta_cents": 0
+      }
+    },
+    {
+      "name": "tech_make_safe",
+      "ok": true,
+      "detail": {
+        "job_id": "514edaed-2cd6-4387-9255-484e3420df44",
+        "billable": false,
+        "make_safe_id": "ec950fe0-b4e7-4f77-9e23-293b45890062",
+        "office_review_status": "pending_office_review"
+      }
+    },
+    {
+      "name": "tech_upsert_evidence",
+      "ok": true,
+      "detail": "514edaed-2cd6-4387-9255-484e3420df44"
+    },
+    {
+      "name": "completion_readiness_ready",
+      "ok": true,
+      "detail": {
+        "ready": true,
+        "job_id": "514edaed-2cd6-4387-9255-484e3420df44",
+        "blockers": [],
+        "pending_change_orders": 0,
+        "approved_change_orders": 1
+      }
+    },
+    {
+      "name": "tech_complete_finalize",
+      "ok": true,
+      "detail": {
+        "job_id": "514edaed-2cd6-4387-9255-484e3420df44",
+        "status": "completed",
+        "readiness": {
+          "ready": true,
+          "job_id": "514edaed-2cd6-4387-9255-484e3420df44",
+          "blockers": [],
+          "pending_change_orders": 0,
+          "approved_change_orders": 1
+        },
+        "to_status": "completed",
+        "from_status": "in_progress",
+        "completed_at": "2026-07-22T06:20:33.306339+00:00",
+        "invoice_created": false,
+        "execution_row_version": 8
+      }
+    },
+    {
+      "name": "no_invoice_created",
+      "ok": true,
+      "detail": {
+        "count": 0
+      }
+    },
+    {
+      "name": "final_job_posture",
+      "ok": true,
+      "detail": {
+        "status": "completed",
+        "is_test_data": true,
+        "technician_id": "02743912-4123-4764-81ac-e9a3af7dc8ee"
+      }
+    },
+    {
+      "name": "cleanup_job_gone",
+      "ok": true,
+      "detail": {
+        "orphanJobs": 0,
+        "jobId": "514edaed-2cd6-4387-9255-484e3420df44"
+      }
+    },
+    {
+      "name": "cleanup_lead_gone",
+      "ok": true,
+      "detail": {
+        "orphanLeads": 0,
+        "leadId": "457240dd-9199-422d-8d6f-c4b81ae7aff6"
+      }
+    },
+    {
+      "name": "cleanup_aggregate_synth_jobs",
+      "ok": true,
+      "detail": {
+        "jobCount": 0
+      }
+    },
+    {
+      "name": "cleanup_aggregate_synth_leads",
+      "ok": true,
+      "detail": {
+        "leadCount": 0
+      }
+    },
+    {
+      "name": "cleanup_no_errors",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "failed": [],
+  "at": "2026-07-22T06:20:36.161Z"
+}
