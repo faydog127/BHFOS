@@ -237,7 +237,7 @@ Idempotent job from approved version; lineage; dup-job prevention; audit. Stop b
 
 ### S4 — Job execution and completion
 
-Authorized field transitions; evidence; mobile; Notes-escape measurement. Includes statuses needed for later on-my-way / no-access **comms** (comms themselves in S6). Stop before invoice. Branch `ml/p1-s4-job-execution`.
+Authorized field transitions; evidence; mobile; Notes-escape measurement; **first-class change orders** (Founder S4 planning expansion). Includes statuses needed for later on-my-way / no-access **comms** (comms themselves in S6). Stop before invoice. Planning: `ML-P1_SLICE4_DECISION_PACKET.md`. Branch `ml/p1-s4-job-execution`.
 
 ### S5 — Completed job → invoice
 
