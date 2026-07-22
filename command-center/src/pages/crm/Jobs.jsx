@@ -8,6 +8,8 @@ import {
   normalizePaymentStatus,
 } from '@/lib/jobStatus';
 import { jobService } from '@/services/jobService';
+import OfficeJobExecutionPanel from '@/components/crm/jobs/OfficeJobExecutionPanel';
+import { formatS4StatusLabel } from '@/lib/mlP1S4RoleAuthz';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -114,16 +116,32 @@ const Jobs = () => {
     const composed = [street, [city, state, zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     return asText(composed || addressData.formatted_address);
   };
-  const statusOptions = ['unscheduled', 'pending_schedule', 'scheduled', 'en_route', 'in_progress', 'on_hold', 'completed', 'cancelled'];
+  const statusOptions = [
+    'unscheduled',
+    'pending_schedule',
+    'scheduled',
+    'en_route',
+    'arrived',
+    'in_progress',
+    'on_hold',
+    'no_access',
+    'reschedule_required',
+    'completion_pending',
+    'completed',
+    'cancelled',
+  ];
   const getOperationalStage = (job) => job?.operational_stage || normalizeStatus(job?.status);
   const collectionStages = ['invoice_draft', 'invoiced'];
 
-  const formatStatusLabel = (status) =>
-    normalizeStatus(status)
+  const formatStatusLabel = (status) => {
+    const s4 = formatS4StatusLabel(status);
+    if (s4 && s4 !== 'Unknown') return s4;
+    return normalizeStatus(status)
       .split('_')
       .filter(Boolean)
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join(' ');
+  };
 
   const statusOptionsForJob = (status) => {
     const normalized = normalizeStatus(status);
@@ -967,6 +985,14 @@ const Jobs = () => {
           </DialogHeader>
           {recordJob ? (
             <div className="space-y-4 py-2">
+              <OfficeJobExecutionPanel
+                job={recordJob}
+                tenantId={tenantId}
+                technicians={technicians}
+                onUpdated={() => {
+                  fetchJobs();
+                }}
+              />
               <div className="rounded-md border bg-slate-50 p-4">
                 <div className="text-xs text-slate-500">Work Order</div>
                 <div className="font-semibold text-slate-900">{getWorkOrderLabel(recordJob)}</div>

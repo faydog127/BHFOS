@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import TechSendQuoteDialog from '@/components/tech/TechSendQuoteDialog';
+import TechJobExecutionPanel from '@/components/tech/TechJobExecutionPanel';
 
 const asText = (v) => (typeof v === 'string' ? v.trim() : '');
 
@@ -71,6 +72,14 @@ export default function TechJobDetail() {
           scheduled_end,
           service_address,
           work_order_number,
+          technician_id,
+          technician_notes,
+          customer_summary,
+          execution_findings,
+          execution_photos,
+          execution_checklist,
+          execution_row_version,
+          completion_blockers,
           lead:leads(id, first_name, last_name, company, email, phone)
         `,
         )
@@ -239,6 +248,8 @@ export default function TechJobDetail() {
           ) : null}
         </CardContent>
       </Card>
+
+      <TechJobExecutionPanel job={job} tenantId={tenantId} onUpdated={() => load()} />
 
       <Card className="border-slate-200 shadow-sm">
         <CardHeader>

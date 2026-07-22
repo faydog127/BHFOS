@@ -45,12 +45,37 @@ const CUSTOMER_TYPE_ALIAS_MAP: Record<string, string> = {
 const STATUS_TRANSITIONS: Record<string, string[]> = {
   unscheduled: ['unscheduled', 'pending_schedule', 'scheduled', 'on_hold', 'cancelled'],
   pending_schedule: ['pending_schedule', 'unscheduled', 'scheduled', 'on_hold', 'cancelled'],
-  scheduled: ['scheduled', 'pending_schedule', 'en_route', 'in_progress', 'on_hold', 'cancelled', 'completed'],
-  en_route: ['en_route', 'scheduled', 'in_progress', 'on_hold', 'cancelled'],
-  in_progress: ['in_progress', 'on_hold', 'completed', 'cancelled'],
-  on_hold: ['on_hold', 'pending_schedule', 'scheduled', 'in_progress', 'cancelled'],
+  scheduled: ['scheduled', 'pending_schedule', 'en_route', 'arrived', 'in_progress', 'on_hold', 'no_access', 'reschedule_required', 'cancelled'],
+  en_route: ['en_route', 'arrived', 'scheduled', 'in_progress', 'on_hold', 'no_access', 'reschedule_required', 'cancelled'],
+  arrived: ['arrived', 'in_progress', 'on_hold', 'no_access', 'reschedule_required', 'cancelled'],
+  in_progress: ['in_progress', 'on_hold', 'completion_pending', 'completed', 'no_access', 'reschedule_required', 'cancelled'],
+  on_hold: ['on_hold', 'pending_schedule', 'scheduled', 'en_route', 'arrived', 'in_progress', 'reschedule_required', 'cancelled'],
+  no_access: ['no_access', 'reschedule_required', 'scheduled', 'cancelled'],
+  reschedule_required: ['reschedule_required', 'pending_schedule', 'scheduled', 'cancelled'],
+  completion_pending: ['completion_pending', 'completed', 'in_progress', 'cancelled'],
   completed: ['completed'],
   cancelled: ['cancelled'],
+};
+
+/** ML-P1 S4: invoice-on-complete is disabled. Slice 5 owns invoicing. */
+const ML_P1_S4_INVOICE_ON_COMPLETE_ENABLED = false;
+
+const mapStatusToS4Action = (fromStatus: string, toStatus: string): string | null => {
+  const from = normalizeJobStatus(fromStatus);
+  const to = normalizeJobStatus(toStatus);
+  if (!to || from === to) return null;
+  if (to === 'en_route') return 'on_my_way';
+  if (to === 'arrived') return 'arrive';
+  if (to === 'in_progress' && from === 'on_hold') return 'resume';
+  if (to === 'in_progress') return 'start';
+  if (to === 'on_hold') return 'pause';
+  if (to === 'no_access') return 'no_access';
+  if (to === 'reschedule_required') return 'request_reschedule';
+  if (to === 'completion_pending') return 'complete_submit';
+  if (to === 'completed') return 'complete_finalize';
+  if (to === 'cancelled') return 'cancel';
+  if (to === 'scheduled') return 'schedule_via_assign';
+  return null;
 };
 
 const JOB_SELECT =
@@ -727,10 +752,13 @@ Deno.serve(async (req) => {
     const patch = buildPatch(patchInput as Record<string, unknown>);
     const mergedJob = { ...existingJob, ...patch };
     const nextStatus = normalizeJobStatus((patch as Record<string, unknown>).status || existingJob.status);
+    const statusChanging = 'status' in patch && normalizeJobStatus(patch.status) !== normalizeJobStatus(existingJob.status);
+    const scheduleChanging =
+      'scheduled_start' in patch || 'scheduled_end' in patch || 'technician_id' in patch;
 
     validateStatusTransition(existingJob.status, nextStatus);
 
-    if (nextStatus === 'scheduled' || nextStatus === 'en_route' || nextStatus === 'in_progress') {
+    if (nextStatus === 'scheduled' || nextStatus === 'en_route' || nextStatus === 'arrived' || nextStatus === 'in_progress') {
       if (!asNullableString(mergedJob.scheduled_start)) {
         return json({ error: 'Scheduled start is required before dispatching this work order.' }, 400);
       }
@@ -755,6 +783,19 @@ Deno.serve(async (req) => {
       }, 409);
     }
 
+    // ML-P1 S4: execution fields require authenticated canonical RPCs (not service-role edge).
+    if (statusChanging || scheduleChanging) {
+      const suggested = mapStatusToS4Action(String(existingJob.status || ''), String(nextStatus || ''));
+      return json({
+        error: 'ML_P1_S4_USE_CANONICAL_WRITER: use ml_p1_s4_job_transition / ml_p1_s4_assign_and_schedule',
+        code: 'ML_P1_S4_USE_CANONICAL_WRITER',
+        from: existingJob.status,
+        to: nextStatus,
+        suggested_action: suggested,
+        invoice_on_complete: false,
+      }, 409);
+    }
+
     if (!asNullableString(mergedJob.customer_type_snapshot)) {
       patch.customer_type_snapshot = await loadLeadCustomerType(asNullableString(existingJob.lead_id), jwtTenantId);
     }
@@ -764,6 +805,12 @@ Deno.serve(async (req) => {
         (patch as Record<string, unknown>).customer_type_snapshot || existingJob.customer_type_snapshot,
       );
     }
+
+    // Strip guarded fields from legacy patch path (defense in depth).
+    delete (patch as Record<string, unknown>).status;
+    delete (patch as Record<string, unknown>).technician_id;
+    delete (patch as Record<string, unknown>).scheduled_start;
+    delete (patch as Record<string, unknown>).scheduled_end;
 
     const { data, error } = await updateJobRow(jobId, jwtTenantId, patch);
 
@@ -780,15 +827,23 @@ Deno.serve(async (req) => {
     const jobForInvoice = { ...existingJob, ...data, tenant_id: jwtTenantId };
 
     if (nextStatus === 'completed') {
-      try {
-        invoiceResult = await ensureInvoiceForCompletedJob(
-          jobForInvoice,
-          jwtTenantId,
-        );
-      } catch (invoiceError) {
-        console.error('work-order-update invoice flow failed:', invoiceError);
+      // ML-P1 S4 boundary: never create invoices from completion.
+      if (ML_P1_S4_INVOICE_ON_COMPLETE_ENABLED) {
+        try {
+          invoiceResult = await ensureInvoiceForCompletedJob(
+            jobForInvoice,
+            jwtTenantId,
+          );
+        } catch (invoiceError) {
+          console.error('work-order-update invoice flow failed:', invoiceError);
+          invoiceResult = {
+            error: invoiceError instanceof Error ? invoiceError.message : 'Invoice flow failed.',
+          };
+        }
+      } else {
         invoiceResult = {
-          error: invoiceError instanceof Error ? invoiceError.message : 'Invoice flow failed.',
+          skipped: 'ml_p1_s4_invoice_on_complete_disabled',
+          invoice_created: false,
         };
       }
     }

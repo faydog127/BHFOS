@@ -6,6 +6,16 @@ const JOB_STATUS_ALIAS_MAP = {
   pending: 'unscheduled',
   pendingschedule: 'pending_schedule',
   'pending-schedule': 'pending_schedule',
+  on_the_way: 'en_route',
+  ontheway: 'en_route',
+  paused: 'on_hold',
+  pause: 'on_hold',
+  noaccess: 'no_access',
+  'no-access': 'no_access',
+  reschedule: 'reschedule_required',
+  'reschedule-required': 'reschedule_required',
+  completionpending: 'completion_pending',
+  'completion-pending': 'completion_pending',
 };
 
 const PAYMENT_STATUS_ALIAS_MAP = {
