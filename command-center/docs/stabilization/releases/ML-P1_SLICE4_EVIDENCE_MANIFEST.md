@@ -6,7 +6,7 @@
 | Coding auth base SHA | `24cec0e4d168a17384a5c16616c41e637a713fdc` (main / PR #93 planning) |
 | Branch / worktree | `ml/p1-s4-job-execution` / `F:\Dev\BHFOS-ml-p1-s4` |
 | Ratified PDs | 01=B · 02=A · 03=C · 04=B · 05=accept · 06=A |
-| **Frozen review head** | *(set at remediation tip)* |
+| **Frozen review head** | 4484b2916744bf0c178f65a1ca2183703041482a |
 | Prior code freeze (superseded) | `e6138dd7afc7a0e4b6c630c6132e56eeaf5da631` — does **not** cover control-amendment remediation |
 | Migrations | see checksum table below |
 | Tests executed | `node --test tests/unit/ml-p1-s4-execution.test.mjs` — **14/14 pass** |

@@ -9,7 +9,7 @@ Updated under Founder control amendment §15. Prefer this ledger for status ques
 | Exact current main SHA | `24cec0e4d168a17384a5c16616c41e637a713fdc` |
 | Branch / worktree | `ml/p1-s4-job-execution` / `F:\Dev\BHFOS-ml-p1-s4` |
 | PR | [#95](https://github.com/faydog127/BHFOS/pull/95) |
-| Exact head | *(set on next freeze commit)* |
+| Exact head | 4484b2916744bf0c178f65a1ca2183703041482a |
 | Review status | Prior lanes APPROVE at `e6138dd…`; **re-review required** after control-amendment remediation |
 | Migration status | Drafted, **not applied** to production |
 | Deployment status | Not deployed (Hostinger still prior baseline) |
