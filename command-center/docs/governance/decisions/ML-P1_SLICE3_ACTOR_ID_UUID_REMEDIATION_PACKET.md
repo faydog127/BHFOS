@@ -5,13 +5,13 @@
 
 ---
 
-## Disposition (pre-merge)
+## Disposition
 
-# **SLICE3_ACTOR_ID_UUID_READY_FOR_APPLY**
+# **SLICE3_REMEDIATION_IN_PROGRESS → revalidate 3/4/10**
 
 ---
 
-## Root cause
+## Root cause (primary)
 
 `ml_p1_s2_quote_lifecycle` (from `20260721200000_ml_p1_s3_canonical_job_writer`) inserts
 `v_uid::text` into `public.events.actor_id`, which is typed **uuid**. Office
@@ -20,16 +20,28 @@
 
 Live OpenAPI confirms `events.actor_id` format=`uuid`.
 
+## Root cause (follow-on, check 4)
+
+After actor_id fix, first office approve succeeds, but idempotent
+`ensure_job` / replay hits `coalesce(quotes.quote_number int, jobs.quote_number text)`
+inside `ml_p1_s3_ensure_job_for_accepted_quote` → `COALESCE types integer and text`.
+
 ---
 
 ## Exact changes
 
 | Surface | Change |
 | --- | --- |
-| DB object | `CREATE OR REPLACE FUNCTION public.ml_p1_s2_quote_lifecycle(...)` |
-| Migration | `command-center/supabase/migrations/20260721210000_ml_p1_s3_lifecycle_actor_id_uuid.sql` |
-| Tests | `command-center/tests/unit/ml-p1-s3-lifecycle-actor-id.test.mjs` |
-| Edge / Hostinger | **No change required** (RPC-only fix) |
+| DB object | `public.ml_p1_s2_quote_lifecycle(...)` |
+| Migration | `20260721210000_ml_p1_s3_lifecycle_actor_id_uuid.sql` · SHA-256 LF `179B3CFD…418567` · **applied** |
+| DB object | `public.ml_p1_s3_ensure_job_for_accepted_quote(...)` |
+| Migration | `20260721211000_ml_p1_s3_writer_quote_number_text.sql` · SHA-256 LF `24ECC0D4…9F6A7` |
+| Tests | `ml-p1-s3-lifecycle-actor-id.test.mjs` (8) · `ml-p1-s3-writer-quote-number.test.mjs` (3) |
+| Edge / Hostinger | **No change required** |
+
+### Reviews (actor_id surface)
+
+Product / Data / Security / Financial / Architecture / Adversarial → **REMEDIATION_REVIEW_PASS**
 
 ### Actor semantics preserved
 
