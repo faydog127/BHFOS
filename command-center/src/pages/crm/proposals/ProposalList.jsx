@@ -422,7 +422,7 @@ const ProposalList = () => {
                           type="button"
                           variant="link"
                           className="h-auto p-0 text-base font-semibold text-blue-700 underline-offset-2 hover:underline"
-                          onClick={() => navigate(tenantPath(`/crm/quotes/${quote.id}`, resolvedTenantId))}
+                          onClick={() => navigate(tenantPath(`/crm/quotes/p1-lifecycle/${quote.id}`, resolvedTenantId))}
                         >
                           #{asTracking(quote.quote_number)}
                         </Button>
@@ -722,7 +722,7 @@ const ProposalList = () => {
               Delete {deleteIds.length === 1 ? 'Quote' : `${deleteIds.length} Quotes`}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently deletes the selected estimate records, their line items, and linked CRM logs for those estimates. Any connected work orders or invoices will remain, but their estimate link will be detached.
+              This permanently deletes the selected quote records, their line items, and linked CRM logs for those quotes. Any connected work orders or invoices will remain, but their quote link will be detached.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
