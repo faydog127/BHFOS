@@ -308,9 +308,13 @@ const AppAliasRedirect = () => {
   return <Navigate to={`/${tenantId}${crmPath}${location.search || ''}${location.hash || ''}`} replace />;
 };
 
-const EstimateAliasRedirect = () => {
+/** Compatibility: /crm/estimates/* and /crm/proposals/* → canonical /crm/quotes/* */
+const QuoteCompatRedirect = () => {
   const location = useLocation();
-  const targetPath = location.pathname.replace(/\/crm\/(?:proposals|quotes)(?=\/|$)/, '/crm/estimates');
+  const targetPath = location.pathname.replace(
+    /\/crm\/(?:estimates|proposals)(?=\/|$)/,
+    '/crm/quotes',
+  );
   return <Navigate to={`${targetPath}${location.search || ''}${location.hash || ''}`} replace />;
 };
 
@@ -332,14 +336,14 @@ const CRMRoutes = () => (
       <Route path="inspections/new" element={<FeatureGuard flag="enableInspections"><InspectionEditorPage forceNew /></FeatureGuard>} />
       <Route path="inspections/:id/report" element={<FeatureGuard flag="enableInspections"><InspectionReportPage /></FeatureGuard>} />
       <Route path="inspections/:id" element={<FeatureGuard flag="enableInspections"><InspectionEditorPage /></FeatureGuard>} />
-      <Route path="estimates" element={<FeatureGuard flag="enableEstimates"><ProposalList /></FeatureGuard>} />
-      {/* ML-P1 Slice 1: mobile-first customer + draft quote (canonical quotes only) */}
-      <Route path="estimates/p1-draft" element={<FeatureGuard flag="enableEstimates"><MlP1S1DraftQuotePage /></FeatureGuard>} />
-      <Route path="estimates/new" element={<FeatureGuard flag="enableEstimates"><MlP1S1DraftQuotePage /></FeatureGuard>} />
-      <Route path="estimates/p1-lifecycle/:id" element={<FeatureGuard flag="enableEstimates"><MlP1S2QuoteLifecyclePage /></FeatureGuard>} />
-      <Route path="estimates/:id" element={<FeatureGuard flag="enableEstimates"><ProposalBuilder /></FeatureGuard>} />
-      <Route path="quotes/*" element={<EstimateAliasRedirect />} />
-      <Route path="proposals/*" element={<EstimateAliasRedirect />} />
+      {/* ML-P1 canonical Quotes surface (quotes table). estimates/proposals redirect only. */}
+      <Route path="quotes" element={<FeatureGuard flag="enableEstimates"><ProposalList /></FeatureGuard>} />
+      <Route path="quotes/p1-draft" element={<FeatureGuard flag="enableEstimates"><MlP1S1DraftQuotePage /></FeatureGuard>} />
+      <Route path="quotes/new" element={<FeatureGuard flag="enableEstimates"><MlP1S1DraftQuotePage /></FeatureGuard>} />
+      <Route path="quotes/p1-lifecycle/:id" element={<FeatureGuard flag="enableEstimates"><MlP1S2QuoteLifecyclePage /></FeatureGuard>} />
+      <Route path="quotes/:id" element={<FeatureGuard flag="enableEstimates"><ProposalBuilder /></FeatureGuard>} />
+      <Route path="estimates/*" element={<QuoteCompatRedirect />} />
+      <Route path="proposals/*" element={<QuoteCompatRedirect />} />
       <Route path="money" element={<FlowConsolePage />} />
       <Route path="setup" element={<Navigate to="dashboard" replace />} />
       <Route path="invoices" element={<FeatureGuard flag="enableInvoicing"><InvoicesPage /></FeatureGuard>} />

@@ -41,7 +41,7 @@ const toCrmLink = ({ tenantId, entityType, entityId }) => {
   const type = (entityType || '').toLowerCase();
 
   if (type === 'invoice' && entityId) return `/${safeTenant}/crm/invoices/${entityId}`;
-  if (type === 'quote' && entityId) return `/${safeTenant}/crm/estimates/${entityId}`;
+  if (type === 'quote' && entityId) return `/${safeTenant}/crm/quotes/${entityId}`;
 
   if (type === 'job') return `/${safeTenant}/crm/jobs`;
   if (type === 'lead' || type === 'contact') return `/${safeTenant}/crm/leads`;
@@ -256,7 +256,7 @@ const FlowConsole = () => {
     () => [
       { label: 'Hub', to: `/${tenantId}/crm` },
       { label: 'Leads', to: `/${tenantId}/crm/leads` },
-      { label: 'Estimates', to: `/${tenantId}/crm/estimates` },
+      { label: 'Quotes', to: `/${tenantId}/crm/quotes` },
       { label: 'Work Orders', to: `/${tenantId}/crm/jobs` },
       { label: 'Dispatch', to: `/${tenantId}/crm/dispatch` },
       { label: 'Invoices', to: `/${tenantId}/crm/invoices` }
@@ -278,7 +278,7 @@ const FlowConsole = () => {
               <Badge variant="secondary">Read-only</Badge>
             </div>
             <p className="text-slate-600 mt-1">
-              Orchestration lens over existing entities (Lead → Estimate → Work Order → Invoice → Payment). No parallel creation workflow lives here.
+              Orchestration lens over existing entities (Lead → Quote → Work Order → Invoice → Payment). No parallel creation workflow lives here.
             </p>
           </div>
 
@@ -391,12 +391,12 @@ const FlowConsole = () => {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Estimates Awaiting Response</CardTitle>
-                  <CardDescription>Estimates that are sent/viewed but not yet accepted or declined.</CardDescription>
+                  <CardTitle>Quotes Awaiting Response</CardTitle>
+                  <CardDescription>Quotes that are sent/viewed but not yet accepted or declined.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {quotesNeedingResponse.length === 0 ? (
-                    <EmptyState>No pending estimates found.</EmptyState>
+                    <EmptyState>No pending quotes found.</EmptyState>
                   ) : (
                     <ul className="space-y-2">
                       {quotesNeedingResponse.map((q) => (
@@ -410,13 +410,13 @@ const FlowConsole = () => {
                             {q.valid_until ? <div className="text-xs text-slate-500">Valid until: {new Date(q.valid_until).toLocaleDateString()}</div> : null}
                           </div>
                           <Button size="sm" variant="outline" asChild>
-                            <Link to={`/${tenantId}/crm/estimates/${q.id}`}>Open</Link>
+                            <Link to={`/${tenantId}/crm/quotes/${q.id}`}>Open</Link>
                           </Button>
                         </li>
                       ))}
                     </ul>
                   )}
-                  <SectionError title="Estimates" error={quotesError} />
+                  <SectionError title="Quotes" error={quotesError} />
                 </CardContent>
               </Card>
 

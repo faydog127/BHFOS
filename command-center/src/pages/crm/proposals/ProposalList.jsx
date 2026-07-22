@@ -92,7 +92,7 @@ const ProposalList = () => {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: error?.message || 'Failed to load estimates.'
+        description: error?.message || 'Failed to load quotes.'
       });
     } finally {
       setLoading(false);
@@ -109,7 +109,7 @@ const ProposalList = () => {
       toast({
         variant: 'destructive',
         title: 'Missing Contact',
-        description: 'This customer needs a valid email address or a textable phone number before you can send the estimate.',
+        description: 'This customer needs a valid email address or a textable phone number before you can send the quote.',
       });
       return;
     }
@@ -148,11 +148,11 @@ const ProposalList = () => {
 
       await fetchQuotes(resolvedTenantId);
     } catch (error) {
-      console.error('Estimate send error:', error);
+      console.error('Quote send error:', error);
       toast({
         variant: 'destructive',
         title: 'Send Failed',
-        description: error?.message || 'Could not send the estimate.',
+        description: error?.message || 'Could not send the quote.',
       });
     } finally {
       setSendingQuoteId(null);
@@ -188,7 +188,7 @@ const ProposalList = () => {
 
       toast({
         title: 'Status Updated',
-        description: `Estimate marked as ${newStatus}.`
+        description: `Quote marked as ${newStatus}.`
       });
 
       // IMPORTANT: refetch with tenantId (fixes the previous bug)
@@ -204,7 +204,7 @@ const ProposalList = () => {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: error?.message || 'Failed to update estimate status.'
+        description: error?.message || 'Failed to update quote status.'
       });
     }
   };
@@ -333,15 +333,15 @@ const ProposalList = () => {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <Helmet><title>Estimates | CRM</title></Helmet>
+      <Helmet><title>Quotes | CRM</title></Helmet>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">Estimates</h1>
-          <p className="text-slate-500 mt-1">Manage customer estimates and approvals.</p>
+          <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">Quotes</h1>
+          <p className="text-slate-500 mt-1">Manage customer quotes and approvals.</p>
         </div>
-        <Button onClick={() => navigate(tenantPath('/crm/estimates/new', resolvedTenantId))} className="w-full bg-blue-600 hover:bg-blue-700 sm:w-auto">
-          <Plus className="w-4 h-4 mr-2" /> New Estimate
+        <Button onClick={() => navigate(tenantPath('/crm/quotes/new', resolvedTenantId))} className="w-full bg-blue-600 hover:bg-blue-700 sm:w-auto">
+          <Plus className="w-4 h-4 mr-2" /> New Quote
         </Button>
       </div>
 
@@ -349,7 +349,7 @@ const ProposalList = () => {
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-2">
-              <CardTitle>Actionable Estimates</CardTitle>
+              <CardTitle>Actionable Quotes</CardTitle>
               {selectedIds.length > 0 && (
                 <div className="hidden items-center gap-3 md:flex">
                   <span className="text-sm text-slate-500">
@@ -370,7 +370,7 @@ const ProposalList = () => {
               <div className="relative w-full sm:w-64">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="Search estimates..."
+                  placeholder="Search quotes..."
                   className="pl-9"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -378,17 +378,22 @@ const ProposalList = () => {
               </div>
 
               <div className="flex overflow-x-auto rounded-md bg-slate-100 p-1">
-                {['all', 'draft', 'sent', 'accepted'].map((status) => (
+                {[
+                  { value: 'all', label: 'All' },
+                  { value: 'draft', label: 'Draft' },
+                  { value: 'sent', label: 'Sent' },
+                  { value: 'accepted', label: 'Approved' },
+                ].map((status) => (
                   <button
-                    key={status}
-                    onClick={() => setStatusFilter(status)}
-                    className={`whitespace-nowrap px-3 py-1.5 text-xs font-medium rounded-sm capitalize transition-all ${
-                      statusFilter === status
+                    key={status.value}
+                    onClick={() => setStatusFilter(status.value)}
+                    className={`whitespace-nowrap px-3 py-1.5 text-xs font-medium rounded-sm transition-all ${
+                      statusFilter === status.value
                         ? 'bg-white shadow-sm text-slate-900'
                         : 'text-slate-500 hover:text-slate-700'
                     }`}
                   >
-                    {status}
+                    {status.label}
                   </button>
                 ))}
               </div>
@@ -404,7 +409,7 @@ const ProposalList = () => {
           ) : filteredQuotes.length === 0 ? (
             <div className="text-center py-12 text-slate-500">
               <FileText className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-              <p>No estimates found matching your criteria.</p>
+              <p>No quotes found matching your criteria.</p>
             </div>
           ) : (
             <>
@@ -417,7 +422,7 @@ const ProposalList = () => {
                           type="button"
                           variant="link"
                           className="h-auto p-0 text-base font-semibold text-blue-700 underline-offset-2 hover:underline"
-                          onClick={() => navigate(tenantPath(`/crm/estimates/${quote.id}`, resolvedTenantId))}
+                          onClick={() => navigate(tenantPath(`/crm/quotes/${quote.id}`, resolvedTenantId))}
                         >
                           #{asTracking(quote.quote_number)}
                         </Button>
@@ -447,7 +452,7 @@ const ProposalList = () => {
                         variant="outline"
                         size="sm"
                         className="flex-1 min-w-[8rem]"
-                        onClick={() => navigate(tenantPath(`/crm/estimates/${quote.id}`, resolvedTenantId))}
+                        onClick={() => navigate(tenantPath(`/crm/quotes/p1-lifecycle/${quote.id}`, resolvedTenantId))}
                       >
                         <Edit2 className="mr-2 h-4 w-4" /> Open
                       </Button>
@@ -493,7 +498,7 @@ const ProposalList = () => {
                           size="sm"
                           className="flex-1 min-w-[8rem] border-green-200 text-green-700 hover:bg-green-50"
                           onClick={() =>
-                            navigate(tenantPath(`estimates/p1-lifecycle/${quote.id}`, resolvedTenantId))
+                            navigate(tenantPath(`/crm/quotes/p1-lifecycle/${quote.id}`, resolvedTenantId))
                           }
                           title="Open lifecycle to approve (creates job server-side)"
                         >
@@ -501,7 +506,7 @@ const ProposalList = () => {
                         </Button>
                       )}
 
-                      {(quote.status === 'sent' || quote.status === 'viewed') && (
+                      {(quote.status === 'sent' || quote.status === 'viewed' || quote.status === 'issued') && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -536,7 +541,7 @@ const ProposalList = () => {
                         <Checkbox
                           checked={allVisibleSelected ? true : someVisibleSelected ? 'indeterminate' : false}
                           onCheckedChange={(checked) => toggleSelectAllVisible(Boolean(checked))}
-                          aria-label="Select all visible estimates"
+                          aria-label="Select all visible quotes"
                         />
                       </TableHead>
                       <TableHead>#</TableHead>
@@ -554,7 +559,7 @@ const ProposalList = () => {
                           <Checkbox
                             checked={selectedIds.includes(String(quote.id))}
                             onCheckedChange={(checked) => toggleQuoteSelection(quote.id, Boolean(checked))}
-                            aria-label={`Select estimate ${asTracking(quote.quote_number)}`}
+                            aria-label={`Select quote ${asTracking(quote.quote_number)}`}
                           />
                         </TableCell>
                         <TableCell className="font-medium">
@@ -562,7 +567,7 @@ const ProposalList = () => {
                             type="button"
                             variant="link"
                             className="h-auto p-0 font-semibold text-blue-700 underline-offset-2 hover:underline"
-                            onClick={() => navigate(tenantPath(`/crm/estimates/${quote.id}`, resolvedTenantId))}
+                            onClick={() => navigate(tenantPath(`/crm/quotes/p1-lifecycle/${quote.id}`, resolvedTenantId))}
                           >
                             #{asTracking(quote.quote_number)}
                           </Button>
@@ -588,7 +593,7 @@ const ProposalList = () => {
                               variant="ghost"
                               size="icon"
                               onClick={() => handleOpenPreview(quote.id)}
-                              title="Preview Estimate"
+                              title="Preview Quote"
                             >
                               <ExternalLink className="w-4 h-4 text-slate-500 hover:text-blue-600" />
                             </Button>
@@ -605,8 +610,8 @@ const ProposalList = () => {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => navigate(tenantPath(`/crm/estimates/${quote.id}`, resolvedTenantId))}
-                              title="Edit"
+                              onClick={() => navigate(tenantPath(`/crm/quotes/p1-lifecycle/${quote.id}`, resolvedTenantId))}
+                              title="Open lifecycle"
                             >
                               <Edit2 className="w-4 h-4 text-slate-500 hover:text-blue-600" />
                             </Button>
@@ -635,7 +640,7 @@ const ProposalList = () => {
                                   size="icon"
                                   className="h-8 w-8 text-green-600 border-green-200 hover:bg-green-50"
                                   onClick={() =>
-                                    navigate(tenantPath(`estimates/p1-lifecycle/${quote.id}`, resolvedTenantId))
+                                    navigate(tenantPath(`/crm/quotes/p1-lifecycle/${quote.id}`, resolvedTenantId))
                                   }
                                   title="Open lifecycle to approve (creates job server-side)"
                                 >
@@ -681,7 +686,7 @@ const ProposalList = () => {
       <Dialog open={isRejectModalOpen} onOpenChange={setIsRejectModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reject Estimate</DialogTitle>
+            <DialogTitle>Reject Quote</DialogTitle>
             <DialogDescription>
               Please provide a reason for rejection. This will be logged for reporting.
             </DialogDescription>
@@ -714,7 +719,7 @@ const ProposalList = () => {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Delete {deleteIds.length === 1 ? 'Estimate' : `${deleteIds.length} Estimates`}?
+              Delete {deleteIds.length === 1 ? 'Quote' : `${deleteIds.length} Quotes`}?
             </AlertDialogTitle>
             <AlertDialogDescription>
               This permanently deletes the selected estimate records, their line items, and linked CRM logs for those estimates. Any connected work orders or invoices will remain, but their estimate link will be detached.

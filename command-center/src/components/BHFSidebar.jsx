@@ -23,13 +23,30 @@ import TenantSwitcher from '@/components/TenantSwitcher';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 
-const BUILD_STAMP = import.meta.env.VITE_BUILD_STAMP || '2026-02-23-1';
-
 const BHFSidebar = ({ onNavigate = null }) => {
   const { tenantId = 'tvg' } = useParams();
   const navigate = useNavigate();
   const [isSuperUser, setIsSuperUser] = useState(false);
+  const [buildLabel, setBuildLabel] = useState('Build: …');
   const { signOut, user } = useSupabaseAuth();
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/build-info.json', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((info) => {
+        if (cancelled || !info?.commitSha) return;
+        const short = String(info.commitSha).slice(0, 12);
+        const env = info.environment || 'unknown';
+        setBuildLabel(`Build: ${short} · ${env}`);
+      })
+      .catch(() => {
+        if (!cancelled) setBuildLabel('Build: unknown');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -77,8 +94,7 @@ const BHFSidebar = ({ onNavigate = null }) => {
       title: 'Sales',
       items: [
         { name: 'Opportunities', path: '/crm/opportunities', icon: BarChart },
-        // NOTE: `/crm/estimates` is the active Quotes/Proposals surface today (legacy route name).
-        { name: 'Quotes', path: '/crm/estimates', icon: FileText },
+        { name: 'Quotes', path: '/crm/quotes', icon: FileText },
       ],
     },
     {
@@ -201,8 +217,8 @@ const BHFSidebar = ({ onNavigate = null }) => {
             Sign In
           </button>
         )}
-        <div className="mt-3 text-[11px] text-slate-500 opacity-60">
-          Build: {BUILD_STAMP}
+        <div className="mt-3 text-[11px] text-slate-500 opacity-60" title={buildLabel}>
+          {buildLabel}
         </div>
       </div>
     </div>

@@ -3,7 +3,7 @@ export const FRONTEND_MODULES = [
   { id: 'pipeline', name: 'Pipeline', path: '/crm/pipeline' },
   { id: 'leads', name: 'Leads', path: '/crm/leads' },
   { id: 'jobs', name: 'Work Orders', path: '/crm/jobs' },
-  { id: 'estimates', name: 'Estimates', path: '/crm/estimates' },
+  { id: 'estimates', name: 'Quotes', path: '/crm/quotes' },
   { id: 'proposals', name: 'Proposals', path: '/crm/proposals' },
   { id: 'smart_console', name: 'Smart Call Console', path: '/crm/calls' },
   { id: 'inbox', name: 'Inbox', path: '/crm/inbox' },
