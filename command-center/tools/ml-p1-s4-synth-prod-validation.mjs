@@ -172,6 +172,17 @@ async function main() {
         p_reason: 'S4 synthetic office assign/schedule',
       });
       step('office_assign_schedule', !error && data?.status === 'scheduled', error?.message || data);
+      if (!error) {
+        const { data: evs } = await admin
+          .from('events')
+          .select('actor_id,event_type')
+          .eq('entity_id', jobId)
+          .eq('event_type', 'JobAssignedScheduled')
+          .order('created_at', { ascending: false })
+          .limit(1);
+        const actor = evs?.[0]?.actor_id;
+        step('office_assign_audit_actor_uuid', actor === EXPECT_OFFICE_UID, { actor, event: evs?.[0] });
+      }
     }
 
     // Tech field transitions
@@ -186,6 +197,16 @@ async function main() {
         p_payload: {},
       });
       step(`tech_transition_${action}`, !error && !!data?.status, error?.message || data?.status);
+      if (action === 'on_my_way' && !error) {
+        const { data: evs } = await admin
+          .from('events')
+          .select('actor_id,event_type')
+          .eq('entity_id', jobId)
+          .eq('event_type', 'JobTransition_on_my_way')
+          .order('created_at', { ascending: false })
+          .limit(1);
+        step('tech_transition_audit_actor_uuid', evs?.[0]?.actor_id === EXPECT_TECH_UID, evs?.[0]);
+      }
     }
 
     // Tech propose CO (description-only price-book path)
@@ -221,7 +242,7 @@ async function main() {
         p_client_mutation_id: mut,
         p_reason: 'should deny',
         p_customer_auth_proof: 'x',
-        p_customer_auth_evidence_type: 'call_recording',
+        p_customer_auth_evidence_type: 'recorded_verbal',
         p_customer_auth_evidence_ref: `synth/s4/${RUN_TAG}/should-deny`,
         p_customer_auth_at: new Date().toISOString(),
       });
@@ -229,7 +250,7 @@ async function main() {
       step('tech_self_approve_deny', denied, error?.message || 'expected deny');
     }
 
-    // Office break-glass approve with immutable evidence
+    // Office break-glass approve with immutable evidence (allowlisted type)
     {
       const mut = `s4-office-bg-${randomUUID()}`;
       const { data, error } = await rpc(officeAuth.c, 'ml_p1_s4_change_order_transition', {
@@ -238,7 +259,7 @@ async function main() {
         p_client_mutation_id: mut,
         p_reason: 'S4 synthetic office break-glass — customer unreachable; test only',
         p_customer_auth_proof: `synth-proof-${RUN_TAG}`,
-        p_customer_auth_evidence_type: 'call_recording',
+        p_customer_auth_evidence_type: 'recorded_verbal',
         p_customer_auth_evidence_ref: `synth/s4/${RUN_TAG}/break-glass-proof.wav`,
         p_customer_auth_at: new Date().toISOString(),
       });
