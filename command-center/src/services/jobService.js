@@ -3,6 +3,84 @@ import { getDispatchAddressValidation } from '@/lib/dispatchAddress';
 import { getTenantId } from '@/lib/tenantUtils';
 import { normalizeJobStatus, normalizePaymentStatus } from '@/lib/jobStatus';
 import { defaultPaymentTermsForCustomerType } from '@/lib/workOrderOperational';
+import { createMlP1S4JobExecutionService } from '@/services/mlP1S4JobExecutionService';
+
+const s4Service = () => createMlP1S4JobExecutionService({ supabase });
+
+const mapStatusToS4Action = (fromStatus, toStatus) => {
+  const from = normalizeJobStatus(fromStatus);
+  const to = normalizeJobStatus(toStatus);
+  if (!to || from === to) return null;
+  if (to === 'en_route') return 'on_my_way';
+  if (to === 'arrived') return 'arrive';
+  if (to === 'in_progress' && from === 'on_hold') return 'resume';
+  if (to === 'in_progress') return 'start';
+  if (to === 'on_hold') return 'pause';
+  if (to === 'no_access') return 'no_access';
+  if (to === 'reschedule_required') return 'request_reschedule';
+  if (to === 'completion_pending') return 'complete_submit';
+  if (to === 'completed') return 'complete_finalize';
+  if (to === 'cancelled') return 'cancel';
+  return null;
+};
+
+const updateViaS4CanonicalWriter = async (jobId, nextPatch, tenantId) => {
+  const { data: existingJob, error: existingJobError } = await supabase
+    .from('jobs')
+    .select('id, status, scheduled_start, scheduled_end, technician_id, execution_row_version')
+    .eq('id', jobId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+  if (existingJobError) throw existingJobError;
+  if (!existingJob) throw new Error('Work order not found.');
+
+  const svc = s4Service();
+  const statusChanging =
+    Object.prototype.hasOwnProperty.call(nextPatch, 'status') &&
+    normalizeJobStatus(nextPatch.status) !== normalizeJobStatus(existingJob.status);
+  const scheduleChanging =
+    Object.prototype.hasOwnProperty.call(nextPatch, 'scheduled_start') ||
+    Object.prototype.hasOwnProperty.call(nextPatch, 'scheduled_end') ||
+    Object.prototype.hasOwnProperty.call(nextPatch, 'technician_id');
+
+  if (scheduleChanging) {
+    await svc.assignAndSchedule(jobId, {
+      technicianId: nextPatch.technician_id ?? existingJob.technician_id,
+      scheduledStart: nextPatch.scheduled_start ?? existingJob.scheduled_start,
+      scheduledEnd: nextPatch.scheduled_end ?? existingJob.scheduled_end,
+      reason: 'office jobService bridge',
+    });
+  }
+
+  if (statusChanging) {
+    const action = mapStatusToS4Action(existingJob.status, nextPatch.status);
+    if (!action) {
+      throw new Error(
+        `ML_P1_S4_USE_CANONICAL_WRITER: unsupported status bridge ${existingJob.status} -> ${nextPatch.status}`,
+      );
+    }
+    await svc.transition(jobId, action, {
+      reason: nextPatch.reason || 'office jobService bridge',
+      expectedRowVersion: null,
+    });
+  }
+
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('*')
+    .eq('id', jobId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('Work order not found after S4 update.');
+
+  return {
+    success: true,
+    job: data,
+    invoice: null,
+    invoiceResult: { skipped: 'ml_p1_s4_invoice_on_complete_disabled', invoice_created: false },
+  };
+};
 
 /**
  * Service to handle Job Lifecycle and Workflow Transitions
@@ -41,53 +119,11 @@ const findLocalSchedulingConflict = async (jobId, tenantId, mergedPatch) => {
   }) || null;
 };
 
-const updateWorkOrderLocally = async (jobId, nextPatch, tenantId) => {
-  const { data: existingJob, error: existingJobError } = await supabase
-    .from('jobs')
-    .select('id, status, scheduled_start, scheduled_end, service_address, technician_id')
-    .eq('id', jobId)
-    .eq('tenant_id', tenantId)
-    .maybeSingle();
-
-  if (existingJobError) throw existingJobError;
-  if (!existingJob) throw new Error('Work order not found.');
-
-  const mergedPatch = {
-    ...existingJob,
-    ...nextPatch,
-  };
-
-  if (['scheduled', 'en_route', 'in_progress'].includes(String(mergedPatch.status || '').toLowerCase())) {
-    if (!mergedPatch.scheduled_start) {
-      throw new Error('Scheduled start is required before dispatching this work order.');
-    }
-    const addressValidation = getDispatchAddressValidation(mergedPatch.service_address);
-    if (!addressValidation.hasDispatchableAddress) {
-      throw new Error('Service address must include street, city, and state before dispatching this work order.');
-    }
-  }
-
-  const conflict = await findLocalSchedulingConflict(jobId, tenantId, mergedPatch);
-  if (conflict) {
-    throw new Error(`Scheduling conflict with ${conflict.work_order_number || 'another work order'} (${conflict.status || 'scheduled'}).`);
-  }
-
-  const { data, error } = await supabase
-    .from('jobs')
-    .update(nextPatch)
-    .eq('id', jobId)
-    .eq('tenant_id', tenantId)
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  return {
-    success: true,
-    job: data,
-    invoice: null,
-    invoiceResult: null,
-  };
+/** Legacy direct jobs.update path — denied under ML-P1 S4 (no independent writer). */
+const updateWorkOrderLocally = async () => {
+  throw new Error(
+    'ML_P1_S4_ALT_WRITER_DENY: direct jobs.update is forbidden; use ml_p1_s4_* RPCs via jobService/S4 service',
+  );
 };
 
 export const jobService = {
@@ -106,6 +142,26 @@ export const jobService = {
           : undefined,
         updated_at: patch?.updated_at ?? new Date().toISOString(),
       });
+
+      const touchesExecution =
+        Object.prototype.hasOwnProperty.call(nextPatch, 'status') ||
+        Object.prototype.hasOwnProperty.call(nextPatch, 'technician_id') ||
+        Object.prototype.hasOwnProperty.call(nextPatch, 'scheduled_start') ||
+        Object.prototype.hasOwnProperty.call(nextPatch, 'scheduled_end');
+
+      // ML-P1 S4: prefer canonical RPC writer for execution fields.
+      if (touchesExecution) {
+        try {
+          return await updateViaS4CanonicalWriter(jobId, nextPatch, tenantId);
+        } catch (s4Error) {
+          // Fall through to edge only for non-migration local/dev diagnostics.
+          if (!String(s4Error?.message || '').includes('ML_P1_S4_')) {
+            console.warn('S4 writer path failed, trying edge:', s4Error);
+          } else {
+            throw s4Error;
+          }
+        }
+      }
 
       const { data, error } = await supabase.functions.invoke('work-order-update', {
         body: {
@@ -127,6 +183,10 @@ export const jobService = {
               details = text ? { error: text } : null;
             }
 
+            if (details?.code === 'ML_P1_S4_USE_CANONICAL_WRITER') {
+              return await updateViaS4CanonicalWriter(jobId, nextPatch, tenantId);
+            }
+
             if (details?.error) {
               throw new Error(details.error);
             }
@@ -138,10 +198,13 @@ export const jobService = {
         }
 
         if (isLocalSupabaseUrl(import.meta.env.VITE_SUPABASE_URL) && hasLocalFunctionAuthFailure(error)) {
-          return await updateWorkOrderLocally(jobId, nextPatch, tenantId);
+          return await updateViaS4CanonicalWriter(jobId, nextPatch, tenantId);
         }
 
         throw error;
+      }
+      if (data?.code === 'ML_P1_S4_USE_CANONICAL_WRITER') {
+        return await updateViaS4CanonicalWriter(jobId, nextPatch, tenantId);
       }
       if (data?.error) throw new Error(data.error);
       if (!data?.job) throw new Error('Work order update returned no row.');
@@ -228,20 +291,20 @@ export const jobService = {
   },
 
   /**
-   * Mark a job as complete.
-   * Completion authority lives in the work-order-update edge function.
-   * It creates a draft invoice for founder review instead of auto-sending.
+   * Mark a job as complete via ML-P1 S4 canonical writer.
+   * Does not create invoices (Slice 5).
    */
   async completeJob(jobId, notes) {
-    const result = await this.updateWorkOrder(jobId, {
-        status: normalizeJobStatus('completed'),
-        completed_at: new Date().toISOString(),
-        technician_notes: notes,
-      });
-
-    if (!result.success) return result;
-
-    return { success: true, data: result.job };
+    try {
+      const svc = s4Service();
+      if (notes) {
+        await svc.upsertEvidence(jobId, { technicianNotes: notes });
+      }
+      const data = await svc.completeFinalize(jobId, { reason: 'jobService.completeJob' });
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   },
 
   /**
