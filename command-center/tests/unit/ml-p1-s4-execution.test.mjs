@@ -177,3 +177,72 @@ describe('ML-P1 S4 UI surfaces wired', () => {
     assert.match(detail, /TechJobExecutionPanel/);
   });
 });
+
+describe('ML-P1 S4 R-S4-06 emit actor_id uuid remediation', () => {
+  const rem = read('supabase/migrations/20260722140000_ml_p1_s4_emit_actor_id_uuid.sql');
+  const rpcs = read('supabase/migrations/20260722121000_ml_p1_s4_execution_rpcs.sql');
+  const amend = read('supabase/migrations/20260722130000_ml_p1_s4_control_amendment.sql');
+  const compat = read('supabase/migrations/20260722122000_ml_p1_s4_s3_writer_compat.sql');
+  const s4Sql = [rpcs, amend, compat, rem].join('\n');
+  const remBody = rem.slice(rem.indexOf('CREATE OR REPLACE FUNCTION'));
+
+  const emitCallSites = [
+    'JobAssignedScheduled',
+    'JobTransition_',
+    'JobEvidenceUpserted',
+    'JobMakeSafeRecorded',
+    'ChangeOrderProposed',
+    "ChangeOrder_' || v_action",
+  ];
+
+  it('remediation writes auth.uid() uuid (not text cast) and keeps nullable system path', () => {
+    assert.match(remBody, /ml_p1_s4_emit_job_event/);
+    assert.match(remBody, /v_actor uuid := auth\.uid\(\)/);
+    assert.match(remBody, /actor_id, payload\)/);
+    assert.equal(/auth\.uid\(\)\s*::\s*text/.test(remBody), false);
+    assert.match(remBody, /WHEN undefined_column THEN/);
+    // Forbid casting arbitrary text expressions into uuid for actor_id.
+    assert.equal(/actor_id[\s\S]{0,80}::\s*uuid/.test(remBody), false);
+    assert.equal(/::\s*uuid[\s\S]{0,40}actor_id/.test(remBody), false);
+  });
+
+  it('scan: live remediation body has no text-cast actor; other S4 files do not reintroduce it', () => {
+    // Historical defect remains in 221210 for provenance; live body is replaced by 221400.
+    assert.match(rpcs, /auth\.uid\(\)::text/);
+    assert.equal(/auth\.uid\(\)\s*::\s*text/.test(remBody), false);
+    assert.equal(/auth\.uid\(\)\s*::\s*text/.test(amend), false);
+    assert.equal(/auth\.uid\(\)\s*::\s*text/.test(compat), false);
+  });
+
+  it('regression: every S4 job audit emitter routes through ml_p1_s4_emit_job_event', () => {
+    for (const marker of emitCallSites) {
+      assert.match(s4Sql, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    }
+    const emitPerforms = (s4Sql.match(/PERFORM\s+public\.ml_p1_s4_emit_job_event\s*\(/g) || []).length;
+    assert.ok(emitPerforms >= 6, `expected >=6 emit call sites, got ${emitPerforms}`);
+  });
+
+  it('regression: job_time_events.actor_id uses auth.uid() uuid (not text)', () => {
+    assert.match(rpcs, /INSERT INTO public\.job_time_events \([\s\S]*?actor_id[\s\S]*?auth\.uid\(\)/);
+    assert.equal(
+      /INSERT INTO public\.job_time_events \([\s\S]*?actor_id[\s\S]*?auth\.uid\(\)::text/.test(rpcs),
+      false,
+    );
+  });
+
+  it('regression: S3 compat events use NULL actor_id (nullable/system convention)', () => {
+    const inserts = compat.match(/INSERT INTO public\.events \([\s\S]*?\);/g) || [];
+    assert.ok(inserts.length >= 2);
+    for (const block of inserts) {
+      assert.match(block, /actor_id/);
+      assert.match(block, /NULL/);
+      assert.equal(/auth\.uid\(\)\s*::\s*text/.test(block), false);
+    }
+  });
+
+  it('fail-closed: emit has no broad EXCEPTION that swallows non-undefined_column errors', () => {
+    assert.match(remBody, /EXCEPTION\s+WHEN undefined_column THEN/);
+    assert.equal(/WHEN others/i.test(remBody), false);
+    assert.equal(/WHEN OTHERS/i.test(remBody), false);
+  });
+});
