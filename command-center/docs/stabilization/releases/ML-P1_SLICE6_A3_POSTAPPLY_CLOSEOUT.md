@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Classification at close | **STRUCTURAL PASS** · Full-Threat E2E **BLOCKED_PENDING_STRIPE_TEST_KEYS** |
+| Classification at close | **SLICE6_PRODUCTION_VALIDATION_PASS** (structural + sk_test E2E after hotfixes) |
 | Authority | Orchestrator prompt 2026-07-23 + Delegated-Authority Policy v2026-07-23 + PR #104 merge |
 | Merged main tip (deployed) | `206e1411ce89674a9875070586f7e1572d86acc8` |
 | Exact A2 code SHA | `02238f4edd506c0756e74d1dbd0f0640f999b5bb` (ancestor of tip) |

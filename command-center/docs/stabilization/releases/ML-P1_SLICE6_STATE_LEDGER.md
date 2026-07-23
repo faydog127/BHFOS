@@ -3,20 +3,16 @@
 | Field | Value |
 | --- | --- |
 | Active slice | **ML-P1-S6** |
-| Stage | **A3 STRUCTURAL CLOSED** · Full-Threat E2E **BLOCKED** · **FOUNDER HALT** (UX + Stripe test keys) |
-| Exact `origin/main` / deployed | `206e1411ce89674a9875070586f7e1572d86acc8` |
-| A2 code SHA | `02238f4edd506c0756e74d1dbd0f0640f999b5bb` |
-| Migration | `20260723140000` **APPLIED** |
-| Edge | `public-pay`, `payment-webhook`, `invoice-update-status`, `stripe-webhook` redeployed |
-| Hostinger | HEALTHY @ tip; `migrationVersion=20260723140000` |
-| Prod validation | Structural PASS · money-path E2E blocked (`sk_live`) |
-| Next | Founder UX review + Stripe test-key decision; then Full-Threat re-run or accept residual deferral before S8 |
+| Stage | **PRODUCTION VALIDATION PASS** — idle awaiting Founder direction |
+| Exact A2 head | `02238f4edd506c0756e74d1dbd0f0640f999b5bb` |
+| Migrations | `20260723140000` + hotfix `150000` + `151000` **APPLIED** |
+| Flags | `invoice_auto_send_enabled=false` (binding) |
+| E2E | sk_test synth **PASS** (`S6-SYNTH-1784832909376`) |
+| Next | Await Founder; do not start S8 until directed |
 
 ## Waiting on Founder
 
-1. Billing & Payments dashboard UX / rough-edge list  
-2. Install `sk_test` (+ test webhook secret) **or** explicit deferral of Full-Threat money E2E  
-3. Any secret rotation / new payment rail remains Category-C
+None for S6 close. Optional: Billing & Payments UX rough-edge feedback (non-blocking).
 
 ## Halt defaults (unchanged)
 

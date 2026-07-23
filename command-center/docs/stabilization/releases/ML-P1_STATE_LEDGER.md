@@ -4,24 +4,22 @@
 | --- | --- |
 | Updated | 2026-07-23 |
 | Repo | https://github.com/faydog127/BHFOS |
-| Current main / live deploy | `206e1411ce89674a9875070586f7e1572d86acc8` |
-| Authority | Delegated-Authority Policy **v2026-07-23** |
-| Next-phase | `docs/governance/ML-P1_NEXT_PHASE_PRIORITIES.md` |
+| Authority | Delegated-Authority Policy **v2026-07-23** + FIX-S6-SETTLEMENT APPROVE |
+| S6 A2 head | `02238f4edd506c0756e74d1dbd0f0640f999b5bb` |
+| Disposition | **SLICE6_PRODUCTION_VALIDATION_PASS** |
 
 ## Slice / gate posture
 
 | Slice | Gate | Status |
 | --- | --- | --- |
 | S5 | A3 CLOSED ✔ | |
-| **S6** | A3 STRUCTURAL CLOSED ✔ | Deployed `206e141`; Full-Threat E2E **BLOCKED** (`sk_live`); **FOUNDER HALT** (UX + test keys) |
+| **S6** | **PRODUCTION VALIDATION PASS** ✔ | Hotfixes applied; sk_test E2E PASS; idle |
 | S7 | Reserved | Not started |
-| **S8** | Queued | Do **not** start until Founder clears S6 halt |
+| **S8** | Queued | Await Founder direction |
 
 ## Waiting on Founder
 
-1. Billing & Payments UX / rough-edge feedback  
-2. Stripe `sk_test` (+ test webhook) install **or** explicit E2E deferral  
-3. Clearance to leave halt before S8 / next-phase coding
+None required for S6. Optional UX feedback on Billing & Payments.
 
 ## Halt defaults
 
