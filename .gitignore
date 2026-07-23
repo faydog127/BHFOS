@@ -48,3 +48,5 @@ yarn-error.log*
 # Supabase
 supabase/functions/_lib/
 !supabase/functions/_lib/.gitkeep
+
+command-center/crm-*.zip

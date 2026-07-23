@@ -27,6 +27,8 @@ import {
   resolveServiceAddress,
 } from '@/lib/inspectionFieldAddress';
 import InspectionFieldCustomerStep from '@/components/tech/InspectionFieldCustomerStep';
+import InspectionChecklistPanel from '@/components/tech/InspectionChecklistPanel';
+import { DEFAULT_OFFLINE_CACHE_MB } from '@/lib/offlineInspectionMediaQueue';
 
 const PHOTO_BUCKET = 'inspection-photos';
 
@@ -202,6 +204,7 @@ export default function TechInspectionSession() {
         inspectionId,
         revision,
         qualityResults,
+        cacheMb: DEFAULT_OFFLINE_CACHE_MB,
       });
       await refreshQueue();
       if (rejected.length) {
@@ -354,13 +357,15 @@ export default function TechInspectionSession() {
   );
   const customerReady = Boolean(inspection?.lead_id) && serviceAddressReady;
   const photosReady = photos.some((photo) => photo && photo.is_voided !== true);
+  const photosWaveComplete = Boolean(inspection?.photos_wave_complete_at) || photosReady;
   const requestedStep = asText(searchParams.get('step')).toLowerCase();
-  const currentStep = ['customer', 'photos'].includes(requestedStep)
+  const currentStep = ['customer', 'photos', 'checklist'].includes(requestedStep)
     ? requestedStep
     : (customerReady ? 'photos' : 'customer');
   const completionByStep = {
     customer: customerReady,
-    photos: photosReady,
+    photos: photosWaveComplete,
+    checklist: false,
     findings: false,
     recommendation: false,
     finish: false,
@@ -368,6 +373,34 @@ export default function TechInspectionSession() {
 
   const goToStep = (stepId) => {
     setSearchParams({ step: stepId }, { replace: true });
+  };
+
+  const markPhotosWaveAndContinue = async () => {
+    if (!photosReady) {
+      toast({
+        variant: 'destructive',
+        title: 'Photos required',
+        description: 'Capture at least one photo before continuing (photos-first wave).',
+      });
+      return;
+    }
+    try {
+      const { error } = await supabase.rpc('ml_p1_s8_mark_photos_wave_complete', {
+        p_inspection_id: inspectionId,
+      });
+      if (error) throw error;
+      setInspection((current) => ({
+        ...current,
+        photos_wave_complete_at: current?.photos_wave_complete_at || new Date().toISOString(),
+      }));
+      goToStep('checklist');
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: 'Could not complete photo wave',
+        description: err?.message || String(err),
+      });
+    }
   };
 
   return (
@@ -434,11 +467,14 @@ export default function TechInspectionSession() {
               <RefreshCw className="h-4 w-4" />
               Refresh
             </Button>
-            <Button asChild className="gap-2 bg-blue-600 hover:bg-blue-700">
-              <Link to={stepHref(inspectionId, 'findings')}>
-                <CheckCircle2 className="h-4 w-4" />
-                Findings
-              </Link>
+            <Button
+              type="button"
+              className="gap-2 bg-blue-600 hover:bg-blue-700"
+              onClick={markPhotosWaveAndContinue}
+              disabled={!photosReady}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Checklist
             </Button>
           </div>
         </CardHeader>
@@ -682,11 +718,45 @@ export default function TechInspectionSession() {
       </Card>
 
       <div className="sticky bottom-0 z-10 -mx-1 border-t border-slate-200 bg-white/95 p-3 backdrop-blur">
-        <Button asChild size="lg" className="w-full min-h-12 bg-blue-600 hover:bg-blue-700">
-          <Link to={stepHref(inspectionId, 'findings')}>Continue to Findings</Link>
+        <Button
+          type="button"
+          size="lg"
+          className="w-full min-h-12 bg-blue-600 hover:bg-blue-700"
+          onClick={markPhotosWaveAndContinue}
+          disabled={!photosReady}
+        >
+          Continue to Checklist
         </Button>
       </div>
         </>
+      ) : null}
+
+      {currentStep === 'checklist' ? (
+        <div className="space-y-4">
+          {!photosWaveComplete ? (
+            <Card className="border-amber-200 bg-amber-50">
+              <CardContent className="py-3 text-sm text-amber-950">
+                Complete the photo wave before checklist and report.
+                <Button type="button" variant="outline" className="mt-2 min-h-11 w-full" onClick={() => goToStep('photos')}>
+                  Back to Photos
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <InspectionChecklistPanel
+                inspectionId={inspectionId}
+                workType={inspection?.work_type || inspection?.service_type || null}
+                locked={locked}
+              />
+              <div className="sticky bottom-0 z-10 -mx-1 border-t border-slate-200 bg-white/95 p-3 backdrop-blur">
+                <Button asChild size="lg" className="w-full min-h-12 bg-blue-600 hover:bg-blue-700">
+                  <Link to={stepHref(inspectionId, 'findings')}>Continue to Findings</Link>
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
       ) : null}
     </div>
   );

@@ -301,6 +301,7 @@ export default function TechInspectionReview() {
   const completionByStep = {
     customer: customerReady,
     photos: photosReady,
+    checklist: photosReady,
     findings: findingsReviewed,
     recommendation: hasInspectionLevelRec,
     finish: summaryReady && hasInspectionLevelRec && isReviewed,
@@ -397,6 +398,10 @@ export default function TechInspectionReview() {
         p_tenant_id: tenantId, p_inspection_id: inspectionId, p_expected_revision: inspection.revision || 1,
       });
       if (error) throw error;
+      const gate = await supabase.rpc('ml_p1_s8_assert_photos_before_report', {
+        p_inspection_id: inspectionId,
+      });
+      if (gate.error) throw gate.error;
       const pdf = await supabase.functions.invoke('inspection-report-pdf', { body: { tenant_id: tenantId, inspection_id: inspectionId, store: true, return_pdf: false } });
       if (pdf.error || pdf.data?.error) throw pdf.error || new Error(pdf.data.error);
       setInspection((current) => ({ ...current, ...data }));

@@ -27,6 +27,7 @@ export default function Inspections() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
+  const [flagMap, setFlagMap] = useState({});
   const [query, setQuery] = useState('');
   const [loadError, setLoadError] = useState('');
   const [reloadToken, setReloadToken] = useState(0);
@@ -88,6 +89,18 @@ export default function Inspections() {
           job: Array.isArray(row.job) ? row.job[0] : row.job,
           technician: Array.isArray(row.technician) ? row.technician[0] : row.technician,
         })));
+
+        // Office safety/quality flags (PD-S8-05) — fail soft if RPC not yet applied
+        const flags = await supabase.rpc('ml_p1_s8_inspection_open_flags', { p_tenant_id: tenantId });
+        if (!flags.error && mounted) {
+          const next = {};
+          for (const row of flags.data || []) {
+            const id = row.inspection_id;
+            if (!next[id]) next[id] = [];
+            next[id].push(row);
+          }
+          setFlagMap(next);
+        }
       } catch (err) {
         console.error('Failed to load inspections:', err);
         setLoadError(err?.message || 'The inspection list could not be loaded.');
@@ -197,6 +210,19 @@ export default function Inspections() {
                           <Badge variant="outline" className={statusTone(row.status)}>
                             {normalizeStatus(row.status) || 'draft'}
                           </Badge>
+                          {(flagMap[row.id] || []).map((flag) => (
+                            <Badge
+                              key={`${row.id}-${flag.flag_code}`}
+                              variant="outline"
+                              className={
+                                flag.flag_code === 'safety' || flag.flag_code === 'make_safe'
+                                  ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                  : 'bg-amber-50 text-amber-800 border-amber-200'
+                              }
+                            >
+                              {flag.flag_code} ×{flag.flag_count}
+                            </Badge>
+                          ))}
                           {job?.work_order_number ? (
                             <Badge variant="secondary" className="text-[11px]">
                               {job.work_order_number}
