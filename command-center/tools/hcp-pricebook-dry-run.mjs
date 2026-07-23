@@ -121,10 +121,16 @@ for (const row of sourceRows) {
     continue;
   }
   seenCodes.set(code.toUpperCase(), row);
-  if (!Number.isFinite(row.price) || row.price < 0) {
+  const isApprovedDiscount =
+    code.toUpperCase() === 'DISC-050' ||
+    (Number.isFinite(row.price) && row.price < 0 && /discount/i.test(row.name || ''));
+  if (!Number.isFinite(row.price) || (row.price < 0 && !isApprovedDiscount)) {
     defects.push({ type: 'invalid_price', code, price: row.price });
     rejected.push({ reason: 'invalid_price', code, row });
     continue;
+  }
+  if (isApprovedDiscount) {
+    row._item_type = 'discount';
   }
   if (!row.name) {
     defects.push({ type: 'missing_name', code });

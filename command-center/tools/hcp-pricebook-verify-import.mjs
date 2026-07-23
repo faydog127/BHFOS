@@ -151,6 +151,19 @@ const counts = dbQueryFile(
   'VERIFY_COUNTS.sql',
 );
 
+const prePath = path.join(dir, 'PRE_IMPORT_COUNTS.json');
+let historyBaseline = null;
+if (fs.existsSync(prePath)) {
+  const preRaw = JSON.parse(fs.readFileSync(prePath, 'utf8').replace(/^\uFEFF/, ''));
+  historyBaseline = Array.isArray(preRaw) ? preRaw[0] : preRaw;
+}
+
+const post = counts[0] || counts;
+const history_untouched = historyBaseline
+  ? post.quote_items === historyBaseline.quote_items &&
+    post.invoice_items === historyBaseline.invoice_items
+  : null;
+
 const report = {
   disposition: null,
   csv_sha256: csvSha,
@@ -158,17 +171,18 @@ const report = {
   mismatches,
   still_active_should_be_off: stillActiveShouldBeOff,
   disc_mil_active: mil?.active === true,
-  counts: counts[0] || counts,
-  history_untouched:
-    (counts[0] || counts).quote_items === 119 && (counts[0] || counts).invoice_items === 11,
+  counts: post,
+  history_baseline: historyBaseline,
+  history_untouched,
   pass:
     mismatches.length === 0 &&
     stillActiveShouldBeOff.length === 0 &&
     mil?.active === true &&
     hcp.length === 52 &&
-    (counts[0] || counts).hcp_codes_present === 52 &&
-    (counts[0] || counts).bundle_still_active === 0 &&
-    (counts[0] || counts).disc050_ok === 1,
+    post.hcp_codes_present === 52 &&
+    post.bundle_still_active === 0 &&
+    post.disc050_ok === 1 &&
+    (history_untouched === null || history_untouched === true),
 };
 report.disposition = report.pass
   ? 'CRM_HCP_PRICEBOOK_IMPORT_PASS'
