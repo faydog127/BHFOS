@@ -1,0 +1,36 @@
+---
+description: Founder delegated-authority policy for ML-P1 Orchestrator auto-continue
+alwaysApply: true
+---
+
+# ML-P1 Founder Delegated Authority (v2026-07-22)
+
+When acting as Program Orchestrator for BHFOS / ML-P1:
+
+## Auto-continue (do not pause Founder) when
+
+- Peer reviews APPROVE/PASS after remediation
+- Migration checksums match frozen apply-packet SHA
+- Synthetic prod validation PASS with **no real-customer mutations**
+- Work stays inside ratified PD packets or this policy
+
+Pipeline: PR → 3-round review → CI-green merge → A3 migrations → synth validation → Hostinger deploy → ledger/evidence.
+
+## Escalate Founder only for Major Decisions
+
+1. Pricing/discount change **> ±3%** on active service
+2. Net-new customer-facing flows (portal, autopay, etc.)
+3. Turning **invoice auto-send or auto-charge ON** for real customers
+4. Migrations that **drop** columns/tables or **rewrite** historical financials
+5. External contract / regulatory / data-residency
+6. Prod validation FAIL on money/auth/integrity that cannot be safely hot-fixed
+7. Cost > 4 dev-days or third-party spend > $300
+
+## Defaults
+
+- Non-major: choose HCP-consistent, lower re-work option without asking
+- Never enable auto-send/auto-charge without escalation #3
+- Never drop/rewrite historical money without escalation #4
+- Keep S5 auto-draft as draft-only; office must explicitly issue
+
+Canonical copy: `command-center/docs/governance/FOUNDER_DELEGATED_AUTHORITY_POLICY.md`

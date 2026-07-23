@@ -1,24 +1,31 @@
-# Evidence Manifest — ML-P1 Slice 5 A2 Coding
+# Evidence Manifest — ML-P1 Slice 5 A3 Closeout
 
 | Field | Value |
 | --- | --- |
-| Scope | Completed job → canonical final invoice (draft → issue `sent` / Issued) |
-| Exact coding base SHA | `8505a89a0e920ff68e35d0f10b49e98693125674` |
-| Branch | `ml/p1-s5-invoice-collection` |
-| Disposition | **A2 coding complete (SOURCE)**; merge requires Founder exact-head approval; **no prod apply** |
+| Scope | Completed job → canonical final invoice (draft → Issued/`sent`) |
+| Exact main SHA | `2b37985e25f2afbd6ac209982f724aadd4da404d` |
+| Exact code SHA | `f5f0e0969ace339854dda582bd2c9e66a77b3199` |
+| Disposition | **A3 PASS** — DB + Edge + Hostinger + structural synth |
 
 ## Artifacts
 
 | Path | Role |
 | --- | --- |
-| `docs/governance/decisions/ML-P1_SLICE5_DECISION_PACKET.md` | Ratified PD-S5-01…07 |
-| `docs/stabilization/releases/ML-P1_SLICE5_A2_CODING_EVIDENCE.md` | Coding evidence |
-| `docs/stabilization/releases/ML-P1_SLICE5_STATE_LEDGER.md` | S5 state |
-| `docs/stabilization/releases/ML-P1_SLICE5_RESIDUAL_REGISTER.md` | Residuals |
-| `docs/stabilization/releases/reviews/ML-P1_S5_CODING_*_REVIEW.md` | Three coding critique rounds |
-| `supabase/migrations/2026072312*_ml_p1_s5_*.sql` | Schema / RPCs / auto-draft (SOURCE) |
-| `tests/unit/ml-p1-s5-invoice.test.mjs` | Unit / source guards |
+| `docs/governance/FOUNDER_DELEGATED_AUTHORITY_POLICY.md` | Delegated authority |
+| `docs/governance/decisions/ML-P1_SLICE5_A3_APPLY_PACKET.md` | Frozen checksums |
+| `docs/stabilization/releases/ML-P1_SLICE5_A3_POSTAPPLY_CLOSEOUT.md` | Closeout |
+| `docs/stabilization/releases/ML-P1_SLICE5_A2_CODING_EVIDENCE.md` | A2 coding |
+| PR #101 | Source merge |
+
+## EXECUTED
+
+- Migrations applied with checksum match
+- I2 objects/RPCs/triggers present
+- Grandfather 25 / sum 11985.19 unchanged
+- `PASS_ISSUED_IMMUTABLE`
+- Edge `work-order-update` deployed
+- Hostinger health-probe HEALTHY @ `2b37985`
 
 ## Explicit non-claims
 
-No production migrations applied · no Hostinger deploy · no Stripe/Braintree · no historical invoice rewrite · merge not authorized without Founder exact-head approval.
+No auto-send · no auto-charge · no Stripe settlement · no historical rewrite · no live customer invoice create/issue in synth.

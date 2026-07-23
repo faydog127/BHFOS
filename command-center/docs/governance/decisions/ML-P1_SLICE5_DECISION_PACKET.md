@@ -7,7 +7,8 @@
 | Coding base SHA | `8505a89a0e920ff68e35d0f10b49e98693125674` |
 | Branch | `ml/p1-s5-invoice-collection` |
 | Prior slices | S1–S4 closed; price-book **A2-MERGED**; invoice-on-complete **disabled** |
-| Coding | **Authorized** — A2 SOURCE PR; **no prod migration apply / deploy / Stripe** until separate Founder A3 |
+| Coding | **A2 MERGED + A3 APPLIED** under Delegated-Authority Policy v2026-07-22 |
+| Deployed main tip | `2b37985e25f2afbd6ac209982f724aadd4da404d` |
 | Supersedes | Draft packet on prior tip `84452db` (base `3bb175e`) |
 
 ## Purpose
@@ -71,6 +72,6 @@ Slice 5b Stripe · refunds · payment reconciliation · Slice 6 autonomous follo
 
 ## Coding gate
 
-Founder authorized Slice 5 coding on branch `ml/p1-s5-invoice-collection` at base `8505a89`.  
-A2 SOURCE complete. **Merge** requires exact-head Founder approval.  
-**A3** (prod migrations / Hostinger / Stripe) requires separate Founder line — not granted.
+Founder authorized Slice 5 coding on `ml/p1-s5-invoice-collection` @ `8505a89`.  
+PR #101 merged at `f5f0e09` → main `2b37985`. A3 applied + Hostinger HEALTHY under Delegated-Authority Policy.  
+**Still requires Major Decision** to enable auto-send / auto-charge or Stripe settlement product defaults that charge customers.
