@@ -249,7 +249,7 @@ Deno.serve(async (req) => {
     }
 
     const actorUserId = asString(claims?.sub) || null;
-    const rpcResult = await supabaseAdmin.rpc('record_offline_manual_payment', {
+    const rpcResult = await supabaseAdmin.rpc('ml_p1_s6_record_offline_manual_payment', {
       p_tenant_id: jwtTenantId,
       p_invoice_id: invoiceId,
       p_amount: paymentAmount,

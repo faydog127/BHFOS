@@ -79,7 +79,63 @@ Deno.serve(async (req) => {
   const REVERSAL_EVENTS = new Set(['charge.refunded', 'charge.refund.updated', 'payment_intent.canceled']);
 
   if (REVERSAL_EVENTS.has(event.type)) {
-    return respondJson({ received: true, ignored: 'reversal_not_supported' }, 200);
+    // PD-S6-04: refunds/disputes → quarantine (no silent money rewrite from webhook alone)
+    await supabaseAdmin.rpc('ml_p1_s6_enqueue_recon', {
+      p_event_type: event.type,
+      p_reason: 'reversal_or_refund_event',
+      p_provider_event_id: event.id,
+      p_provider_payment_id: providerPaymentId,
+      p_invoice_id: invoiceIdFromMetadata,
+      p_tenant_id: null,
+      p_payload: event as unknown as Record<string, unknown>,
+    }).catch(() => null);
+
+    await createMoneyLoopTask({
+      tenantId: null,
+      sourceType: invoiceIdFromMetadata ? 'invoice' : 'webhook',
+      sourceId: invoiceIdFromMetadata ? String(invoiceIdFromMetadata) : String(providerPaymentId),
+      title: 'Payment Reversal / Refund — Reconcile',
+      leadId: null,
+      metadata: {
+        provider: 'stripe',
+        provider_payment_id: providerPaymentId,
+        gateway_event_id: event.id,
+        event_type: event.type,
+        slice: 'ml-p1-s6',
+      },
+    });
+
+    return respondJson({ received: true, quarantined: true, reason: 'reversal_queued' }, 200);
+  }
+
+  // Dispute events (PD-S6-04)
+  if (String(event.type || '').startsWith('charge.dispute')) {
+    await supabaseAdmin.rpc('ml_p1_s6_enqueue_recon', {
+      p_event_type: event.type,
+      p_reason: 'dispute_quarantine',
+      p_provider_event_id: event.id,
+      p_provider_payment_id: providerPaymentId,
+      p_invoice_id: invoiceIdFromMetadata,
+      p_tenant_id: null,
+      p_payload: event as unknown as Record<string, unknown>,
+    }).catch(() => null);
+
+    await createMoneyLoopTask({
+      tenantId: null,
+      sourceType: invoiceIdFromMetadata ? 'invoice' : 'webhook',
+      sourceId: invoiceIdFromMetadata ? String(invoiceIdFromMetadata) : String(providerPaymentId),
+      title: 'Stripe Dispute — Quarantine',
+      leadId: null,
+      metadata: {
+        provider: 'stripe',
+        provider_payment_id: providerPaymentId,
+        gateway_event_id: event.id,
+        event_type: event.type,
+        slice: 'ml-p1-s6',
+      },
+    });
+
+    return respondJson({ received: true, quarantined: true, reason: 'dispute_queued' }, 200);
   }
 
   if (!FINAL_SUCCESS_EVENTS.has(event.type) && !NON_FINAL_EVENTS.has(event.type)) {

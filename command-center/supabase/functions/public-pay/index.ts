@@ -261,6 +261,7 @@ Deno.serve(async (req) => {
   }
 
   let paymentsMode: string | null = null;
+  let stripeCheckoutEnabled: boolean | null = null;
   try {
     const { data: modeRow } = await supabaseAdmin
       .from('global_config')
@@ -270,6 +271,43 @@ Deno.serve(async (req) => {
     paymentsMode = typeof modeRow?.value === 'string' ? modeRow.value.trim().toLowerCase() : null;
   } catch (err) {
     console.error('Failed to read payments_mode:', formatError(err));
+  }
+
+  try {
+    const { data: flagRow, error: flagErr } = await supabaseAdmin
+      .from('global_config')
+      .select('value')
+      .eq('key', 'payment_invoicing.stripe_checkout_enabled')
+      .maybeSingle();
+    if (flagErr) {
+      return respondJson(
+        { error: 'ML_P1_S6_CHECKOUT_CONFIG_UNAVAILABLE: cannot verify Checkout setting' },
+        503,
+        cors.headers,
+      );
+    }
+    if (flagRow == null) {
+      stripeCheckoutEnabled = true; // seeded default when row not yet migrated
+    } else if (typeof flagRow.value === 'string') {
+      stripeCheckoutEnabled = /^(true|1|yes|on)$/i.test(flagRow.value.trim());
+    } else {
+      stripeCheckoutEnabled = false;
+    }
+  } catch (err) {
+    console.error('Failed to read stripe_checkout_enabled:', formatError(err));
+    return respondJson(
+      { error: 'ML_P1_S6_CHECKOUT_CONFIG_UNAVAILABLE: cannot verify Checkout setting' },
+      503,
+      cors.headers,
+    );
+  }
+
+  if (stripeCheckoutEnabled !== true) {
+    return respondJson(
+      { error: 'ML_P1_S6_CHECKOUT_OFF: Stripe Checkout pay links are disabled in Billing & Payments settings.' },
+      403,
+      cors.headers,
+    );
   }
 
   if (paymentsMode && paymentsMode.startsWith('stripe')) {

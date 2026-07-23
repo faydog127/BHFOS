@@ -4,23 +4,18 @@
 | --- | --- |
 | Updated | 2026-07-23 |
 | Repo | https://github.com/faydog127/BHFOS |
-| Current main (deployed) | `2b37985e25f2afbd6ac209982f724aadd4da404d` |
-| Authority | Founder Delegated-Authority Policy v2026-07-22 |
-| Evidence (price-book) | `260C5CB28EE1A7F5E4E76A488C38749926CDC8435608F83A1B421808E90A4158` |
+| S6 coding base | `6b300e40747cfceaf743b264d9f58bf7eede079a` |
+| Branch | `ml/p1-s6-stripe-settlement` |
+| Authority | Delegated + Category-C coding auth for S6 |
 
 ## Slice / gate posture
 
 | Slice | Gate | Status |
 | --- | --- | --- |
-| S4 | CLOSED ✔ | A3 PASS |
-| Price-book | A2-MERGED ✔ | PR #100 |
-| **S5** | **A3 CLOSED ✔** | PR #101 merged; migrations applied; Hostinger HEALTHY |
-| S6 | NEXT | Stripe settlement — under delegated auth; **no auto-charge** without Major Decision |
+| S5 | A3 CLOSED ✔ | |
+| **S6** | **A2 coding** | SOURCE on branch; stop before A3 secret/webhook/auto-charge |
+| S7 | Not started | Follow-up |
 
-## Waiting on Founder
+## Halt
 
-None for non-major work. Escalate only per Delegated-Authority Policy (pricing ±3%, new customer flows, auto-send/charge ON, destructive migrations, regulatory, money FAIL, cost gates).
-
-## Halt / non-scope (until Major Decision or S6 PD)
-
-Auto-send · auto-charge · historical financial rewrite · column/table drops · TIS · G2.3 reopen.
+No prod Stripe secret rotate · no webhook live-attach · no auto-charge enable · no portal · no QB export until separate auth.

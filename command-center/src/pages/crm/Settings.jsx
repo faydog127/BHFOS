@@ -5,6 +5,7 @@ import FeatureFlagManager from '@/components/crm/settings/FeatureFlagManager';
 import SecretsManager from '@/components/crm/settings/SecretsManager';
 import SystemDiagnostics from '@/components/crm/settings/SystemDiagnostics';
 import TrainingDataSettings from '@/components/crm/settings/TrainingDataSettings';
+import BillingPaymentsSettings from '@/components/crm/settings/BillingPaymentsSettings';
 import SYSTEM_VERSION from '@/config/version';
 
 const SettingsPage = () => {
@@ -15,15 +16,19 @@ const SettingsPage = () => {
         <p className="text-slate-500 mt-2">Configuration, security, and feature management.</p>
       </div>
 
-      <Tabs defaultValue="general" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 lg:w-[600px]">
+      <Tabs defaultValue="billing" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-5 lg:w-[720px]">
+          <TabsTrigger value="billing">Billing & Payments</TabsTrigger>
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="features">Features</TabsTrigger>
           <TabsTrigger value="secrets">Secrets</TabsTrigger>
           <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>
         </TabsList>
 
-        {/* GENERAL TAB */}
+        <TabsContent value="billing" className="space-y-6">
+          <BillingPaymentsSettings />
+        </TabsContent>
+
         <TabsContent value="general" className="space-y-6">
           <TrainingDataSettings />
           
