@@ -2,12 +2,12 @@
 
 | Field | Value |
 | --- | --- |
-| Active slice | **ML-P1-S5** (planning) |
-| Stage | Product decisions **RATIFIED** → planning PR → coding auth (later) |
-| Exact main SHA | `e9cc3317fcb9c84f44643700927699f40c7f1a93` |
-| Branch | `plan/ml-p1-s5-invoice-generation` |
-| Migration status | None for S5 |
-| Deploy status | N/A |
+| Active slice | **ML-P1-S5** (coding A2) |
+| Stage | Coding on branch; **A2 docs/code PR** — stop before prod apply / deploy / Stripe |
+| Exact coding base SHA | `8505a89a0e920ff68e35d0f10b49e98693125674` |
+| Branch | `ml/p1-s5-invoice-collection` |
+| Migration status | SOURCE committed; **not applied** to production |
+| Deploy status | Not deployed |
 | Open decisions | None (PD-S5-01…07 closed) |
-| Next Founder auth | After planning PR merge: **authorize Slice 5 coding** on exact SHA |
-| Explicitly not started | Implementation · migrations · S5b · Stripe · S6 · TIS · G2.3 |
+| Next Founder auth | Exact-head merge approval for A2 PR; separate A3 for prod migration apply |
+| Explicitly not started | Prod migrations · Hostinger · Stripe/Braintree · S5b · S6 · TIS · G2.3 |

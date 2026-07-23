@@ -243,4 +243,5 @@ Product · Data · Security · Financial Control · Architecture · UX/Field · 
 
 ## 16. Coding-readiness
 
-PD-S5-01…07 **ratified**. Next: merge this planning PR → Founder **coding authorization** on exact branch/base. No implementation until that auth.
+PD-S5-01…07 **ratified**. Coding authorized on `ml/p1-s5-invoice-collection` @ `8505a89`.  
+A2 SOURCE delivered (see `ML-P1_SLICE5_A2_CODING_EVIDENCE.md`). Stop before prod apply / deploy / Stripe.

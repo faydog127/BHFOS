@@ -9,6 +9,7 @@ import {
 } from '@/lib/jobStatus';
 import { jobService } from '@/services/jobService';
 import OfficeJobExecutionPanel from '@/components/crm/jobs/OfficeJobExecutionPanel';
+import OfficeInvoicePanel from '@/components/crm/jobs/OfficeInvoicePanel';
 import { formatS4StatusLabel } from '@/lib/mlP1S4RoleAuthz';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
@@ -989,6 +990,13 @@ const Jobs = () => {
                 job={recordJob}
                 tenantId={tenantId}
                 technicians={technicians}
+                onUpdated={() => {
+                  fetchJobs();
+                }}
+              />
+              <OfficeInvoicePanel
+                job={recordJob}
+                role="office"
                 onUpdated={() => {
                   fetchJobs();
                 }}

@@ -4,7 +4,7 @@
 | --- | --- |
 | Updated | 2026-07-23 |
 | Repo | https://github.com/faydog127/BHFOS |
-| Current main (planning base) | `e9cc3317fcb9c84f44643700927699f40c7f1a93` |
+| Current coding branch | `ml/p1-s5-invoice-collection` @ base `8505a89` |
 | Evidence bundle (price-book) | `260C5CB28EE1A7F5E4E76A488C38749926CDC8435608F83A1B421808E90A4158` |
 
 ## Slice / gate posture
@@ -13,12 +13,13 @@
 | --- | --- | --- |
 | S4 | CLOSED ✔ | A3 PASS |
 | Price-book | A2-MERGED ✔ | PR #100 |
-| **S5** | Planning PR (docs) | PD-S5-01…07 **RATIFIED**; coding **blocked** until planning PR merges + coding auth |
+| **S5** | **A2 coding** | PD-S5-01…07 ratified; coding on `ml/p1-s5-invoice-collection`; **no prod apply** |
 
-## Waiting on Founder (after planning PR merges)
+## Waiting on Founder
 
-- Authorize **Slice 5 coding** on exact branch/base SHA (not yet requested)
+- Exact-head **merge approval** for Slice 5 A2 coding PR
+- Separate **A3** auth before production migrations / Hostinger / Stripe
 
 ## Halt / non-scope
 
-No migrations · no app implementation · no Hostinger deploy · no Stripe · no historical invoice rewrite until coding is explicitly authorized.
+No production migrations · no Hostinger deploy · no Stripe/Braintree · no historical invoice rewrite · merge requires exact-head Founder approval.

@@ -2,11 +2,12 @@
 
 | Field | Value |
 | --- | --- |
-| Disposition | **SLICE5_PLANNING_REQUIRES_CODING_AUTH** (product decisions **RATIFIED**) |
-| Planning base (exact `origin/main`) | `e9cc3317fcb9c84f44643700927699f40c7f1a93` |
-| Branch | `plan/ml-p1-s5-invoice-generation` |
+| Disposition | **SLICE5_A2_CODING** (product decisions **RATIFIED**; coding on `ml/p1-s5-invoice-collection`) |
+| Planning base (exact `origin/main` ancestor) | `e9cc3317fcb9c84f44643700927699f40c7f1a93` |
+| Coding base SHA | `8505a89a0e920ff68e35d0f10b49e98693125674` |
+| Branch | `ml/p1-s5-invoice-collection` |
 | Prior slices | S1–S4 closed; price-book **A2-MERGED**; invoice-on-complete **disabled** |
-| Coding | **Not authorized** until this planning PR merges and Founder grants coding auth |
+| Coding | **Authorized** — A2 SOURCE PR; **no prod migration apply / deploy / Stripe** until separate Founder A3 |
 | Supersedes | Draft packet on prior tip `84452db` (base `3bb175e`) |
 
 ## Purpose
@@ -68,7 +69,8 @@ Completed canonical job → **exactly one** canonical **`final`** invoice (`draf
 
 Slice 5b Stripe · refunds · payment reconciliation · Slice 6 autonomous follow-up · TIS · G2.3 · multi-tenancy · pricebook optimization · historical invoice reprice.
 
-## Coding gate (after this planning PR merges)
+## Coding gate
 
-Requires separate Founder line: **authorize Slice 5 coding** on exact branch/base SHA.  
-Until then: **no migrations, no app implementation, no deploy.**
+Founder authorized Slice 5 coding on branch `ml/p1-s5-invoice-collection` at base `8505a89`.  
+A2 SOURCE complete. **Merge** requires exact-head Founder approval.  
+**A3** (prod migrations / Hostinger / Stripe) requires separate Founder line — not granted.

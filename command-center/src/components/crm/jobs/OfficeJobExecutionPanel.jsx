@@ -73,7 +73,7 @@ export default function OfficeJobExecutionPanel({ job, tenantId, technicians = [
             {isDispatchedDerived(job) ? ' · Dispatched (derived)' : ''}
           </div>
         </div>
-        <Badge variant="outline">No invoice on complete</Badge>
+        <Badge variant="outline">Invoice via Slice 5 (no auto-send)</Badge>
       </div>
 
       <div className="grid gap-2 md:grid-cols-3">

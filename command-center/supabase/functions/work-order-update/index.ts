@@ -448,98 +448,23 @@ const findSchedulingConflict = async (
   }) || null;
 };
 
-const createInvoiceForCompletedJob = async (job: Record<string, unknown>, tenantId: string) => {
-  const leadId = asNullableString(job.lead_id);
-  const quoteId = asNullableString(job.quote_id);
-  const customerType =
-    normalizeCustomerTypeSnapshot(job.customer_type_snapshot) ||
-    await loadLeadCustomerType(leadId, tenantId);
-  const paymentTerms =
-    normalizePaymentTerms(job.payment_terms) ||
-    defaultPaymentTermsForCustomerType(customerType);
-  const dueDays = paymentTermsDueDays(paymentTerms);
-  const workOrderLabel =
-    asNullableString(job.work_order_number) ||
-    asNullableString(job.job_number) ||
-    asNullableString(job.id) ||
-    'completed work order';
-
-  const [jobItems, recipientEmail] = await Promise.all([
-    loadJobItems(asString(job.id)),
-    loadLeadEmail(leadId, tenantId),
-  ]);
-
-  const invoiceItems = jobItems.length > 0 ? jobItems : await loadQuoteItems(quoteId, tenantId);
-  const subtotalFromItems = invoiceItems.reduce((sum, item) => sum + (item.total_price || 0), 0);
-  const contractTotal = asNullableNumber(job.total_amount) ?? subtotalFromItems;
-  const subtotal = subtotalFromItems > 0 ? subtotalFromItems : contractTotal;
-  const taxAmount = Math.max(contractTotal - subtotal, 0);
-  const totalAmount = subtotal + taxAmount;
-  const nowIso = new Date().toISOString();
-
-  const invoiceInsert: Record<string, unknown> = {
-    tenant_id: tenantId,
-    lead_id: leadId,
-    quote_id: quoteId,
-    job_id: asString(job.id),
-    invoice_number: randomInvoiceNumber(),
-    status: 'draft',
-    subtotal,
-    tax_amount: taxAmount,
-    total_amount: totalAmount,
-    amount_paid: 0,
-    balance_due: totalAmount,
-    issue_date: dateOnlyFromNow(0),
-    due_date: dateOnlyFromNow(dueDays),
-    notes: `Generated automatically from ${workOrderLabel}.`,
-    terms: paymentTermsDescription(paymentTerms),
-    customer_email: recipientEmail || null,
-    created_at: nowIso,
-    updated_at: nowIso,
-  };
-
-  const invoice = await insertInvoiceRow(invoiceInsert);
-
-  if (invoiceItems.length > 0) {
-    const lineRows = invoiceItems.map((item) => ({
-      invoice_id: invoice.id,
-      description: item.description,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      total_price: item.total_price,
-    }));
-
-    const { error: itemsError } = await supabaseAdmin.from('invoice_items').insert(lineRows);
-    if (itemsError) {
-      throw new Error(itemsError.message || 'Failed to create invoice line items.');
-    }
-  }
-
-  return { invoice, recipientEmail };
+const createInvoiceForCompletedJob = async (_job: Record<string, unknown>, _tenantId: string) => {
+  // ML-P1 S5: alternate Edge create denied — use ml_p1_s5_invoice_create RPC only.
+  throw new Error('ML_P1_S5_ALT_WRITER_DENY: use canonical ml_p1_s5_invoice_create');
 };
 
-const ensureInvoiceForCompletedJob = async (job: Record<string, unknown>, tenantId: string) => {
-  const existingInvoice = await fetchExistingInvoice(asString(job.id), tenantId);
-
-  if (existingInvoice?.id) {
+const ensureInvoiceForCompletedJob = async (job: Record<string, unknown>, _tenantId: string) => {
+  const existing = await fetchExistingInvoice(asString(job.id));
+  if (existing) {
     return {
-      invoice: existingInvoice,
+      invoice: existing,
       created: false,
       sent: false,
-      skipped: existingInvoice.sent_at ? 'already_sent' : 'draft_exists',
+      skipped: existing.sent_at ? 'already_sent' : 'draft_exists',
+      recipient_email: null,
     };
   }
-
-  const created = await createInvoiceForCompletedJob(job, tenantId);
-  const refreshed = await fetchInvoiceById(created.invoice.id, tenantId);
-
-  return {
-    invoice: refreshed || created.invoice,
-    created: true,
-    sent: false,
-    recipient_email: created.recipientEmail || null,
-    skipped: 'draft_created',
-  };
+  throw new Error('ML_P1_S5_ALT_WRITER_DENY: use canonical ml_p1_s5_invoice_create');
 };
 
 const syncInvoiceForPayment = async (params: {
