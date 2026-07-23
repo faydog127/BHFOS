@@ -2,12 +2,10 @@
 
 | Field | Value |
 | --- | --- |
-| Disposition | **SLICE6_PLANNING_READY_FOR_FOUNDER_REVIEW** |
-| Planning base (`origin/main`) | `a7e1f63781cca7fcba5d706a7a97bd62a17a4c3b` |
-| Branch | `plan/ml-p1-s6-stripe-settlement` |
-| Prior | S5 A3 CLOSED @ deploy `2b37985`; docs tip `a7e1f63` |
-| Coding | **Not authorized** — requires Founder **Category-C** on exact SHA after this planning PR |
-| Naming | Maps historical roadmap **S5b** → this **S6**; follow-up → **S7** |
+| Disposition | **SLICE6_A2_CODING** (PD-S6-01…07 as recommended; Category-C coding auth 2026-07-23) |
+| Coding base SHA | `6b300e40747cfceaf743b264d9f58bf7eede079a` |
+| Branch | `ml/p1-s6-stripe-settlement` |
+| Coding | **Authorized** — A2 SOURCE; **no A3** secret rotate / webhook live-attach / auto-charge enable |
 
 ## Purpose
 

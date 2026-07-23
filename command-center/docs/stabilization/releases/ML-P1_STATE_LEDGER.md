@@ -4,22 +4,18 @@
 | --- | --- |
 | Updated | 2026-07-23 |
 | Repo | https://github.com/faydog127/BHFOS |
-| Current main | `a7e1f63781cca7fcba5d706a7a97bd62a17a4c3b` |
-| Authority | Founder Delegated-Authority Policy v2026-07-22 |
-| Active planning branch | `plan/ml-p1-s6-stripe-settlement` |
+| S6 coding base | `6b300e40747cfceaf743b264d9f58bf7eede079a` |
+| Branch | `ml/p1-s6-stripe-settlement` |
+| Authority | Delegated + Category-C coding auth for S6 |
 
 ## Slice / gate posture
 
 | Slice | Gate | Status |
 | --- | --- | --- |
-| S5 | A3 CLOSED ✔ | Hostinger HEALTHY @ `2b37985` |
-| **S6** | **Planning** | PD-S6-01…07 recommended; docs PR for Founder Category-C; **no A2** |
-| S7 | Not started | Autonomous follow-up (former roadmap S6) |
+| S5 | A3 CLOSED ✔ | |
+| **S6** | **A2 coding** | SOURCE on branch; stop before A3 secret/webhook/auto-charge |
+| S7 | Not started | Follow-up |
 
-## Waiting on Founder
+## Halt
 
-- **Category-C** review/ratification of PD-S6-01…07 (or amendments) before any S6 coding
-
-## Halt / non-scope
-
-No S6 code/migrations/deploys · no auto-charge · no card vault · no merge-to-coding without Category-C.
+No prod Stripe secret rotate · no webhook live-attach · no auto-charge enable · no portal · no QB export until separate auth.

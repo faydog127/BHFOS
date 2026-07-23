@@ -2,12 +2,10 @@
 
 | Field | Value |
 | --- | --- |
-| Active slice | **ML-P1-S6** (planning) |
-| Stage | Planning docs → Founder Category-C review |
-| Exact main SHA | `a7e1f63781cca7fcba5d706a7a97bd62a17a4c3b` |
-| Branch | `plan/ml-p1-s6-stripe-settlement` |
-| Migration status | None for S6 |
-| Deploy status | N/A |
-| Open decisions | PD-S6-01…07 recommended; await Founder Category-C |
-| Next Founder auth | Category-C on exact planning head → then coding auth on exact base SHA |
-| Explicitly not started | Implementation · migrations · auto-charge · vault · S7 |
+| Active slice | **ML-P1-S6** (coding A2) |
+| Stage | SOURCE coding — PR pending merge; **no A3** |
+| Exact coding base | `6b300e40747cfceaf743b264d9f58bf7eede079a` |
+| Branch | `ml/p1-s6-stripe-settlement` |
+| Migration status | SOURCE only (not applied) |
+| Next | Peer reviews + Bugbot → Founder exact-head merge → separate A3 |
+| Halt | Secret rotate · webhook live-attach · auto-charge · portal · QB |
