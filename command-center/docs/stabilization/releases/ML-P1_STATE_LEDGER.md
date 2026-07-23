@@ -6,8 +6,9 @@
 | Repo | https://github.com/faydog127/BHFOS |
 | Worktree | `F:\Dev\BHFOS-ml-p1-s4` |
 | Planning / code base (origin/main) | `3bb175e3a952756066b29dc38ab25864ad47bdca` |
-| Active branch (local) | `ops/hcp-crm-pricebook-import` |
+| Active branch | `ops/hcp-crm-pricebook-import` @ `3f5b097f952970615f1835d2b83ac7b1427c18f0` |
 | Persistent orchestrator prompt | Adopted 2026-07-23 (revised); obeys `FOUNDER_DELEGATED_AUTHORITY_POLICY.md` |
+| Price-book PR | Draft https://github.com/faydog127/BHFOS/pull/100 |
 
 ## Slice / gate posture
 
@@ -15,7 +16,7 @@
 | --- | --- | --- |
 | S1–S3 | Closed | Production coherent; residuals tracked separately |
 | **S4** Field execution | **A3 complete** | `SLICE4_PRODUCTION_VALIDATION_PASS`; R-S4-06 remediated; soft residue R-S4-07 (tenant_id stamps) |
-| Price-book (cross-cut) | **Prod applied; repo PR pending** | PD-PB-01…04 ratified; `CRM_HCP_PRICEBOOK_IMPORT_PASS` on linked DB |
+| Price-book (cross-cut) | **A2 draft PR #100**; prod already PASS | PD-PB-01…04 ratified; merge = Category C (Founder) after 3 review rounds + CI |
 | **S5** Invoice generation | **Planning / PD open** | PR #99 docs; `SLICE5_PLANNING_REQUIRES_PRODUCT_DECISION` (PD-S5-01…07); **no A2 coding auth** |
 
 ## Production surfaces (known)
@@ -44,27 +45,27 @@
 | Active bundle discount | `DISC-050` only; `BUNDLE-DISCOUNT-50` deactivated for new quotes |
 | CRM-only retain | `DISC-MIL-10PCT` still active |
 | History | Quote/invoice line counts unchanged at import |
-| Repo residual | Migration + tools + decision docs **uncommitted**; no PR yet |
+| Evidence | `ML-P1_PRICEBOOK_EVIDENCE_MANIFEST.md` |
 
 ## Outstanding residuals / blockers
 
-1. **Price-book source sync** — Prod catalog updated; branch artifacts not on `main` (needs A2 PR + 3-round peer review before merge).
+1. **R-PB-01** — Draft PR #100 needs 3 peer-review rounds + CI; **merge requires Founder** (Category C).
 2. **S5 product decisions** — PD-S5-01…07 unanswered → coding blocked.
 3. **R-S4-07** — Soft: row `tenant_id` stamps (non-blocking).
 4. **Stale open docs PRs** — #94, #87, #86, #85 may need close/supercede hygiene (non-blocking).
 
 ## Standing policies in force
 
-- Auto-continue when packet/policy authorises next intra-slice step and preconditions green.
-- A0–A3 gate discipline; fail-closed on health/CI/permission errors.
+- Auto-continue inside granted slice scope per Founder prompt + `FOUNDER_DELEGATED_AUTHORITY_POLICY.md`.
+- Draft PR / review coordination = standing (A/B). Merge / new prod mutation / next slice = Category C.
 - Synthetic-only production validation; cleanup required.
 - S4 CO / make-safe / status vocabulary / invoice-on-complete OFF (ratified 2026-07-22).
-- Three peer-review rounds (Product · Data · Security · Architecture · Financial Control) before any PR merges to `main`.
+- Three peer-review rounds before any PR merges to `main`.
 
-## Next authorised moves (no Founder re-ask if green)
+## Next authorised moves
 
-| Move | Gate | Auth basis |
+| Move | Gate | Auth |
 | --- | --- | --- |
-| Commit + open PR for price-book migration/tools/docs | A2 | Close out ratified PD-PB import; peer review required before merge |
-| Do **not** start S5 coding | — | Waiting PD-S5-01…07 |
-| Do **not** enable invoice-on-complete | — | Slice 5 gate |
+| Complete 3 peer-review rounds on PR #100 | A2 | Standing (review coordination) |
+| Mark ready + merge PR #100 | A2→main | **Founder** (Category C) |
+| Do **not** start S5 coding / Stripe / invoice / TIS / G2.3 | — | Stop condition |
