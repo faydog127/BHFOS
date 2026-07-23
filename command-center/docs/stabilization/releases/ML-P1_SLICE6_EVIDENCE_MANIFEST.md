@@ -1,29 +1,29 @@
-# Evidence Manifest — ML-P1 Slice 6 Planning
+# Evidence Manifest — ML-P1 Slice 6 A3
 
 | Field | Value |
 | --- | --- |
-| Scope | Planning only — Stripe settlement & payment posting |
-| Exact main SHA | `a7e1f63781cca7fcba5d706a7a97bd62a17a4c3b` |
-| Branch | `plan/ml-p1-s6-stripe-settlement` |
-| Disposition | Docs PR ready for Founder Category-C review; **no coding auth** |
+| Scope | Stripe settlement settings + Checkout/offline/refund/recon gates (no auto-charge, no vault) |
+| Exact deployed SHA | `206e1411ce89674a9875070586f7e1572d86acc8` |
+| A2 merge | PR #104 → `d73f975…`; tip includes next-phase docs PR #105 |
+| Disposition | **A3 STRUCTURAL PASS** · Full-Threat **BLOCKED_PENDING_STRIPE_TEST_KEYS** |
 
 ## Artifacts
 
 | Path | Role |
 | --- | --- |
-| `docs/governance/decisions/ML-P1_SLICE6_DECISION_PACKET.md` | PD-S6-01…07 (recommended) |
-| `docs/stabilization/releases/ML-P1_SLICE6_BRIEF.md` | Brief |
-| `docs/stabilization/releases/ML-P1_SLICE6_ARCHITECTURE_FINDINGS.md` | Architecture |
-| `docs/stabilization/releases/ML-P1_SLICE6_RESIDUAL_REGISTER.md` | Residuals |
-| `docs/stabilization/releases/ML-P1_SLICE6_STATE_LEDGER.md` | S6 state |
-| `docs/stabilization/releases/reviews/ML-P1_S6_PLANNING_*_REVIEW.md` | Three critique rounds |
+| `docs/governance/decisions/ML-P1_SLICE6_A3_APPLY_PACKET.md` | Exact apply set |
+| `docs/stabilization/releases/ML-P1_SLICE6_A3_POSTAPPLY_CLOSEOUT.md` | Closeout |
+| `docs/stabilization/releases/ML-P1_SLICE6_FULL_THREAT_E2E_REPORT.md` | E2E disposition |
+| `docs/governance/ML-P1_ORCHESTRATOR_ACTIVE_PROMPT.md` | Reconciled orchestrator posture |
+| Migration `20260723140000_ml_p1_s6_payment_settings.sql` | SHA-256 `1E268248…FFB0D9` |
 
-## EXECUTED (read-only)
+## EXECUTED
 
-- `payments_mode=stripe`
-- Invoice settlement snapshot: 25 / paid 9 / provider_id 9 / amount_paid>0 10
-- Confirmed `stripe_webhook_events`, `public_payment_attempts` present
+- Linked SQL apply of S6 migration; I2 object/flag/RLS/auto-charge deny probes  
+- Edge redeploy of pay + webhook surfaces  
+- Hostinger CRM deploy; health-probe **HEALTHY** @ `206e141`  
+- Unit 8/8; webhook spoof reject  
 
 ## Explicit non-claims
 
-No code · no migrations · no deploys · no Stripe API mutations · no PD ratification · no A2 coding.
+No live Checkout charge/refund/dispute · no secret rotate · no auto-charge enable · no vault/Terminal · no S8 start.
