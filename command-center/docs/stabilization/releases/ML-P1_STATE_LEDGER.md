@@ -4,23 +4,23 @@
 | --- | --- |
 | Updated | 2026-07-23 |
 | Repo | https://github.com/faydog127/BHFOS |
-| Authority | Delegated-Authority Policy **v2026-07-23** + FIX-S6-SETTLEMENT APPROVE |
-| S6 A2 head | `02238f4edd506c0756e74d1dbd0f0640f999b5bb` |
-| Disposition | **SLICE6_PRODUCTION_VALIDATION_PASS** |
+| Current main | `3cd9a32a03c07eda541daf75e28ddb0ec4aa27e2` |
+| Canonical governance copy | `docs/governance/state/ML-P1_STATE_LEDGER.md` |
+| Authority | Delegated-Authority Policy |
 
 ## Slice / gate posture
 
 | Slice | Gate | Status |
 | --- | --- | --- |
-| S5 | A3 CLOSED ✔ | |
-| **S6** | **PRODUCTION VALIDATION PASS** ✔ | Hotfixes applied; sk_test E2E PASS; idle |
-| S7 | Reserved | Not started |
-| **S8** | Queued | Await Founder direction |
+| S1–S5 | CLOSED ✔ | |
+| **S6** | PRODUCTION VALIDATION PASS ✔ | Idle / closed |
+| **S7** | Deferred | Do not start |
+| **S8** | A0/A1 PLANNING | `ml/p1-s8-planning` · PD draft · **WAIT Category-C** before A2 |
 
 ## Waiting on Founder
 
-None required for S6. Optional UX feedback on Billing & Payments.
+PD-S8-01…07 Category-C + A2 coding auth at exact SHA.
 
 ## Halt defaults
 
-Auto-send · auto-charge · portal/vault · historical rewrite · live (non-sandbox) Stripe mutation in regression.
+Auto-send · auto-charge · portal/vault · TIS merge · silent S4 bypass · A2 without Category-C.

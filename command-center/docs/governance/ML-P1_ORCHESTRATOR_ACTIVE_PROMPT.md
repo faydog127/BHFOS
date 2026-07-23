@@ -3,20 +3,29 @@
 | Field | Value |
 | --- | --- |
 | Repo | https://github.com/faydog127/BHFOS |
-| S6 A2 head | `02238f4edd506c0756e74d1dbd0f0640f999b5bb` |
-| Disposition | **SLICE6_PRODUCTION_VALIDATION_PASS** |
-| Active posture | **Idle** — awaiting Founder direction (S8 / next-phase) |
+| Exact `origin/main` | `3cd9a32a03c07eda541daf75e28ddb0ec4aa27e2` |
+| Stale SHA in prior pastes | `e9cc3317…` — **superseded** |
+| Completed | S1–S6 **CLOSED** (`SLICE6_PRODUCTION_VALIDATION_PASS`) |
+| Deferred | **S7** autonomous follow-up / warranty |
+| Active | **S8 A0/A1 planning** — `ml/p1-s8-planning` |
 
-## Completed
+## Standing policy
 
-- S1–S5 + price-book  
-- S6 A2 + A3 structural + settlement hotfixes (`150000`, `151000`)  
-- sk_test Full-Threat synth E2E PASS  
+- Auto-continue inside authorized gates (Delegated Authority).  
+- PRs: 3-round peer review → CI green.  
+- **A2 coding for S8 requires Founder Category-C** on PD-S8-01…07.  
+- Synthetic-only prod validation; no real-customer money mutation.  
 
-## Guard-rails (always)
+## Open work-stream
 
-- Never widen GRANTs without migration review.  
-- Never enable auto-charge, saved cards/portal, or Terminal.  
-- Checkout immediate capture only; no card data outside Stripe.  
-- `invoice_auto_send_enabled` remains **false** unless Major Decision.  
-- Health probe GREEN after each deploy.  
+1. Land S8 planning PR (docs only).  
+2. CI green + 3 peer approvals.  
+3. **WAIT** — Founder Category-C PD answers + A2 auth at exact SHA.  
+4. Do **not** open coding branch or migrations until step 3.
+
+## Guard-rails
+
+- No app/migration code in planning.  
+- No TIS merge · no multi-tenant redesign · no silent S4 bypass.  
+- No auto-send/auto-charge/vault/Terminal.  
+- S7 remains deferred.  
