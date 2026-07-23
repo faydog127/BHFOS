@@ -5,9 +5,10 @@ import { Check } from 'lucide-react';
 export const FIELD_STEPS = [
   { id: 'customer', label: 'Customer', shortLabel: '1. Customer', route: 'session' },
   { id: 'photos', label: 'Photos', shortLabel: '2. Photos', route: 'session' },
-  { id: 'findings', label: 'Findings', shortLabel: '3. Findings', route: 'review' },
-  { id: 'recommendation', label: 'Recommendation', shortLabel: '4. Rec', route: 'review' },
-  { id: 'finish', label: 'Review & Finish', shortLabel: '5. Finish', route: 'review' },
+  { id: 'checklist', label: 'Checklist', shortLabel: '3. Check', route: 'session' },
+  { id: 'findings', label: 'Findings', shortLabel: '4. Findings', route: 'review' },
+  { id: 'recommendation', label: 'Recommendation', shortLabel: '5. Rec', route: 'review' },
+  { id: 'finish', label: 'Review & Finish', shortLabel: '6. Finish', route: 'review' },
 ];
 
 export const stepHref = (inspectionId, stepId) => {
@@ -35,7 +36,7 @@ export default function InspectionFieldStepper({
       className={`rounded-xl border border-slate-200 bg-white p-2 ${className}`.trim()}
       aria-label="Inspection field steps"
     >
-      <ol className="grid grid-cols-5 gap-1">
+      <ol className="grid grid-cols-6 gap-1">
         {FIELD_STEPS.map((step, index) => {
           const complete = Boolean(completionByStep[step.id]);
           const active = step.id === currentStep;

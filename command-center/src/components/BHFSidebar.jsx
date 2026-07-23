@@ -122,7 +122,7 @@ const BHFSidebar = ({ onNavigate = null }) => {
       items: [
         { name: 'Marketing', path: '/crm/marketing', icon: Megaphone },
         { name: 'Partners', path: '/crm/partners', icon: Users },
-        { name: 'Reporting', path: '/crm/reporting', icon: BarChart },
+        { name: 'Analytics', path: '/crm/reporting', icon: BarChart },
       ],
     },
     {

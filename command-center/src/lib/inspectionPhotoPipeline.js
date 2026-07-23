@@ -110,6 +110,7 @@ export const enqueueInspectionPhotoFiles = async ({
   revision,
   isBefore = null,
   qualityResults = new Map(),
+  cacheMb = 250,
 }) => {
   const accepted = [];
   const rejected = [];
@@ -118,31 +119,40 @@ export const enqueueInspectionPhotoFiles = async ({
     try {
       validateInspectionImageFile(file);
       const id = crypto.randomUUID();
-      const item = await mediaQueue.add({
-        id,
-        tenant_id: tenantId,
-        inspection_id: inspectionId,
-        inspection_revision: revision,
-        status: 'queued',
-        stage: 'queued',
-        progress: 0,
-        photo_row_id: id,
-        object_path: `${tenantId}/inspections/${inspectionId}/revision-${revision}/photos/${id}.jpg`,
-        file,
-        file_name: file?.name || `photo-${id}`,
-        original_content_type: file?.type || null,
-        caption: '',
-        finding_id: null,
-        recommendation_id: null,
-        is_before: typeof isBefore === 'boolean' ? isBefore : null,
-        quality_status: qualityResults.get(file)?.status || 'unchecked',
-        quality_warnings: qualityResults.get(file)?.warnings || [],
-        quality_metrics: qualityResults.get(file)?.metrics || {},
-        quality_checked_at: qualityResults.get(file) ? new Date().toISOString() : null,
-      });
+      const item = await mediaQueue.add(
+        {
+          id,
+          tenant_id: tenantId,
+          inspection_id: inspectionId,
+          inspection_revision: revision,
+          status: 'queued',
+          stage: 'queued',
+          progress: 0,
+          photo_row_id: id,
+          object_path: `${tenantId}/inspections/${inspectionId}/revision-${revision}/photos/${id}.jpg`,
+          file,
+          blob: file,
+          byte_size: file?.size || 0,
+          file_name: file?.name || `photo-${id}`,
+          original_content_type: file?.type || null,
+          caption: '',
+          finding_id: null,
+          recommendation_id: null,
+          is_before: typeof isBefore === 'boolean' ? isBefore : null,
+          quality_status: qualityResults.get(file)?.status || 'unchecked',
+          quality_warnings: qualityResults.get(file)?.warnings || [],
+          quality_metrics: qualityResults.get(file)?.metrics || {},
+          quality_checked_at: qualityResults.get(file) ? new Date().toISOString() : null,
+        },
+        { cacheMb },
+      );
       accepted.push(item);
     } catch (error) {
-      rejected.push({ fileName: file?.name || 'image', error: error?.message || 'Unsupported image.' });
+      rejected.push({
+        fileName: file?.name || 'image',
+        error: error?.message || 'Unsupported image.',
+        code: error?.code || null,
+      });
     }
   }
 
