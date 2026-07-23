@@ -53,7 +53,8 @@ export function evaluateCompletionGates({
   if (unansweredChecklistCount(responses) > 0) codes.push('ML_P1_S8_CHECKLIST_INCOMPLETE');
   const missing = missingRequiredPhotoItemKeys(responses, photos);
   if (missing.length) codes.push('ML_P1_S8_REQUIRED_PHOTOS_MISSING');
-  if (!photosWaveCompleteAt && countValidEvidencePhotos(photos) < 1) {
+  // Mirror server: wave marker alone never replaces valid complete evidence.
+  if (countValidEvidencePhotos(photos) < 1) {
     codes.push('ML_P1_S8_PHOTOS_REQUIRED');
   }
   return { ok: codes.length === 0, codes, missingPhotoItemKeys: missing };

@@ -80,70 +80,7 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.ml_p1_s8_assert_completion_gates(p_inspection_id uuid)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, auth
-AS $$
-DECLARE
-  v_inv public.inspections%ROWTYPE;
-  v_unanswered integer;
-  v_missing_photo integer;
-  v_photo_count integer;
-  v_response_count integer;
-BEGIN
-  v_inv := public.ml_p1_s8_assert_inspection_actor(p_inspection_id);
-
-  IF NOT public.ml_p1_s8_photos_before_report_enabled() THEN
-    RETURN;
-  END IF;
-
-  SELECT count(*) INTO v_response_count
-  FROM public.inspection_checklist_responses r
-  WHERE r.inspection_id = p_inspection_id;
-
-  IF v_response_count < 1 THEN
-    RAISE EXCEPTION 'ML_P1_S8_CHECKLIST_REQUIRED: seed and complete checklist before finalize'
-      USING ERRCODE = 'P0001';
-  END IF;
-
-  SELECT count(*) INTO v_unanswered
-  FROM public.inspection_checklist_responses r
-  WHERE r.inspection_id = p_inspection_id
-    AND r.checked IS NULL;
-
-  IF v_unanswered > 0 THEN
-    RAISE EXCEPTION 'ML_P1_S8_CHECKLIST_INCOMPLETE: % mandatory responses unanswered', v_unanswered
-      USING ERRCODE = 'P0001';
-  END IF;
-
-  SELECT count(*) INTO v_missing_photo
-  FROM public.inspection_checklist_responses r
-  WHERE r.inspection_id = p_inspection_id
-    AND r.photo_required IS TRUE
-    AND NOT EXISTS (
-      SELECT 1
-      FROM public.inspection_photos p
-      WHERE p.inspection_id = p_inspection_id
-        AND p.checklist_item_key = r.item_key
-        AND coalesce(p.is_voided, false) IS NOT TRUE
-        AND lower(coalesce(p.upload_state, '')) = 'complete'
-    );
-
-  IF v_missing_photo > 0 THEN
-    RAISE EXCEPTION 'ML_P1_S8_REQUIRED_PHOTOS_MISSING: % checklist items lack complete evidence', v_missing_photo
-      USING ERRCODE = 'P0001';
-  END IF;
-
-  v_photo_count := public.ml_p1_s8_valid_evidence_photo_count(p_inspection_id);
-  -- Wave marker alone is insufficient: voiding all evidence must re-block finalize.
-  IF v_photo_count < 1 THEN
-    RAISE EXCEPTION 'ML_P1_S8_PHOTOS_REQUIRED: complete photo wave before report'
-      USING ERRCODE = 'P0001';
-  END IF;
-END;
-$$;
+-- ml_p1_s8_assert_completion_gates defined later (template-backed + immutability companion).
 
 CREATE OR REPLACE FUNCTION public.ml_p1_s8_photos_before_report_enabled()
 RETURNS boolean
@@ -557,6 +494,140 @@ BEGIN
   END IF;
 
   RETURN NEW;
+END;
+$$;
+
+-- Checklist responses: seed/template fields immutable; DELETE denied for JWT actors.
+CREATE OR REPLACE FUNCTION public.ml_p1_s8_checklist_responses_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, auth
+AS $$
+BEGIN
+  IF coalesce(auth.role(), '') = 'service_role'
+     OR current_user IN ('postgres', 'supabase_admin') THEN
+    RETURN coalesce(NEW, OLD);
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'ML_P1_S8_CHECKLIST_IMMUTABLE: delete not allowed'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  IF TG_OP = 'UPDATE' THEN
+    IF coalesce(NEW.photo_required, false) IS DISTINCT FROM coalesce(OLD.photo_required, false)
+       OR coalesce(NEW.item_key, '') IS DISTINCT FROM coalesce(OLD.item_key, '')
+       OR coalesce(NEW.item_label, '') IS DISTINCT FROM coalesce(OLD.item_label, '')
+       OR coalesce(NEW.sort_order, 0) IS DISTINCT FROM coalesce(OLD.sort_order, 0)
+       OR NEW.template_id IS DISTINCT FROM OLD.template_id
+       OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+       OR NEW.inspection_id IS DISTINCT FROM OLD.inspection_id THEN
+      RAISE EXCEPTION 'ML_P1_S8_CHECKLIST_IMMUTABLE: seeded fields cannot change'
+        USING ERRCODE = 'P0001';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_ml_p1_s8_checklist_responses_guard ON public.inspection_checklist_responses;
+CREATE TRIGGER trg_ml_p1_s8_checklist_responses_guard
+BEFORE UPDATE OR DELETE ON public.inspection_checklist_responses
+FOR EACH ROW
+EXECUTE FUNCTION public.ml_p1_s8_checklist_responses_guard();
+
+-- Also enforce against template when responses were thinned (defense in depth).
+CREATE OR REPLACE FUNCTION public.ml_p1_s8_assert_completion_gates(p_inspection_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+DECLARE
+  v_inv public.inspections%ROWTYPE;
+  v_unanswered integer;
+  v_missing_photo integer;
+  v_photo_count integer;
+  v_response_count integer;
+  v_tmpl_required integer;
+BEGIN
+  v_inv := public.ml_p1_s8_assert_inspection_actor(p_inspection_id);
+
+  IF NOT public.ml_p1_s8_photos_before_report_enabled() THEN
+    RETURN;
+  END IF;
+
+  SELECT count(*) INTO v_response_count
+  FROM public.inspection_checklist_responses r
+  WHERE r.inspection_id = p_inspection_id;
+
+  IF v_response_count < 1 THEN
+    RAISE EXCEPTION 'ML_P1_S8_CHECKLIST_REQUIRED: seed and complete checklist before finalize'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  -- Template-backed required-photo count cannot be undercut by deleted rows.
+  IF v_inv.checklist_template_id IS NOT NULL THEN
+    SELECT count(*) INTO v_tmpl_required
+    FROM public.inspection_checklist_templates t,
+         jsonb_array_elements(coalesce(t.items, '[]'::jsonb)) item
+    WHERE t.id = v_inv.checklist_template_id
+      AND coalesce((item->>'photo_required')::boolean, false) IS TRUE;
+
+    SELECT count(*) INTO v_missing_photo
+    FROM public.inspection_checklist_templates t,
+         jsonb_array_elements(coalesce(t.items, '[]'::jsonb)) item
+    WHERE t.id = v_inv.checklist_template_id
+      AND coalesce((item->>'photo_required')::boolean, false) IS TRUE
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.inspection_photos p
+        WHERE p.inspection_id = p_inspection_id
+          AND p.checklist_item_key = coalesce(item->>'key', '')
+          AND coalesce(p.is_voided, false) IS NOT TRUE
+          AND lower(coalesce(p.upload_state, '')) = 'complete'
+      );
+
+    IF coalesce(v_tmpl_required, 0) > 0 AND coalesce(v_missing_photo, 0) > 0 THEN
+      RAISE EXCEPTION 'ML_P1_S8_REQUIRED_PHOTOS_MISSING: % checklist items lack complete evidence', v_missing_photo
+        USING ERRCODE = 'P0001';
+    END IF;
+  END IF;
+
+  SELECT count(*) INTO v_unanswered
+  FROM public.inspection_checklist_responses r
+  WHERE r.inspection_id = p_inspection_id
+    AND r.checked IS NULL;
+
+  IF v_unanswered > 0 THEN
+    RAISE EXCEPTION 'ML_P1_S8_CHECKLIST_INCOMPLETE: % mandatory responses unanswered', v_unanswered
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  SELECT count(*) INTO v_missing_photo
+  FROM public.inspection_checklist_responses r
+  WHERE r.inspection_id = p_inspection_id
+    AND r.photo_required IS TRUE
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.inspection_photos p
+      WHERE p.inspection_id = p_inspection_id
+        AND p.checklist_item_key = r.item_key
+        AND coalesce(p.is_voided, false) IS NOT TRUE
+        AND lower(coalesce(p.upload_state, '')) = 'complete'
+    );
+
+  IF v_missing_photo > 0 THEN
+    RAISE EXCEPTION 'ML_P1_S8_REQUIRED_PHOTOS_MISSING: % checklist items lack complete evidence', v_missing_photo
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  v_photo_count := public.ml_p1_s8_valid_evidence_photo_count(p_inspection_id);
+  IF v_photo_count < 1 THEN
+    RAISE EXCEPTION 'ML_P1_S8_PHOTOS_REQUIRED: complete photo wave before report'
+      USING ERRCODE = 'P0001';
+  END IF;
 END;
 $$;
 

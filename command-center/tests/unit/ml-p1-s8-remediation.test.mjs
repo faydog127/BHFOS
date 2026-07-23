@@ -72,6 +72,14 @@ test('unit: evaluateCompletionGates allow and deny paths', () => {
     photosWaveCompleteAt: '2026-07-23T00:00:00Z',
   });
   assert.equal(allow.ok, true);
+
+  const waveOnly = evaluateCompletionGates({
+    responses: [{ item_key: 'a', photo_required: false, checked: true }],
+    photos: [],
+    photosWaveCompleteAt: '2026-07-23T00:00:00Z',
+  });
+  assert.equal(waveOnly.ok, false);
+  assert.ok(waveOnly.codes.includes('ML_P1_S8_PHOTOS_REQUIRED'));
 });
 
 test('remediation migration hardens DEFINER + finalize order + grants', () => {
