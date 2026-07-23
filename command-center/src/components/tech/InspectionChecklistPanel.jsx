@@ -27,6 +27,9 @@ export default function InspectionChecklistPanel({
   workType = null,
   locked = false,
   onFlagsChange = null,
+  onResponsesChange = null,
+  onPhotoLinked = null,
+  photos = [],
 }) {
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState('');
@@ -60,6 +63,7 @@ export default function InspectionChecklistPanel({
       }
 
       setRows(list.data || []);
+      onResponsesChange?.(list.data || []);
       onFlagsChange?.(
         (list.data || []).filter((r) => r.flag_code && r.flag_code !== 'none'),
       );
@@ -68,7 +72,7 @@ export default function InspectionChecklistPanel({
     } finally {
       setLoading(false);
     }
-  }, [inspectionId, workType, onFlagsChange]);
+  }, [inspectionId, workType, onFlagsChange, onResponsesChange]);
 
   useEffect(() => {
     load();
@@ -87,8 +91,9 @@ export default function InspectionChecklistPanel({
         p_notes: patch.notes ?? null,
       });
       if (rpcErr) throw rpcErr;
-      setRows((prev) => prev.map((row) => (row.item_key === itemKey ? { ...row, ...data } : row)));
       const next = (rows || []).map((row) => (row.item_key === itemKey ? { ...row, ...data } : row));
+      setRows(next);
+      onResponsesChange?.(next);
       onFlagsChange?.(next.filter((r) => r.flag_code && r.flag_code !== 'none'));
     } catch (err) {
       setError(err?.message || String(err));
@@ -96,6 +101,29 @@ export default function InspectionChecklistPanel({
       setSavingKey('');
     }
   };
+
+  const linkPhoto = async (itemKey, photoId) => {
+    if (locked || !photoId) return;
+    setSavingKey(itemKey);
+    setError('');
+    try {
+      const { error: rpcErr } = await supabase.rpc('ml_p1_s8_link_photo_checklist_item', {
+        p_inspection_id: inspectionId,
+        p_photo_id: photoId,
+        p_item_key: itemKey,
+      });
+      if (rpcErr) throw rpcErr;
+      onPhotoLinked?.(photoId, itemKey);
+    } catch (err) {
+      setError(err?.message || String(err));
+    } finally {
+      setSavingKey('');
+    }
+  };
+
+  const completePhotos = (photos || []).filter(
+    (p) => p && p.is_voided !== true && String(p.upload_state || '').toLowerCase() === 'complete',
+  );
 
   if (loading) {
     return (
@@ -133,7 +161,7 @@ export default function InspectionChecklistPanel({
                 <div className="min-w-0">
                   <div className="text-sm font-medium text-slate-900">{row.item_label}</div>
                   {row.photo_required ? (
-                    <div className="text-[11px] text-slate-500">Photo required for this item</div>
+                    <div className="text-[11px] text-amber-700">Photo required — link a completed upload</div>
                   ) : null}
                 </div>
                 <Badge variant="outline" className={flagTone(row.flag_code)}>
@@ -176,6 +204,25 @@ export default function InspectionChecklistPanel({
                   ))}
                 </select>
               </div>
+              {row.photo_required ? (
+                <select
+                  className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+                  disabled={locked || savingKey === row.item_key || completePhotos.length === 0}
+                  defaultValue=""
+                  aria-label={`Link photo for ${row.item_label}`}
+                  onChange={(e) => linkPhoto(row.item_key, e.target.value)}
+                >
+                  <option value="">
+                    {completePhotos.length ? 'Link completed photo…' : 'No completed photos yet'}
+                  </option>
+                  {completePhotos.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {(p.file_name || p.caption || p.id).toString().slice(0, 48)}
+                      {p.checklist_item_key === row.item_key ? ' (linked)' : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               <Textarea
                 rows={2}
                 disabled={locked || savingKey === row.item_key}

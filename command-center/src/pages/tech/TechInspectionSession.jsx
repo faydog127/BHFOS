@@ -29,6 +29,11 @@ import {
 import InspectionFieldCustomerStep from '@/components/tech/InspectionFieldCustomerStep';
 import InspectionChecklistPanel from '@/components/tech/InspectionChecklistPanel';
 import { DEFAULT_OFFLINE_CACHE_MB } from '@/lib/offlineInspectionMediaQueue';
+import {
+  countValidEvidencePhotos,
+  isChecklistComplete,
+  photosWaveSatisfied,
+} from '@/lib/inspectionCompletionRules';
 
 const PHOTO_BUCKET = 'inspection-photos';
 
@@ -356,8 +361,14 @@ export default function TechInspectionSession() {
     }),
   );
   const customerReady = Boolean(inspection?.lead_id) && serviceAddressReady;
-  const photosReady = photos.some((photo) => photo && photo.is_voided !== true);
-  const photosWaveComplete = Boolean(inspection?.photos_wave_complete_at) || photosReady;
+  const [checklistRows, setChecklistRows] = useState([]);
+  const validPhotoCount = countValidEvidencePhotos(photos);
+  const photosReady = validPhotoCount >= 1;
+  const photosWaveComplete = photosWaveSatisfied({
+    photos,
+    photosWaveCompleteAt: inspection?.photos_wave_complete_at,
+  }) && photosReady;
+  const checklistComplete = isChecklistComplete(checklistRows);
   const requestedStep = asText(searchParams.get('step')).toLowerCase();
   const currentStep = ['customer', 'photos', 'checklist'].includes(requestedStep)
     ? requestedStep
@@ -365,7 +376,7 @@ export default function TechInspectionSession() {
   const completionByStep = {
     customer: customerReady,
     photos: photosWaveComplete,
-    checklist: false,
+    checklist: checklistComplete,
     findings: false,
     recommendation: false,
     finish: false,
@@ -748,6 +759,9 @@ export default function TechInspectionSession() {
                 inspectionId={inspectionId}
                 workType={inspection?.work_type || inspection?.service_type || null}
                 locked={locked}
+                photos={photos}
+                onResponsesChange={setChecklistRows}
+                onPhotoLinked={() => { void load(); }}
               />
               <div className="sticky bottom-0 z-10 -mx-1 border-t border-slate-200 bg-white/95 p-3 backdrop-blur">
                 <Button asChild size="lg" className="w-full min-h-12 bg-blue-600 hover:bg-blue-700">

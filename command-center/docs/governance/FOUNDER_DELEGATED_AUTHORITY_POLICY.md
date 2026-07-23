@@ -50,3 +50,9 @@ See `ML-P1_NEXT_PHASE_PRIORITIES.md`: Mobile Inspections (S8) → Photo Bundles 
 - Do **not** enable invoice auto-send or auto-charge for real customers without escalation #3.
 - Do **not** drop columns/tables or rewrite historical financials without escalation #4.
 - S5/S6: auto-draft may exist; issue and charge remain explicit / gated OFF by default.
+
+## Precedence vs Access Matrix S
+
+When this policy’s auto-continue pipeline conflicts with `PRODUCTION_ACCESS_MATRIX.md` category **S**, or with a newer explicit Founder directive, follow **`ML-P1_AUTHORITY_PRECEDENCE.md`**.
+
+Standing override for Slice 8 remediation (2026-07-23): auto-merge / auto-migrate / auto-deploy **suspended**; Major Decisions #6 and #8 apply; Founder must authorize production actions after evidence.
