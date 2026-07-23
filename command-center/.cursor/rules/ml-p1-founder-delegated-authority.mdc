@@ -1,36 +1,46 @@
 ---
-description: Founder delegated-authority policy for ML-P1 Orchestrator auto-continue
+description: Founder delegated-authority + next-phase priorities for ML-P1 Orchestrator
 alwaysApply: true
 ---
 
-# ML-P1 Founder Delegated Authority (v2026-07-22)
+# ML-P1 Founder Delegated Authority (v2026-07-23)
 
-When acting as Program Orchestrator for BHFOS / ML-P1:
+Canonical: `command-center/docs/governance/FOUNDER_DELEGATED_AUTHORITY_POLICY.md`  
+Next-phase queue: `command-center/docs/governance/ML-P1_NEXT_PHASE_PRIORITIES.md`
 
-## Auto-continue (do not pause Founder) when
+## Auto-continue (do not pause Founder)
 
 - Peer reviews APPROVE/PASS after remediation
 - Migration checksums match frozen apply-packet SHA
-- Synthetic prod validation PASS with **no real-customer mutations**
-- Work stays inside ratified PD packets or this policy
+- Synthetic prod validation PASS (**no real-customer mutations**)
+- Inside ratified PDs, this policy, or Next-Phase Priorities
 
-Pipeline: PR → 3-round review → CI-green merge → A3 migrations → synth validation → Hostinger deploy → ledger/evidence.
+**Pipeline:** PR → 3-round review → **auto-merge on CI green** → A3 migrations → synth validation → Hostinger → ledger/evidence → next priority.
 
-## Escalate Founder only for Major Decisions
+## Escalate only for Major Decisions
 
-1. Pricing/discount change **> ±3%** on active service
-2. Net-new customer-facing flows (portal, autopay, etc.)
-3. Turning **invoice auto-send or auto-charge ON** for real customers
-4. Migrations that **drop** columns/tables or **rewrite** historical financials
-5. External contract / regulatory / data-residency
-6. Prod validation FAIL on money/auth/integrity that cannot be safely hot-fixed
-7. Cost > 4 dev-days or third-party spend > $300
+1. Pricing/discount **> ±3%** on active service  
+2. Net-new customer-facing flows (portal, autopay, etc.)  
+3. Invoice **auto-send or auto-charge ON** for real customers  
+4. Drop columns/tables or rewrite historical financials  
+5. Contract / regulatory / data-residency  
+6. Prod validation FAIL on money/auth/integrity (unhotfixable)  
+7. Cost > 4 dev-days or third-party spend > $300  
+8. Scope change · new payment rails · breaking PD/Security invariants  
+
+## Post–Slice 6 priority order
+
+1. Mobile Inspections (**S8**) — `/inspections/*`, offline sync, `inspection-sync`  
+2. Photo Bundles — reorder albums + email links + S3 prefix  
+3. Analytics — `/analytics` read-only RPCs + export  
+4. Global UX/IA — nav order, breadcrumbs, + Create, mobile bar  
+5. Settings typed UI — `settings.billing_*` / jobs / pricing (auto-charge stays OFF)  
+6. Nightly regression — fixtures + Stripe **sandbox** only  
+
+S7 = reserved follow-up/warranty (do not jump ahead without queue clearance).
 
 ## Defaults
 
-- Non-major: choose HCP-consistent, lower re-work option without asking
-- Never enable auto-send/auto-charge without escalation #3
-- Never drop/rewrite historical money without escalation #4
-- Keep S5 auto-draft as draft-only; office must explicitly issue
-
-Canonical copy: `command-center/docs/governance/FOUNDER_DELEGATED_AUTHORITY_POLICY.md`
+- Non-major → HCP-consistent, lower re-work, no ask  
+- Never enable auto-send/auto-charge without #3  
+- Never drop/rewrite historical money without #4  
