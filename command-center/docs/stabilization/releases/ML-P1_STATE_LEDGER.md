@@ -4,11 +4,10 @@
 | --- | --- |
 | Updated | 2026-07-23 |
 | Repo | https://github.com/faydog127/BHFOS |
-| Worktree | `F:\Dev\BHFOS-ml-p1-s4` |
-| Planning / code base (origin/main) | `3bb175e3a952756066b29dc38ab25864ad47bdca` |
-| Active branch | `ops/hcp-crm-pricebook-import` @ `3f5b097f952970615f1835d2b83ac7b1427c18f0` |
-| Persistent orchestrator prompt | Adopted 2026-07-23 (revised); obeys `FOUNDER_DELEGATED_AUTHORITY_POLICY.md` |
-| Price-book PR | Draft https://github.com/faydog127/BHFOS/pull/100 |
+| Worktree | `F:\Dev\BHFOS-ml-p1-s3` (main) |
+| origin/main | `ced9bfbbe19289a2747c64bb0ce7206872601a06` |
+| Persistent orchestrator prompt | Adopted 2026-07-23; obeys `FOUNDER_DELEGATED_AUTHORITY_POLICY.md` |
+| Price-book PR | **MERGED** https://github.com/faydog127/BHFOS/pull/100 @ head `a1c822b` |
 
 ## Slice / gate posture
 
@@ -16,8 +15,8 @@
 | --- | --- | --- |
 | S1–S3 | Closed | Production coherent; residuals tracked separately |
 | **S4** Field execution | **A3 complete** | `SLICE4_PRODUCTION_VALIDATION_PASS`; R-S4-06 remediated; soft residue R-S4-07 (tenant_id stamps) |
-| Price-book (cross-cut) | **A2 draft PR #100**; prod already PASS | PD-PB-01…04 ratified; merge = Category C (Founder) after 3 review rounds + CI |
-| **S5** Invoice generation | **Planning / PD open** | PR #99 docs; `SLICE5_PLANNING_REQUIRES_PRODUCT_DECISION` (PD-S5-01…07); **no A2 coding auth** |
+| HCP price-book import | **A2-MERGED** | Prod apply PASS earlier; source synced via PR #100 merge `ced9bfb` |
+| **S5** Invoice generation | **Planning / PD open** | PR #99 docs; waiting **PD-S5-01…07**; **no A2 coding auth** |
 
 ## Production surfaces (known)
 
@@ -25,7 +24,6 @@
 | --- | --- |
 | Supabase | `wwyxohjnyqnegzbxtuxs` |
 | Prod UI | https://app.bhfos.com |
-| Hostinger tip (last noted) | Still behind planning tip at S4 merge era — confirm before next UI deploy |
 | Invoice-on-Complete | **OFF** until Slice 5 |
 
 ## Migrations applied (linked prod, relevant)
@@ -34,38 +32,31 @@
 | --- | --- |
 | `20260722120000`…`20260722130000` | S4 execution schema/RPCs/control amendment |
 | `20260722140000` | R-S4-06 emit actor_id UUID |
-| `20260722150000` | Price-book HCP fields (`taxable`, `online_booking_enabled`, `subcategory`, `industry`, `unit_of_measure`) — applied via `db query -f` |
+| `20260722150000`…`20260722152000` | Price-book HCP fields + code unique + id/updated_at defaults (schema on prod; repo now matched) |
 
 ## Price-book (PD-PB-01…04)
 
 | Item | Value |
 | --- | --- |
+| Status | **A2-MERGED** (PR #100) |
 | HCP CSV SHA-256 | `FB3C412853619EBC54BE30627A9F133AAA962304B5A58F2D93833B086F9BB4B3` |
-| Import | 52 rows exact; no price changes |
-| Active bundle discount | `DISC-050` only; `BUNDLE-DISCOUNT-50` deactivated for new quotes |
-| CRM-only retain | `DISC-MIL-10PCT` still active |
-| History | Quote/invoice line counts unchanged at import |
-| Evidence | `ML-P1_PRICEBOOK_EVIDENCE_MANIFEST.md` |
+| Evidence bundle SHA-256 | `260C5CB28EE1A7F5E4E76A488C38749926CDC8435608F83A1B421808E90A4158` |
+| Detail | `ML-P1_EVIDENCE_MANIFEST.md` / `ML-P1_PRICEBOOK_EVIDENCE_MANIFEST.md` |
 
 ## Outstanding residuals / blockers
 
-1. **R-PB-01** — Draft PR #100 needs 3 peer-review rounds + CI; **merge requires Founder** (Category C).
-2. **S5 product decisions** — PD-S5-01…07 unanswered → coding blocked.
-3. **R-S4-07** — Soft: row `tenant_id` stamps (non-blocking).
-4. **Stale open docs PRs** — #94, #87, #86, #85 may need close/supercede hygiene (non-blocking).
+1. **S5 product decisions** — PD-S5-01…07 unanswered → coding blocked.
+2. **R-S4-07** — Soft: row `tenant_id` stamps (non-blocking).
+3. **R-PB-01** — Closed by PR #100 merge (source synced).
+4. Stale open docs PRs (#94, #87, #86, #85) — hygiene only.
 
 ## Standing policies in force
 
 - Auto-continue inside granted slice scope per Founder prompt + `FOUNDER_DELEGATED_AUTHORITY_POLICY.md`.
-- Draft PR / review coordination = standing (A/B). Merge / new prod mutation / next slice = Category C.
+- Three peer-review rounds before any future code PR merges to `main`.
 - Synthetic-only production validation; cleanup required.
-- S4 CO / make-safe / status vocabulary / invoice-on-complete OFF (ratified 2026-07-22).
-- Three peer-review rounds before any PR merges to `main`.
+- S4 CO / make-safe / invoice-on-complete OFF until Slice 5.
 
-## Next authorised moves
+## Halt
 
-| Move | Gate | Auth |
-| --- | --- | --- |
-| Complete 3 peer-review rounds on PR #100 | A2 | Standing (review coordination) |
-| Mark ready + merge PR #100 | A2→main | **Founder** (Category C) |
-| Do **not** start S5 coding / Stripe / invoice / TIS / G2.3 | — | Stop condition |
+**No migrations, deploys, or Slice 5 work** until Founder provides explicit PD-S5 answers.
