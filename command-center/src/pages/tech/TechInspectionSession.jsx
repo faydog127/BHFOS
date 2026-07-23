@@ -31,7 +31,7 @@ import InspectionChecklistPanel from '@/components/tech/InspectionChecklistPanel
 import { DEFAULT_OFFLINE_CACHE_MB } from '@/lib/offlineInspectionMediaQueue';
 import {
   countValidEvidencePhotos,
-  isChecklistComplete,
+  evaluateCompletionGates,
   photosWaveSatisfied,
 } from '@/lib/inspectionCompletionRules';
 
@@ -77,6 +77,7 @@ export default function TechInspectionSession() {
   const [photos, setPhotos] = useState([]);
   const [queueItems, setQueueItems] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [checklistRows, setChecklistRows] = useState([]);
 
   const revision = inspection?.revision || 1;
   const normalizedStatus = normalizeInspectionStatus(inspection?.status);
@@ -361,14 +362,17 @@ export default function TechInspectionSession() {
     }),
   );
   const customerReady = Boolean(inspection?.lead_id) && serviceAddressReady;
-  const [checklistRows, setChecklistRows] = useState([]);
   const validPhotoCount = countValidEvidencePhotos(photos);
   const photosReady = validPhotoCount >= 1;
   const photosWaveComplete = photosWaveSatisfied({
     photos,
     photosWaveCompleteAt: inspection?.photos_wave_complete_at,
   }) && photosReady;
-  const checklistComplete = isChecklistComplete(checklistRows);
+  const checklistComplete = evaluateCompletionGates({
+    responses: checklistRows,
+    photos,
+    photosWaveCompleteAt: inspection?.photos_wave_complete_at,
+  }).ok;
   const requestedStep = asText(searchParams.get('step')).toLowerCase();
   const currentStep = ['customer', 'photos', 'checklist'].includes(requestedStep)
     ? requestedStep
@@ -585,6 +589,29 @@ export default function TechInspectionSession() {
                     disabled={uploading || !canFulfillUploads}
                   >
                     Try again
+                  </Button>
+                ) : null}
+                {q.status === 'failed' || q.status === 'queued' ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="min-h-11 w-full text-rose-700"
+                    onClick={async () => {
+                      const result = await mediaQueue.discardQueuedOrFailed(q.id);
+                      if (!result.ok) {
+                        toast({
+                          variant: 'destructive',
+                          title: 'Could not discard',
+                          description: result.code || 'Offline item is not discardable.',
+                        });
+                        return;
+                      }
+                      await refreshQueue();
+                      toast({ title: 'Offline photo discarded', description: 'Removed from local cache only.' });
+                    }}
+                    disabled={uploading}
+                  >
+                    Discard local copy
                   </Button>
                 ) : null}
                 <div

@@ -84,6 +84,9 @@ test('remediation migration hardens DEFINER + finalize order + grants', () => {
   assert.match(remMig, /REVOKE ALL ON FUNCTION public\.ml_p1_s8_.* FROM PUBLIC, anon/);
   assert.match(remMig, /checklist_item_key/);
   assert.match(remMig, /reviewed_at IS NOT NULL/);
+  assert.match(remMig, /CREATE OR REPLACE FUNCTION public\.inspection_mark_reviewed/);
+  assert.match(remMig, /checklist_item_key/);
+  assert.match(remMig, /REVOKE ALL ON FUNCTION public\.ml_p1_s8_valid_evidence_photo_count/);
 });
 
 test('UI finalize calls assert before finalize_phase5', () => {

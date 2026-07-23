@@ -61,16 +61,23 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.ml_p1_s8_valid_evidence_photo_count(p_inspection_id uuid)
 RETURNS integer
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, auth
 AS $$
-  SELECT count(*)::integer
+DECLARE
+  v_count integer;
+BEGIN
+  -- Tenant/role gate for any direct callers; internal DEFINER callers also pass.
+  PERFORM public.ml_p1_s8_assert_inspection_actor(p_inspection_id);
+  SELECT count(*)::integer INTO v_count
   FROM public.inspection_photos p
   WHERE p.inspection_id = p_inspection_id
     AND coalesce(p.is_voided, false) IS NOT TRUE
     AND lower(coalesce(p.upload_state, '')) = 'complete';
+  RETURN coalesce(v_count, 0);
+END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.ml_p1_s8_assert_completion_gates(p_inspection_id uuid)
@@ -130,7 +137,8 @@ BEGIN
   END IF;
 
   v_photo_count := public.ml_p1_s8_valid_evidence_photo_count(p_inspection_id);
-  IF v_inv.photos_wave_complete_at IS NULL AND v_photo_count < 1 THEN
+  -- Wave marker alone is insufficient: voiding all evidence must re-block finalize.
+  IF v_photo_count < 1 THEN
     RAISE EXCEPTION 'ML_P1_S8_PHOTOS_REQUIRED: complete photo wave before report'
       USING ERRCODE = 'P0001';
   END IF;
@@ -411,6 +419,147 @@ BEGIN
 END;
 $$;
 
+-- Close alternate finalize path: mark_reviewed must enforce S8 gates + role.
+CREATE OR REPLACE FUNCTION public.inspection_mark_reviewed(
+  p_tenant_id text,
+  p_inspection_id uuid,
+  p_expected_revision integer
+)
+RETURNS public.inspections
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+DECLARE
+  v_row public.inspections;
+  v_user uuid := auth.uid();
+  v_issues jsonb;
+BEGIN
+  IF NOT public.inspection_tenant_access(p_tenant_id) THEN
+    RAISE EXCEPTION 'tenant_access_denied';
+  END IF;
+
+  -- Role + membership for JWT actors (service/postgres remain privileged).
+  PERFORM public.ml_p1_s8_assert_inspection_actor(p_inspection_id);
+
+  SELECT * INTO v_row
+  FROM public.inspections
+  WHERE id = p_inspection_id AND tenant_id = p_tenant_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'inspection_not_found';
+  END IF;
+  IF v_row.revision <> p_expected_revision THEN
+    RAISE EXCEPTION 'stale_revision';
+  END IF;
+
+  -- Idempotent: already reviewed at this revision.
+  IF v_row.reviewed_at IS NOT NULL AND v_row.reviewed_revision IS NOT DISTINCT FROM p_expected_revision THEN
+    RETURN v_row;
+  END IF;
+
+  PERFORM public.ml_p1_s8_assert_completion_gates(p_inspection_id);
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.inspection_ai_suggestions s
+    JOIN public.inspection_photos p ON p.id = s.photo_id AND p.tenant_id = s.tenant_id
+    WHERE s.tenant_id = p_tenant_id
+      AND s.inspection_id = p_inspection_id
+      AND s.inspection_revision = p_expected_revision
+      AND s.status = 'pending'
+      AND coalesce(p.is_voided, false) = false
+  ) THEN
+    RAISE EXCEPTION 'pending_ai_suggestions';
+  END IF;
+
+  v_issues := public.inspection_report_coherence_issues(p_tenant_id, p_inspection_id);
+  IF jsonb_array_length(v_issues) > 0 THEN
+    RAISE EXCEPTION USING errcode = 'P0001', message = 'report_coherence_failed', detail = v_issues::text;
+  END IF;
+
+  PERFORM set_config('app.inspection_transition', '1', true);
+
+  UPDATE public.inspections
+  SET reviewed_at = now(),
+      reviewed_by_user_id = v_user,
+      reviewed_revision = revision
+  WHERE id = p_inspection_id
+  RETURNING * INTO v_row;
+
+  INSERT INTO public.inspection_events (tenant_id, inspection_id, event_type, actor_user_id, inspection_revision, metadata)
+  VALUES (
+    p_tenant_id,
+    p_inspection_id,
+    'report_reviewed',
+    v_user,
+    p_expected_revision,
+    jsonb_build_object('ai_is_advisory', true, 'coherence_gate', 'passed', 'ml_p1_s8_completion_gates', 'passed')
+  );
+  RETURN v_row;
+END;
+$$;
+
+-- Lock checklist_item_key on post-submit photo updates (must use link RPC / draft edits).
+CREATE OR REPLACE FUNCTION public.inspection_photos_update_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, auth
+AS $$
+DECLARE
+  parent_status text;
+  allowed boolean := false;
+BEGIN
+  IF auth.role() = 'service_role' THEN
+    RETURN coalesce(NEW, OLD);
+  END IF;
+
+  SELECT lower(coalesce(i.status, 'draft'))
+    INTO parent_status
+  FROM public.inspections i
+  WHERE i.id = coalesce(NEW.inspection_id, OLD.inspection_id)
+    AND i.tenant_id = coalesce(NEW.tenant_id, OLD.tenant_id);
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING errcode = 'P0001', message = 'Parent inspection not found';
+  END IF;
+
+  IF TG_OP IN ('INSERT', 'DELETE') THEN
+    IF parent_status <> 'draft' THEN
+      RAISE EXCEPTION USING errcode = 'P0001', message = 'Inspection is locked. Reopen to edit.';
+    END IF;
+    RETURN coalesce(NEW, OLD);
+  END IF;
+
+  IF parent_status = 'draft' THEN
+    RETURN NEW;
+  END IF;
+
+  IF coalesce(NEW.tenant_id, '') <> coalesce(OLD.tenant_id, '') THEN allowed := false; ELSE allowed := true; END IF;
+  IF allowed AND coalesce(NEW.inspection_id::text, '') <> coalesce(OLD.inspection_id::text, '') THEN allowed := false; END IF;
+  IF allowed AND coalesce(NEW.finding_id::text, '') <> coalesce(OLD.finding_id::text, '') THEN allowed := false; END IF;
+  IF allowed AND coalesce(NEW.recommendation_id::text, '') <> coalesce(OLD.recommendation_id::text, '') THEN allowed := false; END IF;
+  IF allowed AND coalesce(NEW.caption, '') <> coalesce(OLD.caption, '') THEN allowed := false; END IF;
+  IF allowed AND coalesce(NEW.category, '') <> coalesce(OLD.category, '') THEN allowed := false; END IF;
+  IF allowed AND coalesce(NEW.is_before::text, '') <> coalesce(OLD.is_before::text, '') THEN allowed := false; END IF;
+  IF allowed AND coalesce(NEW.object_path, '') <> coalesce(OLD.object_path, '') THEN allowed := false; END IF;
+  IF allowed AND coalesce(NEW.bucket_id, '') <> coalesce(OLD.bucket_id, '') THEN allowed := false; END IF;
+  IF allowed AND coalesce(NEW.file_name, '') <> coalesce(OLD.file_name, '') THEN allowed := false; END IF;
+  IF allowed AND coalesce(NEW.taken_at::text, '') <> coalesce(OLD.taken_at::text, '') THEN allowed := false; END IF;
+  IF allowed AND coalesce(NEW.checklist_item_key, '') <> coalesce(OLD.checklist_item_key, '') THEN allowed := false; END IF;
+  IF allowed AND coalesce(NEW.is_voided, false) <> coalesce(OLD.is_voided, false) THEN allowed := false; END IF;
+  IF allowed AND coalesce(NEW.void_reason, '') <> coalesce(OLD.void_reason, '') THEN allowed := false; END IF;
+  IF allowed AND coalesce(NEW.voided_by::text, '') <> coalesce(OLD.voided_by::text, '') THEN allowed := false; END IF;
+  IF allowed AND coalesce(NEW.voided_at::text, '') <> coalesce(OLD.voided_at::text, '') THEN allowed := false; END IF;
+
+  IF NOT allowed THEN
+    RAISE EXCEPTION USING errcode = 'P0001', message = 'Inspection is locked. Reopen to edit.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
 -- Finalize only after S8 gates; idempotent if already reviewed at expected revision.
 CREATE OR REPLACE FUNCTION public.inspection_finalize_phase5(
   p_tenant_id text,
@@ -484,13 +633,16 @@ REVOKE ALL ON FUNCTION public.inspection_finalize_phase5(text, uuid, integer) FR
 GRANT EXECUTE ON FUNCTION public.ml_p1_s8_photos_before_report_enabled() TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.ml_p1_s8_assert_photos_before_report(uuid) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.ml_p1_s8_assert_completion_gates(uuid) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.ml_p1_s8_valid_evidence_photo_count(uuid) TO authenticated, service_role;
+-- Count helper is for DEFINER internals / service tooling — not a general authenticated API.
+REVOKE ALL ON FUNCTION public.ml_p1_s8_valid_evidence_photo_count(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.ml_p1_s8_valid_evidence_photo_count(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.ml_p1_s8_mark_photos_wave_complete(uuid) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.ml_p1_s8_seed_checklist_for_inspection(uuid, text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.ml_p1_s8_upsert_checklist_response(uuid, text, boolean, text, text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.ml_p1_s8_inspection_open_flags(text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.ml_p1_s8_link_photo_checklist_item(uuid, uuid, text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.inspection_finalize_phase5(text, uuid, integer) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.inspection_mark_reviewed(text, uuid, integer) TO authenticated, service_role;
 
 -- Internal helper: do not expose assert_inspection_actor broadly beyond service/authenticated
 -- (authenticated needs it only via other RPCs; revoke direct if desired — keep for tests)
