@@ -4,23 +4,22 @@
 | --- | --- |
 | Updated | 2026-07-23 |
 | Repo | https://github.com/faydog127/BHFOS |
-| Current main (deployed) | `2b37985e25f2afbd6ac209982f724aadd4da404d` |
+| Current main | `a7e1f63781cca7fcba5d706a7a97bd62a17a4c3b` |
 | Authority | Founder Delegated-Authority Policy v2026-07-22 |
-| Evidence (price-book) | `260C5CB28EE1A7F5E4E76A488C38749926CDC8435608F83A1B421808E90A4158` |
+| Active planning branch | `plan/ml-p1-s6-stripe-settlement` |
 
 ## Slice / gate posture
 
 | Slice | Gate | Status |
 | --- | --- | --- |
-| S4 | CLOSED ✔ | A3 PASS |
-| Price-book | A2-MERGED ✔ | PR #100 |
-| **S5** | **A3 CLOSED ✔** | PR #101 merged; migrations applied; Hostinger HEALTHY |
-| S6 | NEXT | Stripe settlement — under delegated auth; **no auto-charge** without Major Decision |
+| S5 | A3 CLOSED ✔ | Hostinger HEALTHY @ `2b37985` |
+| **S6** | **Planning** | PD-S6-01…07 recommended; docs PR for Founder Category-C; **no A2** |
+| S7 | Not started | Autonomous follow-up (former roadmap S6) |
 
 ## Waiting on Founder
 
-None for non-major work. Escalate only per Delegated-Authority Policy (pricing ±3%, new customer flows, auto-send/charge ON, destructive migrations, regulatory, money FAIL, cost gates).
+- **Category-C** review/ratification of PD-S6-01…07 (or amendments) before any S6 coding
 
-## Halt / non-scope (until Major Decision or S6 PD)
+## Halt / non-scope
 
-Auto-send · auto-charge · historical financial rewrite · column/table drops · TIS · G2.3 reopen.
+No S6 code/migrations/deploys · no auto-charge · no card vault · no merge-to-coding without Category-C.
