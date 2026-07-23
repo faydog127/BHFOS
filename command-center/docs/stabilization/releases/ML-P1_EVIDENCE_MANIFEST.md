@@ -38,4 +38,5 @@ Paths relative to `command-center/`; SHA-256 over path + newline + file bytes, c
 | --- | --- |
 | Slice 4 evidence | `ML-P1_SLICE4_EVIDENCE_MANIFEST.md` |
 | Slice 4 state | `ML-P1_SLICE4_STATE_LEDGER.md` |
+| Slice 5 planning evidence | `ML-P1_SLICE5_EVIDENCE_MANIFEST.md` |
 | Program state | `ML-P1_STATE_LEDGER.md` |

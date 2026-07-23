@@ -241,80 +241,11 @@ const MyMoney = () => {
   };
 
   const createInvoice = async () => {
-    if (!invoice.lead_id) {
-      toast({ variant: 'destructive', title: 'Pick a customer' });
-      return;
-    }
-    if (!invoice.description) {
-      toast({ variant: 'destructive', title: 'Missing line item', description: 'Add a description.' });
-      return;
-    }
-
-    setCreatingInvoice(true);
-    try {
-      const qty = Math.max(1, safeNumber(invoice.quantity, 1));
-      const price = Math.max(0, safeNumber(invoice.unit_price, 0));
-      const subtotal = qty * price;
-      const issueDate = new Date().toISOString().slice(0, 10);
-      const dueDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
-      const invoicePayload = {
-        tenant_id: tenantId,
-        lead_id: invoice.lead_id,
-        invoice_number: String(Math.floor(100000 + Math.random() * 900000)),
-        status: 'sent',
-        issue_date: issueDate,
-        due_date: dueDate,
-        subtotal,
-        tax_rate: 0,
-        tax_amount: 0,
-        total_amount: subtotal,
-        amount_paid: 0,
-        balance_due: subtotal,
-        notes: 'Thank you for your business.',
-        terms: 'Payment is due within 14 days.',
-        sent_at: new Date().toISOString()
-      };
-
-      let inv = null;
-      const attempt = await supabase
-        .from('invoices')
-        .insert([invoicePayload])
-        .select('id, public_token, invoice_number, status, total_amount, created_at')
-        .single();
-      if (attempt.error) {
-        const message = attempt.error?.message || '';
-        if (message.toLowerCase().includes('balance_due')) {
-          const { balance_due, ...payloadNoBalance } = invoicePayload;
-          const retry = await supabase
-            .from('invoices')
-            .insert([payloadNoBalance])
-            .select('id, public_token, invoice_number, status, total_amount, created_at')
-            .single();
-          if (retry.error) throw retry.error;
-          inv = retry.data;
-        } else {
-          throw attempt.error;
-        }
-      } else {
-        inv = attempt.data;
-      }
-
-      const { error: iErr } = await supabase.from('invoice_items').insert([
-        { invoice_id: inv.id, description: invoice.description, quantity: qty, unit_price: price, total_price: subtotal }
-      ]);
-      if (iErr) throw iErr;
-
-      setCreatedInvoice(inv);
-      setInvoice((p) => ({ ...p, description: '', quantity: 1, unit_price: 0 }));
-      toast({ title: 'Invoice created', description: 'Copy/share the payment link to send it.' });
-      await loadQueue();
-    } catch (error) {
-      console.error('MoneyLoop: create invoice failed', error);
-      toast({ variant: 'destructive', title: 'Could not create invoice', description: error.message });
-    } finally {
-      setCreatingInvoice(false);
-    }
+    toast({
+      variant: 'destructive',
+      title: 'Use Slice 5 invoice flow',
+      description: 'ML_P1_S5_ALT_WRITER_DENY: create invoices from the completed job panel (canonical RPC).',
+    });
   };
 
   const quoteLink = createdQuote?.public_token ? `${window.location.origin}/quotes/${createdQuote.public_token}` : '';
