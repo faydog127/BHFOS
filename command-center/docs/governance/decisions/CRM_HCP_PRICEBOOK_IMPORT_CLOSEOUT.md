@@ -42,3 +42,9 @@ Evidence: `command-center/tmp/hcp-pricebook/VERIFY_REPORT.json`, `APPLY_PLAN.jso
 - No historical quote/job/invoice rewrite
 - No multi-company / tenant architecture
 - Migration applied via linked `db query -f` (same pattern as Slice 4); repo file ready for PR
+
+## Re-apply policy (post-closeout)
+
+- Prod import for CSV SHA `FB3C4128…` is **complete**. Do not re-run `hcp-pricebook-apply.mjs --execute` for this SHA.
+- Tooling now refuses same-SHA re-apply unless `--allow-reapply` plus a full mutation gate (`--environment=production --authorization=<new Category C ref> --sha=<hex> --i-understand-production`) and a pre-import backup file.
+- Merging the source PR syncs repo only; it is not authorization to mutate the catalog again.

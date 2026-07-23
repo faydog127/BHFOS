@@ -204,4 +204,4 @@ PD-PB-04 (catalog fields):
 Notes (optional):
 ```
 
-After these answers, import proceeds under the existing pricebook authorization (backup → import → verify) without changing any approved HCP price.
+After these answers, a **one-time** import was authorized (backup → import → verify) without changing any approved HCP price. That apply completed 2026-07-22. This packet does **not** authorize repeat prod `--execute`. Re-apply needs new Category C Founder authorization and an updated closeout.

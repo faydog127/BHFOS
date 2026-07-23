@@ -7,14 +7,21 @@
  * - Does NOT rewrite quote/job/invoice history
  *
  * Usage:
- *   node tools/hcp-pricebook-apply.mjs            # write SQL + plan JSON
- *   node tools/hcp-pricebook-apply.mjs --execute  # also run via supabase db query --linked
+ *   node tools/hcp-pricebook-apply.mjs            # write SQL + plan JSON (no DB mutation)
+ *   node tools/hcp-pricebook-apply.mjs --execute \\
+ *     --environment=production --authorization=<ref> --sha=<40-hex> \\
+ *     --i-understand-production
+ *
+ * One-time prod apply for CSV SHA FB3C4128… already completed (2026-07-22).
+ * Repeat --execute on that same SHA is refused unless --allow-reapply is set
+ * with a new Category C authorization reference.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+import { createMutationGate, parseCliArgs } from './deploy-lib.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
@@ -22,6 +29,13 @@ const dir = path.join(root, 'tmp/hcp-pricebook');
 const csvPath = path.join(dir, 'The_Vent_Guys_HCP_Pricebook_Expanded.csv');
 const EXPECTED_CSV_SHA =
   'FB3C412853619EBC54BE30627A9F133AAA962304B5A58F2D93833B086F9BB4B3';
+
+/** Recorded one-time prod apply — blocks accidental re-run of the same import. */
+const APPLIED_ONCE = {
+  disposition: 'CRM_HCP_PRICEBOOK_IMPORT_PASS',
+  csv_sha256: EXPECTED_CSV_SHA,
+  applied_at: '2026-07-22',
+};
 
 const HOLD_DEACTIVATE = [
   'BATH-FAN',
@@ -314,21 +328,66 @@ console.log(`Wrote ${sqlOut}`);
 console.log(`Wrote ${planOut}`);
 console.log(`Import ${importRows.length}; deactivate ${DEACTIVATE.length}; retain ${RETAIN_ACTIVE.join(',')}`);
 
-const execute = process.argv.includes('--execute');
+const args = parseCliArgs(process.argv.slice(2));
+const execute = Boolean(args.execute);
 if (!execute) {
-  console.log('Dry write only. Pass --execute to apply via supabase db query --linked');
+  console.log(
+    'Dry write only. Mutation requires: --execute --environment=production --authorization=<ref> --sha=<40-hex> --i-understand-production',
+  );
   process.exit(0);
 }
 
-const result = spawnSync(
-  'supabase',
-  ['db', 'query', '--linked', '--agent=no', '-f', sqlOut],
-  { cwd: root, encoding: 'utf8', shell: true },
+if (csvSha === APPLIED_ONCE.csv_sha256 && !args['allow-reapply']) {
+  console.error(
+    `mutation refused: ${APPLIED_ONCE.disposition} already recorded for CSV SHA ${APPLIED_ONCE.csv_sha256} (${APPLIED_ONCE.applied_at}). ` +
+      'PR merge is source sync only. Repeat --execute requires new Category C Founder authorization plus --allow-reapply.',
+  );
+  process.exit(2);
+}
+
+let gate;
+try {
+  gate = createMutationGate({
+    environment: typeof args.environment === 'string' ? args.environment : undefined,
+    authorization: typeof args.authorization === 'string' ? args.authorization : undefined,
+    intendedSha: typeof args.sha === 'string' ? args.sha.trim() : undefined,
+    acknowledged: args['i-understand-production'] === true,
+  });
+} catch (err) {
+  console.error(String(err?.message || err));
+  process.exit(2);
+}
+
+const backupPath = path.join(dir, 'live_price_book_pre_import.json');
+if (!fs.existsSync(backupPath)) {
+  console.error(
+    `mutation refused: missing backup export at ${backupPath}. Export live price_book before --execute.`,
+  );
+  process.exit(2);
+}
+
+console.log(
+  JSON.stringify({
+    mutation_gate: {
+      environment: gate.environment,
+      authorization: gate.authorization,
+      intendedSha: gate.intendedSha,
+      createdAt: gate.createdAt,
+      allow_reapply: Boolean(args['allow-reapply']),
+    },
+  }),
 );
-process.stdout.write(result.stdout || '');
-process.stderr.write(result.stderr || '');
-if (result.status !== 0) {
+
+try {
+  const stdout = execFileSync(
+    'supabase',
+    ['db', 'query', '--linked', '--agent=no', '-f', sqlOut],
+    { cwd: root, encoding: 'utf8' },
+  );
+  process.stdout.write(stdout || '');
+} catch (err) {
+  process.stderr.write(String(err?.stderr || err?.message || err));
   console.error('Apply failed');
-  process.exit(result.status || 1);
+  process.exit(1);
 }
 console.log('APPLY_OK');

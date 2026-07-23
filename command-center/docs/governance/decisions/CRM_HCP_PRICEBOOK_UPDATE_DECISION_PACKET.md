@@ -1,4 +1,4 @@
-# Decision Packet — HCP → BHFOS CRM Pricebook Update
+# Decision Packet ? HCP ? BHFOS CRM Pricebook Update
 
 | Field | Value |
 | --- | --- |
@@ -18,7 +18,7 @@
 | Live catalog | 47 rows, tenant sentinel `default` only (nullable column; **not used for auth**) |
 | Writers today | Admin UI direct table writes; **no HCP sync**; no dedicated import RPC yet |
 | CRM admin routes | Pricebook manager routes currently commented out in `App.jsx` |
-| Quote/job money path | `quotes` / `quote_items` (estimates INSERT denied) — untouched |
+| Quote/job money path | `quotes` / `quote_items` (estimates INSERT denied) ? untouched |
 | Schema gaps vs HCP | Missing: `taxable`, `online_booking_enabled`, `subcategory_1/2`, `industry` (bounded additive columns planned if import proceeds) |
 
 ## Dry-run reconciliation (by task code)
@@ -37,8 +37,8 @@
 
 ## Material / policy stops
 
-### 1) Negative price row — `DISC-050`
-HCP draft includes `DISC-050` at **`-50`**. Dry-run rejected it under “invalid price.”  
+### 1) Negative price row ? `DISC-050`
+HCP draft includes `DISC-050` at **`-50`**. Dry-run rejected it under ?invalid price.?  
 If this is an intentional discount line, Founder must allow negative `base_price` (or map to `item_type=discount`).
 
 ### 2) Active legacy items that can double-charge with new HCP lines
@@ -55,7 +55,7 @@ High-risk active absents (examples):
 | `EXT-GUARD-STD` | Bird/Rodent Guard / $89 | Confirm successor in HCP draft |
 | `DUCT-SYS2`, `DUCT-VENT`, `DUCT-RET` | Duct adders | New HCP air-duct adders |
 
-Workbook `Current SQL Audit` already classifies many other absents as **HOLD → recommend deactivate** (11 codes) and some as retain/consolidate — those recommendations are recorded in the dry-run JSON.
+Workbook `Current SQL Audit` already classifies many other absents as **HOLD ? recommend deactivate** (11 codes) and some as retain/consolidate ? those recommendations are recorded in the dry-run JSON.
 
 ## What will NOT be done without your answers
 
@@ -66,30 +66,30 @@ Workbook `Current SQL Audit` already classifies many other absents as **HOLD →
 
 ## Decisions required (answer A/B/C style)
 
-**PD-PB-01 — `DISC-050` (-$50)**  
+**PD-PB-01 ? `DISC-050` (-$50)**  
 - **A)** Import as discount (allow negative / `item_type=discount`)  
 - **B)** Exclude from CRM import  
 - **C)** Other (specify)
 
-**PD-PB-02 — Active live codes absent from HCP (double-charge prevention)**  
+**PD-PB-02 ? Active live codes absent from HCP (double-charge prevention)**  
 - **A)** Auto-deactivate **all** active live codes not present in HCP Import Draft (retain rows; `active=false`) as part of this update  
 - **B)** Auto-deactivate only those with workbook SQL Audit action HOLD/DEACTIV; leave the rest active for later  
 - **C)** Deactivate the explicit high-risk overlap set only (list above + Founder edits); leave others active  
-- **D)** Import HCP codes only; leave all live actives unchanged (accept dual-catalog risk — not recommended)
+- **D)** Import HCP codes only; leave all live actives unchanged (accept dual-catalog risk ? not recommended)
 
-**PD-PB-03 — SQL Audit “retain” / “consolidate” absents**  
+**PD-PB-03 ? SQL Audit ?retain? / ?consolidate? absents**  
 - **A)** Keep current dry-run recommendations (retain/consolidate lists unchanged; no deletes)  
 - **B)** Provide alternate list
 
-**PD-PB-04 — Schema packing for taxable / online booking / subcategories**  
+**PD-PB-04 ? Schema packing for taxable / online booking / subcategories**  
 - **A)** Add nullable columns on `price_book` and fill from HCP (recommended)  
 - **B)** Store only in description/notes (weaker; not recommended)
 
-After PD-PB-01..04 are answered, Orchestrator will proceed under existing authorization through tooling → tests → review → backup → import → verification without another merge auth ask (unless scope expands).
+After PD-PB-01..04 are answered, Orchestrator may complete the **one-time** authorized import cycle (tooling ? backup ? import ? verify) and open a **source-sync** PR. That one-time prod apply for CSV SHA `FB3C4128?` completed 2026-07-22 (`CRM_HCP_PRICEBOOK_IMPORT_PASS`). **Repeat `--execute` / catalog re-apply requires new Category C Founder authorization.** Merging the source PR is separate Category C merge auth and does **not** re-authorize prod mutation.
 
 ## Explicit non-claims
 
-No price optimization · no $2,000 aspiration repricing · no Slice 5 · no historical money mutation · no automatic deletes.
+No price optimization � no $2,000 aspiration repricing � no Slice 5 � no historical money mutation � no automatic deletes.
 
 ---
 
@@ -104,4 +104,4 @@ No price optimization · no $2,000 aspiration repricing · no Slice 5 · no hist
 - Machine import source: **CSV**.
 - Online Booking variants / `pricebook_template.csv`: **excluded**.
 - Artifact: `tmp/hcp-pricebook/SOURCE_PAIR_VERIFICATION.json`.
-- Mutation still blocked on **PD-PB-01�04** (unchanged).
+- Mutation still blocked on **PD-PB-01?04** (unchanged).
