@@ -4,18 +4,23 @@
 | --- | --- |
 | Updated | 2026-07-23 |
 | Repo | https://github.com/faydog127/BHFOS |
-| S6 coding base | `6b300e40747cfceaf743b264d9f58bf7eede079a` |
-| Branch | `ml/p1-s6-stripe-settlement` |
-| Authority | Delegated + Category-C coding auth for S6 |
+| Current main | `d73f975412e0f54f4c58c7399a01bd0c7acba480` (S6 A2 merged) |
+| Authority | Delegated-Authority Policy **v2026-07-23** |
+| Next-phase | `docs/governance/ML-P1_NEXT_PHASE_PRIORITIES.md` |
 
 ## Slice / gate posture
 
 | Slice | Gate | Status |
 | --- | --- | --- |
 | S5 | A3 CLOSED ✔ | |
-| **S6** | **A2 coding** | SOURCE on branch; stop before A3 secret/webhook/auto-charge |
-| S7 | Not started | Follow-up |
+| **S6** | A2-MERGED ✔ | PR #104 @ `02238f4` → merge `d73f975`; **A3 next** (apply + test-Stripe synth) |
+| S7 | Reserved | Follow-up / warranty — not started |
+| **S8** | Queued after S6 A3 | Mobile Inspections (Next-Phase Priorities) |
 
-## Halt
+## Waiting on Founder
 
-No prod Stripe secret rotate · no webhook live-attach · no auto-charge enable · no portal · no QB export until separate auth.
+None for non-major work. Escalate only per policy (payment rails ON, scope change, PD/Security breaks, money FAIL).
+
+## Halt defaults
+
+Auto-send · auto-charge · portal/vault · historical rewrite · live (non-sandbox) Stripe mutation in regression.

@@ -2,21 +2,21 @@
 
 | Field | Value |
 | --- | --- |
-| Version | v2026-07-22 |
-| Effective | 2026-07-23 (Founder paste into Orchestrator) |
+| Version | v2026-07-23 |
+| Supersedes | v2026-07-22 |
 | Authority | Founder Erron |
-| Scope | ML-P1 Slice 5 → S N (incl. S6 Stripe, S7 follow-up/warranty) + S1–S4 residual remediation |
+| Scope | ML-P1 S5 → S N + residuals + [Next-Phase Priorities](./ML-P1_NEXT_PHASE_PRIORITIES.md) |
 
 ## Purpose
 
-Preserve Founder focus by letting the Program Orchestrator finish remaining ML-P1 slices end-to-end without pausing for minor checkpoints. Escalate **only** for Major Decisions.
+Preserve Founder focus: Orchestrator finishes authorized slices end-to-end. Escalate **only** for Major Decisions.
 
 ## Continue-automatically when
 
 - Peer-review lanes return APPROVE or PASS after remediation.
 - Migration checksums match the frozen SHA in the apply packet.
 - Synthetic production-validation PASS with **no real-customer mutations**.
-- Action stays inside previously-ratified PD packets or this policy.
+- Work stays inside ratified PD packets, this policy, or Next-Phase Priorities.
 
 ## Escalate (prompt Founder) only when
 
@@ -27,31 +27,26 @@ Preserve Founder focus by letting the Program Orchestrator finish remaining ML-P
 5. External contract, regulatory, or data-residency implications.
 6. A production validation **FAIL** that impacts money, auth, or data integrity and cannot be hot-fixed safely.
 7. Aggregate estimated cost > 4 dev-days or third-party spend > $300.
+8. **Scope change**, **new payment rails**, or **breaking PD/Security invariants**.
 
 ## Default for non-major questions
 
-Choose the option that maintains consistency with HCP, reduces re-work, and aligns with existing governance patterns — **without asking**.
+Choose the option that maintains consistency with HCP, reduces re-work, and aligns with existing governance — **without asking**.
 
-## Auto-continue pipeline
+## Auto-continue pipeline (all future slices)
 
-open PR → 3-round peer review → merge after CI-green (Category C) → apply migrations (A3) → synthetic prod validation → Hostinger deploy → ledger & evidence docs.
+1. Open PR → **3-round peer review** → remediate to APPROVE/PASS.  
+2. **Auto-merge on CI green** (retain exact-head match in merge command).  
+3. A3: apply migrations → synthetic prod validation → Hostinger when needed.  
+4. PASS → continue next priority; FAIL (money/auth/integrity) → escalate #6.  
+5. Update `ML-P1_STATE_LEDGER.md` + evidence manifests every step.
 
-Update `ML-P1_STATE_LEDGER.md` and Evidence manifest every step. Commit docs under `docs/governance/…` as you go.
+## Next-phase order (post–S6)
 
-## Escalation format
+See `ML-P1_NEXT_PHASE_PRIORITIES.md`: Mobile Inspections (S8) → Photo Bundles → Analytics → Global UX/IA → Settings typed UI → Nightly regression. S7 follow-up remains reserved.
 
-```
-**ESCALATION – MAJOR DECISION REQUIRED**
-
-Slice X  · Packet ID …  · main SHA …
-
-• What changed / why the auto-continue rule stops here.
-• 1-paragraph impact summary (risk, cost, customer hit).
-• Exactly what you need decided (bullet list of options).
-```
-
-## Binding non-defaults under this policy
+## Binding non-defaults
 
 - Do **not** enable invoice auto-send or auto-charge for real customers without escalation #3.
 - Do **not** drop columns/tables or rewrite historical financials without escalation #4.
-- S5 auto-draft remains draft-only (PD-S5-01); issue stays explicit office action.
+- S5/S6: auto-draft may exist; issue and charge remain explicit / gated OFF by default.
