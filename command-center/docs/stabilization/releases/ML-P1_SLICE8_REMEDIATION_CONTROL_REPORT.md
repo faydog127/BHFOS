@@ -8,7 +8,8 @@
 | Clean worktree | `F:\Dev\BHFOS-ml-p1-s8-remediation` |
 | Dirty worktree not used | `F:\Dev\BHFOS` |
 | PR | [#111](https://github.com/faydog127/BHFOS/pull/111) |
-| Head SHA (at report write) | `24ab78ff4c431d1a6960b72a8bf5a0db122c989b` |
+| Head SHA (PR tip) | `76ee2cd3c2d98e7a9be53fd387e42995e3ec4001` |
+| Code tip reviewed | `24ab78ff4c431d1a6960b72a8bf5a0db122c989b` (+ docs-only control report commit) |
 | Recommendation | **PASS WITH FOLLOW-UP** — do **not** merge/migrate/deploy until Erron authorizes |
 
 ## Governance corrected
