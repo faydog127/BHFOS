@@ -186,6 +186,8 @@ BEGIN
       updated_at = now()
   WHERE id = v_inv.id;
 
+  PERFORM set_config('app.ml_p1_s8_checklist_seed', '1', true);
+
   FOR v_item IN SELECT * FROM jsonb_array_elements(coalesce(v_tmpl.items, '[]'::jsonb))
   LOOP
     v_sort := v_sort + 10;
@@ -340,6 +342,13 @@ BEGIN
     RAISE EXCEPTION 'ML_P1_S8_CHECKLIST_ITEM_NOT_FOUND' USING ERRCODE = 'P0001';
   END IF;
 
+  IF v_inv.reviewed_at IS NOT NULL THEN
+    RAISE EXCEPTION 'ML_P1_S8_INSPECTION_LOCKED' USING ERRCODE = 'P0001';
+  END IF;
+
+  -- Allow checklist_item_key mutation post-submit until reviewed (photo guard honors this GUC).
+  PERFORM set_config('app.ml_p1_s8_link_photo', '1', true);
+
   UPDATE public.inspection_photos
   SET checklist_item_key = p_item_key,
       updated_at = now()
@@ -483,7 +492,10 @@ BEGIN
   IF allowed AND coalesce(NEW.bucket_id, '') <> coalesce(OLD.bucket_id, '') THEN allowed := false; END IF;
   IF allowed AND coalesce(NEW.file_name, '') <> coalesce(OLD.file_name, '') THEN allowed := false; END IF;
   IF allowed AND coalesce(NEW.taken_at::text, '') <> coalesce(OLD.taken_at::text, '') THEN allowed := false; END IF;
-  IF allowed AND coalesce(NEW.checklist_item_key, '') <> coalesce(OLD.checklist_item_key, '') THEN allowed := false; END IF;
+  IF allowed AND coalesce(NEW.checklist_item_key, '') <> coalesce(OLD.checklist_item_key, '')
+     AND current_setting('app.ml_p1_s8_link_photo', true) IS DISTINCT FROM '1' THEN
+    allowed := false;
+  END IF;
   IF allowed AND coalesce(NEW.is_voided, false) <> coalesce(OLD.is_voided, false) THEN allowed := false; END IF;
   IF allowed AND coalesce(NEW.void_reason, '') <> coalesce(OLD.void_reason, '') THEN allowed := false; END IF;
   IF allowed AND coalesce(NEW.voided_by::text, '') <> coalesce(OLD.voided_by::text, '') THEN allowed := false; END IF;
@@ -497,7 +509,7 @@ BEGIN
 END;
 $$;
 
--- Checklist responses: seed/template fields immutable; DELETE denied for JWT actors.
+-- Checklist responses: JWT INSERT denied except seed RPC (GUC); seeded fields immutable; DELETE denied.
 CREATE OR REPLACE FUNCTION public.ml_p1_s8_checklist_responses_guard()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -507,6 +519,14 @@ BEGIN
   IF coalesce(auth.role(), '') = 'service_role'
      OR current_user IN ('postgres', 'supabase_admin') THEN
     RETURN coalesce(NEW, OLD);
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF current_setting('app.ml_p1_s8_checklist_seed', true) IS DISTINCT FROM '1' THEN
+      RAISE EXCEPTION 'ML_P1_S8_CHECKLIST_IMMUTABLE: insert only via seed RPC'
+        USING ERRCODE = 'P0001';
+    END IF;
+    RETURN NEW;
   END IF;
 
   IF TG_OP = 'DELETE' THEN
@@ -533,7 +553,7 @@ $$;
 
 DROP TRIGGER IF EXISTS trg_ml_p1_s8_checklist_responses_guard ON public.inspection_checklist_responses;
 CREATE TRIGGER trg_ml_p1_s8_checklist_responses_guard
-BEFORE UPDATE OR DELETE ON public.inspection_checklist_responses
+BEFORE INSERT OR UPDATE OR DELETE ON public.inspection_checklist_responses
 FOR EACH ROW
 EXECUTE FUNCTION public.ml_p1_s8_checklist_responses_guard();
 
@@ -562,12 +582,12 @@ BEGIN
   FROM public.inspection_checklist_responses r
   WHERE r.inspection_id = p_inspection_id;
 
-  IF v_response_count < 1 THEN
+  IF v_response_count < 1 OR v_inv.checklist_template_id IS NULL THEN
     RAISE EXCEPTION 'ML_P1_S8_CHECKLIST_REQUIRED: seed and complete checklist before finalize'
       USING ERRCODE = 'P0001';
   END IF;
 
-  -- Template-backed required-photo count cannot be undercut by deleted rows.
+  -- Template-backed required-photo count cannot be undercut by deleted/forged rows.
   IF v_inv.checklist_template_id IS NOT NULL THEN
     SELECT count(*) INTO v_tmpl_required
     FROM public.inspection_checklist_templates t,

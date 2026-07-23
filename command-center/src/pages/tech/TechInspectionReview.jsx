@@ -387,6 +387,11 @@ export default function TechInspectionReview() {
         setSearchParams({ step: 'finish' }, { replace: true });
         return;
       }
+      // Completion gates while still editable; submit only after gates pass. Server also enforces inside finalize.
+      const gate = await supabase.rpc('ml_p1_s8_assert_photos_before_report', {
+        p_inspection_id: inspectionId,
+      });
+      if (gate.error) throw gate.error;
       if (statusText(inspection.status) === 'draft') {
         const submitted = await supabase.rpc('inspection_submit', {
           p_tenant_id: tenantId, p_inspection_id: inspectionId, p_expected_revision: inspection.revision || 1,
@@ -394,11 +399,6 @@ export default function TechInspectionReview() {
         });
         if (submitted.error) throw submitted.error;
       }
-      // Client-order hardening: completion gates before finalize. Server enforces the same inside the finalize RPC.
-      const gate = await supabase.rpc('ml_p1_s8_assert_photos_before_report', {
-        p_inspection_id: inspectionId,
-      });
-      if (gate.error) throw gate.error;
       const { data, error } = await supabase.rpc('inspection_finalize_phase5', {
         p_tenant_id: tenantId, p_inspection_id: inspectionId, p_expected_revision: inspection.revision || 1,
       });
