@@ -1,0 +1,53 @@
+---
+# Release Baton — UX-REFACTOR (parallel frontend slice)
+# No DB migrations. Peer review + auto-continue per ML-P1 Delegated-Authority.
+
+release_id: "UX-REFACTOR"
+current_phase: "planning"
+governance_version: "v2.2"
+risk_tier: "Tier 2"
+status: "planning"
+schedule: "parallel"
+db_migrations: "forbidden"
+current_owner: "Orchestrator"
+base_sha: "a12b0f4502fe668a900381753128e9e4724cd844"
+branch: "ml/ux-refactor-planning"
+worktree: "F:\\Dev\\BHFOS-ux-refactor"
+brief_path: "command-center/docs/stabilization/releases/UX_REFACTOR_BRIEF.md"
+decision_packet_path: "command-center/docs/governance/decisions/UX_REFACTOR_DECISION_PACKET.md"
+architecture_path: "command-center/docs/architecture/UX_REFACTOR_ARCHITECTURE_FINDINGS.md"
+evidence_manifest_path: "command-center/docs/stabilization/releases/UX_REFACTOR_EVIDENCE_MANIFEST.md"
+residual_register_path: "command-center/docs/stabilization/releases/UX_REFACTOR_RESIDUAL_REGISTER.md"
+authority_precedence_path: "command-center/docs/governance/ML-P1_AUTHORITY_PRECEDENCE.md"
+delegated_authority_policy: "command-center/docs/governance/FOUNDER_DELEGATED_AUTHORITY_POLICY.md"
+
+top_5_screens:
+  - hub          # /crm — CRMHub.jsx
+  - work_orders  # /crm/jobs — Jobs.jsx (label: Work Orders)
+  - quotes       # /crm/quotes
+  - inspections  # /crm/inspections
+  - settings     # /crm/settings (chrome only)
+code_root: "command-center/src"
+canonical_primary_nav:
+  - { label: Hub, path: /crm }
+  - { label: Work Orders, path: /crm/jobs }
+  - { label: Quotes, path: /crm/quotes }
+  - { label: Inspections, path: /crm/inspections }
+  - { label: Analytics, path: /crm/reporting }
+  - { label: Settings, path: /crm/settings }
+
+founder_create_auth: "2026-07-23 — create slice; parallel; no migrations; peer-review + auto-continue"
+merge_authorization_planning: "pending — peer reviews + CI"
+implementation_authorization: "auto-continue after planning merge + PD-UX defaults A"
+migration_authorization: "none — forbidden"
+deployment_authorization: "none — separate Access Matrix S / Founder auth for Hostinger"
+
+out_of_scope:
+  - photo_bundles
+  - slice_7
+  - stripe_auto_charge
+  - supabase_migrations
+  - tis_merge
+
+next_phase: "Open planning PR → 3 peer reviews → CI → merge → A2 coding on same scope"
+next_owner: "Orchestrator"

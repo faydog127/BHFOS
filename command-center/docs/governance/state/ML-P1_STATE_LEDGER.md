@@ -4,8 +4,8 @@
 | --- | --- |
 | Updated | 2026-07-23 |
 | Repo | https://github.com/faydog127/BHFOS |
-| Exact `origin/main` | `98cdee15c09ed5511f16cff9ea116cab052c92f8` (PR #111 merge; tip may advance with hotfix docs) |
-| Authority | `ML-P1_AUTHORITY_PRECEDENCE.md` + Founder A3 auth for S8 remediation |
+| Exact `origin/main` (slice base) | `a12b0f4502fe668a900381753128e9e4724cd844` |
+| Authority | Precedence + Delegated-Authority auto-continue |
 
 ## Slice posture
 
@@ -15,17 +15,20 @@
 | **S6** | **CLOSED** — `SLICE6_PRODUCTION_VALIDATION_PASS` |
 | **S7** | **Deferred** — do not start |
 | **S8** | **SLICE8_PRODUCTION_VALIDATION_PASS** (remediation) |
+| **UX-REFACTOR** | **A0/A1 PLANNING** — parallel · no DB migrations · branch `ml/ux-refactor-planning` |
+| Photo Bundles | **Deferred** |
 
-## Slice 8 remediation facts
+## UX-REFACTOR entry
 
 | Field | Value |
 | --- | --- |
-| PR | #111 merged @ authorized head `d061982…` → merge `98cdee1…` |
-| Migrations | `20260723200000` + hotfix `20260723201000` applied on `wwyxohjnyqnegzbxtuxs` |
-| Hostinger | HEALTHY @ merge tip |
-| Photo Bundles | **Deferred** |
-| Closeout | `docs/stabilization/releases/ML-P1_SLICE8_REMEDIATION_A3_CLOSEOUT.md` |
+| Base | `a12b0f4502fe668a900381753128e9e4724cd844` |
+| Scope | Global shell, nav, design tokens, component consolidation — top 5 screens |
+| Top 5 | Hub · Jobs · Quotes · Inspections · Settings |
+| Brief | `docs/stabilization/releases/UX_REFACTOR_BRIEF.md` |
+| Policy | Peer review ×3 → CI → auto-continue |
+| Migrations | **Forbidden** |
 
 ## Halt defaults
 
-Auto-send · auto-charge · vault/portal/Terminal · TIS merge · Photo Bundles · S7 · silent S4 bypass.
+Auto-send · auto-charge · vault/portal/Terminal · TIS merge · Photo Bundles · S7 · UX-REFACTOR migrations (none allowed).
