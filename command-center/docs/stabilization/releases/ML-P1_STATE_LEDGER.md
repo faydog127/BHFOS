@@ -4,9 +4,9 @@
 | --- | --- |
 | Updated | 2026-07-23 |
 | Repo | https://github.com/faydog127/BHFOS |
-| Current main | `f39045ca125f7fbe94b9b2f9096b6f9cc20b70c4` |
+| Current main | `98cdee15c09ed5511f16cff9ea116cab052c92f8` |
 | Canonical governance copy | `docs/governance/state/ML-P1_STATE_LEDGER.md` |
-| Authority | `ML-P1_AUTHORITY_PRECEDENCE.md` + Delegated-Authority Policy |
+| Authority | Precedence + Founder A3 auth |
 
 ## Slice / gate posture
 
@@ -15,12 +15,12 @@
 | S1–S5 | CLOSED ✔ | |
 | **S6** | PRODUCTION VALIDATION PASS ✔ | Idle / closed |
 | **S7** | Deferred | Do not start |
-| **S8** | A3 deploy/reachability only | **Acceptance withdrawn — remediation required** |
+| **S8** | Remediation A3 | **SLICE8_PRODUCTION_VALIDATION_PASS** |
 
 ## Waiting on Founder
 
-Remediation control report → explicit merge / migrate / deploy authorization.
+None for S8 remediation. Photo Bundles / S7 remain deferred until separate authorization.
 
 ## Halt defaults
 
-Auto-send · auto-charge · portal/vault · TIS merge · silent S4 bypass · Photo Bundles · S7 · remediation prod apply without Founder S-auth.
+Auto-send · auto-charge · portal/vault · TIS merge · Photo Bundles · S7.

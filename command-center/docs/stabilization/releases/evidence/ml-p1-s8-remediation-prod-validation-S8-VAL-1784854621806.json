@@ -1,0 +1,124 @@
+{
+  "run": "S8-VAL-1784854621806",
+  "url": "https://wwyxohjnyqnegzbxtuxs.supabase.co",
+  "results": [
+    {
+      "name": "create_ephemeral_actors",
+      "ok": true,
+      "detail": {
+        "count": 4
+      }
+    },
+    {
+      "name": "jwt_sign_in",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "fixtures_created",
+      "ok": true,
+      "detail": {
+        "inspA": "164d1f62-c199-44db-b36a-9c137fef4634",
+        "inspB": "5e2ca99c-4b15-4be0-b74a-ebaea35c7377"
+      }
+    },
+    {
+      "name": "deny_cross_tenant_seed",
+      "ok": true,
+      "detail": "ML_P1_S8_TEMPLATE_MISSING"
+    },
+    {
+      "name": "deny_open_flags_other_tenant",
+      "ok": false,
+      "detail": null
+    },
+    {
+      "name": "deny_open_flags_null_jwt",
+      "ok": true,
+      "detail": "ML_P1_S8_TENANT_REQUIRED"
+    },
+    {
+      "name": "deny_customer_seed",
+      "ok": false,
+      "detail": null
+    },
+    {
+      "name": "allow_tech_seed",
+      "ok": true,
+      "detail": {
+        "work_type": "general",
+        "template_id": "63e0b92e-2550-404e-88af-70e23cad4000",
+        "items_seeded": 5,
+        "inspection_id": "164d1f62-c199-44db-b36a-9c137fef4634"
+      }
+    },
+    {
+      "name": "allow_office_seed",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "deny_pending_mark_wave",
+      "ok": true,
+      "detail": "ML_P1_S8_PHOTOS_REQUIRED: need at least one complete non-voided photo"
+    },
+    {
+      "name": "allow_complete_mark_wave",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "deny_incomplete_checklist",
+      "ok": true,
+      "detail": "ML_P1_S8_REQUIRED_PHOTOS_MISSING: 3 checklist items lack complete evidence"
+    },
+    {
+      "name": "answer_and_link_required_photos",
+      "ok": true,
+      "detail": {
+        "items": 5
+      }
+    },
+    {
+      "name": "deny_jwt_checklist_insert",
+      "ok": true,
+      "detail": "ML_P1_S8_CHECKLIST_IMMUTABLE: insert only via seed RPC"
+    },
+    {
+      "name": "deny_jwt_photo_required_patch",
+      "ok": false,
+      "detail": null
+    },
+    {
+      "name": "allow_completion_gates",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "deny_cross_tenant_finalize",
+      "ok": true,
+      "detail": "tenant_access_denied"
+    },
+    {
+      "name": "deny_customer_finalize",
+      "ok": true,
+      "detail": "inspection_preflight_failed"
+    },
+    {
+      "name": "mark_reviewed_not_blocked_by_s8_after_gates",
+      "ok": true,
+      "detail": "ok_or_preflight"
+    },
+    {
+      "name": "allow_open_flags_own_tenant",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "cleanup",
+      "ok": true,
+      "detail": null
+    }
+  ],
+  "failed": 3
+}
