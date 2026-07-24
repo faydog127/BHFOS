@@ -3,14 +3,17 @@
 # No DB migrations. Peer review + auto-continue per ML-P1 Delegated-Authority.
 
 release_id: "UX-REFACTOR"
-current_phase: "a2_merged"
+current_phase: "a3_deployed"
 governance_version: "v2.2"
 risk_tier: "Tier 2"
-status: "merged_awaiting_deploy_auth"
+status: "production_deploy_pass"
 schedule: "parallel"
 db_migrations: "forbidden"
 current_owner: "Orchestrator"
-base_sha: "14301fc2b1d5e15b5f664a69613ff2370a91de1d"
+base_sha: "c469f7c8174642f40ca60756c124dec63a80bb10"
+deployed_sha: "c469f7c8174642f40ca60756c124dec63a80bb10"
+rollback_point: "fcc1fccf0388fc896e29e13f0b6261265f60e9d5"
+hostinger_closeout_path: "command-center/docs/stabilization/releases/UX_REFACTOR_A3_HOSTINGER_CLOSEOUT.md"
 planning_base_sha: "a12b0f4502fe668a900381753128e9e4724cd844"
 planning_merge: "PR #114 → 67423d2468c647cac17c8afc766c1bc86ff42e2d"
 a2_merge: "PR #115 → 14301fc2b1d5e15b5f664a69613ff2370a91de1d"
@@ -45,7 +48,7 @@ merge_authorization_planning: "merged PR #114"
 merge_authorization_a2: "merged PR #115 after peer APPROVE ×3 + CI green"
 implementation_authorization: "auto-continue after planning merge + PD-UX defaults A"
 migration_authorization: "none — forbidden"
-deployment_authorization: "none — separate Access Matrix S / Founder auth for Hostinger"
+deployment_authorization: "granted — Founder 2026-07-23 Hostinger UX-REFACTOR A3 @ c469f7c; HEALTHY; rollback fcc1fcc"
 
 out_of_scope:
   - photo_bundles
@@ -54,5 +57,5 @@ out_of_scope:
   - supabase_migrations
   - tis_merge
 
-next_phase: "Await Founder / Access Matrix S for Hostinger deploy of UX-REFACTOR A2; residuals remain non-blocking"
-next_owner: "Founder (deploy gate)"
+next_phase: "Idle — UX-REFACTOR production chrome live; residuals non-blocking; no migrations"
+next_owner: "Orchestrator"
