@@ -28,21 +28,34 @@ Unify CRM shell chrome, navigation IA, design tokens, and shared page patterns a
 
 ## Top 5 screens (this slice)
 
-| # | Screen | Route | Primary file |
+| # | Screen | Route | Primary file (command-center) |
 | --- | --- | --- | --- |
-| 1 | CRM Hub | `/:tenantId/crm` | `src/pages/crm/CRMHub.jsx` |
-| 2 | Jobs | `/:tenantId/crm/jobs` | `src/pages/crm/Jobs.jsx` |
-| 3 | Quotes | `/:tenantId/crm/quotes` | `src/pages/crm/proposals/ProposalList.jsx` |
-| 4 | Inspections | `/:tenantId/crm/inspections` | `src/pages/crm/Inspections.jsx` |
-| 5 | Settings | `/:tenantId/crm/settings` | `src/pages/crm/Settings.jsx` |
+| 1 | Hub | `/:tenantId/crm` | `command-center/src/pages/crm/CRMHub.jsx` |
+| 2 | Work Orders | `/:tenantId/crm/jobs` | `command-center/src/pages/crm/Jobs.jsx` |
+| 3 | Quotes | `/:tenantId/crm/quotes` | `command-center/src/pages/crm/proposals/ProposalList.jsx` |
+| 4 | Inspections | `/:tenantId/crm/inspections` | `command-center/src/pages/crm/Inspections.jsx` |
+| 5 | Settings | `/:tenantId/crm/settings` | `command-center/src/pages/crm/Settings.jsx` |
 
-## Target nav IA (from Next-Phase Priorities §4)
+All A2 paths are under **`command-center/src/`** (not repo-root `src/`, which is a divergent legacy shell).
 
-Desktop left nav order:
+## Target nav IA (canonical — binds PD-UX-01)
 
-**Dashboard → CRM/Hub → Jobs → Quotes → Inspections → Analytics/Reporting → Settings**
+Primary desktop left-nav (above divider), using **live route paths** and **display labels**:
 
-(Other existing entries remain reachable; this slice reorders/relabels primary IA and aligns breadcrumbs/titles. Does not delete routes.)
+| Order | Label (UI) | Path |
+| --- | --- | --- |
+| 1 | Hub | `/crm` |
+| 2 | Work Orders | `/crm/jobs` |
+| 3 | Quotes | `/crm/quotes` |
+| 4 | Inspections | `/crm/inspections` |
+| 5 | Analytics | `/crm/reporting` |
+| 6 | Settings | `/crm/settings` |
+
+Secondary (below divider; all remain linked): Leads, Call Console, SMS Inbox, Opportunities, Calendar, Dispatch, Invoices, Marketing, Partners, Ops Dashboard.
+
+**Naming rule:** Prefer live labels (**Hub**, **Work Orders**, **Analytics**) over synonyms (Dashboard/Jobs/Reporting) in UI copy. Docs may say “Jobs screen” meaning Work Orders route.
+
+**Settings boundary:** Top-5 Settings work is **chrome/tokens/layout only** — no new typed billing/pricing settings UI, no flag flips for auto-send/auto-charge.
 
 ## Success criteria (A2 later)
 

@@ -12,9 +12,9 @@ Founder create already fixed: parallel schedule, no DB migrations, scope = shell
 
 ### PD-UX-01 — Desktop nav order
 
-**Q:** Adopt Next-Phase target order for primary left-nav items?  
-**A (recommended):** Yes — Dashboard/Hub → Jobs → Quotes → Inspections → Reporting → Settings; demote secondary items below a divider.  
-**B:** Keep current `BHFSidebar` order; only restyle.  
+**Q:** Adopt Next-Phase intent with **live labels/paths**?  
+**A (recommended):** Primary above divider in this exact order: **Hub** (`/crm`) → **Work Orders** (`/crm/jobs`) → **Quotes** (`/crm/quotes`) → **Inspections** (`/crm/inspections`) → **Analytics** (`/crm/reporting`) → **Settings** (`/crm/settings`). All other current items stay below a divider.  
+**B:** Keep current `BHFSidebar` section order; only restyle.  
 **C:** Custom order (Founder list required).
 
 **Default under auto-continue:** **A**
@@ -24,11 +24,12 @@ Founder create already fixed: parallel schedule, no DB migrations, scope = shell
 ### PD-UX-02 — Mobile bottom bar
 
 **Q:** Align mobile bottom bar to top-5 primaries?  
-**A (recommended):** Hub · Jobs · Quotes · Inspections · More (Settings + overflow).  
+**A (recommended):** **Hub · Work Orders · Quotes · Inspections · More** (Settings + overflow including Leads/Calendar/Invoices).  
 **B:** Keep current Hub · Leads · Quotes · Calendar · Invoices.  
 **C:** Hide bottom bar; hamburger only.
 
-**Default under auto-continue:** **A**
+**Default under auto-continue:** **A**  
+**Note:** Demoting Invoices/Leads/Calendar from the bar is intentional; they remain in sidebar + More.
 
 ---
 

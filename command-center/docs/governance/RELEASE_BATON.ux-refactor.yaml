@@ -22,11 +22,19 @@ authority_precedence_path: "command-center/docs/governance/ML-P1_AUTHORITY_PRECE
 delegated_authority_policy: "command-center/docs/governance/FOUNDER_DELEGATED_AUTHORITY_POLICY.md"
 
 top_5_screens:
-  - hub
-  - jobs
-  - quotes
-  - inspections
-  - settings
+  - hub          # /crm — CRMHub.jsx
+  - work_orders  # /crm/jobs — Jobs.jsx (label: Work Orders)
+  - quotes       # /crm/quotes
+  - inspections  # /crm/inspections
+  - settings     # /crm/settings (chrome only)
+code_root: "command-center/src"
+canonical_primary_nav:
+  - { label: Hub, path: /crm }
+  - { label: Work Orders, path: /crm/jobs }
+  - { label: Quotes, path: /crm/quotes }
+  - { label: Inspections, path: /crm/inspections }
+  - { label: Analytics, path: /crm/reporting }
+  - { label: Settings, path: /crm/settings }
 
 founder_create_auth: "2026-07-23 — create slice; parallel; no migrations; peer-review + auto-continue"
 merge_authorization_planning: "pending — peer reviews + CI"
