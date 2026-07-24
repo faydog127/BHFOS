@@ -1,0 +1,57 @@
+---
+# Release Baton — UXV2_APP_POLISH
+# Look-and-feel / layout / interaction only. No domain features. No Stripe.
+
+release_id: "UXV2_APP_POLISH"
+current_phase: "planning"
+governance_version: "v2.2"
+risk_tier: "Tier 2"
+status: "planning"
+schedule: "parallel"
+db_migrations: "forbidden_by_default"
+product_name: "TVG CRM"
+current_owner: "Orchestrator"
+production_baseline_sha: "a12b0f4502fe668a900381753128e9e4724cd844"
+branch: "ux/v2-polish"
+worktree: "F:\\Dev\\BHFOS-uxv2"
+brief_path: "docs/UXV2_BRIEF.md"
+foundation_tokens_path: "docs/UXV2_FOUNDATION_TOKENS.md"
+style_ground_truth:
+  - Dispatch
+  - Quotes
+peer_lanes:
+  - product
+  - design
+  - accessibility
+code_root: "command-center/src/"
+
+founder_create_auth: "2026-07-23 — PROJECT SEED UXV2_APP_POLISH"
+merge_authorization_planning: "pending — Product + Design + Accessibility + CI"
+implementation_authorization: "auto-continue after planning merge + PD-UXV2 defaults A"
+migration_authorization: "none — forbidden unless Founder re-authorizes is_legacy metadata"
+deployment_authorization: "none — Access Matrix S / Founder for Hostinger"
+a2_tooling:
+  unit_snapshots: required
+  percy_visual_baseline: required
+  synthetic_smoke: "Playwright preferred; sk_test only; no production mutations"
+
+in_scope:
+  - unified_brand_language
+  - chrome_consistency
+  - data_integrity_filtering
+  - hub_first_viewport_rewrite
+  - mobile_parity
+  - visual_polish
+  - percy_baselines
+
+out_of_scope:
+  - domain_features
+  - financial_business_rules
+  - stripe_auto_charge
+  - photo_bundles
+  - slice_7
+  - pwa_service_worker
+  - blind_is_legacy_migration
+
+next_phase: "Open A0/A1 PR → Product/Design/Accessibility APPROVE ×3 → CI → merge → A2"
+next_owner: "Orchestrator"
