@@ -4,7 +4,7 @@
 | --- | --- |
 | Updated | 2026-07-23 |
 | Repo | https://github.com/faydog127/BHFOS |
-| Exact `origin/main` | `7623948a7a312125842223e27dd6a39c3834b060` |
+| Exact `origin/main` | `0dcbcf00396644ba1139a3504b9f1a72d56a1d6f` |
 | Prod UI | `c469f7c8174642f40ca60756c124dec63a80bb10` |
 | Authority | Precedence + Delegated-Authority auto-continue |
 
@@ -17,20 +17,20 @@
 | **S7** | **Deferred** — do not start |
 | **S8** | **SLICE8_PRODUCTION_VALIDATION_PASS** (remediation) |
 | **UX-REFACTOR** | **PRODUCTION DEPLOY PASS** — Hostinger HEALTHY @ `c469f7c` |
-| **UX-POLISH** | **A0/A1 PLANNING** — brand **TVG CRM** · no PWA · no migrations · `ml/ux-polish-planning` |
+| **UX-POLISH** | **A2 MERGED** — PR #119 @ `0dcbcf0` · content `0e592b2` · brand **TVG CRM** · awaiting Hostinger **S** |
 | Photo Bundles | **Deferred** |
 
-## UX-POLISH entry
+## UX-POLISH A2 closeout
 
 | Field | Value |
 | --- | --- |
-| Base | `7623948a7a312125842223e27dd6a39c3834b060` |
-| Brand | **TVG CRM** (Founder-locked) |
-| Scope | Tokens · shell finish · synthetic exclude · Hub diet · table density · copy · Leads drawer/stage bugs |
+| Planning | PR #118 merged |
+| A2 | PR #119 merged — TVG CRM, chrome finish, synthetic hygiene |
+| Content SHA | `0e592b27cbf3032a49a61624638cc1be3389dc8c` |
+| Merge SHA | `0dcbcf00396644ba1139a3504b9f1a72d56a1d6f` |
 | Out | PWA · migrations · Storybook/Cypress farm · Photo Bundles · S7 · Stripe |
-| Brief | `docs/stabilization/releases/UX_POLISH_BRIEF.md` |
-| Policy | Peer review ×3 → CI → auto-continue |
+| Deploy | **Not authorized** until Access Matrix **S** / Founder |
 
 ## Halt defaults
 
-Auto-send · auto-charge · vault/portal/Terminal · TIS merge · Photo Bundles · S7 · UX-POLISH migrations · UX-POLISH PWA.
+Auto-send · auto-charge · vault/portal/Terminal · TIS merge · Photo Bundles · S7 · UX-POLISH migrations · UX-POLISH PWA · Hostinger without Matrix **S**.
