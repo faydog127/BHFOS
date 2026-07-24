@@ -58,5 +58,11 @@ a2_progress:
   leads_drawer_and_pipeline_stage_bugs: "done"
   unit_guards: "ux-polish-brand-hygiene.test.mjs"
 
-next_phase: "Commit A2 → open PR → peer APPROVE ×3 → CI → merge; Hostinger only with Access Matrix S"
+peer_reviews_a2:
+  product: "APPROVE — UX_POLISH_A2_PRODUCT_REVIEW.md @ content 0e592b27cbf3032a49a61624638cc1be3389dc8c"
+  architecture: "APPROVE — UX_POLISH_A2_ARCHITECTURE_REVIEW.md @ content 0e592b27cbf3032a49a61624638cc1be3389dc8c"
+  security: "APPROVE — UX_POLISH_A2_SECURITY_REVIEW.md @ content 0e592b27cbf3032a49a61624638cc1be3389dc8c"
+pr_a2: "https://github.com/faydog127/BHFOS/pull/119"
+
+next_phase: "CI green on PR #119 → merge; tip-pin closeout; Hostinger only with Access Matrix S"
 next_owner: "Orchestrator"
