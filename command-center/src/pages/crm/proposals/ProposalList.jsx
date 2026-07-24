@@ -30,6 +30,7 @@ import { sendQuoteDocument } from '@/services/documentDeliveryService';
 import { openQuotePreview, openQuotePrintView } from '@/services/quotePreviewService';
 import CrmPageHeader from '@/components/crm/CrmPageHeader';
 import CrmListToolbar from '@/components/crm/CrmListToolbar';
+import { excludeSyntheticRows } from '@/lib/excludeSynthetic';
 
 const ProposalList = () => {
   const navigate = useNavigate();
@@ -88,7 +89,7 @@ const ProposalList = () => {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      setQuotes(data?.quotes || []);
+      setQuotes(excludeSyntheticRows(data?.quotes || []));
     } catch (error) {
       console.error('Error fetching quotes:', error);
       toast({

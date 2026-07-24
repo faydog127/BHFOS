@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { Plus, Search, Loader2 } from 'lucide-react';
 import CrmPageHeader from '@/components/crm/CrmPageHeader';
+import CrmListToolbar from '@/components/crm/CrmListToolbar';
 import { supabase } from '@/lib/customSupabaseClient';
 import { getTenantId } from '@/lib/tenantUtils';
 import { useToast } from '@/components/ui/use-toast';
@@ -10,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { excludeSyntheticRows } from '@/lib/excludeSynthetic';
+import { CRM_PRODUCT_NAME } from '@/config/productBrand';
 
 const normalizeStatus = (value) => String(value || '').trim().toLowerCase();
 
@@ -84,12 +87,13 @@ export default function Inspections() {
         if (error) throw error;
 
         if (!mounted) return;
-        setRows((data || []).map((row) => ({
+        const normalized = (data || []).map((row) => ({
           ...row,
           lead: Array.isArray(row.lead) ? row.lead[0] : row.lead,
           job: Array.isArray(row.job) ? row.job[0] : row.job,
           technician: Array.isArray(row.technician) ? row.technician[0] : row.technician,
-        })));
+        }));
+        setRows(excludeSyntheticRows(normalized));
 
         // Office safety/quality flags (PD-S8-05) — fail soft if RPC not yet applied
         const flags = await supabase.rpc('ml_p1_s8_inspection_open_flags', { p_tenant_id: tenantId });
@@ -125,7 +129,7 @@ export default function Inspections() {
   return (
     <div className="space-y-6">
       <Helmet>
-        <title>Inspections | TVG CRM</title>
+        <title>Inspections | {CRM_PRODUCT_NAME}</title>
       </Helmet>
 
       <CrmPageHeader
@@ -146,24 +150,20 @@ export default function Inspections() {
         )}
       />
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Search</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Customer, email, work order number, address..."
-                className="pl-9"
-              />
-            </div>
+      <CrmListToolbar
+        search={(
+          <div className="relative min-w-[16rem] flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Customer, email, work order, address..."
+              className="pl-9"
+              aria-label="Search inspections"
+            />
           </div>
-        </CardContent>
-      </Card>
+        )}
+      />
 
       <Card>
         <CardHeader className="pb-3">

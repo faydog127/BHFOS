@@ -3,10 +3,11 @@
 # Look-and-feel / layout / interaction only. No domain features. No Stripe.
 
 release_id: "UXV2_APP_POLISH"
-current_phase: "planning"
+current_phase: "a2_coding"
 governance_version: "v2.2"
 risk_tier: "Tier 2"
-status: "planning"
+status: "a2_in_progress"
+planning_merge_sha: "26023f671e428438932efd90a31ade8ec3fce9ce"
 schedule: "parallel"
 db_migrations: "forbidden_by_default"
 product_name: "TVG CRM"
@@ -58,5 +59,14 @@ out_of_scope:
   - pwa_service_worker
   - blind_is_legacy_migration
 
-next_phase: "CI green on PR #121 → merge → A2 coding on ux/v2-polish"
+a2_progress:
+  hub_today_hero: "done"
+  kpi_toggle: "done"
+  integrity_filter_sweep: "quotes_flow_dispatch_inspections_hub"
+  mobile_invoices_bottom_bar: "done"
+  inspections_toolbar: "done"
+  percy_scaffold: "tests/smoke/uxv2-percy-baselines.spec.js (requires PERCY_TOKEN)"
+  unit_guards: "test:uxv2-helpers"
+
+next_phase: "Finish A2 PR → Product/Design/Accessibility APPROVE ×3 → CI → merge; Percy capture when PERCY_TOKEN available; Hostinger Matrix S"
 next_owner: "Orchestrator"

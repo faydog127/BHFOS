@@ -55,6 +55,7 @@ import {
 import { jobService } from '@/services/jobService';
 import { workOrderBoardService } from '@/services/workOrderBoardService';
 import CrmPageHeader from '@/components/crm/CrmPageHeader';
+import { excludeSyntheticRows } from '@/lib/excludeSynthetic';
 
 const STATUS_OPTIONS = [
   'unscheduled',
@@ -716,7 +717,7 @@ export default function Schedule() {
 
       setTechnicians(technicianRows);
       setWorkOrders(
-        (workOrderRows || []).map((job) => ({
+        excludeSyntheticRows(workOrderRows || []).map((job) => ({
           ...job,
           technician_name: getTechnicianDisplayName(technicianRows, job.technician_id),
         })),
