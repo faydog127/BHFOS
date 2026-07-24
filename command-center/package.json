@@ -25,6 +25,7 @@
     "test:ml-p1-s1-helpers": "node --test tests/unit/ml-p1-s1-foundation.test.mjs",
     "test:ml-p1-s2-helpers": "node --test tests/unit/ml-p1-s2-lifecycle.test.mjs",
     "test:ux-refactor-helpers": "node --test tests/unit/ux-refactor-nav-ia.test.mjs",
+    "test:ux-polish-helpers": "node --test tests/unit/ux-polish-brand-hygiene.test.mjs",
     "test:intake-contracts": "npm run test:intake-helpers && playwright test tests/smoke/r2-intake-clarity.spec.js tests/smoke/inspection-field-address-schema.spec.js",
     "test:scheduling-helpers": "node --test tests/unit/r3-job-appointment-schedule.test.mjs",
     "test:scheduling-contracts": "npm run test:scheduling-helpers && playwright test tests/smoke/r3-scheduling-operations.spec.js",

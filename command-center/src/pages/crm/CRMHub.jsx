@@ -22,6 +22,7 @@ import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import HubCalendar from '@/components/crm/HubCalendar';
 import CrmPageHeader from '@/components/crm/CrmPageHeader';
+import { excludeSyntheticRows } from '@/lib/excludeSynthetic';
 
 const StatCard = ({ title, value, icon: Icon, color, loading, subtext, link }) => (
   <Link to={link || "#"} className={link ? "cursor-pointer" : "cursor-default"}>
@@ -137,7 +138,7 @@ const CRMHub = () => {
           const wonQuotes = quoteRows.filter((row) => wonStatuses.has(String(row.status || '').toLowerCase())).length;
           const closeRate = actionedQuotes > 0 ? (wonQuotes / actionedQuotes) * 100 : 0;
 
-          const invoiceRows = invoiceKpiRes.data || [];
+          const invoiceRows = excludeSyntheticRows(invoiceKpiRes.data || []);
           const moneyGenerated = invoiceRows.reduce((sum, row) => {
             const status = String(row.status || '').toLowerCase();
             const total = Number(row.total_amount) || 0;
@@ -188,7 +189,7 @@ const CRMHub = () => {
               </Button>
             )}
             {flags.enableEstimates && (
-              <Button variant="outline" asChild>
+              <Button asChild>
                 <Link to={`/${tenantId}/crm/quotes/new`}>
                   <Plus className="mr-2 h-4 w-4" /> New Quote
                 </Link>
@@ -198,7 +199,7 @@ const CRMHub = () => {
         )}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 grid-flow-col auto-cols-[minmax(11rem,1fr)] overflow-x-auto pb-1 md:grid-flow-row md:auto-cols-auto md:grid-cols-2 lg:grid-cols-5">
         <StatCard
           title="Close Rate"
           value={`${performance.closeRate.toFixed(1)}%`}
@@ -235,7 +236,7 @@ const CRMHub = () => {
             icon={FileText} 
             color="text-orange-500" 
             loading={loading}
-            subtext="Waiting Approval / Expired"
+            subtext="Waiting acceptance / Expired"
             link={`/${tenantId}/crm/quotes?status=waiting_approval,expired`}
           />
         )}

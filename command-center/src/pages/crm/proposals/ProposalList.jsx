@@ -394,7 +394,7 @@ const ProposalList = () => {
                   { value: 'all', label: 'All' },
                   { value: 'draft', label: 'Draft' },
                   { value: 'sent', label: 'Sent' },
-                  { value: 'accepted', label: 'Approved' },
+                  { value: 'accepted', label: 'Accepted' },
                 ].map((status) => (
                   <button
                     key={status.value}

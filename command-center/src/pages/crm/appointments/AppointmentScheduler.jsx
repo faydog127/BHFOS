@@ -29,6 +29,8 @@ import {
   CommandShortcut,
 } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
+import CrmPageHeader from '@/components/crm/CrmPageHeader';
+import { CRM_PRODUCT_NAME } from '@/config/productBrand';
 
 const SERVICE_CATEGORY_LABELS = {
   dryer_vent: 'Dryer Vent',
@@ -374,18 +376,16 @@ const AppointmentScheduler = () => {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <Helmet><title>Calendar | CRM</title></Helmet>
+      <Helmet><title>Calendar | {CRM_PRODUCT_NAME}</title></Helmet>
 
-      <div>
-        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
-          <CalendarIcon className="h-3.5 w-3.5" />
-          Booking Source Of Truth
-        </div>
-        <h1 className="mt-3 text-3xl font-bold text-gray-900">Calendar</h1>
-        <p className="text-gray-500">
-          Commit bookings here, then hand booked work to Dispatch. Other screens can initiate scheduling, but they should land here.
-        </p>
-      </div>
+      <CrmPageHeader
+        title="Calendar"
+        description="Commit bookings here, then hand booked work to Dispatch. Other screens can initiate scheduling, but they should land here."
+        breadcrumbs={[
+          { label: 'Hub', to: `/${getTenantId()}/crm` },
+          { label: 'Calendar' },
+        ]}
+      />
 
       <Dialog open={customerDialogOpen} onOpenChange={setCustomerDialogOpen}>
         <DialogContent>

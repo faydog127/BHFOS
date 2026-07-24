@@ -50,7 +50,8 @@ export const getCardSlaStatus = (item, stageId) => {
     if (isAfterHours) {
       status = 'after_hours';
       colorClass = 'bg-blue-500';
-      badgeText = 'Night Mode';
+      // UX-POLISH: moon / after-hours cue only when outside business hours
+      badgeText = 'After hours';
     } else if (mins < 15) {
       status = 'fresh';
       colorClass = 'bg-emerald-500';

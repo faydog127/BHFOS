@@ -62,6 +62,9 @@ import {
 import { moneyLoopDeleteService } from '@/services/moneyLoopDeleteService';
 import { workOrderBoardService } from '@/services/workOrderBoardService';
 import CrmPageHeader from '@/components/crm/CrmPageHeader';
+import { excludeSyntheticRows } from '@/lib/excludeSynthetic';
+import { useTrainingMode } from '@/contexts/TrainingModeContext';
+import { CRM_PRODUCT_NAME } from '@/config/productBrand';
 
 const Jobs = () => {
   const { toast } = useToast();
@@ -101,6 +104,7 @@ const Jobs = () => {
   const [scheduleLinkedAppointment, setScheduleLinkedAppointment] = useState(null);
 
   const tenantId = getTenantId();
+  const { isTrainingMode } = useTrainingMode();
   const recordScheduleLocked = isJobScheduleLockedByAppointment(recordLinkedAppointment);
   const scheduleLocked = isJobScheduleLockedByAppointment(scheduleLinkedAppointment);
   const asText = (value) => (typeof value === 'string' ? value.trim() : '');
@@ -214,7 +218,10 @@ const Jobs = () => {
     setLoading(true);
     try {
       const rows = await workOrderBoardService.fetchWorkOrders(tenantId);
-      const filteredRows = rows.filter((row) => matchesFilter(row, filter));
+      const hygieneRows = isTrainingMode
+        ? rows
+        : excludeSyntheticRows(rows, { trainingMode: false });
+      const filteredRows = hygieneRows.filter((row) => matchesFilter(row, filter));
       setJobs(filteredRows);
     } catch (error) {
       console.error('Error fetching jobs:', error);
@@ -749,7 +756,7 @@ const Jobs = () => {
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
-      <Helmet><title>Work Orders | CRM</title></Helmet>
+      <Helmet><title>Work Orders | {CRM_PRODUCT_NAME}</title></Helmet>
       
       <CrmPageHeader
         title="Work Orders"
@@ -849,7 +856,9 @@ const Jobs = () => {
                       <TableCell>
                         <div className="flex items-center gap-2 text-sm font-medium">
                           <Clock className="w-4 h-4 text-slate-400" />
-                          {job.scheduled_start ? format(new Date(job.scheduled_start), 'MMM d, h:mm a') : 'Unscheduled'}
+                          {job.scheduled_start
+                            ? format(new Date(job.scheduled_start), 'MMM d, h:mm a')
+                            : 'Needs schedule'}
                         </div>
                         <div className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                           <MapPin className="w-3 h-3" /> {job.service_address || 'No Address'}
@@ -857,9 +866,19 @@ const Jobs = () => {
                       </TableCell>
                       <TableCell>
                         <div className="space-y-2">
-                          <Badge variant="outline" className={getStatusColor(job)}>
-                            {formatOperationalStageLabel(getOperationalStage(job))}
-                          </Badge>
+                          {(() => {
+                            const stage = getOperationalStage(job);
+                            const stageLabel = formatOperationalStageLabel(stage);
+                            // Avoid duplicate “Unscheduled” next to schedule column
+                            if (!job.scheduled_start && String(stage).toLowerCase() === 'unscheduled') {
+                              return null;
+                            }
+                            return (
+                              <Badge variant="outline" className={getStatusColor(job)}>
+                                {stageLabel}
+                              </Badge>
+                            );
+                          })()}
                           {job.is_overdue ? (
                             <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
                               {job.overdue_reason || 'Overdue'}

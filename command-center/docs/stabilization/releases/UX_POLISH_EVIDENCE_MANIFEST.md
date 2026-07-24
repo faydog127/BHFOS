@@ -28,3 +28,13 @@
 | Drawer | Manual or Playwright: `?leadId=` + sheet open |
 | No migrations | Diff contains zero `supabase/migrations` |
 | No PWA | Diff contains no vite-plugin-pwa / service worker |
+
+## A2 evidence captured (coding)
+
+| ID | Artifact | Notes |
+| --- | --- | --- |
+| A2-E1 | `src/config/productBrand.js` | `CRM_PRODUCT_NAME = 'TVG CRM'` |
+| A2-E2 | `src/lib/excludeSynthetic.js` | Shared live/training polarity helper |
+| A2-E3 | `tests/unit/ux-polish-brand-hygiene.test.mjs` | Brand, headers, helper, Accepted, After hours |
+| A2-E4 | Headers on Leads / Call Console / Calendar / Dispatch / Invoices (+ Opportunities) | `CrmPageHeader` |
+| A2-E5 | Leads drawer race fix | Removed URL clear while selection still committing |

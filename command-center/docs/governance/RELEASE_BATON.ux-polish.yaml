@@ -3,17 +3,19 @@
 # No DB migrations. No PWA. Brand = TVG CRM. Peer review + auto-continue.
 
 release_id: "UX-POLISH"
-current_phase: "planning"
+current_phase: "a2_coding"
 governance_version: "v2.2"
 risk_tier: "Tier 2"
-status: "planning"
+status: "a2_in_progress"
 schedule: "parallel"
 db_migrations: "forbidden"
 pwa: "forbidden_this_slice"
 product_name: "TVG CRM"
 current_owner: "Orchestrator"
-base_sha: "7623948a7a312125842223e27dd6a39c3834b060"
-branch: "ml/ux-polish-planning"
+base_sha: "19b45e96a2926fe03030c2024f5858058cc80dd4"
+planning_merge_sha: "19b45e96a2926fe03030c2024f5858058cc80dd4"
+content_sha_planning: "9bd5baa4258ac34c905d520ca49a7c78680d0229"
+branch: "ml/ux-polish-a2"
 worktree: "F:\\Dev\\BHFOS-ux-polish"
 brief_path: "command-center/docs/stabilization/releases/UX_POLISH_BRIEF.md"
 decision_packet_path: "command-center/docs/governance/decisions/UX_POLISH_DECISION_PACKET.md"
@@ -23,7 +25,7 @@ residual_register_path: "command-center/docs/stabilization/releases/UX_POLISH_RE
 predecessor_slice: "UX-REFACTOR"
 
 founder_create_auth: "2026-07-23 — CREATE UX-POLISH; brand TVG CRM; PWA out; peer-review + auto-continue"
-merge_authorization_planning: "pending — peer reviews + CI"
+merge_authorization_planning: "merged — PR #118"
 implementation_authorization: "auto-continue after planning merge + PD-UXP defaults A"
 migration_authorization: "none — forbidden"
 deployment_authorization: "none — Access Matrix S / Founder for Hostinger"
@@ -46,5 +48,15 @@ out_of_scope:
   - supabase_migrations
   - storybook_cypress_visual_ci_farm
 
-next_phase: "Open planning PR → 3 peer reviews → CI → merge → A2 coding"
+a2_progress:
+  brand_foundation: "done"
+  shell_consolidation: "done"
+  universal_exclude_helper: "done"
+  hub_first_viewport_diet: "done"
+  table_density_wo_leads: "done"
+  copy_vocabulary: "done"
+  leads_drawer_and_pipeline_stage_bugs: "done"
+  unit_guards: "ux-polish-brand-hygiene.test.mjs"
+
+next_phase: "Commit A2 → open PR → peer APPROVE ×3 → CI → merge; Hostinger only with Access Matrix S"
 next_owner: "Orchestrator"

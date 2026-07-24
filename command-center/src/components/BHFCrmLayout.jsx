@@ -77,7 +77,7 @@ const BHFCrmLayout = () => {
           </Button>
           <div className="min-w-0">
             <div className={cn("truncate text-sm font-semibold", isDemo ? "text-[#e7e5e4]" : "text-slate-900")}>
-              {isDemo ? "Farm OS" : (isInstallWorxs ? "Install Worxs" : "BHF CRM")}
+              {isDemo ? "Farm OS" : (isInstallWorxs ? "Install Worxs" : "TVG CRM")}
             </div>
             <div className={cn("truncate text-xs", isDemo ? "text-[#a8a29e]" : "text-slate-500")}>
               {currentPageLabel}
