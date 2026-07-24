@@ -9,6 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, RefreshCcw } from 'lucide-react';
+import { excludeSyntheticRows } from '@/lib/excludeSynthetic';
+import CrmPageHeader from '@/components/crm/CrmPageHeader';
+import { CRM_PRODUCT_NAME } from '@/config/productBrand';
 
 const isMissingRelationError = (error) => {
   const combined = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
@@ -132,13 +135,13 @@ const FlowConsole = () => {
     try {
       const { data, error } = await supabase
         .from('jobs')
-        .select('id, status, created_at, quote_id, lead_id')
+        .select('id, status, created_at, quote_id, lead_id, is_test_data')
         .eq('tenant_id', tenantId)
         .in('status', expandLegacyJobStatuses(['unscheduled', 'pending_schedule']))
         .order('created_at', { ascending: false })
         .limit(10);
       if (error) throw error;
-      setJobsToSchedule(data || []);
+      setJobsToSchedule(excludeSyntheticRows(data || []));
     } catch (error) {
       setJobsError(error);
       setJobsToSchedule([]);
@@ -150,14 +153,14 @@ const FlowConsole = () => {
     try {
       const { data, error } = await supabase
         .from('quotes')
-        .select('id, quote_number, status, total_amount, valid_until, viewed_at, accepted_at, rejected_at, created_at, lead_id')
+        .select('id, quote_number, status, total_amount, valid_until, viewed_at, accepted_at, rejected_at, created_at, lead_id, is_test_data')
         .eq('tenant_id', tenantId)
         .is('accepted_at', null)
         .is('rejected_at', null)
         .order('created_at', { ascending: false })
         .limit(10);
       if (error) throw error;
-      setQuotesNeedingResponse(data || []);
+      setQuotesNeedingResponse(excludeSyntheticRows(data || []));
     } catch (error) {
       setQuotesError(error);
       setQuotesNeedingResponse([]);
@@ -169,14 +172,14 @@ const FlowConsole = () => {
     try {
       const { data, error } = await supabase
         .from('invoices')
-        .select('id, invoice_number, status, total_amount, balance_due, due_date, viewed_at, paid_at, created_at, lead_id')
+        .select('id, invoice_number, status, total_amount, balance_due, due_date, viewed_at, paid_at, created_at, lead_id, is_test_data')
         .eq('tenant_id', tenantId)
         .is('paid_at', null)
         .gt('balance_due', 0)
         .order('created_at', { ascending: false })
         .limit(10);
       if (error) throw error;
-      setUnpaidInvoices(data || []);
+      setUnpaidInvoices(excludeSyntheticRows(data || []));
     } catch (error) {
       setInvoicesError(error);
       setUnpaidInvoices([]);
@@ -267,28 +270,27 @@ const FlowConsole = () => {
   return (
     <>
       <Helmet>
-        <title>Flow Console | {tenantId.toUpperCase()} CRM</title>
+        <title>Flow Console | {CRM_PRODUCT_NAME}</title>
       </Helmet>
 
       <div className="space-y-6 max-w-6xl mx-auto">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
+        <CrmPageHeader
+          title="Flow Console"
+          description="Orchestration lens over existing entities (Lead → Quote → Work Order → Invoice → Payment). No parallel creation workflow lives here."
+          breadcrumbs={[
+            { label: 'Hub', to: `/${tenantId}/crm` },
+            { label: 'Flow Console' },
+          ]}
+          actions={(
             <div className="flex items-center gap-2">
-              <h1 className="text-3xl font-bold text-slate-900">Flow Console</h1>
               <Badge variant="secondary">Read-only</Badge>
+              <Button variant="outline" onClick={refresh} disabled={!user || authLoading || refreshing}>
+                {refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-2 h-4 w-4" />}
+                Refresh
+              </Button>
             </div>
-            <p className="text-slate-600 mt-1">
-              Orchestration lens over existing entities (Lead → Quote → Work Order → Invoice → Payment). No parallel creation workflow lives here.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={refresh} disabled={!user || authLoading || refreshing}>
-              {refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-2 h-4 w-4" />}
-              Refresh
-            </Button>
-          </div>
-        </div>
+          )}
+        />
 
         {!user && !authLoading ? (
           <Card>

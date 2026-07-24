@@ -48,10 +48,10 @@ describe('UX-REFACTOR primary nav IA', () => {
     assert.match(read('src/components/BHFCrmLayout.jsx'), /openSidebar/);
   });
 
-  it('mobile bottom bar uses Hub · Work Orders · Quotes · Inspections · More', () => {
+  it('mobile bottom bar uses Hub · Work Orders · Quotes · Invoices · More (UXV2 money parity)', () => {
     const src = read('src/config/crmPrimaryNav.js');
     const mobileBlock = src.slice(src.indexOf('CRM_MOBILE_BOTTOM_NAV'));
-    for (const name of ['Hub', 'Work Orders', 'Quotes', 'Inspections', 'More']) {
+    for (const name of ['Hub', 'Work Orders', 'Quotes', 'Invoices', 'More']) {
       assert.ok(mobileBlock.includes(`name: '${name}'`), `mobile missing ${name}`);
     }
   });

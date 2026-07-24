@@ -40,6 +40,8 @@ export function identityBlob(record = {}) {
 export function isSynthetic(record) {
   if (!record || typeof record !== 'object') return false;
   if (record.is_test_data === true) return true;
+  // UXV2: honor is_legacy when already present on fetched rows (no migration).
+  if (record.is_legacy === true) return true;
 
   const email = String(record.email || record.lead?.email || record.leads?.email || '');
   if (email && SYNTH_EMAIL_RE.test(email)) return true;

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { DEFAULT_TENANT_ID } from '@/config/tenantDefaults';
 import { tenantPath } from '@/lib/tenantUtils';
 import { CRM_MOBILE_BOTTOM_NAV } from '@/config/crmPrimaryNav';
+import { CRM_PRODUCT_NAME } from '@/config/productBrand';
 
 const BHFCrmLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -77,7 +78,7 @@ const BHFCrmLayout = () => {
           </Button>
           <div className="min-w-0">
             <div className={cn("truncate text-sm font-semibold", isDemo ? "text-[#e7e5e4]" : "text-slate-900")}>
-              {isDemo ? "Farm OS" : (isInstallWorxs ? "Install Worxs" : "TVG CRM")}
+              {isDemo ? "Farm OS" : (isInstallWorxs ? "Install Worxs" : CRM_PRODUCT_NAME)}
             </div>
             <div className={cn("truncate text-xs", isDemo ? "text-[#a8a29e]" : "text-slate-500")}>
               {currentPageLabel}

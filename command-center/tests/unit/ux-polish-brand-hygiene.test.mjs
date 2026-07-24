@@ -43,7 +43,7 @@ describe('UX-POLISH product brand', () => {
 
   it('layout and sidebar consume CRM_PRODUCT_NAME or TVG CRM', () => {
     assert.match(read('src/config/productBrand.js'), /TVG CRM/);
-    assert.match(read('src/components/BHFCrmLayout.jsx'), /TVG CRM/);
+    assert.match(read('src/components/BHFCrmLayout.jsx'), /CRM_PRODUCT_NAME/);
     assert.match(read('src/components/BHFSidebar.jsx'), /CRM_PRODUCT_NAME/);
   });
 });
