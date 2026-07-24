@@ -4,7 +4,8 @@
 | --- | --- |
 | Updated | 2026-07-23 |
 | Repo | https://github.com/faydog127/BHFOS |
-| Exact `origin/main` / prod | `c469f7c8174642f40ca60756c124dec63a80bb10` (UX Hostinger) |
+| Exact `origin/main` | `7623948a7a312125842223e27dd6a39c3834b060` |
+| Prod UI | `c469f7c8174642f40ca60756c124dec63a80bb10` |
 | Authority | Precedence + Delegated-Authority auto-continue |
 
 ## Slice posture
@@ -15,21 +16,21 @@
 | **S6** | **CLOSED** — `SLICE6_PRODUCTION_VALIDATION_PASS` |
 | **S7** | **Deferred** — do not start |
 | **S8** | **SLICE8_PRODUCTION_VALIDATION_PASS** (remediation) |
-| **UX-REFACTOR** | **PRODUCTION DEPLOY PASS** — Hostinger HEALTHY @ `c469f7c` · rollback `fcc1fcc` |
+| **UX-REFACTOR** | **PRODUCTION DEPLOY PASS** — Hostinger HEALTHY @ `c469f7c` |
+| **UX-POLISH** | **A0/A1 PLANNING** — brand **TVG CRM** · no PWA · no migrations · `ml/ux-polish-planning` |
 | Photo Bundles | **Deferred** |
 
-## UX-REFACTOR entry
+## UX-POLISH entry
 
 | Field | Value |
 | --- | --- |
-| Planning base | `a12b0f4502fe668a900381753128e9e4724cd844` |
-| A2 base | `67423d2468c647cac17c8afc766c1bc86ff42e2d` |
-| Scope | Global shell, nav, design tokens, component consolidation — top 5 screens |
-| Top 5 | Hub · Work Orders · Quotes · Inspections · Settings |
-| Brief | `docs/stabilization/releases/UX_REFACTOR_BRIEF.md` |
+| Base | `7623948a7a312125842223e27dd6a39c3834b060` |
+| Brand | **TVG CRM** (Founder-locked) |
+| Scope | Tokens · shell finish · synthetic exclude · Hub diet · table density · copy · Leads drawer/stage bugs |
+| Out | PWA · migrations · Storybook/Cypress farm · Photo Bundles · S7 · Stripe |
+| Brief | `docs/stabilization/releases/UX_POLISH_BRIEF.md` |
 | Policy | Peer review ×3 → CI → auto-continue |
-| Migrations | **Forbidden** |
 
 ## Halt defaults
 
-Auto-send · auto-charge · vault/portal/Terminal · TIS merge · Photo Bundles · S7 · UX-REFACTOR migrations (none allowed).
+Auto-send · auto-charge · vault/portal/Terminal · TIS merge · Photo Bundles · S7 · UX-POLISH migrations · UX-POLISH PWA.
