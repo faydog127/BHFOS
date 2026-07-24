@@ -11,6 +11,7 @@ import InspectionAiReviewPanel from '@/components/tech/InspectionAiReviewPanel';
 import InspectionFindingsNarrativeCard from '@/components/tech/InspectionFindingsNarrativeCard';
 import ManualConditionReviewControls, { isManualCondition } from '@/components/tech/ManualConditionReviewControls';
 import InspectionPreflightBlockers from '@/components/tech/InspectionPreflightBlockers';
+import InspectionChecklistPanel from '@/components/tech/InspectionChecklistPanel';
 import {
   buildPreflightBlockerModel,
   scrollToInspectionTarget,
@@ -796,6 +797,16 @@ export default function InspectionEditor({ forceNew = false } = {}) {
         return;
       }
 
+      // Seed + completion gates while still editable; submit only after gates pass.
+      const seeded = await supabase.rpc('ml_p1_s8_seed_checklist_for_inspection', {
+        p_inspection_id: inspection.id,
+        p_work_type: inspection.work_type || inspection.service_type || null,
+      });
+      if (seeded.error) throw seeded.error;
+      const gate = await supabase.rpc('ml_p1_s8_assert_photos_before_report', {
+        p_inspection_id: inspection.id,
+      });
+      if (gate.error) throw gate.error;
       if (statusLabel(inspection.status) === 'draft') {
         const submitted = await supabase.rpc('inspection_submit', {
           p_tenant_id: tenantId,
@@ -1747,6 +1758,14 @@ export default function InspectionEditor({ forceNew = false } = {}) {
                   context={preflightContext}
                   onNavigate={navigatePreflightGroup}
                 />
+                {inspection?.id ? (
+                  <InspectionChecklistPanel
+                    inspectionId={inspection.id}
+                    workType={inspection.work_type || inspection.service_type || null}
+                    locked={Boolean(reviewed)}
+                    photos={photos}
+                  />
+                ) : null}
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   <div className="rounded-lg border p-3"><div className="text-xs text-slate-500">Ready photos</div><b>{readyPhotoIds.size}/{activePhotos.length}</b></div>
                   <div className="rounded-lg border p-3"><div className="text-xs text-slate-500">Retake recommended</div><b>{activePhotos.filter((photo) => ['retake_recommended', 'kept_with_warning'].includes(photo.quality_status)).length}</b></div>

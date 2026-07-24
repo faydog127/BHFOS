@@ -15,6 +15,7 @@ require("./smartdocs_suggest.test.js");
 require("./pipeline_endpoints.test.js");
 require("./audience_alignment.test.js");
 require("./kanban_board.test.js");
+require("./ml_p1_s8_remediation_rpc.test.js");
 
 // Run
 helpers.runAllTests();

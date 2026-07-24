@@ -53,7 +53,9 @@ export const mediaQueue = {
   },
 
   /**
-   * Enforce PD-S8-02 cache budget. Evicts oldest uploaded/failed rows first, then oldest queued.
+   * Enforce PD-S8-02 cache budget.
+   * Only auto-evicts successfully uploaded rows. Queued/failed/uploading evidence is retained
+   * until sync succeeds or an explicit authorized discard (discardQueuedOrFailed).
    * Returns { ok, usedBytes, limitBytes, evicted }.
    */
   async enforceCacheBudget(tenantId, limitMb = DEFAULT_OFFLINE_CACHE_MB) {
@@ -62,25 +64,45 @@ export const mediaQueue = {
     let used = rows.reduce((sum, row) => sum + estimateBytes(row), 0);
     const evicted = [];
 
-    const evictionOrder = [
-      ...rows.filter((r) => r.status === 'uploaded' || r.status === 'failed'),
-      ...rows.filter((r) => r.status === 'queued' || r.status === 'uploading'),
-    ];
+    const uploadedOldestFirst = rows
+      .filter((r) => r.status === 'uploaded')
+      .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
 
-    for (const row of evictionOrder) {
+    for (const row of uploadedOldestFirst) {
       if (used <= limitBytes) break;
-      // Never drop an in-flight upload for the active sync mid-flight unless still over after soft eviction.
-      if (row.status === 'uploading') continue;
       await this.remove(row.id);
       evicted.push(row.id);
       used -= estimateBytes(row);
     }
 
-    // Hard fail-closed if still over (only uploading blobs remain).
+    // Never auto-drop queued/failed/uploading — fail closed so field evidence is not lost.
     if (used > limitBytes) {
       return { ok: false, usedBytes: used, limitBytes, evicted, code: 'ML_P1_S8_OFFLINE_CACHE_FULL' };
     }
     return { ok: true, usedBytes: used, limitBytes, evicted };
+  },
+
+  /**
+   * Explicit authorized discard of a queued or failed offline item (not used by budget eviction).
+   */
+  async discardQueuedOrFailed(id) {
+    const rows = await withStore('mediaQueue', 'readonly', (store) => {
+      return new Promise((resolve, reject) => {
+        const req = store.get(id);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+    });
+    const row = rows ? toQueueItem(rows) : null;
+    if (!row) return { ok: false, code: 'ML_P1_S8_OFFLINE_NOT_FOUND' };
+    if (row.status === 'uploading') {
+      return { ok: false, code: 'ML_P1_S8_OFFLINE_IN_FLIGHT' };
+    }
+    if (row.status !== 'queued' && row.status !== 'failed') {
+      return { ok: false, code: 'ML_P1_S8_OFFLINE_NOT_DISCARDABLE' };
+    }
+    await this.remove(id);
+    return { ok: true, id };
   },
 
   async add(item, { cacheMb = DEFAULT_OFFLINE_CACHE_MB } = {}) {

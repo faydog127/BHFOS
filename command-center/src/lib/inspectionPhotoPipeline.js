@@ -75,6 +75,7 @@ const ensureEvidenceRow = async ({
       inspection_id: inspectionId,
       finding_id: item.finding_id || null,
       recommendation_id: item.recommendation_id || null,
+      checklist_item_key: item.checklist_item_key || null,
       technician_id: technicianId || null,
       created_by_user_id: userId || null,
       bucket_id: INSPECTION_PHOTO_BUCKET,
@@ -111,6 +112,7 @@ export const enqueueInspectionPhotoFiles = async ({
   isBefore = null,
   qualityResults = new Map(),
   cacheMb = 250,
+  checklistItemKey = null,
 }) => {
   const accepted = [];
   const rejected = [];
@@ -138,6 +140,7 @@ export const enqueueInspectionPhotoFiles = async ({
           caption: '',
           finding_id: null,
           recommendation_id: null,
+          checklist_item_key: checklistItemKey || null,
           is_before: typeof isBefore === 'boolean' ? isBefore : null,
           quality_status: qualityResults.get(file)?.status || 'unchecked',
           quality_warnings: qualityResults.get(file)?.warnings || [],
