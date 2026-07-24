@@ -1,0 +1,124 @@
+{
+  "run": "S8-VAL-1784854700997",
+  "url": "https://wwyxohjnyqnegzbxtuxs.supabase.co",
+  "results": [
+    {
+      "name": "create_ephemeral_actors",
+      "ok": true,
+      "detail": {
+        "count": 4
+      }
+    },
+    {
+      "name": "jwt_sign_in",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "fixtures_created",
+      "ok": true,
+      "detail": {
+        "inspA": "e72f87a5-b858-4726-8825-1e36ee250fea",
+        "inspB": "f6dce084-7b5d-4e9b-b9ba-7ac61f578247"
+      }
+    },
+    {
+      "name": "deny_cross_tenant_seed",
+      "ok": true,
+      "detail": "ML_P1_S8_TENANT_ACCESS_DENIED"
+    },
+    {
+      "name": "deny_open_flags_other_tenant",
+      "ok": true,
+      "detail": "ML_P1_S8_TENANT_ACCESS_DENIED"
+    },
+    {
+      "name": "open_flags_null_jwt_scopes_caller_tenant",
+      "ok": true,
+      "detail": "rows=0"
+    },
+    {
+      "name": "deny_customer_seed",
+      "ok": true,
+      "detail": "ML_P1_S8_ROLE_DENIED: role \"customer\" cannot mutate inspection workflow"
+    },
+    {
+      "name": "allow_tech_seed",
+      "ok": true,
+      "detail": {
+        "work_type": "general",
+        "template_id": "63e0b92e-2550-404e-88af-70e23cad4000",
+        "items_seeded": 5,
+        "inspection_id": "e72f87a5-b858-4726-8825-1e36ee250fea"
+      }
+    },
+    {
+      "name": "allow_office_seed",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "deny_pending_mark_wave",
+      "ok": true,
+      "detail": "ML_P1_S8_PHOTOS_REQUIRED: need at least one complete non-voided photo"
+    },
+    {
+      "name": "allow_complete_mark_wave",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "deny_incomplete_checklist",
+      "ok": true,
+      "detail": "ML_P1_S8_REQUIRED_PHOTOS_MISSING: 3 checklist items lack complete evidence"
+    },
+    {
+      "name": "answer_and_link_required_photos",
+      "ok": true,
+      "detail": {
+        "items": 5
+      }
+    },
+    {
+      "name": "deny_jwt_checklist_insert",
+      "ok": true,
+      "detail": "ML_P1_S8_CHECKLIST_IMMUTABLE: insert only via seed RPC"
+    },
+    {
+      "name": "deny_jwt_photo_required_patch",
+      "ok": true,
+      "detail": "ML_P1_S8_CHECKLIST_IMMUTABLE: seeded fields cannot change"
+    },
+    {
+      "name": "allow_completion_gates",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "deny_cross_tenant_finalize",
+      "ok": true,
+      "detail": "tenant_access_denied"
+    },
+    {
+      "name": "deny_customer_finalize",
+      "ok": true,
+      "detail": "ML_P1_S8_ROLE_DENIED: role \"customer\" cannot mutate inspection workflow"
+    },
+    {
+      "name": "mark_reviewed_not_blocked_by_s8_after_gates",
+      "ok": true,
+      "detail": "ok_or_preflight"
+    },
+    {
+      "name": "allow_open_flags_own_tenant",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "cleanup",
+      "ok": true,
+      "detail": null
+    }
+  ],
+  "failed": 0
+}
