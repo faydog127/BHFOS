@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
-import { Plus, Search, Loader2, ClipboardList } from 'lucide-react';
+import { Plus, Search, Loader2 } from 'lucide-react';
+import CrmPageHeader from '@/components/crm/CrmPageHeader';
 import { supabase } from '@/lib/customSupabaseClient';
 import { getTenantId } from '@/lib/tenantUtils';
 import { useToast } from '@/components/ui/use-toast';
@@ -127,22 +128,23 @@ export default function Inspections() {
         <title>Inspections | TVG CRM</title>
       </Helmet>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-blue-600 text-white flex items-center justify-center">
-            <ClipboardList className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Inspections</h1>
-            <p className="text-sm text-slate-500">Capture findings, photos, and recommendations that drive quotes and work orders.</p>
-          </div>
-        </div>
-
-        <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => navigate(`/${tenantId}/crm/inspections/new`)}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Inspection
-        </Button>
-      </div>
+      <CrmPageHeader
+        title="Inspections"
+        description="Capture findings, photos, and recommendations that drive quotes and work orders."
+        breadcrumbs={[
+          { label: 'Hub', to: `/${tenantId}/crm` },
+          { label: 'Inspections' },
+        ]}
+        actions={(
+          <Button
+            className="bg-[hsl(var(--cta))] text-[hsl(var(--cta-foreground))] hover:opacity-90"
+            onClick={() => navigate(`/${tenantId}/crm/inspections/new`)}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            New Inspection
+          </Button>
+        )}
+      />
 
       <Card>
         <CardHeader className="pb-3">

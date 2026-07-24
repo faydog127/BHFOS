@@ -2,10 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { NavLink, Outlet, useLocation, useParams } from 'react-router-dom';
 import BHFSidebar from '@/components/BHFSidebar';
 import { cn } from '@/lib/utils';
-import { CreditCard, ClipboardCheck, FileText, LayoutDashboard, Menu, Users } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DEFAULT_TENANT_ID } from '@/config/tenantDefaults';
 import { tenantPath } from '@/lib/tenantUtils';
+import { CRM_MOBILE_BOTTOM_NAV } from '@/config/crmPrimaryNav';
 
 const BHFCrmLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -36,21 +37,15 @@ const BHFCrmLayout = () => {
     sidebarWrapperClass += " border-r border-orange-100 shadow-xl shadow-orange-500/5";
   }
 
-  const mobileNavItems = [
-    { name: 'Hub', path: '/crm', icon: LayoutDashboard, end: true },
-    { name: 'Leads', path: '/crm/leads', icon: Users },
-    { name: 'Quotes', path: '/crm/quotes', icon: FileText },
-    { name: 'Calendar', path: '/crm/calendar', icon: ClipboardCheck },
-    { name: 'Invoices', path: '/crm/invoices', icon: CreditCard },
-  ];
-
   const currentPageLabel = useMemo(() => {
     const path = location.pathname.toLowerCase();
     if (path.includes('/crm/quotes') || path.includes('/crm/estimates')) return 'Quotes';
+    if (path.includes('/crm/inspections')) return 'Inspections';
     if (path.includes('/crm/invoices')) return 'Invoices';
     if (path.includes('/crm/leads')) return 'Leads';
     if (path.includes('/crm/calendar')) return 'Calendar';
     if (path.includes('/crm/jobs')) return 'Work Orders';
+    if (path.includes('/crm/reporting')) return 'Analytics';
     if (path.includes('/crm/dispatch')) return 'Dispatch';
     if (path.includes('/crm/settings')) return 'Settings';
     return 'Hub';
@@ -114,24 +109,47 @@ const BHFCrmLayout = () => {
         <Outlet />
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur lg:hidden">
-        <nav className="mx-auto grid max-w-md grid-cols-5 gap-1 px-2 py-2">
-          {mobileNavItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={tenantPath(item.path, tenantId)}
-              end={item.end}
-              className={({ isActive }) =>
-                cn(
-                  'flex min-h-[3.5rem] flex-col items-center justify-center rounded-xl px-1 text-[11px] font-medium transition-colors',
-                  isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-100',
-                )
-              }
-            >
-              <item.icon className="mb-1 h-4 w-4" />
-              <span className="truncate">{item.name}</span>
-            </NavLink>
-          ))}
+      <div
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur lg:hidden"
+        data-testid="crm-mobile-bottom-nav"
+      >
+        <nav className="mx-auto grid max-w-md grid-cols-5 gap-1 px-2 py-2" aria-label="CRM mobile primary">
+          {CRM_MOBILE_BOTTOM_NAV.map((item) => {
+            const itemClass = ({ isActive }) =>
+              cn(
+                'flex min-h-[3.5rem] flex-col items-center justify-center rounded-xl px-1 text-[11px] font-medium transition-colors',
+                isActive
+                  ? 'bg-blue-50 text-[hsl(var(--nav-active))]'
+                  : 'text-slate-500 hover:bg-slate-100',
+              );
+
+            if (item.openSidebar) {
+              return (
+                <button
+                  key={item.name}
+                  type="button"
+                  onClick={() => setSidebarOpen(true)}
+                  className={itemClass({ isActive: false })}
+                  aria-label="Open more navigation"
+                >
+                  <item.icon className="mb-1 h-4 w-4" />
+                  <span className="truncate">{item.name}</span>
+                </button>
+              );
+            }
+
+            return (
+              <NavLink
+                key={item.path}
+                to={tenantPath(item.path, tenantId)}
+                end={item.end}
+                className={itemClass}
+              >
+                <item.icon className="mb-1 h-4 w-4" />
+                <span className="truncate">{item.name}</span>
+              </NavLink>
+            );
+          })}
         </nav>
       </div>
     </div>

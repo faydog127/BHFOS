@@ -21,6 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import HubCalendar from '@/components/crm/HubCalendar';
+import CrmPageHeader from '@/components/crm/CrmPageHeader';
 
 const StatCard = ({ title, value, icon: Icon, color, loading, subtext, link }) => (
   <Link to={link || "#"} className={link ? "cursor-pointer" : "cursor-default"}>
@@ -173,32 +174,29 @@ const CRMHub = () => {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto p-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
-            Welcome back, {userName}!
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">
-            Here's what's happening today in {tenantId.toUpperCase()}.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {flags.enableLeads && (
-            <Button asChild>
-              <Link to={`/${tenantId}/crm/leads`}>
-                <Plus className="mr-2 h-4 w-4" /> New Lead
-              </Link>
-            </Button>
-          )}
-          {flags.enableEstimates && (
-            <Button variant="outline" asChild>
-              <Link to={`/${tenantId}/crm/quotes/new`}>
-                <Plus className="mr-2 h-4 w-4" /> New Quote
-              </Link>
-            </Button>
-          )}
-        </div>
-      </div>
+      <CrmPageHeader
+        title={`Welcome back, ${userName}!`}
+        description={`Here's what's happening today in ${tenantId.toUpperCase()}.`}
+        breadcrumbs={[{ label: 'Hub' }]}
+        actions={(
+          <div className="flex gap-2">
+            {flags.enableLeads && (
+              <Button asChild>
+                <Link to={`/${tenantId}/crm/leads`}>
+                  <Plus className="mr-2 h-4 w-4" /> New Lead
+                </Link>
+              </Button>
+            )}
+            {flags.enableEstimates && (
+              <Button variant="outline" asChild>
+                <Link to={`/${tenantId}/crm/quotes/new`}>
+                  <Plus className="mr-2 h-4 w-4" /> New Quote
+                </Link>
+              </Button>
+            )}
+          </div>
+        )}
+      />
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <StatCard

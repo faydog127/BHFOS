@@ -28,6 +28,8 @@ import { moneyLoopDeleteService } from '@/services/moneyLoopDeleteService';
 import { resolveLeadDelivery } from '@/lib/documentDelivery';
 import { sendQuoteDocument } from '@/services/documentDeliveryService';
 import { openQuotePreview, openQuotePrintView } from '@/services/quotePreviewService';
+import CrmPageHeader from '@/components/crm/CrmPageHeader';
+import CrmListToolbar from '@/components/crm/CrmListToolbar';
 
 const ProposalList = () => {
   const navigate = useNavigate();
@@ -335,15 +337,22 @@ const ProposalList = () => {
     <div className="mx-auto max-w-7xl space-y-6">
       <Helmet><title>Quotes | CRM</title></Helmet>
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">Quotes</h1>
-          <p className="text-slate-500 mt-1">Manage customer quotes and approvals.</p>
-        </div>
-        <Button onClick={() => navigate(tenantPath('/crm/quotes/new', resolvedTenantId))} className="w-full bg-blue-600 hover:bg-blue-700 sm:w-auto">
-          <Plus className="w-4 h-4 mr-2" /> New Quote
-        </Button>
-      </div>
+      <CrmPageHeader
+        title="Quotes"
+        description="Manage customer quotes and approvals."
+        breadcrumbs={[
+          { label: 'Hub', to: tenantPath('/crm', resolvedTenantId) },
+          { label: 'Quotes' },
+        ]}
+        actions={(
+          <Button
+            onClick={() => navigate(tenantPath('/crm/quotes/new', resolvedTenantId))}
+            className="w-full bg-[hsl(var(--cta))] text-[hsl(var(--cta-foreground))] hover:opacity-90 sm:w-auto"
+          >
+            <Plus className="w-4 h-4 mr-2" /> New Quote
+          </Button>
+        )}
+      />
 
       <Card>
         <CardHeader>
@@ -366,7 +375,9 @@ const ProposalList = () => {
                 </div>
               )}
             </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[20rem]">
+            <CrmListToolbar
+              className="mb-0 w-full sm:w-auto sm:min-w-[20rem]"
+              search={(
               <div className="relative w-full sm:w-64">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
                 <Input
@@ -376,7 +387,8 @@ const ProposalList = () => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-
+              )}
+              filters={(
               <div className="flex overflow-x-auto rounded-md bg-slate-100 p-1">
                 {[
                   { value: 'all', label: 'All' },
@@ -397,7 +409,8 @@ const ProposalList = () => {
                   </button>
                 ))}
               </div>
-            </div>
+              )}
+            />
           </div>
         </CardHeader>
 

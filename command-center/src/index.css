@@ -33,6 +33,14 @@
     --ring: 222.2 84% 4.9%;
  
     --radius: 0.5rem;
+
+    /* UX-REFACTOR semantic aliases (PD-UX-03 A) — map to existing system */
+    --surface-page: var(--background);
+    --surface-panel: var(--card);
+    --nav-active: 221.2 83.2% 53.3%;
+    --nav-active-foreground: 210 40% 98%;
+    --cta: 221.2 83.2% 53.3%;
+    --cta-foreground: 210 40% 98%;
   }
  
   .dark {
@@ -63,6 +71,13 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
+
+    --surface-page: var(--background);
+    --surface-panel: var(--card);
+    --nav-active: 217.2 91.2% 59.8%;
+    --nav-active-foreground: 222.2 47.4% 11.2%;
+    --cta: 217.2 91.2% 59.8%;
+    --cta-foreground: 222.2 47.4% 11.2%;
   }
 }
  

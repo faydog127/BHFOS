@@ -61,6 +61,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { moneyLoopDeleteService } from '@/services/moneyLoopDeleteService';
 import { workOrderBoardService } from '@/services/workOrderBoardService';
+import CrmPageHeader from '@/components/crm/CrmPageHeader';
 
 const Jobs = () => {
   const { toast } = useToast();
@@ -750,38 +751,39 @@ const Jobs = () => {
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
       <Helmet><title>Work Orders | CRM</title></Helmet>
       
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Work Orders</h1>
-          <p className="text-slate-500">Manage work orders, scheduling, progress, and collections.</p>
-          {selectedIds.length > 0 ? (
-            <div className="mt-3 flex items-center gap-3">
-              <span className="text-sm text-slate-500">{selectedIds.length} selected</span>
-              <Button variant="destructive" size="sm" onClick={() => queueDelete(selectedIds)}>
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete Selected
-              </Button>
-            </div>
-          ) : null}
-        </div>
-        <div className="flex gap-2">
+      <CrmPageHeader
+        title="Work Orders"
+        description="Manage work orders, scheduling, progress, and collections."
+        breadcrumbs={[{ label: 'Hub', to: `/${tenantId}/crm` }, { label: 'Work Orders' }]}
+        actions={(
+          <div className="flex flex-wrap gap-2">
             <div className="relative min-w-[16rem]">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search work orders..."
-                  className="pl-9"
-                />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search work orders..."
+                className="pl-9"
+              />
             </div>
             <Button variant="outline" asChild>
-                <Link to={`/${tenantId}/crm/dispatch`}>
-                    <Calendar className="mr-2 h-4 w-4" /> Open Dispatch
-                </Link>
+              <Link to={`/${tenantId}/crm/dispatch`}>
+                <Calendar className="mr-2 h-4 w-4" /> Open Dispatch
+              </Link>
             </Button>
             <Button variant="outline" onClick={fetchJobs}>Refresh Board</Button>
+          </div>
+        )}
+      />
+      {selectedIds.length > 0 ? (
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-slate-500">{selectedIds.length} selected</span>
+          <Button variant="destructive" size="sm" onClick={() => queueDelete(selectedIds)}>
+            <Trash2 className="w-4 h-4 mr-2" />
+            Delete Selected
+          </Button>
         </div>
-      </div>
+      ) : null}
 
       <Tabs defaultValue="all" value={filter === 'active' ? 'active' : filter} onValueChange={setFilter} className="w-full">
         <TabsList className="grid w-full grid-cols-4 lg:w-[500px]">
