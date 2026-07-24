@@ -7,14 +7,22 @@ import SystemDiagnostics from '@/components/crm/settings/SystemDiagnostics';
 import TrainingDataSettings from '@/components/crm/settings/TrainingDataSettings';
 import BillingPaymentsSettings from '@/components/crm/settings/BillingPaymentsSettings';
 import SYSTEM_VERSION from '@/config/version';
+import CrmPageHeader from '@/components/crm/CrmPageHeader';
+import { getTenantId } from '@/lib/tenantUtils';
 
 const SettingsPage = () => {
+  const tenantId = getTenantId();
+
   return (
     <div className="p-8 max-w-[1600px] mx-auto space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">System Settings</h1>
-        <p className="text-slate-500 mt-2">Configuration, security, and feature management.</p>
-      </div>
+      <CrmPageHeader
+        title="System Settings"
+        description="Configuration, security, and feature management."
+        breadcrumbs={[
+          { label: 'Hub', to: `/${tenantId}/crm` },
+          { label: 'Settings' },
+        ]}
+      />
 
       <Tabs defaultValue="billing" className="space-y-6">
         <TabsList className="grid w-full grid-cols-5 lg:w-[720px]">

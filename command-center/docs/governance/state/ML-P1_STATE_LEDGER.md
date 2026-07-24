@@ -4,7 +4,7 @@
 | --- | --- |
 | Updated | 2026-07-23 |
 | Repo | https://github.com/faydog127/BHFOS |
-| Exact `origin/main` (slice base) | `a12b0f4502fe668a900381753128e9e4724cd844` |
+| Exact `origin/main` | `67423d2468c647cac17c8afc766c1bc86ff42e2d` (planning #114) |
 | Authority | Precedence + Delegated-Authority auto-continue |
 
 ## Slice posture
@@ -15,16 +15,17 @@
 | **S6** | **CLOSED** — `SLICE6_PRODUCTION_VALIDATION_PASS` |
 | **S7** | **Deferred** — do not start |
 | **S8** | **SLICE8_PRODUCTION_VALIDATION_PASS** (remediation) |
-| **UX-REFACTOR** | **A0/A1 PLANNING** — parallel · no DB migrations · branch `ml/ux-refactor-planning` |
+| **UX-REFACTOR** | **A2 CODING** — parallel · no DB migrations · branch `ml/ux-refactor-a2` |
 | Photo Bundles | **Deferred** |
 
 ## UX-REFACTOR entry
 
 | Field | Value |
 | --- | --- |
-| Base | `a12b0f4502fe668a900381753128e9e4724cd844` |
+| Planning base | `a12b0f4502fe668a900381753128e9e4724cd844` |
+| A2 base | `67423d2468c647cac17c8afc766c1bc86ff42e2d` |
 | Scope | Global shell, nav, design tokens, component consolidation — top 5 screens |
-| Top 5 | Hub · Jobs · Quotes · Inspections · Settings |
+| Top 5 | Hub · Work Orders · Quotes · Inspections · Settings |
 | Brief | `docs/stabilization/releases/UX_REFACTOR_BRIEF.md` |
 | Policy | Peer review ×3 → CI → auto-continue |
 | Migrations | **Forbidden** |

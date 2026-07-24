@@ -3,15 +3,17 @@
 # No DB migrations. Peer review + auto-continue per ML-P1 Delegated-Authority.
 
 release_id: "UX-REFACTOR"
-current_phase: "planning"
+current_phase: "a2_coding"
 governance_version: "v2.2"
 risk_tier: "Tier 2"
-status: "planning"
+status: "implementation"
 schedule: "parallel"
 db_migrations: "forbidden"
 current_owner: "Orchestrator"
-base_sha: "a12b0f4502fe668a900381753128e9e4724cd844"
-branch: "ml/ux-refactor-planning"
+base_sha: "67423d2468c647cac17c8afc766c1bc86ff42e2d"
+planning_base_sha: "a12b0f4502fe668a900381753128e9e4724cd844"
+planning_merge: "PR #114 → 67423d2468c647cac17c8afc766c1bc86ff42e2d"
+branch: "ml/ux-refactor-a2"
 worktree: "F:\\Dev\\BHFOS-ux-refactor"
 brief_path: "command-center/docs/stabilization/releases/UX_REFACTOR_BRIEF.md"
 decision_packet_path: "command-center/docs/governance/decisions/UX_REFACTOR_DECISION_PACKET.md"
@@ -37,7 +39,7 @@ canonical_primary_nav:
   - { label: Settings, path: /crm/settings }
 
 founder_create_auth: "2026-07-23 — create slice; parallel; no migrations; peer-review + auto-continue"
-merge_authorization_planning: "pending — peer reviews + CI"
+merge_authorization_planning: "merged PR #114"
 implementation_authorization: "auto-continue after planning merge + PD-UX defaults A"
 migration_authorization: "none — forbidden"
 deployment_authorization: "none — separate Access Matrix S / Founder auth for Hostinger"
@@ -49,5 +51,5 @@ out_of_scope:
   - supabase_migrations
   - tis_merge
 
-next_phase: "Open planning PR → 3 peer reviews → CI → merge → A2 coding on same scope"
+next_phase: "A2 PR → 3 peer reviews → CI → merge; Hostinger only with Access Matrix S"
 next_owner: "Orchestrator"

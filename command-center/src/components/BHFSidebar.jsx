@@ -1,17 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
 import {
-  LayoutDashboard,
   Users,
   Megaphone,
   Calendar,
   ClipboardCheck,
-  ClipboardList,
-  FileText,
   CreditCard,
-  Settings,
   BarChart,
-  Hammer,
   Phone,
   MessageSquare,
   Activity,
@@ -22,6 +17,7 @@ import { tenantPath } from '@/lib/tenantUtils';
 import TenantSwitcher from '@/components/TenantSwitcher';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { CRM_PRIMARY_NAV } from '@/config/crmPrimaryNav';
 
 const BHFSidebar = ({ onNavigate = null }) => {
   const { tenantId = 'tvg' } = useParams();
@@ -75,13 +71,8 @@ const BHFSidebar = ({ onNavigate = null }) => {
     };
   }, []);
 
-  const navSections = [
-    {
-      title: 'Command',
-      items: [
-        { name: 'Hub', path: '/crm', icon: LayoutDashboard, end: true },
-      ],
-    },
+  /** Secondary IA — below divider (UX-REFACTOR PD-UX-01) */
+  const secondaryNavSections = [
     {
       title: 'Intake',
       items: [
@@ -94,20 +85,12 @@ const BHFSidebar = ({ onNavigate = null }) => {
       title: 'Sales',
       items: [
         { name: 'Opportunities', path: '/crm/opportunities', icon: BarChart },
-        { name: 'Quotes', path: '/crm/quotes', icon: FileText },
       ],
     },
     {
       title: 'Scheduling',
       items: [
         { name: 'Calendar', path: '/crm/calendar', icon: ClipboardCheck },
-      ],
-    },
-    {
-      title: 'Operations',
-      items: [
-        { name: 'Inspections', path: '/crm/inspections', icon: ClipboardList },
-        { name: 'Work Orders', path: '/crm/jobs', icon: Hammer },
         { name: 'Dispatch', path: '/crm/dispatch', icon: Calendar },
       ],
     },
@@ -122,20 +105,26 @@ const BHFSidebar = ({ onNavigate = null }) => {
       items: [
         { name: 'Marketing', path: '/crm/marketing', icon: Megaphone },
         { name: 'Partners', path: '/crm/partners', icon: Users },
-        { name: 'Analytics', path: '/crm/reporting', icon: BarChart },
       ],
     },
     {
       title: 'System',
       items: [
         { name: 'Ops Dashboard', path: '/crm/ops', icon: Activity },
-        { name: 'Settings', path: '/crm/settings', icon: Settings },
       ],
     },
   ];
 
+  const linkClass = ({ isActive }) =>
+    cn(
+      'flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors',
+      isActive
+        ? 'bg-[hsl(var(--nav-active))] text-[hsl(var(--nav-active-foreground))] shadow-sm'
+        : 'text-slate-300 hover:bg-slate-800 hover:text-white',
+    );
+
   return (
-    <div className="h-full flex flex-col bg-slate-900 text-white">
+    <div className="h-full flex flex-col bg-slate-900 text-white" data-testid="crm-sidebar">
       {/* Brand / Logo Area */}
       <div className="flex flex-col px-4 pt-4 pb-2 border-b border-slate-800">
         <div className="h-10 flex items-center mb-4">
@@ -150,8 +139,35 @@ const BHFSidebar = ({ onNavigate = null }) => {
 
       {/* Navigation Items */}
       <div className="flex-1 overflow-y-auto py-4">
-        <nav className="px-3 space-y-5">
-          {navSections.map((section) => (
+        <nav className="px-3 space-y-5" aria-label="CRM primary">
+          <div>
+            <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Primary
+            </div>
+            <div className="space-y-1" data-testid="crm-primary-nav">
+              {CRM_PRIMARY_NAV.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={tenantPath(item.path, tenantId)}
+                  end={item.end}
+                  onClick={() => onNavigate?.()}
+                  className={linkClass}
+                >
+                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  {item.name}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+
+          <div
+            className="mx-3 border-t border-slate-700"
+            role="separator"
+            aria-label="Secondary navigation"
+            data-testid="crm-nav-divider"
+          />
+
+          {secondaryNavSections.map((section) => (
             <div key={section.title}>
               <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                 {section.title}
@@ -163,14 +179,7 @@ const BHFSidebar = ({ onNavigate = null }) => {
                     to={tenantPath(item.path, tenantId)}
                     end={item.end}
                     onClick={() => onNavigate?.()}
-                    className={({ isActive }) =>
-                      cn(
-                        'flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors',
-                        isActive
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'text-slate-300 hover:bg-slate-800 hover:text-white',
-                      )
-                    }
+                    className={linkClass}
                   >
                     <item.icon className="w-5 h-5 flex-shrink-0" />
                     {item.name}
