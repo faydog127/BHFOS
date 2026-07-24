@@ -4,7 +4,7 @@
 | --- | --- |
 | Updated | 2026-07-23 |
 | Repo | https://github.com/faydog127/BHFOS |
-| Exact `origin/main` | `14301fc2b1d5e15b5f664a69613ff2370a91de1d` (A2 #115) |
+| Exact `origin/main` / prod | `c469f7c8174642f40ca60756c124dec63a80bb10` (UX Hostinger) |
 | Authority | Precedence + Delegated-Authority auto-continue |
 
 ## Slice posture
@@ -15,7 +15,7 @@
 | **S6** | **CLOSED** — `SLICE6_PRODUCTION_VALIDATION_PASS` |
 | **S7** | **Deferred** — do not start |
 | **S8** | **SLICE8_PRODUCTION_VALIDATION_PASS** (remediation) |
-| **UX-REFACTOR** | **A2 MERGED** — parallel · no DB migrations · await Hostinger Access Matrix **S** |
+| **UX-REFACTOR** | **PRODUCTION DEPLOY PASS** — Hostinger HEALTHY @ `c469f7c` · rollback `fcc1fcc` |
 | Photo Bundles | **Deferred** |
 
 ## UX-REFACTOR entry
