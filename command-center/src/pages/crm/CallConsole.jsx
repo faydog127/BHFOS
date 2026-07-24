@@ -28,6 +28,8 @@ import CoachingPanel from '@/components/crm/call-console/CoachingPanel';
 import PostCallAutomation from '@/components/crm/call-console/PostCallAutomation';
 import SystemModeToggle from '@/components/SystemModeToggle';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
+import CrmPageHeader from '@/components/crm/CrmPageHeader';
+import { CRM_PRODUCT_NAME } from '@/config/productBrand';
 
 const getQueueItemMeta = (item) => {
   if (!item) {
@@ -421,11 +423,24 @@ const SmartCallConsole = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-64px)] lg:h-screen w-full bg-slate-100 flex overflow-hidden font-sans">
+    <div className="h-[calc(100vh-64px)] lg:h-screen w-full bg-slate-100 flex flex-col overflow-hidden font-sans">
       <Helmet>
-        <title>Call Console | CRM</title>
+        <title>Call Console | {CRM_PRODUCT_NAME}</title>
       </Helmet>
 
+      <div className="shrink-0 border-b border-slate-200 bg-white px-4 pt-3 pb-1">
+        <CrmPageHeader
+          className="mb-2"
+          title="Call Console"
+          description="Work the live queue, capture intent, and advance the next booking step."
+          breadcrumbs={[
+            { label: 'Hub', to: `/${getTenantId()}/crm` },
+            { label: 'Call Console' },
+          ]}
+        />
+      </div>
+
+      <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* Sidebar Queue */}
       <aside className="hidden xl:flex w-80 flex-col bg-white border-r border-slate-200 shrink-0 z-10 h-full">
         <QueueListContent 
@@ -490,6 +505,7 @@ const SmartCallConsole = () => {
           </div>
         </div>
       </main>
+      </div>
     </div>
   );
 };

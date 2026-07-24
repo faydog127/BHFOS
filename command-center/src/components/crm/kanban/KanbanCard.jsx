@@ -1,7 +1,7 @@
 import React from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { Card, CardContent } from '@/components/ui/card';
-import { DollarSign, Clock, Hash, Briefcase, User } from 'lucide-react';
+import { DollarSign, Clock, Hash, Briefcase, User, Moon } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { getCardSlaStatus } from '@/lib/kanbanUtils';
@@ -29,11 +29,13 @@ const KanbanCard = ({ id, card, onClick, isOverlay }) => {
   // SLA Calculation
   let headerColorClass = 'bg-slate-200';
   let headerBadgeText = null;
+  let slaStatus = 'normal';
   try {
       if (typeof getCardSlaStatus === 'function') {
         const sla = getCardSlaStatus(card, card.column_key);
         headerColorClass = sla.colorClass;
         headerBadgeText = sla.badgeText;
+        slaStatus = sla.status;
       }
   } catch (e) { console.warn(e); }
 
@@ -111,7 +113,15 @@ const KanbanCard = ({ id, card, onClick, isOverlay }) => {
                         {subtitle}
                      </span>
                      {headerBadgeText && (
-                        <span className="text-[10px] text-red-600 font-bold ml-auto shrink-0">{headerBadgeText}</span>
+                        <span
+                          className={cn(
+                            'ml-auto shrink-0 inline-flex items-center gap-0.5 text-[10px] font-bold',
+                            slaStatus === 'after_hours' ? 'text-blue-600' : 'text-red-600',
+                          )}
+                        >
+                          {slaStatus === 'after_hours' ? <Moon className="h-3 w-3" aria-hidden="true" /> : null}
+                          {headerBadgeText}
+                        </span>
                      )}
                 </div>
             </div>

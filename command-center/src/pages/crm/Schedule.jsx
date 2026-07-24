@@ -13,7 +13,6 @@ import {
   MapPin,
   Phone,
   PlayCircle,
-  Route,
   UserCheck,
   Wrench,
 } from 'lucide-react';
@@ -55,6 +54,7 @@ import {
 } from '@/lib/jobAppointmentSchedule';
 import { jobService } from '@/services/jobService';
 import { workOrderBoardService } from '@/services/workOrderBoardService';
+import CrmPageHeader from '@/components/crm/CrmPageHeader';
 
 const STATUS_OPTIONS = [
   'unscheduled',
@@ -1161,25 +1161,20 @@ export default function Schedule() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
-            <Route className="h-3.5 w-3.5" />
-            Execution Only
-          </div>
-          <div>
-            <h1 className="text-4xl font-semibold tracking-tight text-slate-950">Dispatch</h1>
-            <p className="mt-2 max-w-3xl text-base text-slate-600">
-              Assign technicians, resolve blockers, and run already-booked work. First-time booking belongs in Calendar, not here.
-            </p>
-          </div>
-        </div>
-
-        <Button variant="outline" onClick={handleRefresh} disabled={refreshing || loading}>
-          {refreshing || loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalIcon className="mr-2 h-4 w-4" />}
-          Refresh Board
-        </Button>
-      </div>
+      <CrmPageHeader
+        title="Dispatch"
+        description="Assign technicians, resolve blockers, and run already-booked work. First-time booking belongs in Calendar, not here."
+        breadcrumbs={[
+          { label: 'Hub', to: `/${getTenantId()}/crm` },
+          { label: 'Dispatch' },
+        ]}
+        actions={(
+          <Button variant="outline" onClick={handleRefresh} disabled={refreshing || loading}>
+            {refreshing || loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalIcon className="mr-2 h-4 w-4" />}
+            Refresh Board
+          </Button>
+        )}
+      />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard

@@ -6,20 +6,31 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
 import ActionHubKanbanView from '@/components/crm/action-hub/ActionHubKanbanView';
+import CrmPageHeader from '@/components/crm/CrmPageHeader';
 import { useKanbanBoardData } from '@/hooks/useKanbanBoardData';
+import { useTrainingMode } from '@/contexts/TrainingModeContext';
+import { excludeSyntheticRows } from '@/lib/excludeSynthetic';
 import { getTenantId, tenantPath } from '@/lib/tenantUtils';
+import { CRM_PRODUCT_NAME } from '@/config/productBrand';
 
 const Pipeline = () => {
   const { toast } = useToast();
   const { items, loading, error, refresh, moveItem } = useKanbanBoardData();
+  const { isTrainingMode } = useTrainingMode();
   const [searchTerm, setSearchTerm] = useState('');
   const tenantId = getTenantId();
 
+  // Live: hide synth. Training: keep board as returned (seeded boards vary).
+  const hygieneItems = useMemo(
+    () => (isTrainingMode ? items : excludeSyntheticRows(items, { trainingMode: false })),
+    [items, isTrainingMode],
+  );
+
   const filteredItems = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
-    if (!query) return items;
+    if (!query) return hygieneItems;
 
-    return items.filter((item) => {
+    return hygieneItems.filter((item) => {
       const haystack = [
         item.title,
         item.subtitle,
@@ -36,7 +47,7 @@ const Pipeline = () => {
 
       return haystack.includes(query);
     });
-  }, [items, searchTerm]);
+  }, [hygieneItems, searchTerm]);
 
   const handleMove = async ({ item, toColumnKey }) => {
     const result = await moveItem({ item, toColumnKey });
@@ -51,34 +62,39 @@ const Pipeline = () => {
 
   return (
     <div className="h-full flex flex-col">
-      <Helmet><title>Opportunities | CRM</title></Helmet>
+      <Helmet><title>Opportunities | {CRM_PRODUCT_NAME}</title></Helmet>
 
       <div className="p-6 border-b bg-white">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Opportunities</h1>
-            <p className="text-muted-foreground">Advance qualified work without mixing it with raw lead intake.</p>
-          </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <div className="relative flex-1 sm:w-64">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search cards..."
-                className="pl-8"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+        <CrmPageHeader
+          className="mb-0"
+          title="Opportunities"
+          description="Advance qualified work without mixing it with raw lead intake."
+          breadcrumbs={[
+            { label: 'Hub', to: `/${tenantId}/crm` },
+            { label: 'Opportunities' },
+          ]}
+          actions={(
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search cards..."
+                  className="pl-8"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <Button variant="outline" onClick={refresh}>
+                <RefreshCcw className="mr-2 h-4 w-4" /> Refresh
+              </Button>
+              <Button asChild>
+                <Link to={tenantPath('/crm/leads', tenantId)}>
+                  <Plus className="mr-2 h-4 w-4" /> Open Leads
+                </Link>
+              </Button>
             </div>
-            <Button variant="outline" onClick={refresh}>
-              <RefreshCcw className="mr-2 h-4 w-4" /> Refresh
-            </Button>
-            <Button asChild>
-              <Link to={tenantPath('/crm/leads', tenantId)}>
-                <Plus className="mr-2 h-4 w-4" /> Open Leads
-              </Link>
-            </Button>
-          </div>
-        </div>
+          )}
+        />
         {error && (
           <div className="mt-3 text-sm text-red-600">
             {error}

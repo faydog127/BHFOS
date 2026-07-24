@@ -58,8 +58,16 @@ import {
   AlertCircle,
   Ticket,
   Copy,
-  Trash2
+  Trash2,
+  MoreHorizontal,
+  Phone,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { format } from 'date-fns';
 import { formatPhoneNumber } from '@/lib/formUtils';
 import {
@@ -68,6 +76,9 @@ import {
   describeLeadIntakeDbError,
   formatLeadIntakeErrors,
 } from '@/lib/leadIntakeContract';
+import CrmPageHeader from '@/components/crm/CrmPageHeader';
+import { excludeSyntheticRows } from '@/lib/excludeSynthetic';
+import { CRM_PRODUCT_NAME } from '@/config/productBrand';
 
 const PIPELINE_STAGES = [
   { value: 'new', label: 'New' },
@@ -231,7 +242,12 @@ const Leads = () => {
       const { data, error } = await query;
 
       if (error) throw error;
-      setLeads(data || []);
+      // Live: also drop unflagged synth identity rows. Training: keep query polarity.
+      setLeads(
+        isTrainingMode
+          ? (data || [])
+          : excludeSyntheticRows(data || [], { trainingMode: false }),
+      );
     } catch (error) {
       console.error('Error fetching leads:', error);
       setError(error.message || 'Failed to load leads');
@@ -253,12 +269,8 @@ const Leads = () => {
   useEffect(() => {
     if (selectedLead) {
       fetchHistory(selectedLead.id);
-    } else {
-      if (searchParams.get('leadId')) {
-        setSearchParams({}, { replace: true });
-      }
     }
-  }, [selectedLead, searchParams, setSearchParams]);
+  }, [selectedLead]);
 
   const fetchPartners = async () => {
     setLoadingPartners(true);
@@ -352,6 +364,24 @@ const Leads = () => {
     completed: 'job_complete',
     complete: 'job_complete',
     won: 'job_complete',
+    lead_new: 'new',
+    new_lead: 'new',
+    intake: 'new',
+    open: 'new',
+    unqualified: 'new',
+    in_progress: 'contacted',
+    working: 'contacted',
+    attempt: 'contacted',
+    attempted: 'contacted',
+    proposal: 'qualified',
+    estimate: 'qualified',
+    booked: 'scheduled',
+    appointment: 'scheduled',
+    done: 'job_complete',
+    closed_won: 'job_complete',
+    closed_lost: 'lost',
+    dead: 'lost',
+    nurture_queue: 'nurture',
   };
 
   const STATUS_TO_STAGE_MAP = {
@@ -387,11 +417,20 @@ const Leads = () => {
     if (!normalized) return null;
     if (STAGE_SYNONYMS[normalized]) return STAGE_SYNONYMS[normalized];
     if (STAGE_TO_STATUS_MAP[normalized]) return normalized;
-    console.warn('[Leads] Unknown pipeline stage value:', {
-      ...buildPipelineWarnContext(context),
-      raw: value,
-      normalized,
-    });
+    // UX-POLISH: prefer status map before warn; unknown stages fall through quietly once per session key
+    if (STATUS_TO_STAGE_MAP[normalized]) return STATUS_TO_STAGE_MAP[normalized];
+    if (typeof window !== 'undefined') {
+      window.__tvgUnknownStages = window.__tvgUnknownStages || new Set();
+      const key = `${normalized}`;
+      if (!window.__tvgUnknownStages.has(key)) {
+        window.__tvgUnknownStages.add(key);
+        console.warn('[Leads] Unknown pipeline stage value:', {
+          ...buildPipelineWarnContext(context),
+          raw: value,
+          normalized,
+        });
+      }
+    }
     return null;
   };
 
@@ -862,15 +901,13 @@ const Leads = () => {
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
-      <Helmet><title>Leads | CRM</title></Helmet>
+      <Helmet><title>Leads | {CRM_PRODUCT_NAME}</title></Helmet>
 
-      {/* --- Actions Bar --- */}
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Leads</h1>
-          <p className="text-gray-500">Capture and qualify new conversations before they become opportunities.</p>
-        </div>
-
+      <CrmPageHeader
+        title="Leads"
+        description="Capture and qualify new conversations before they become opportunities."
+        breadcrumbs={[{ label: 'Hub', to: `/${tenantId}/crm` }, { label: 'Leads' }]}
+        actions={(
         <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto items-center">
             <BulkOperations tableName="leads" label="Leads" onImportSuccess={fetchLeads} />
 
@@ -960,7 +997,8 @@ const Leads = () => {
                 </DialogContent>
             </Dialog>
         </div>
-      </div>
+        )}
+      />
 
       {/* --- Table --- */}
       <div className="rounded-md border bg-white shadow-sm">
@@ -1000,17 +1038,60 @@ const Leads = () => {
                         </TableCell>
                         <TableCell><Badge variant="outline">{lead.service || 'General'}</Badge></TableCell>
                         <TableCell><Badge>{resolvePipelineStage(lead)}</Badge></TableCell>
-                        <TableCell className="text-right">
-                             <Button
-                               variant="ghost"
-                               size="sm"
-                               onClick={(event) => {
-                                 event.stopPropagation();
-                                 handleLeadClick(lead);
-                               }}
-                             >
-                               <ArrowRight className="h-4 w-4" />
-                             </Button>
+                        <TableCell className="text-right" onClick={(event) => event.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                aria-label={`Actions for ${lead.first_name || ''} ${lead.last_name || ''}`.trim()}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleLeadClick(lead)}>
+                                <ArrowRight className="mr-2 h-4 w-4" /> Open
+                              </DropdownMenuItem>
+                              {lead.phone ? (
+                                <DropdownMenuItem
+                                  onClick={async () => {
+                                    try {
+                                      await navigator.clipboard.writeText(String(lead.phone));
+                                      toast({ title: 'Phone copied' });
+                                    } catch {
+                                      toast({
+                                        variant: 'destructive',
+                                        title: 'Copy failed',
+                                        description: 'Could not copy phone number.',
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <Phone className="mr-2 h-4 w-4" /> Copy phone
+                                </DropdownMenuItem>
+                              ) : null}
+                              {lead.email ? (
+                                <DropdownMenuItem
+                                  onClick={async () => {
+                                    try {
+                                      await navigator.clipboard.writeText(String(lead.email));
+                                      toast({ title: 'Email copied' });
+                                    } catch {
+                                      toast({
+                                        variant: 'destructive',
+                                        title: 'Copy failed',
+                                        description: 'Could not copy email.',
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <Copy className="mr-2 h-4 w-4" /> Copy email
+                                </DropdownMenuItem>
+                              ) : null}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </TableCell>
                     </TableRow>
                 ))}
@@ -1019,7 +1100,18 @@ const Leads = () => {
       </div>
 
       {/* --- Drawer --- */}
-      <Sheet open={isDrawerOpen} onOpenChange={(open) => { if (!open) setSelectedLead(null); setIsDrawerOpen(open); }}>
+      <Sheet
+        open={isDrawerOpen}
+        onOpenChange={(open) => {
+          setIsDrawerOpen(open);
+          if (!open) {
+            setSelectedLead(null);
+            if (searchParams.get('leadId')) {
+              setSearchParams({}, { replace: true });
+            }
+          }
+        }}
+      >
         <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Lead Details</SheetTitle>

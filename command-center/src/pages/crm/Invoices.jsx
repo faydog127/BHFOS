@@ -32,6 +32,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { moneyLoopDeleteService } from '@/services/moneyLoopDeleteService';
 import { openInvoicePreview } from '@/services/invoicePreviewService';
+import { excludeSyntheticRows } from '@/lib/excludeSynthetic';
+import CrmPageHeader from '@/components/crm/CrmPageHeader';
+import { CRM_PRODUCT_NAME } from '@/config/productBrand';
 
 const Invoices = () => {
   const [searchParams] = useSearchParams();
@@ -105,7 +108,7 @@ const Invoices = () => {
       const { data, error } = await query;
       if (error) throw error;
 
-      setInvoices(data || []);
+      setInvoices(excludeSyntheticRows(data || []));
     } catch (error) {
       console.error('Error fetching invoices:', error);
       toast({
@@ -301,31 +304,32 @@ const Invoices = () => {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">Invoices</h1>
-          <p className="text-gray-500 mt-1">Manage billing, payments, and revenue.</p>
-          {selectedIds.length > 0 ? (
-            <div className="mt-3 hidden items-center gap-3 md:flex">
-              <span className="text-sm text-slate-500">{selectedIds.length} selected</span>
-              <Button variant="destructive" size="sm" onClick={() => queueDelete(selectedIds)}>
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete Selected
-              </Button>
-            </div>
-          ) : null}
-        </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-           <Button variant="outline" onClick={() => fetchInvoices()} className="w-full sm:w-auto">
-            <Clock className="w-4 h-4 mr-2" />
-            Refresh
+      <CrmPageHeader
+        title="Invoices"
+        description={`Manage billing, payments, and revenue. · ${CRM_PRODUCT_NAME}`}
+        breadcrumbs={[{ label: 'Hub', to: `/${tenantId}/crm` }, { label: 'Invoices' }]}
+        actions={(
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <Button variant="outline" onClick={() => fetchInvoices()} className="w-full sm:w-auto">
+              <Clock className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
+            <Button onClick={() => navigate(`/${tenantId}/crm/invoices/new`)} className="w-full sm:w-auto">
+              <Plus className="w-4 h-4 mr-2" />
+              Create Invoice
+            </Button>
+          </div>
+        )}
+      />
+      {selectedIds.length > 0 ? (
+        <div className="hidden items-center gap-3 md:flex">
+          <span className="text-sm text-slate-500">{selectedIds.length} selected</span>
+          <Button variant="destructive" size="sm" onClick={() => queueDelete(selectedIds)}>
+            <Trash2 className="w-4 h-4 mr-2" />
+            Delete Selected
           </Button>
-          <Button onClick={() => navigate(`/${tenantId}/crm/invoices/new`)} className="w-full sm:w-auto">
-            <Plus className="w-4 h-4 mr-2" />
-            Create Invoice
-          </Button>
         </div>
-      </div>
+      ) : null}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>

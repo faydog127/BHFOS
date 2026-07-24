@@ -18,6 +18,7 @@ import TenantSwitcher from '@/components/TenantSwitcher';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { CRM_PRIMARY_NAV } from '@/config/crmPrimaryNav';
+import { CRM_PRODUCT_NAME } from '@/config/productBrand';
 
 const BHFSidebar = ({ onNavigate = null }) => {
   const { tenantId = 'tvg' } = useParams();
@@ -129,7 +130,7 @@ const BHFSidebar = ({ onNavigate = null }) => {
       <div className="flex flex-col px-4 pt-4 pb-2 border-b border-slate-800">
         <div className="h-10 flex items-center mb-4">
             <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-blue-200 bg-clip-text text-transparent">
-            {tenantId.toUpperCase()} CRM
+            {CRM_PRODUCT_NAME}
             </span>
         </div>
         
