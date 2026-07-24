@@ -52,3 +52,9 @@
 **APPROVE** at exact HEAD `344edc7af65bf07405bb4ca25a1f28783dba23c1`.
 
 No CHANGES REQUIRED for planning merge on security / governance grounds. A2 must keep the same surface exclusions and Access Matrix **S** deploy gate.
+
+
+## Re-ack after planning remediation
+
+**APPROVE** content at 1f91fb50abd44016b0d16b8d24cfcb469d6b70b6 (docs-only remediation; no security surface change). Review-artifact commit may advance tip; security scope unchanged.
+
