@@ -1,0 +1,50 @@
+---
+# Release Baton — UX-POLISH
+# No DB migrations. No PWA. Brand = TVG CRM. Peer review + auto-continue.
+
+release_id: "UX-POLISH"
+current_phase: "planning"
+governance_version: "v2.2"
+risk_tier: "Tier 2"
+status: "planning"
+schedule: "parallel"
+db_migrations: "forbidden"
+pwa: "forbidden_this_slice"
+product_name: "TVG CRM"
+current_owner: "Orchestrator"
+base_sha: "7623948a7a312125842223e27dd6a39c3834b060"
+branch: "ml/ux-polish-planning"
+worktree: "F:\\Dev\\BHFOS-ux-polish"
+brief_path: "command-center/docs/stabilization/releases/UX_POLISH_BRIEF.md"
+decision_packet_path: "command-center/docs/governance/decisions/UX_POLISH_DECISION_PACKET.md"
+architecture_path: "command-center/docs/architecture/UX_POLISH_ARCHITECTURE_FINDINGS.md"
+evidence_manifest_path: "command-center/docs/stabilization/releases/UX_POLISH_EVIDENCE_MANIFEST.md"
+residual_register_path: "command-center/docs/stabilization/releases/UX_POLISH_RESIDUAL_REGISTER.md"
+predecessor_slice: "UX-REFACTOR"
+
+founder_create_auth: "2026-07-23 — CREATE UX-POLISH; brand TVG CRM; PWA out; peer-review + auto-continue"
+merge_authorization_planning: "pending — peer reviews + CI"
+implementation_authorization: "auto-continue after planning merge + PD-UXP defaults A"
+migration_authorization: "none — forbidden"
+deployment_authorization: "none — Access Matrix S / Founder for Hostinger"
+pwa_authorization: "none — deferred UX-PWA"
+
+in_scope_steps:
+  - brand_foundation
+  - shell_consolidation
+  - universal_exclude_helper
+  - hub_first_viewport_diet
+  - table_density_wo_leads
+  - copy_vocabulary
+  - leads_drawer_and_pipeline_stage_bugs
+
+out_of_scope:
+  - pwa_service_worker
+  - photo_bundles
+  - slice_7
+  - stripe_auto_charge
+  - supabase_migrations
+  - storybook_cypress_visual_ci_farm
+
+next_phase: "Open planning PR → 3 peer reviews → CI → merge → A2 coding"
+next_owner: "Orchestrator"
