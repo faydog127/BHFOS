@@ -1,10 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { DEFAULT_TENANT_ID } from '@/config/tenantDefaults';
 import { supabase } from '@/lib/customSupabaseClient';
-import { getAiConfigState, listAssets, audit } from '@/lib/mediaIntel/api';
+import { getAiConfigState, listAssets } from '@/lib/mediaIntel/api';
 import { UPLOAD_PHONE_NOTICE } from '@/lib/mediaIntel/constants';
+
+const CREATOR_ADMIN_UNAVAILABLE_MESSAGE =
+  'Creator invite/roster requires deployed media-intel-creator-admin — not available until staging deploy.';
+
+/** Throws with `.edgeUnavailable = true` when the edge function itself cannot be reached. */
+async function invokeCreatorAdmin(body) {
+  const { data, error } = await supabase.functions.invoke('media-intel-creator-admin', { body });
+  if (error || data?.error) {
+    const message = error?.message || data?.error || 'media-intel-creator-admin unavailable';
+    const err = new Error(message);
+    err.edgeUnavailable = true;
+    throw err;
+  }
+  return data;
+}
 
 export default function MediaSettings() {
   const { caps } = useOutletContext();
@@ -15,10 +29,24 @@ export default function MediaSettings() {
   const [error, setError] = useState(null);
   const [creatorEmail, setCreatorEmail] = useState('');
   const [assignments, setAssignments] = useState([]);
+  const [roster, setRoster] = useState([]);
+  const [rosterUnavailable, setRosterUnavailable] = useState(false);
+  const [assignCreatorId, setAssignCreatorId] = useState('');
+  const [assignAssetId, setAssignAssetId] = useState('');
   const [sessions, setSessions] = useState([]);
   const [sessionLabel, setSessionLabel] = useState('Phone dump');
   const [createdSession, setCreatedSession] = useState(null);
   const [qrDataUrl, setQrDataUrl] = useState(null);
+
+  const refreshRoster = async () => {
+    try {
+      const data = await invokeCreatorAdmin({ action: 'list_creators' });
+      setRoster(data?.creators || []);
+      setRosterUnavailable(false);
+    } catch {
+      setRosterUnavailable(true);
+    }
+  };
 
   const refreshAccess = async () => {
     if (caps.canManageCreatorAccess) {
@@ -33,6 +61,8 @@ export default function MediaSettings() {
         body: { action: 'list' },
       });
       setSessions(sess?.sessions || []);
+
+      await refreshRoster();
     }
   };
 
@@ -47,28 +77,90 @@ export default function MediaSettings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caps.canPromoteWebsite, caps.canManageCreatorAccess]);
 
-  const promote = async () => {
-    if (!caps.canPromoteWebsite || !promoteAssetId) return;
+  const inviteCreator = async () => {
     setError(null);
     setMessage(null);
-    // 1) Build private public_safe derivative with real EXIF strip
-    const prep = await supabase.functions.invoke('media-intel-promote-website', {
-      body: { action: 'prepare_public_safe', assetId: promoteAssetId },
-    });
-    if (prep.error || prep.data?.error) {
-      setError(prep.error?.message || prep.data?.error || 'Public-safe preparation failed');
+    const email = creatorEmail.trim();
+    if (!email) {
+      setError('Enter a creator email first.');
       return;
     }
-    // 2) Promote only that derivative (never the private original)
-    const { data, error: err } = await supabase.functions.invoke('media-intel-promote-website', {
-      body: { action: 'promote', assetId: promoteAssetId },
-    });
-    if (err || data?.error) {
-      setError(err?.message || data?.error || 'Promotion failed');
+    try {
+      const data = await invokeCreatorAdmin({ action: 'invite_creator', email });
+      setMessage(
+        data?.invited
+          ? `Invite sent to ${email} (new account). Confirm actual delivery in Supabase Auth — this app does not track email delivery.`
+          : `${email} already had an account — granted the reel_creator role directly (no new invite email).`,
+      );
+      setCreatorEmail('');
+      await refreshRoster();
+    } catch (err) {
+      setError(err.edgeUnavailable ? CREATOR_ADMIN_UNAVAILABLE_MESSAGE : err.message);
+    }
+  };
+
+  const assignCreator = async () => {
+    setError(null);
+    setMessage(null);
+    const creatorUserId = assignCreatorId.trim();
+    const assetId = assignAssetId.trim();
+    if (!creatorUserId || !assetId) {
+      setError('Creator user ID and asset ID are both required to assign.');
       return;
     }
-    await audit('website_promotion', 'mil_assets', promoteAssetId, { websiteMediaId: data?.websiteMediaId });
-    setMessage('Public-safe derivative promoted to website-public-media. Private original unchanged.');
+    try {
+      await invokeCreatorAdmin({ action: 'assign', creatorUserId, assetId, collectionId: null, notes: null });
+      setMessage('Creator assignment created.');
+      setAssignCreatorId('');
+      setAssignAssetId('');
+      await refreshAccess();
+    } catch (err) {
+      if (!err.edgeUnavailable) {
+        setError(err.message);
+        return;
+      }
+      // Edge not deployed yet — mil_assign_creator RPC already exists server-side
+      // and enforces the same owner/admin-only check, so use it directly rather
+      // than blocking a working capability on an undeployed edge function.
+      const { error: rpcErr } = await supabase.rpc('mil_assign_creator', {
+        p_creator_user_id: creatorUserId,
+        p_asset_id: assetId,
+        p_collection_id: null,
+        p_notes: null,
+      });
+      if (rpcErr) {
+        setError(rpcErr.message);
+        return;
+      }
+      setMessage('Creator assignment created via mil_assign_creator (media-intel-creator-admin not yet deployed).');
+      setAssignCreatorId('');
+      setAssignAssetId('');
+      await refreshAccess();
+    }
+  };
+
+  const revokeAssignment = async (assignmentId) => {
+    setError(null);
+    setMessage(null);
+    try {
+      await invokeCreatorAdmin({ action: 'revoke_assignment', assignmentId });
+      setMessage('Creator assignment revoked. New signed links will fail.');
+      await refreshAccess();
+    } catch (err) {
+      if (!err.edgeUnavailable) {
+        setError(err.message);
+        return;
+      }
+      const { error: rpcErr } = await supabase.rpc('mil_revoke_creator_assignment', {
+        p_assignment_id: assignmentId,
+      });
+      if (rpcErr) {
+        setError(rpcErr.message);
+        return;
+      }
+      setMessage('Creator assignment revoked via mil_revoke_creator_assignment (media-intel-creator-admin not yet deployed).');
+      await refreshAccess();
+    }
   };
 
   const createUploadSession = async () => {
@@ -81,7 +173,10 @@ export default function MediaSettings() {
       return;
     }
     setCreatedSession(data);
-    const absolute = `${window.location.origin}${data.path}`;
+    // Fragment form: the token never travels in the query string (server logs,
+    // browser history, and Referer headers can all leak query params but browsers
+    // never send the URL fragment in a request).
+    const absolute = `${window.location.origin}/media/upload#session=${encodeURIComponent(data.token)}`;
     const url = await QRCode.toDataURL(absolute, { margin: 1, width: 240 });
     setQrDataUrl(url);
     setMessage('Upload session created. Scan from the phone. Link is upload-only and expires.');
@@ -132,7 +227,9 @@ export default function MediaSettings() {
           {createdSession && (
             <div className="rounded-lg border bg-slate-50 p-3 space-y-2">
               {qrDataUrl && <img src={qrDataUrl} alt="QR code for phone upload session" className="mx-auto" />}
-              <p className="text-xs break-all text-slate-700">{`${window.location.origin}${createdSession.path}`}</p>
+              <p className="text-xs break-all text-slate-700">
+                {`${window.location.origin}/media/upload#session=${encodeURIComponent(createdSession.token)}`}
+              </p>
               <p className="text-xs text-slate-500">Expires {new Date(createdSession.expiresAt).toLocaleString()}</p>
               <button
                 type="button"
@@ -181,25 +278,62 @@ export default function MediaSettings() {
           <p className="text-sm text-slate-600">
             Individual Supabase accounts only — no shared passwords. Role <code>reel_creator</code> enters <code>/creator</code> (focused portal, not CRM).
           </p>
+
           <label className="block text-sm">
-            <span className="font-medium">Creator email (invite documentation)</span>
-            <input
-              className="mt-1 w-full rounded-md border px-3 py-2 min-h-[44px]"
-              value={creatorEmail}
-              onChange={(e) => setCreatorEmail(e.target.value)}
-              placeholder="creator@example.com"
-            />
+            <span className="font-medium">Invite creator by email</span>
+            <div className="mt-1 flex gap-2">
+              <input
+                className="flex-1 rounded-md border px-3 py-2 min-h-[44px]"
+                value={creatorEmail}
+                onChange={(e) => setCreatorEmail(e.target.value)}
+                placeholder="creator@example.com"
+              />
+              <button type="button" className="rounded-md border px-4 py-2 text-sm min-h-[44px]" onClick={inviteCreator}>
+                Send invite
+              </button>
+            </div>
           </label>
-          <pre className="text-xs bg-slate-50 border rounded-md p-3 overflow-x-auto">{`-- 1) Invite/create Auth user in Supabase (individual account)
--- 2) Grant creator role (revocable):
-insert into app_user_roles (user_id, role)
-select id, 'reel_creator'
-from auth.users where email = '${creatorEmail || 'creator@example.com'}';
--- If legacy app_user_roles.tenant_id is NOT NULL, add tenant_id with DEFAULT or:
--- insert into app_user_roles (tenant_id, user_id, role)
--- select '${DEFAULT_TENANT_ID}', id, 'reel_creator' from auth.users where email = '...';
--- (tenant_id is legacy V1 CRM column — not MIL product tenancy)
--- 3) Creator signs in at /${DEFAULT_TENANT_ID}/login (legacy V1) then lands on /creator`}</pre>
+          {rosterUnavailable && (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              {CREATOR_ADMIN_UNAVAILABLE_MESSAGE} Grant <code>app_user_roles.role = 'reel_creator'</code> manually via
+              Supabase Studio in the meantime — this UI will not fabricate a delivery confirmation it cannot verify.
+            </p>
+          )}
+          {!rosterUnavailable && roster.length > 0 && (
+            <ul className="text-xs text-slate-600 space-y-1">
+              {roster.map((r) => (
+                <li key={r.user_id} className="flex justify-between gap-2 border-t py-2">
+                  <span className="truncate">{r.email || r.user_id}</span>
+                  <span className="shrink-0 text-slate-500">{r.role}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="pt-2 border-t space-y-2">
+            <h4 className="text-sm font-medium">Assign creator to an asset</h4>
+            <p className="text-xs text-slate-500">
+              Global reel-creation approval alone never grants visibility — assignment is per-asset (or per-collection) and required.
+            </p>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <input
+                className="rounded-md border px-3 py-2 min-h-[44px] text-sm"
+                value={assignCreatorId}
+                onChange={(e) => setAssignCreatorId(e.target.value)}
+                placeholder="Creator user ID (uuid)"
+              />
+              <input
+                className="rounded-md border px-3 py-2 min-h-[44px] text-sm"
+                value={assignAssetId}
+                onChange={(e) => setAssignAssetId(e.target.value)}
+                placeholder="Asset ID (uuid)"
+              />
+            </div>
+            <button type="button" className="rounded-md border px-4 py-2 text-sm min-h-[44px]" onClick={assignCreator}>
+              Assign
+            </button>
+          </div>
+
           <h4 className="text-sm font-medium pt-2">Active assignments</h4>
           <ul className="space-y-2 text-sm">
             {assignments.filter((a) => a.status === 'active').length === 0 && (
@@ -213,16 +347,7 @@ from auth.users where email = '${creatorEmail || 'creator@example.com'}';
                 <button
                   type="button"
                   className="text-red-700 text-xs underline"
-                  onClick={async () => {
-                    const { error: err } = await supabase.rpc('mil_revoke_creator_assignment', {
-                      p_assignment_id: a.id,
-                    });
-                    if (err) setError(err.message);
-                    else {
-                      setMessage('Creator assignment revoked. New signed links will fail.');
-                      await refreshAccess();
-                    }
-                  }}
+                  onClick={() => revokeAssignment(a.id)}
                 >
                   Revoke
                 </button>
@@ -235,21 +360,29 @@ from auth.users where email = '${creatorEmail || 'creator@example.com'}';
       {caps.canPromoteWebsite && (
         <section className="rounded-xl border bg-white p-4 space-y-3">
           <h3 className="font-medium">Promote to website media</h3>
-          <p className="text-sm text-slate-600">
-            Explicit owner/admin action only. Prepares a private <code>public_safe</code> JPEG (EXIF stripped), then copies that derivative—never the original—into <code>website-public-media</code>.
-          </p>
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <strong>Disabled.</strong> Website promotion is paused pending a proven, end-to-end-validated public-safe
+            transform pipeline (EXIF/metadata strip + derivative verification). Promotion must never copy a private
+            original — see <code>mil_website_promotions</code> table comment for the current gate.
+          </div>
           <select
-            className="w-full rounded-md border px-3 py-2 min-h-[44px]"
+            className="w-full rounded-md border px-3 py-2 min-h-[44px] disabled:opacity-60"
             value={promoteAssetId}
             onChange={(e) => setPromoteAssetId(e.target.value)}
+            disabled
           >
             <option value="">Select verified, privacy-clear asset…</option>
             {candidates.map((a) => (
               <option key={a.id} value={a.id}>{a.original_filename}</option>
             ))}
           </select>
-          <button type="button" className="rounded-md bg-blue-600 text-white px-4 py-2.5 text-sm min-h-[44px]" onClick={promote}>
-            Promote public derivative
+          <button
+            type="button"
+            className="rounded-md bg-slate-300 text-slate-600 px-4 py-2.5 text-sm min-h-[44px] cursor-not-allowed"
+            disabled
+            title="Disabled pending proven public-safe transform pipeline"
+          >
+            Promote public derivative (disabled)
           </button>
         </section>
       )}

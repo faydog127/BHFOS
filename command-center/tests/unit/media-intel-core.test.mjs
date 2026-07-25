@@ -76,10 +76,36 @@ describe('MIL checksum de-dupe contract', () => {
 });
 
 describe('MIL denial notes optional', () => {
-  it('reviewReelVersion source allows deny without inventing notes', () => {
+  it('reviewReelVersion calls the mil_review_reel_version RPC and never invents notes', () => {
     const src = read('src/lib/mediaIntel/api.js');
-    assert.match(src, /review_notes: notes\?\.trim\(\) \? notes\.trim\(\) : null/);
-    assert.match(src, /notesProvided: Boolean\(notes\?\.trim\(\)\)/);
+    assert.match(src, /supabase\.rpc\('mil_review_reel_version'/);
+    assert.match(src, /p_notes: notes\?\.trim\(\) \? notes\.trim\(\) : null/);
+  });
+
+  it('the RPC itself stores/audits denial notes as optional (server-side, pre-staging hardening)', () => {
+    const src = read('supabase/migrations/20260725140000_media_intel_pre_staging_hardening.sql');
+    assert.match(src, /function public\.mil_review_reel_version/);
+    assert.match(src, /review_notes = nullif\(btrim\(coalesce\(p_notes, ''\)\), ''\)/);
+    assert.match(src, /'notes_provided', coalesce\(btrim\(coalesce\(p_notes, ''\)\) <> '', false\)/);
+  });
+});
+
+describe('MIL pre-staging hardening: privileged mutations use RPCs, not client audit inserts', () => {
+  const api = read('src/lib/mediaIntel/api.js');
+
+  it('routes verify/permitted-use/reel/archive mutations through SECURITY DEFINER RPCs', () => {
+    assert.match(api, /supabase\.rpc\('mil_verify_asset'/);
+    assert.match(api, /supabase\.rpc\('mil_set_permitted_use'/);
+    assert.match(api, /supabase\.rpc\('mil_review_reel_version'/);
+    assert.match(api, /supabase\.rpc\('mil_submit_reel_version'/);
+    assert.match(api, /supabase\.rpc\('mil_set_asset_archive_state'/);
+  });
+
+  it('disables client-side audit() and direct storage signedUrl()', () => {
+    assert.doesNotMatch(api, /mil_audit_events['"]\)\.insert/);
+    assert.match(api, /export function audit\(\)/);
+    assert.match(api, /export async function signedUrl\(\)/);
+    assert.doesNotMatch(api, /storage\.from\([^)]*\)\.createSignedUrl/);
   });
 });
 
@@ -186,6 +212,15 @@ describe('MIL client API single-company contracts', () => {
     assert.match(roles, /export async function fetchMilRole\(\)/);
     assert.doesNotMatch(api, /tenantId|tenant_id/);
     assert.doesNotMatch(upload, /tenantId|tenant_id/);
-    assert.match(upload, /mil\/originals\//);
+    // Pre-staging hardening: staff desktop uploads land in quarantine, never
+    // written directly as a trusted "original".
+    assert.match(upload, /mil\/quarantine\//);
+  });
+
+  it('phone_uploader role carries no library upload capability (bearer session tokens only)', () => {
+    const roles = read('src/lib/mediaIntel/roles.js');
+    const guard = read('src/components/media/MediaCapabilityGuard.jsx');
+    assert.doesNotMatch(roles, /canUpload: isLibraryStaff \|\| r === 'phone_uploader'/);
+    assert.doesNotMatch(guard, /caps\.role === 'phone_uploader'/);
   });
 });

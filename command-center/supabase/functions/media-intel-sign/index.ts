@@ -1,42 +1,28 @@
 /**
  * Authorized short-lived signed URLs for MIL private media (single-company).
- * Creators never get originals; reel/asset access is assignment- or ownership-bound.
+ * Fail-closed: every branch must explicitly authorize before signing; there
+ * is no fallback path that signs "just in case" when a check is ambiguous.
+ * Creators never get originals; reel/asset access is assignment- or
+ * ownership-bound. Every grant is audited (staff and creator alike).
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
-import { corsHeaders } from '../_shared/cors.ts'
+import { milCorsHeaders, milCorsPreflight } from '../_shared/milCors.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
+import { resolveMilRole } from '../_shared/milRoles.ts'
 
 const PREVIEW_TTL = 300
 const DOWNLOAD_TTL = 600
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  })
-
-function normalizeRole(role: string) {
-  const r = role.toLowerCase().trim()
-  if (['admin', 'super_admin', 'owner'].includes(r)) return 'admin'
-  if (r === 'manager') return 'manager'
-  if (['office', 'csr'].includes(r)) return 'office'
-  if (['media_reviewer', 'reviewer'].includes(r)) return 'media_reviewer'
-  if (['reel_creator', 'creator', 'contributor'].includes(r)) return 'reel_creator'
-  if (['technician', 'tech'].includes(r)) return 'technician'
-  if (['phone_uploader', 'uploader'].includes(r)) return 'phone_uploader'
-  return 'unauthenticated'
-}
-
-async function actorRole(userId: string) {
-  const { data } = await supabaseAdmin
-    .from('app_user_roles')
-    .select('role')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  return normalizeRole(String(data?.role || ''))
-}
+const VALID_PURPOSES = new Set(['preview', 'download'])
+const STAFF_ROLES = new Set(['admin', 'manager', 'office', 'media_reviewer'])
+const CREATOR_DERIVATIVE_KINDS = new Set(['creator_download', 'detail_preview', 'grid_thumb', 'video_preview', 'video_thumb'])
+const STAFF_PREVIEW_DERIVATIVE_KINDS = new Set([
+  'detail_preview', 'grid_thumb', 'heic_preview', 'video_thumb', 'video_preview', 'public_safe',
+])
+const VALID_DERIVATIVE_KINDS = new Set([
+  'grid_thumb', 'detail_preview', 'website_optimized', 'creator_download',
+  'redacted_public', 'video_thumb', 'video_preview', 'reel_version', 'heic_preview',
+  'public_safe', 'ai_safe',
+])
 
 /** Assignment-bound creator access. Global reel_creation approval alone is never enough. */
 async function creatorCanView(userId: string, assetId: string) {
@@ -87,7 +73,11 @@ async function creatorCanView(userId: string, assetId: string) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  const cors = milCorsHeaders(req)
+  if (req.method === 'OPTIONS') return milCorsPreflight(req)
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } })
+
   try {
     const authHeader = req.headers.get('Authorization') || ''
     const authClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
@@ -96,16 +86,30 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authError } = await authClient.auth.getUser()
     if (authError || !user) return json({ error: 'Sign in required' }, 401)
 
-    const body = await req.json()
+    const body = await req.json().catch(() => ({}))
     const assetId = body.assetId ? String(body.assetId).trim() : ''
     const reelVersionId = body.reelVersionId ? String(body.reelVersionId).trim() : ''
     const purpose = String(body.purpose || 'preview')
     const derivativeKind = body.derivativeKind ? String(body.derivativeKind) : null
     const allowOriginal = body.allowOriginal === true
 
-    const role = await actorRole(user.id)
+    // Fail closed on malformed input rather than silently defaulting.
+    if (!VALID_PURPOSES.has(purpose)) {
+      return json({ error: `Invalid purpose: ${purpose}` }, 400)
+    }
+    if (derivativeKind && !VALID_DERIVATIVE_KINDS.has(derivativeKind)) {
+      return json({ error: `Invalid derivative kind: ${derivativeKind}` }, 400)
+    }
+    if (!assetId && !reelVersionId) {
+      return json({ error: 'Missing asset or reel version' }, 400)
+    }
+    if (assetId && reelVersionId) {
+      return json({ error: 'Provide either assetId or reelVersionId, not both' }, 400)
+    }
+
+    const role = await resolveMilRole(user.id)
     // Technicians are not MIL library staff for originals/browse signing.
-    const isStaff = ['admin', 'manager', 'office', 'media_reviewer'].includes(role)
+    const isStaff = STAFF_ROLES.has(role)
     const isCreator = role === 'reel_creator'
     if (!isStaff && !isCreator) {
       return json({ error: 'You do not have access to this media.' }, 403)
@@ -124,6 +128,8 @@ Deno.serve(async (req) => {
       const project = Array.isArray(version.mil_reel_projects)
         ? version.mil_reel_projects[0]
         : version.mil_reel_projects
+
+      // Creator reel signing is only ever for the creator's OWN project versions.
       if (isCreator && (!project || project.creator_user_id !== user.id)) {
         return json({ error: 'This reel is not assigned to you.' }, 403)
       }
@@ -150,8 +156,6 @@ Deno.serve(async (req) => {
       return json({ url: signed.signedUrl, expiresIn: ttl, kind: 'reel_version' })
     }
 
-    if (!assetId) return json({ error: 'Missing asset' }, 400)
-
     const { data: asset, error: assetErr } = await supabaseAdmin
       .from('mil_assets')
       .select('*')
@@ -159,18 +163,26 @@ Deno.serve(async (req) => {
       .maybeSingle()
     if (assetErr) throw assetErr
     if (!asset) return json({ error: 'Media not found' }, 404)
+    if (asset.archived_at) return json({ error: 'Media is archived' }, 403)
 
     if (isCreator) {
+      // Do not allow signing originals for creators — ever — only assigned
+      // creator_download (or preview-safe) derivatives.
+      if (allowOriginal) return json({ error: 'Creators may never access originals.' }, 403)
       const ok = await creatorCanView(user.id, assetId)
       if (!ok) return json({ error: 'This media is not shared with you.' }, 403)
-      const { data: der } = await supabaseAdmin
+      if (derivativeKind && !CREATOR_DERIVATIVE_KINDS.has(derivativeKind)) {
+        return json({ error: 'That derivative type is not available to creators.' }, 403)
+      }
+      const derQuery = supabaseAdmin
         .from('mil_derivatives')
         .select('*')
         .eq('asset_id', assetId)
-        .in('kind', ['creator_download', 'detail_preview', 'grid_thumb', 'video_preview', 'video_thumb'])
         .order('created_at', { ascending: false })
         .limit(1)
-        .maybeSingle()
+      const { data: der } = derivativeKind
+        ? await derQuery.eq('kind', derivativeKind).maybeSingle()
+        : await derQuery.in('kind', Array.from(CREATOR_DERIVATIVE_KINDS)).maybeSingle()
       if (!der) return json({ error: 'No approved downloadable copy is available yet.' }, 403)
       const { data: signed, error: sErr } = await supabaseAdmin.storage
         .from(der.bucket)
@@ -186,11 +198,18 @@ Deno.serve(async (req) => {
       return json({ url: signed.signedUrl, expiresIn: ttl, bucket: der.bucket, kind: der.kind })
     }
 
+    // Staff branch below. isStaff is guaranteed true here (isCreator handled above,
+    // and the top-level check already rejected anyone who is neither).
     let bucket = asset.original_bucket
     let path = asset.original_path
     let kind = 'original'
 
     if (derivativeKind) {
+      // Staff public_safe access requires privacy to be explicitly clear —
+      // never assume a derivative existing means it is safe to hand out.
+      if (derivativeKind === 'public_safe' && asset.privacy_status !== 'clear') {
+        return json({ error: 'Privacy is not clear for this asset; public_safe cannot be signed.' }, 403)
+      }
       const { data: der } = await supabaseAdmin
         .from('mil_derivatives')
         .select('*')
@@ -208,14 +227,18 @@ Deno.serve(async (req) => {
         .from('mil_derivatives')
         .select('*')
         .eq('asset_id', assetId)
-        .in('kind', ['detail_preview', 'grid_thumb', 'heic_preview', 'video_thumb', 'video_preview', 'public_safe'])
+        .in('kind', Array.from(STAFF_PREVIEW_DERIVATIVE_KINDS))
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
       if (der) {
-        bucket = der.bucket
-        path = der.object_path
-        kind = der.kind
+        if (der.kind === 'public_safe' && asset.privacy_status !== 'clear') {
+          // Fall through to original/no-derivative rather than serve an unsafe public_safe copy.
+        } else {
+          bucket = der.bucket
+          path = der.object_path
+          kind = der.kind
+        }
       }
     }
 
@@ -241,7 +264,7 @@ Deno.serve(async (req) => {
 
     return json({ url: signed.signedUrl, expiresIn: ttl, kind })
   } catch (error) {
-    console.error('media-intel-sign', error)
+    console.error('media-intel-sign', error instanceof Error ? error.message : error)
     return json({ error: error instanceof Error ? error.message : 'Sign failed' }, 500)
   }
 })

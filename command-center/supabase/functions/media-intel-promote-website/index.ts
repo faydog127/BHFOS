@@ -1,26 +1,29 @@
 /**
  * Explicit owner/admin website promotion (single-company).
- * Never copies private originals. Only promotes verified public_safe derivatives
- * that actually had EXIF/metadata stripped.
+ *
+ * PRE-STAGING HARDENING: `prepare_public_safe` and `promote` are intentionally
+ * DISABLED (503) pending a proven decode/re-encode public-safe transform
+ * pipeline. The previous implementation only stripped JPEG APP0–APP15
+ * segments (EXIF/XMP marker removal) from the *original* container — it never
+ * decoded and re-encoded pixel data. Stripping metadata markers does NOT
+ * prove an image is safe to publish (embedded thumbnails, non-EXIF
+ * steganographic content, or marker-parsing edge cases in other viewers can
+ * still leak data), so this function must not claim it does. Re-enable only
+ * after a verified decode → re-encode → strip pipeline exists and has been
+ * reviewed.
+ *
+ * `unpublish` remains available so owner/admin can pull anything already
+ * live (or that predates this hardening) without waiting on that work.
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
-import { corsHeaders } from '../_shared/cors.ts'
+import { milCorsHeaders, milCorsPreflight } from '../_shared/milCors.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
+import { isMilOwnerAdmin } from '../_shared/milRoles.ts'
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  })
+const PUBLIC_SAFE_DISABLED_MESSAGE =
+  'Public-safe transform is not implemented. Stripping EXIF/XMP markers from the original container does not prove an image is safe to publish (it does not decode/re-encode pixel data). This action is disabled until a proven decode → re-encode → strip pipeline is built and reviewed. media-intel-originals is never copied directly to website-public-media.'
 
-function normalizeRole(role: string) {
-  const r = role.toLowerCase().trim()
-  if (['admin', 'super_admin', 'owner'].includes(r)) return 'admin'
-  if (r === 'manager') return 'manager'
-  return r
-}
-
-/** Remove JPEG APP0–APP15 segments (includes EXIF APP1 / XMP). */
+/** Remove JPEG APP0–APP15 segments (includes EXIF APP1 / XMP). Kept for future re-enablement only — NOT wired in below. */
 function stripJpegExif(input: Uint8Array): Uint8Array {
   if (input.length < 4 || input[0] !== 0xff || input[1] !== 0xd8) {
     throw new Error('Not a JPEG')
@@ -61,21 +64,7 @@ function stripJpegExif(input: Uint8Array): Uint8Array {
   return new Uint8Array(out)
 }
 
-async function assertOwnerAdmin(userId: string) {
-  const { data: roleRow } = await supabaseAdmin
-    .from('app_user_roles')
-    .select('role')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  const role = normalizeRole(String(roleRow?.role || ''))
-  if (!['admin', 'manager'].includes(role)) {
-    return { ok: false as const, role }
-  }
-  return { ok: true as const, role }
-}
-
+/** Eligibility gates a future proven pipeline must still enforce. Not currently invoked by promote (disabled). */
 async function loadEligibleAsset(assetId: string) {
   const { data: asset, error: assetErr } = await supabaseAdmin
     .from('mil_assets')
@@ -108,7 +97,11 @@ async function loadEligibleAsset(assetId: string) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  const cors = milCorsHeaders(req)
+  if (req.method === 'OPTIONS') return milCorsPreflight(req)
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } })
+
   try {
     const authHeader = req.headers.get('Authorization') || ''
     const authClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
@@ -117,206 +110,79 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authError } = await authClient.auth.getUser()
     if (authError || !user) return json({ error: 'Unauthorized' }, 401)
 
-    const body = await req.json()
+    const body = await req.json().catch(() => ({}))
     const action = String(body.action || 'promote')
     const assetId = String(body.assetId || '').trim()
-    if (!assetId) return json({ error: 'Missing asset' }, 400)
 
-    const admin = await assertOwnerAdmin(user.id)
-    if (!admin.ok) return json({ error: 'Only owner/admin may prepare or promote website media' }, 403)
+    if (!(await isMilOwnerAdmin(user.id))) {
+      return json({ error: 'Only owner/admin may manage website promotions' }, 403)
+    }
 
-    const eligible = await loadEligibleAsset(assetId)
-    if ('error' in eligible) return json({ error: eligible.error }, eligible.status)
-    const { asset } = eligible
+    if (action === 'prepare_public_safe' || action === 'promote') {
+      if (!assetId) return json({ error: 'Missing asset' }, 400)
+      await supabaseAdmin.from('mil_audit_events').insert({
+        actor_user_id: user.id,
+        action: 'website_promotion_attempt_blocked',
+        target_type: 'mil_assets',
+        target_id: assetId,
+        details: { action, reason: 'public_safe_transform_not_implemented' },
+      })
+      return json({ error: PUBLIC_SAFE_DISABLED_MESSAGE, code: 'not_implemented' }, 503)
+    }
 
-    // Create a private public_safe derivative with real EXIF strip (JPEG only in this slice).
-    if (action === 'prepare_public_safe') {
-      if (!String(asset.mime_type || '').includes('jpeg') && !String(asset.mime_type || '').includes('jpg')) {
-        return json({
-          error: 'Public-safe preparation currently supports JPEG originals only. Convert or provide a JPEG first.',
-        }, 400)
+    if (action === 'unpublish') {
+      if (!assetId) return json({ error: 'Missing asset' }, 400)
+
+      const { data: promotions, error: promoErr } = await supabaseAdmin
+        .from('mil_website_promotions')
+        .select('*')
+        .eq('asset_id', assetId)
+        .order('promoted_at', { ascending: false })
+      if (promoErr) throw promoErr
+      if (!promotions || !promotions.length) {
+        return json({ error: 'No website promotion found for this asset' }, 404)
       }
 
-      const { data: blob, error: dlErr } = await supabaseAdmin.storage
-        .from(asset.original_bucket)
-        .download(asset.original_path)
-      if (dlErr || !blob) throw dlErr || new Error('Unable to read private original for derivative generation')
+      const results: Array<{ promotionId: string; ok: boolean; error?: string }> = []
+      for (const promo of promotions) {
+        try {
+          if (promo.website_media_id) {
+            await supabaseAdmin
+              .from('website_media')
+              .update({ display_status: 'unavailable' })
+              .eq('id', promo.website_media_id)
+          }
 
-      const originalBytes = new Uint8Array(await blob.arrayBuffer())
-      const stripped = stripJpegExif(originalBytes)
-      if (stripped.byteLength < 128) throw new Error('EXIF strip produced invalid JPEG')
+          const { data: der } = await supabaseAdmin
+            .from('mil_derivatives')
+            .select('bucket, object_path')
+            .eq('id', promo.derivative_id)
+            .maybeSingle()
+          if (der && der.bucket === 'website-public-media') {
+            await supabaseAdmin.storage.from(der.bucket).remove([der.object_path]).catch(() => {})
+          }
 
-      const objectPath = `mil/derivatives/${assetId}/public_safe.jpg`
-      const up = await supabaseAdmin.storage.from('media-intel-derivatives').upload(objectPath, stripped, {
-        contentType: 'image/jpeg',
-        upsert: true,
-      })
-      if (up.error) throw up.error
-
-      const { data: derivative, error: derErr } = await supabaseAdmin
-        .from('mil_derivatives')
-        .upsert(
-          {
-            asset_id: assetId,
-            kind: 'public_safe',
-            bucket: 'media-intel-derivatives',
-            object_path: objectPath,
-            mime_type: 'image/jpeg',
-            byte_size: stripped.byteLength,
-            strip_exif: true,
-          },
-          { onConflict: 'bucket,object_path' },
-        )
-        .select('*')
-        .single()
-      if (derErr) throw derErr
+          results.push({ promotionId: promo.id, ok: true })
+        } catch (err) {
+          results.push({ promotionId: promo.id, ok: false, error: err instanceof Error ? err.message : 'unpublish failed' })
+        }
+      }
 
       await supabaseAdmin.from('mil_audit_events').insert({
         actor_user_id: user.id,
-        action: 'public_safe_derivative_created',
-        target_type: 'mil_derivatives',
-        target_id: derivative.id,
-        details: {
-          assetId,
-          objectPath,
-          strip_exif: true,
-          originalBytes: originalBytes.byteLength,
-          strippedBytes: stripped.byteLength,
-        },
+        action: 'website_unpublish',
+        target_type: 'mil_assets',
+        target_id: assetId,
+        details: { results },
       })
 
-      return json({
-        ok: true,
-        derivativeId: derivative.id,
-        objectPath,
-        strip_exif: true,
-        note: 'Private public_safe derivative ready. Promote copies this derivative, never the original.',
-      })
+      const allOk = results.every((r) => r.ok)
+      return json({ ok: allOk, results }, allOk ? 200 : 500)
     }
 
-    // Promote: copy only an existing stripped public_safe derivative into the public bucket.
-    const { data: safeDer } = await supabaseAdmin
-      .from('mil_derivatives')
-      .select('*')
-      .eq('asset_id', assetId)
-      .eq('kind', 'public_safe')
-      .eq('strip_exif', true)
-      .eq('bucket', 'media-intel-derivatives')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (!safeDer) {
-      return json({
-        error: 'Create a public-safe derivative first (action=prepare_public_safe). Originals are never copied to the public bucket.',
-      }, 400)
-    }
-    if (!String(safeDer.object_path).startsWith('mil/derivatives/')) {
-      return json({ error: 'Invalid public-safe derivative path' }, 400)
-    }
-
-    // Re-check gates immediately before publication
-    const recheck = await loadEligibleAsset(assetId)
-    if ('error' in recheck) return json({ error: recheck.error }, recheck.status)
-
-    const { data: blob, error: dlErr } = await supabaseAdmin.storage
-      .from(safeDer.bucket)
-      .download(safeDer.object_path)
-    if (dlErr || !blob) throw dlErr || new Error('Unable to read public-safe derivative')
-
-    const bytes = new Uint8Array(await blob.arrayBuffer())
-    // Refuse if somehow still a JPEG with APP1 EXIF present
-    if (bytes[0] === 0xff && bytes[1] === 0xd8) {
-      for (let i = 2; i + 3 < Math.min(bytes.length, 65536);) {
-        if (bytes[i] !== 0xff) break
-        const marker = bytes[i + 1]
-        if (marker === 0xe1) {
-          return json({ error: 'Public-safe derivative still contains EXIF (APP1); regenerate it.' }, 400)
-        }
-        if (marker === 0xda || marker === 0xd9) break
-        if (marker >= 0xd0 && marker <= 0xd7) {
-          i += 2
-          continue
-        }
-        const len = (bytes[i + 2] << 8) | bytes[i + 3]
-        i += 2 + len
-      }
-    }
-
-    const publicPath = `promoted/mil/${assetId}/${crypto.randomUUID()}.jpg`
-    const up = await supabaseAdmin.storage.from('website-public-media').upload(publicPath, bytes, {
-      contentType: 'image/jpeg',
-      upsert: false,
-    })
-    if (up.error) throw up.error
-
-    const verified = Array.isArray(asset.mil_verified_metadata)
-      ? asset.mil_verified_metadata[0]
-      : asset.mil_verified_metadata
-
-    const { data: websiteDer, error: derErr } = await supabaseAdmin
-      .from('mil_derivatives')
-      .insert({
-        asset_id: assetId,
-        kind: 'website_optimized',
-        bucket: 'website-public-media',
-        object_path: publicPath,
-        mime_type: 'image/jpeg',
-        byte_size: bytes.byteLength,
-        strip_exif: true,
-      })
-      .select('*')
-      .single()
-    if (derErr) throw derErr
-
-    const alt = verified?.alt_text || asset.original_filename || 'Vent Guys field documentation'
-    const { data: websiteRow, error: wmErr } = await supabaseAdmin
-      .from('website_media')
-      .insert({
-        storage_bucket: 'website-public-media',
-        storage_path: publicPath,
-        original_filename: asset.original_filename,
-        title: verified?.public_caption || null,
-        alt_text: alt,
-        caption: verified?.public_caption || null,
-        media_type: 'photo',
-        display_status: 'pending_review',
-        authorization_source: `mil_asset:${assetId}`,
-        authorization_notes: 'Promoted from MIL public_safe derivative after human verification',
-      })
-      .select('id')
-      .single()
-    if (wmErr) throw wmErr
-
-    await supabaseAdmin.from('mil_website_promotions').insert({
-      asset_id: assetId,
-      derivative_id: websiteDer.id,
-      website_media_id: websiteRow.id,
-      promoted_by: user.id,
-      notes: 'Promoted from public_safe derivative; private original unchanged',
-    })
-
-    await supabaseAdmin.from('mil_audit_events').insert({
-      actor_user_id: user.id,
-      action: 'promotion_to_website_media',
-      target_type: 'mil_assets',
-      target_id: assetId,
-      details: {
-        websiteMediaId: websiteRow.id,
-        publicPath,
-        sourceDerivativeId: safeDer.id,
-        websiteDerivativeId: websiteDer.id,
-        strip_exif: true,
-      },
-    })
-
-    return json({
-      ok: true,
-      websiteMediaId: websiteRow.id,
-      publicPath,
-      note: 'Promoted public_safe derivative only. Private original remains in media-intel-originals.',
-    })
+    return json({ error: `Unknown action: ${action}` }, 400)
   } catch (error) {
-    console.error('media-intel-promote-website', error)
+    console.error('media-intel-promote-website', error instanceof Error ? error.message : error)
     return json({ error: error instanceof Error ? error.message : 'Promotion failed' }, 500)
   }
 })

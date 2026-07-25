@@ -15,6 +15,10 @@ create table if not exists public.mil_upload_sessions (
   revoked_at timestamptz,
   last_used_at timestamptz,
   use_count integer not null default 0,
+  -- Session quotas (enforced by media-intel-upload-session edge + helpers).
+  max_file_count integer not null default 200 check (max_file_count > 0),
+  max_cumulative_bytes bigint not null default 5368709120 check (max_cumulative_bytes > 0), -- 5 GiB
+  max_concurrent_grants integer not null default 5 check (max_concurrent_grants > 0),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -41,6 +45,7 @@ create table if not exists public.mil_upload_grants (
   original_filename text not null,
   expires_at timestamptz not null,
   completed_at timestamptz,
+  revoked_at timestamptz,
   created_at timestamptz not null default now(),
   unique (session_id, asset_id),
   unique (object_path)

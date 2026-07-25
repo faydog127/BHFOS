@@ -47,7 +47,10 @@ export function milCapabilities(role) {
     isCreator: r === 'reel_creator',
     isPhoneUploader: r === 'phone_uploader',
     isTechnician: r === 'technician',
-    canUpload: isLibraryStaff || r === 'phone_uploader',
+    // phone_uploader is not a product role with library capabilities — it exists only
+    // for legacy accounts. Phone uploads are authorized purely by a bearer session
+    // token (mil_upload_sessions) minted by an owner/admin, never by this role.
+    canUpload: isLibraryStaff,
     canVerify: REVIEWERS.has(r),
     canApproveReels: OWNERS.has(r),
     canManageCreatorAccess: OWNERS.has(r),

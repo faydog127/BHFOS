@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { listAssets } from '@/lib/mediaIntel/api';
-import { supabase } from '@/lib/customSupabaseClient';
-import { audit } from '@/lib/mediaIntel/api';
+import { listAssets, restoreAsset, unrestrictAsset } from '@/lib/mediaIntel/api';
 
 export default function MediaArchive() {
   const { caps } = useOutletContext();
@@ -46,9 +44,12 @@ export default function MediaArchive() {
                   type="button"
                   className="text-blue-700 text-xs underline"
                   onClick={async () => {
-                    await supabase.from('mil_assets').update({ privacy_status: 'needs_review' }).eq('id', a.id);
-                    await audit('privacy_unrestrict', 'mil_assets', a.id, {});
-                    await load();
+                    try {
+                      await unrestrictAsset(a.id);
+                      await load();
+                    } catch (err) {
+                      setError(err.message);
+                    }
                   }}
                 >
                   Move to privacy review
@@ -70,9 +71,12 @@ export default function MediaArchive() {
                   type="button"
                   className="text-blue-700 text-xs underline"
                   onClick={async () => {
-                    await supabase.from('mil_assets').update({ archived_at: null, human_review_status: 'pending' }).eq('id', a.id);
-                    await audit('restore_archived', 'mil_assets', a.id, {});
-                    await load();
+                    try {
+                      await restoreAsset(a.id);
+                      await load();
+                    } catch (err) {
+                      setError(err.message);
+                    }
                   }}
                 >
                   Restore

@@ -1,3 +1,5 @@
+import { MAX_PRACTICAL_HASH_BYTES } from './checksum';
+
 export const MIL_ORIGINALS_BUCKET = 'media-intel-originals';
 export const MIL_DERIVATIVES_BUCKET = 'media-intel-derivatives';
 export const MIL_WEBSITE_BUCKET = 'website-public-media';
@@ -16,7 +18,9 @@ export const MIL_SUPPORTED_MIME = [
   'video/x-m4v',
 ];
 
-export const MIL_MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024; // 2 GiB
+// Pre-staging hardening: capped to the practical in-browser SHA-256 hashing limit
+// (see checksum.js). Do not advertise 2 GB in UI copy until chunked hashing exists.
+export const MIL_MAX_FILE_BYTES = MAX_PRACTICAL_HASH_BYTES;
 
 export const MIL_NAV = [
   { id: 'dashboard', name: 'Dashboard', path: 'dashboard' },

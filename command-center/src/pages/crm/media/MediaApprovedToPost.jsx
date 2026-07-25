@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
-import { signedUrl } from '@/lib/mediaIntel/api';
+import { requestSignedReelUrl } from '@/lib/mediaIntel/signedAccess';
 
 export default function MediaApprovedToPost() {
   const [rows, setRows] = useState([]);
   const [error, setError] = useState(null);
+  const [previewError, setPreviewError] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -27,6 +28,7 @@ export default function MediaApprovedToPost() {
         </p>
       </div>
       {error && <div className="text-sm text-red-700">{error}</div>}
+      {previewError && <div className="text-sm text-red-700">{previewError}</div>}
       {rows.length === 0 ? (
         <div className="rounded-xl border bg-white p-6 text-sm text-slate-600">No approved reels yet.</div>
       ) : (
@@ -43,8 +45,12 @@ export default function MediaApprovedToPost() {
                 type="button"
                 className="rounded-md border px-4 py-2.5 text-sm min-h-[44px]"
                 onClick={async () => {
-                  const url = await signedUrl(v.storage_bucket, v.storage_path, 600);
-                  window.open(url, '_blank', 'noopener,noreferrer');
+                  try {
+                    const signed = await requestSignedReelUrl(v.id, 'download');
+                    window.open(signed.url, '_blank', 'noopener,noreferrer');
+                  } catch (err) {
+                    setPreviewError(err.message || 'Preview not authorized');
+                  }
                 }}
               >
                 Download / preview

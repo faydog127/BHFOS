@@ -38,7 +38,10 @@ export function validateMediaFile(file) {
     return { ok: false, reason: `Unsupported type: ${file.name}` };
   }
   if (file.size > MIL_MAX_FILE_BYTES) {
-    return { ok: false, reason: `File too large (max 2 GB): ${file.name}` };
+    return {
+      ok: false,
+      reason: `File too large (max ${Math.round(MIL_MAX_FILE_BYTES / (1024 * 1024))} MB): ${file.name}`,
+    };
   }
   if (file.size <= 0) {
     return { ok: false, reason: `Empty file: ${file.name}` };

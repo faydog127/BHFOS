@@ -78,3 +78,29 @@ Phone dump → mil_upload_batches + mil_manifest_entries
 ## Explicit non-goals (confirmed)
 
 Automated content creation, social connections/scheduling/publishing, facial recognition, phone deletion, destructive de-dupe, deep CRM job replacement, production deploy without separate auth.
+
+---
+
+## Implementation status notes (2026-07-25 — does not replace plan above)
+
+Status buckets: **1** locally proven · **2** staging proof required · **3** scaffold/UI · **4** deferred · **5** disabled pending safe implementation. Full matrix: `IMPLEMENTATION_STATUS.md`.
+
+| Plan slice | Status | Honest notes |
+|---|---|---|
+| 1. Schema + buckets + RLS + role helpers + audit | **2** | Four migrations written (`20260725120000`–`20260725150000`); **unapplied** outside disposable local testing. Capability-matrix RLS in `140000` drops `mil_staff_all_*`. |
+| 2. Media shell (11 nav destinations) + dashboard | **3** | Routes/components wired; counts empty until DB exists. |
+| 3. Resumable upload + manifest + recovery | **1 + 2** | Client/TUS + unit tests (**1**); grant finalize + quarantine path requires staging (**2**). Max **250 MB** practical (not 2 GB). Phone auth = bearer `#session=` token, **not** `phone_uploader` library role. |
+| 4. Derivatives/previews + original immutability | **3 + 5** | Client grid thumbs (**3**); `public_safe` transform **5 — disabled** until decode/re-encode pipeline proven. |
+| 5. AI adapter + review queue + provenance | **2** | Edge + RPCs exist; analyze is **invoke-on-demand only** (no background worker). Jobs stay `queued` if never invoked. |
+| 6. Collections + before/after confirmation | **3** | UI + RPC wiring; staging proof pending. |
+| 7. Creator workspace + reel versioning/review | **2 + 3** | `media-intel-creator-admin` + `media-intel-reel-upload` written, **not deployed**. UI scaffold. |
+| 8. Website promote + backup/export docs + tests | **5 + 2** | Promote **503 disabled**; unpublish only. Backup docs exist; **restore not proven**. Unit + SQL contract tests added; SQL tests need Docker + `supabase db reset`. |
+
+**Corrections vs original discovery table:**
+
+- `phone_uploader` remains in `app_user_roles` vocabulary for legacy accounts but is **not** a MIL product capability — field dumps use scoped bearer sessions only.
+- `media_reviewer` is distinct from office for **write** surfaces (`mil_is_reviewer` excludes office).
+- Website promotion gate in plan assumes EXIF-stripped derivative — **promote is disabled** until a proven public-safe pipeline exists.
+- No social publishing (**4**). Single-company only — no tenant ownership abstractions (**1** in source contract tests).
+
+**Test execution caveat:** Docker Desktop engine was unavailable in the agent environment when SQL tests were added; `supabase/tests/mil/*.sql` are present but **not executed** here. Run locally after `npx supabase start` && `npx supabase db reset`.

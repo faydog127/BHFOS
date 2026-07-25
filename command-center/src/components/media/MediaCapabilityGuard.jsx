@@ -35,7 +35,9 @@ export default function MediaCapabilityGuard({ capability = 'staff', children, f
     (capability === 'reviewer' && caps.isReviewer) ||
     (capability === 'ownerAdmin' && caps.isOwnerAdmin) ||
     (capability === 'creator' && caps.isCreator) ||
-    (capability === 'upload' && (caps.canUpload || caps.role === 'phone_uploader'));
+    // Phone uploads are bearer-session-authorized (mil_upload_sessions), not role-based;
+    // phone_uploader carries no library capability here.
+    (capability === 'upload' && caps.canUpload);
 
   if (!allowed) {
     if (caps.isCreator && forbiddenRedirect !== false) {

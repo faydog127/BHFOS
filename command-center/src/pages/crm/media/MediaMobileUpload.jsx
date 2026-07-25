@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useOutletContext } from 'react-router-dom';
 import { Loader2, Upload } from 'lucide-react';
 import { DEFAULT_TENANT_ID } from '@/config/tenantDefaults';
@@ -24,11 +24,54 @@ async function invokeSession(body) {
   return data;
 }
 
+/**
+ * Prefer the URL fragment (#session=) over the query string (?session=): fragments
+ * are never sent to the server in the request line, never logged by reverse
+ * proxies/analytics, and are stripped before the Referer header is generated.
+ * Legacy ?session= links are still honored for backward compatibility.
+ */
+function extractSessionToken() {
+  if (typeof window === 'undefined') return '';
+  const hashMatch = /(?:^#|[#&])session=([^&]+)/.exec(window.location.hash || '');
+  if (hashMatch) {
+    try {
+      return decodeURIComponent(hashMatch[1]);
+    } catch {
+      return hashMatch[1];
+    }
+  }
+  return new URLSearchParams(window.location.search).get('session') || '';
+}
+
 export default function MediaMobileUpload() {
   const outlet = useOutletContext() || {};
   const [caps, setCaps] = useState(outlet.caps || null);
-  const [params] = useSearchParams();
-  const sessionToken = params.get('session') || '';
+  const [sessionToken] = useState(extractSessionToken);
+
+  useEffect(() => {
+    if (!sessionToken) return;
+    // Move the token to memory only, then strip it from the visible URL
+    // immediately so it never lingers in browser history, screen recordings,
+    // or gets accidentally shared by copying the address bar.
+    window.history.replaceState(null, '', window.location.pathname);
+  }, [sessionToken]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    let meta = document.querySelector('meta[name="referrer"]');
+    const created = !meta;
+    const previous = meta?.getAttribute('content') ?? null;
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'referrer');
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute('content', 'no-referrer');
+    return () => {
+      if (created) meta.remove();
+      else if (previous !== null) meta.setAttribute('content', previous);
+    };
+  }, []);
 
   const inputRef = useRef(null);
   const [sessionInfo, setSessionInfo] = useState(null);
@@ -81,9 +124,12 @@ export default function MediaMobileUpload() {
   const uploadViaSession = async (files) => {
     setBusy(true);
     setSessionError(null);
-    try {
-      for (const file of files) {
-        const key = clientFileKey(file);
+    // Continue past per-file failures so one bad file in a large phone dump
+    // doesn't stall or discard the rest of the batch. Each failure is recorded
+    // on its own file entry; totals below reflect the true per-file outcome.
+    for (const file of files) {
+      const key = clientFileKey(file);
+      try {
         const validation = validateMediaFile(file);
         if (!validation.ok) {
           onFileUpdate({ clientKey: key, filename: file.name, status: 'skipped', message: validation.reason });
@@ -124,6 +170,10 @@ export default function MediaMobileUpload() {
         if (uploadError) throw uploadError;
 
         onFileUpdate({ clientKey: key, filename: file.name, status: 'uploading', percent: 90 });
+        // checksumSha256 is the client-computed SHA-256 — advisory only. It is
+        // stored alongside the server-verified checksum for later reconciliation
+        // but must never be treated as the security boundary; the server/finalize
+        // path is the source of truth for integrity.
         const completed = await invokeSession({
           action: 'complete_file',
           token: sessionToken,
@@ -140,7 +190,11 @@ export default function MediaMobileUpload() {
           percent: 100,
           message: completed.status === 'duplicate' ? 'Exact duplicate — kept existing file' : undefined,
         });
+      } catch (err) {
+        onFileUpdate({ clientKey: key, filename: file.name, status: 'failed', message: err?.message || 'Upload failed' });
       }
+    }
+    try {
       const m = await invokeSession({ action: 'manifest', token: sessionToken });
       setManifest(m);
     } catch (err) {

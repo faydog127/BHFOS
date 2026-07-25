@@ -1,19 +1,24 @@
 import { supabase } from '@/lib/customSupabaseClient';
-import { MIL_DERIVATIVES_BUCKET, MIL_ORIGINALS_BUCKET } from './constants';
+import { PREVIEW_DERIVATIVE_KINDS } from './derivativeKinds';
 
 async function actorId() {
   const { data } = await supabase.auth.getUser();
   return data?.user?.id || null;
 }
 
-export async function audit(action, targetType, targetId, details = {}) {
-  return supabase.from('mil_audit_events').insert({
-    actor_user_id: await actorId(),
-    action,
-    target_type: targetType,
-    target_id: targetId,
-    details,
-  });
+/**
+ * Pre-staging hardening: client-side inserts into mil_audit_events were removable
+ * (any authenticated session could forge audit history). All privileged mutations
+ * now go through SECURITY DEFINER RPCs (mil_verify_asset, mil_set_permitted_use,
+ * mil_review_reel_version, mil_submit_reel_version, mil_set_asset_archive_state)
+ * which call mil_audit_insert() server-side using auth.uid(). There is no
+ * client-authored audit trail anymore — call sites must not depend on this.
+ */
+export function audit() {
+  throw new Error(
+    'Client-side audit() inserts are disabled. Privileged actions audit themselves ' +
+      'server-side via mil_audit_insert() inside their RPC.',
+  );
 }
 
 export async function fetchDashboardStats() {
@@ -77,33 +82,29 @@ export async function listAssets(filters = {}) {
   return data || [];
 }
 
-export async function signedUrl(bucket, path, expiresIn = 300) {
-  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
-  if (error) throw error;
-  return data.signedUrl;
+/**
+ * Direct storage.createSignedUrl() is disabled for MIL. Every preview/download must
+ * go through the media-intel-sign edge function so access is authorized server-side
+ * (asset visibility, creator assignment, reel ownership, etc.) rather than trusting
+ * whatever RLS the browser session happens to carry.
+ */
+export async function signedUrl() {
+  throw new Error('Use requestSignedMediaUrl — direct storage signing disabled for MIL');
 }
 
 export async function assetPreviewUrl(asset) {
   const { requestSignedMediaUrl } = await import('./signedAccess');
+  const thumb = (asset.mil_derivatives || []).find((d) => PREVIEW_DERIVATIVE_KINDS.includes(d.kind));
   try {
-    const thumb = (asset.mil_derivatives || []).find((d) =>
-      ['grid_thumb', 'detail_preview', 'heic_preview', 'video_thumb'].includes(d.kind),
-    );
     const signed = await requestSignedMediaUrl({
       assetId: asset.id,
       purpose: 'preview',
       derivativeKind: thumb?.kind || null,
       allowOriginal: false,
     });
-    return signed.url;
-  } catch {
-    const thumb = (asset.mil_derivatives || []).find((d) =>
-      ['grid_thumb', 'detail_preview', 'heic_preview', 'video_thumb'].includes(d.kind),
-    );
-    if (thumb) return signedUrl(thumb.bucket || MIL_DERIVATIVES_BUCKET, thumb.object_path, 300);
-    if (asset.media_kind === 'photo' && !String(asset.mime_type).includes('heic')) {
-      return signedUrl(asset.original_bucket || MIL_ORIGINALS_BUCKET, asset.original_path, 300);
-    }
+    return signed?.url || null;
+  } catch (err) {
+    console.warn('MIL preview sign failed — no direct storage fallback', err);
     return null;
   }
 }
@@ -130,18 +131,13 @@ export async function fetchReviewBundle(assetId) {
   };
 }
 
+/** Human verification is a SECURITY DEFINER RPC — it audits server-side. */
 export async function verifyAssetMetadata(assetId, patch) {
-  const userId = await actorId();
-  const { error } = await supabase.from('mil_verified_metadata').upsert({
-    asset_id: assetId,
-    ...patch,
-    verified_by: userId,
-    verified_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+  const { error } = await supabase.rpc('mil_verify_asset', {
+    p_asset_id: assetId,
+    p_patch: patch || {},
   });
   if (error) throw error;
-  await supabase.from('mil_assets').update({ human_review_status: 'verified' }).eq('id', assetId);
-  await audit('human_verification', 'mil_assets', assetId, { patch });
 }
 
 export async function acceptAiSuggestions(assetId, analysisId) {
@@ -170,20 +166,17 @@ export async function acceptAiSuggestions(assetId, analysisId) {
       })),
     );
   }
-  await audit('ai_suggestion_accepted', 'mil_ai_analyses', analysisId, { assetId });
 }
 
+/** Permitted-use gate changes are a SECURITY DEFINER RPC — it audits server-side. */
 export async function setPermittedUse(assetId, useKey, approved, notes) {
-  const { error } = await supabase.from('mil_permitted_uses').upsert({
-    asset_id: assetId,
-    use_key: useKey,
-    approved,
-    approved_by: await actorId(),
-    approved_at: approved ? new Date().toISOString() : null,
-    notes: notes || null,
+  const { error } = await supabase.rpc('mil_set_permitted_use', {
+    p_asset_id: assetId,
+    p_use_key: useKey,
+    p_approved: approved,
+    p_notes: notes || null,
   });
   if (error) throw error;
-  await audit('permitted_use_change', 'mil_assets', assetId, { useKey, approved, notes });
 }
 
 export async function confirmBeforeAfter(relationshipId, confirm) {
@@ -197,56 +190,45 @@ export async function confirmBeforeAfter(relationshipId, confirm) {
     })
     .eq('id', relationshipId);
   if (error) throw error;
-  await audit(confirm ? 'before_after_confirmed' : 'before_after_rejected', 'mil_asset_relationships', relationshipId, {});
 }
 
+/** Reel review decisions are a SECURITY DEFINER RPC — it audits server-side. */
 export async function reviewReelVersion({ versionId, decision, notes }) {
   if (!['approved', 'denied', 'revision_requested'].includes(decision)) {
     throw new Error('Invalid review decision');
   }
-  const statusMap = {
-    approved: 'approved_to_post',
-    denied: 'denied',
-    revision_requested: 'revision_requested',
-  };
-  const { data: version, error: vErr } = await supabase
-    .from('mil_reel_versions')
-    .select('*, mil_reel_projects!inner(id, status)')
-    .eq('id', versionId)
-    .single();
-  if (vErr) throw vErr;
-
-  const { error } = await supabase
-    .from('mil_reel_versions')
-    .update({
-      status: statusMap[decision],
-      review_decision: decision,
-      review_notes: notes?.trim() ? notes.trim() : null,
-      reviewed_by: await actorId(),
-      reviewed_at: new Date().toISOString(),
-    })
-    .eq('id', versionId);
-  if (error) throw error;
-
-  await supabase.from('mil_reel_projects').update({ status: statusMap[decision] }).eq('id', version.project_id);
-  await audit(`reel_${decision}`, 'mil_reel_versions', versionId, {
-    notes: notes?.trim() ? notes.trim() : null,
-    notesProvided: Boolean(notes?.trim()),
+  const { error } = await supabase.rpc('mil_review_reel_version', {
+    p_version_id: versionId,
+    p_decision: decision,
+    p_notes: notes?.trim() ? notes.trim() : null,
   });
+  if (error) throw error;
 }
 
+/** Reel submission is a SECURITY DEFINER RPC — it audits server-side. */
 export async function submitReelVersion(versionId) {
-  const { error } = await supabase
-    .from('mil_reel_versions')
-    .update({ status: 'submitted_for_review', submitted_at: new Date().toISOString() })
-    .eq('id', versionId);
+  const { error } = await supabase.rpc('mil_submit_reel_version', {
+    p_version_id: versionId,
+  });
   if (error) throw error;
-  const { data: version } = await supabase.from('mil_reel_versions').select('project_id').eq('id', versionId).single();
-  if (version?.project_id) {
-    await supabase.from('mil_reel_projects').update({ status: 'submitted_for_review' }).eq('id', version.project_id);
-  }
-  await audit('reel_submission', 'mil_reel_versions', versionId, {});
 }
+
+/**
+ * Archive / restore / privacy-restrict state changes are all a single SECURITY
+ * DEFINER RPC (mil_set_asset_archive_state) — it audits server-side.
+ */
+async function setAssetArchiveState(assetId, action) {
+  const { error } = await supabase.rpc('mil_set_asset_archive_state', {
+    p_asset_id: assetId,
+    p_action: action,
+  });
+  if (error) throw error;
+}
+
+export const archiveAsset = (assetId) => setAssetArchiveState(assetId, 'archive');
+export const restoreAsset = (assetId) => setAssetArchiveState(assetId, 'restore');
+export const restrictAsset = (assetId) => setAssetArchiveState(assetId, 'restrict');
+export const unrestrictAsset = (assetId) => setAssetArchiveState(assetId, 'unrestrict');
 
 export async function getAiConfigState() {
   try {

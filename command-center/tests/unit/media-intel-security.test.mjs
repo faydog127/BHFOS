@@ -241,18 +241,33 @@ describe('Upload grant binding', () => {
 });
 
 describe('Website promotion public-safe path', () => {
-  it('promote refuses originals and requires public_safe strip_exif derivative', () => {
+  it('prepare_public_safe and promote are disabled (503) pending a proven decode/re-encode pipeline', () => {
     const fn = read('supabase/functions/media-intel-promote-website/index.ts');
     assert.match(fn, /prepare_public_safe/);
     assert.match(fn, /stripJpegExif/);
-    assert.match(fn, /kind: 'public_safe'/);
-    assert.match(fn, /strip_exif: true/);
-    assert.match(fn, /Originals are never copied/);
-    const promoteBlock = fn.slice(fn.lastIndexOf('// Promote:'));
-    assert.match(promoteBlock, /from\(safeDer\.bucket\)/);
-    assert.match(promoteBlock, /website-public-media/);
-    assert.doesNotMatch(promoteBlock, /asset\.original_bucket/);
-    assert.doesNotMatch(promoteBlock, /asset\.original_path/);
+    // Stripping EXIF/XMP markers from the original container is explicitly
+    // documented as NOT proving public-safety (no decode/re-encode occurs).
+    assert.match(fn, /does not prove an image is safe to publish/);
+    assert.match(fn, /action === 'prepare_public_safe' \|\| action === 'promote'/);
+    assert.match(fn, /503/);
+    assert.match(fn, /not_implemented/);
+    assert.match(fn, /website_promotion_attempt_blocked/);
+    // stripJpegExif is retained for future re-enablement only — not wired into promote.
+    const promoteBlock = fn.slice(
+      fn.indexOf("action === 'prepare_public_safe' || action === 'promote'"),
+      fn.indexOf("if (action === 'unpublish')"),
+    );
+    assert.doesNotMatch(promoteBlock, /stripJpegExif\(/);
+    assert.doesNotMatch(promoteBlock, /website-public-media/);
+  });
+
+  it('unpublish removes public objects and marks promotions unavailable', () => {
+    const fn = read('supabase/functions/media-intel-promote-website/index.ts');
+    assert.match(fn, /action === 'unpublish'/);
+    assert.match(fn, /mil_website_promotions/);
+    assert.match(fn, /display_status: 'unavailable'/);
+    assert.match(fn, /website-public-media/);
+    assert.match(fn, /website_unpublish/);
   });
 
   it('strips APP1 EXIF from a synthetic JPEG', () => {

@@ -85,7 +85,9 @@ describe('MIL upload session + signed access (no tenant)', () => {
     assert.match(fn, /action === 'mint_upload'/);
     assert.match(fn, /action === 'revoke'/);
     assert.match(fn, /browseLibrary: false/);
-    assert.match(fn, /\/media\/upload\?session=/);
+    // Fragment form (#session=), not a query param — never sent to the server in
+    // the request line and stripped before any Referer header is generated.
+    assert.match(fn, /\/media\/upload#session=/);
     assert.doesNotMatch(fn, /tenant_id|tenantId/);
   });
 

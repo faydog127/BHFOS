@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
-import { reviewReelVersion, signedUrl } from '@/lib/mediaIntel/api';
+import { reviewReelVersion } from '@/lib/mediaIntel/api';
+import { requestSignedReelUrl } from '@/lib/mediaIntel/signedAccess';
 
 export default function MediaReelReview() {
   const { caps } = useOutletContext();
@@ -58,8 +59,12 @@ export default function MediaReelReview() {
               type="button"
               className="rounded-md border px-3 py-2 text-sm min-h-[44px]"
               onClick={async () => {
-                const url = await signedUrl(v.storage_bucket, v.storage_path);
-                setPreview((p) => ({ ...p, [v.id]: url }));
+                try {
+                  const signed = await requestSignedReelUrl(v.id, 'preview');
+                  setPreview((p) => ({ ...p, [v.id]: signed.url }));
+                } catch (err) {
+                  setError(err.message || 'Preview not authorized');
+                }
               }}
             >
               Load preview

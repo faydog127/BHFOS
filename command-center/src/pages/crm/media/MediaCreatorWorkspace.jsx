@@ -1,10 +1,54 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
-import { audit, listAssets, submitReelVersion } from '@/lib/mediaIntel/api';
-import { MIL_DERIVATIVES_BUCKET } from '@/lib/mediaIntel/constants';
-import { safeStorageSegment } from '@/lib/mediaIntel/formats';
+import { listAssets, submitReelVersion } from '@/lib/mediaIntel/api';
 import { requestSignedReelUrl } from '@/lib/mediaIntel/signedAccess';
+
+const REEL_UPLOAD_UNAVAILABLE_MESSAGE =
+  'Reel upload requires deployed media-intel-reel-upload — not available until staging deploy. ' +
+  'Direct client writes to mil/reels/% are disabled (creators/staff have no storage or table ' +
+  'insert access there under pre-staging hardening).';
+
+/**
+ * Mint a server-authorized reel upload target. Creators/staff must never write
+ * mil/reels/% storage or insert mil_reel_versions rows directly — RLS only allows
+ * SELECT and owner-approve UPDATEs on that table now.
+ */
+async function mintReelUpload(body) {
+  const { data, error } = await supabase.functions.invoke('media-intel-reel-upload', {
+    body: { action: 'mint', ...body },
+  });
+  if (error || data?.error) {
+    throw new Error(error?.message || data?.error || 'media-intel-reel-upload unavailable');
+  }
+  return data;
+}
+
+async function completeReelUpload(body) {
+  const { data, error } = await supabase.functions.invoke('media-intel-reel-upload', {
+    body: { action: 'complete', ...body },
+  });
+  if (error || data?.error) {
+    throw new Error(error?.message || data?.error || 'media-intel-reel-upload unavailable');
+  }
+  return data;
+}
+
+async function putToMintedTarget(minted, file, mime) {
+  if (minted.signedUrl) {
+    const res = await fetch(minted.signedUrl, { method: 'PUT', headers: { 'Content-Type': mime }, body: file });
+    if (!res.ok) throw new Error(`Reel upload failed (${res.status})`);
+    return;
+  }
+  if (minted.token && minted.bucket && minted.path) {
+    const { error } = await supabase.storage
+      .from(minted.bucket)
+      .uploadToSignedUrl(minted.path, minted.token, file, { contentType: mime });
+    if (error) throw error;
+    return;
+  }
+  throw new Error('No signed upload credentials returned');
+}
 
 export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
   const outlet = useOutletContext() || {};
@@ -17,6 +61,7 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [reelUploadDisabled, setReelUploadDisabled] = useState(false);
 
   const load = async () => {
     try {
@@ -50,9 +95,11 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
     }
     setBusy(true);
     setError(null);
+    let project = null;
     try {
       const { data: auth } = await supabase.auth.getUser();
-      const { data: project, error: pErr } = await supabase
+      const mime = file.type || 'video/mp4';
+      const { data: created, error: pErr } = await supabase
         .from('mil_reel_projects')
         .insert({
           title: title.trim() || file.name,
@@ -62,42 +109,37 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
         .select('*')
         .single();
       if (pErr) throw pErr;
+      project = created;
 
-      const versionId = crypto.randomUUID();
-      const path = `mil/reels/${project.id}/v1/${versionId}-${safeStorageSegment(file.name)}`;
-      const up = await supabase.storage.from(MIL_DERIVATIVES_BUCKET).upload(path, file, {
-        contentType: file.type || 'video/mp4',
-        upsert: false,
-      });
-      if (up.error) throw up.error;
-
-      const { data: version, error: vErr } = await supabase
-        .from('mil_reel_versions')
-        .insert({
-          id: versionId,
-          project_id: project.id,
-          version_number: 1,
-          status: 'creator_draft',
-          storage_bucket: MIL_DERIVATIVES_BUCKET,
-          storage_path: path,
-          mime_type: file.type || 'video/mp4',
-          byte_size: file.size,
-          creator_notes: notes || null,
-        })
-        .select('*')
-        .single();
-      if (vErr) throw vErr;
-
-      await audit('reel_upload', 'mil_reel_versions', version.id, {
+      const minted = await mintReelUpload({
         projectId: project.id,
-        version: 1,
+        versionNumber: 1,
+        filename: file.name,
+        contentType: mime,
+        byteSize: file.size,
+        creatorNotes: notes || null,
       });
+      await putToMintedTarget(minted, file, mime);
+      await completeReelUpload({
+        grantId: minted.grantId,
+        versionId: minted.versionId,
+        byteSize: file.size,
+      });
+
       setMessage('Draft reel uploaded. Submit when ready for owner review.');
       setTitle('');
       setNotes('');
       await load();
     } catch (err) {
-      setError(err.message);
+      // The edge mint/complete step is the only authorized path to create a reel
+      // version. If it is unavailable, disable further attempts with an honest
+      // message instead of silently falling back to a forbidden direct write.
+      setReelUploadDisabled(true);
+      setError(REEL_UPLOAD_UNAVAILABLE_MESSAGE);
+      if (project?.id) {
+        // Roll back the orphaned draft project — it has no version and never will.
+        await supabase.from('mil_reel_projects').delete().eq('id', project.id).eq('status', 'creator_draft');
+      }
     } finally {
       setBusy(false);
     }
@@ -105,54 +147,32 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
 
   const uploadRevision = async (project, file) => {
     setBusy(true);
+    setError(null);
     try {
       const versions = project.mil_reel_versions || [];
       const nextNum = versions.reduce((m, v) => Math.max(m, v.version_number || 0), 0) + 1;
-      const versionId = crypto.randomUUID();
-      const path = `mil/reels/${project.id}/v${nextNum}/${versionId}-${safeStorageSegment(file.name)}`;
-      const up = await supabase.storage.from(MIL_DERIVATIVES_BUCKET).upload(path, file, {
-        contentType: file.type || 'video/mp4',
-        upsert: false,
-      });
-      if (up.error) throw up.error;
+      const mime = file.type || 'video/mp4';
 
-      await supabase
-        .from('mil_reel_versions')
-        .update({ status: 'superseded' })
-        .eq('project_id', project.id)
-        .in('status', ['denied', 'revision_requested', 'approved_to_post']);
-
-      const { data: version, error } = await supabase
-        .from('mil_reel_versions')
-        .insert({
-          id: versionId,
-          project_id: project.id,
-          version_number: nextNum,
-          status: 'creator_draft',
-          storage_bucket: MIL_DERIVATIVES_BUCKET,
-          storage_path: path,
-          mime_type: file.type || 'video/mp4',
-          byte_size: file.size,
-          creator_notes: notes || null,
-        })
-        .select('*')
-        .single();
-      if (error) throw error;
-
-      await supabase
-        .from('mil_reel_projects')
-        .update({ status: 'creator_draft' })
-        .eq('id', project.id);
-
-      await audit('reel_upload', 'mil_reel_versions', version.id, {
+      const minted = await mintReelUpload({
         projectId: project.id,
-        version: nextNum,
-        revision: true,
+        versionNumber: nextNum,
+        filename: file.name,
+        contentType: mime,
+        byteSize: file.size,
+        creatorNotes: notes || null,
       });
+      await putToMintedTarget(minted, file, mime);
+      await completeReelUpload({
+        grantId: minted.grantId,
+        versionId: minted.versionId,
+        byteSize: file.size,
+      });
+
       setMessage(`Version ${nextNum} uploaded. Fresh owner approval is required.`);
       await load();
     } catch (err) {
-      setError(err.message);
+      setReelUploadDisabled(true);
+      setError(REEL_UPLOAD_UNAVAILABLE_MESSAGE);
     } finally {
       setBusy(false);
     }
@@ -187,23 +207,31 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
 
       <section className="rounded-xl border bg-white p-4 space-y-3">
         <h3 className="font-medium text-slate-900">Upload draft or completed reel</h3>
-        <label className="block text-sm">
-          <span className="font-medium">Title</span>
-          <input className="mt-1 w-full rounded-md border px-3 py-2 min-h-[44px]" value={title} onChange={(e) => setTitle(e.target.value)} />
-        </label>
-        <label className="block text-sm">
-          <span className="font-medium">Notes / questions for owner</span>
-          <textarea className="mt-1 w-full rounded-md border px-3 py-2" value={notes} onChange={(e) => setNotes(e.target.value)} />
-        </label>
-        <input ref={fileRef} type="file" accept="video/*,.mp4,.mov" className="hidden" onChange={(e) => uploadReel(e.target.files?.[0])} />
-        <button
-          type="button"
-          disabled={busy}
-          className="rounded-md bg-blue-600 text-white px-4 py-2.5 text-sm min-h-[44px]"
-          onClick={() => fileRef.current?.click()}
-        >
-          {busy ? 'Uploading…' : 'Choose reel file'}
-        </button>
+        {reelUploadDisabled ? (
+          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+            {REEL_UPLOAD_UNAVAILABLE_MESSAGE}
+          </p>
+        ) : (
+          <>
+            <label className="block text-sm">
+              <span className="font-medium">Title</span>
+              <input className="mt-1 w-full rounded-md border px-3 py-2 min-h-[44px]" value={title} onChange={(e) => setTitle(e.target.value)} />
+            </label>
+            <label className="block text-sm">
+              <span className="font-medium">Notes / questions for owner</span>
+              <textarea className="mt-1 w-full rounded-md border px-3 py-2" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </label>
+            <input ref={fileRef} type="file" accept="video/*,.mp4,.mov" className="hidden" onChange={(e) => uploadReel(e.target.files?.[0])} />
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded-md bg-blue-600 text-white px-4 py-2.5 text-sm min-h-[44px]"
+              onClick={() => fileRef.current?.click()}
+            >
+              {busy ? 'Uploading…' : 'Choose reel file'}
+            </button>
+          </>
+        )}
       </section>
 
       <section className="space-y-3">
@@ -236,7 +264,7 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
                     Submit for review
                   </button>
                 )}
-                {['denied', 'revision_requested', 'approved_to_post'].includes(latest?.status) && (
+                {!reelUploadDisabled && ['denied', 'revision_requested', 'approved_to_post'].includes(latest?.status) && (
                   <label className="rounded-md border px-3 py-2 text-sm min-h-[44px] inline-flex items-center cursor-pointer">
                     Upload new version
                     <input

@@ -48,12 +48,24 @@ begin
     return 'unauthenticated';
   end if;
 
-  -- Prefer latest role row for this user. Ignore JWT role claims.
+  -- Deterministic MIL role when legacy app_user_roles has multiple rows per user:
+  -- prefer MIL-relevant roles by priority, then newest created_at.
   -- Do not require or filter by tenant_id (legacy column may exist on app_user_roles).
   select r.role into v_role
   from public.app_user_roles r
   where r.user_id = auth.uid()
-  order by r.created_at desc nulls last
+  order by
+    case public.mil_normalize_role(r.role)
+      when 'admin' then 1
+      when 'manager' then 2
+      when 'media_reviewer' then 3
+      when 'office' then 4
+      when 'reel_creator' then 5
+      when 'phone_uploader' then 6
+      when 'technician' then 7
+      else 99
+    end,
+    r.created_at desc nulls last
   limit 1;
 
   if v_role is null or btrim(v_role) = '' then
@@ -86,6 +98,8 @@ as $$
   select public.mil_current_role() in ('admin', 'manager');
 $$;
 
+-- Reviewer roles only. Office may browse/upload but must not write review surfaces
+-- via this helper (capability matrix is refined in the hardening migration).
 create or replace function public.mil_is_reviewer()
 returns boolean
 language sql
@@ -93,7 +107,7 @@ stable
 security definer
 set search_path = public
 as $$
-  select public.mil_current_role() in ('admin', 'manager', 'office', 'media_reviewer');
+  select public.mil_current_role() in ('admin', 'manager', 'media_reviewer');
 $$;
 
 create or replace function public.mil_is_creator()
@@ -123,13 +137,39 @@ $$;
 do $$
 begin
   if to_regclass('storage.buckets') is not null then
-    insert into storage.buckets (id, name, public)
-    values ('media-intel-originals', 'media-intel-originals', false)
-    on conflict (id) do update set public = excluded.public;
+    -- Defense-in-depth bucket limits (edge/RPC still authoritative).
+    -- 250 MiB matches practical client hashing / phone-transfer honesty; not 2 GiB.
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values (
+      'media-intel-originals',
+      'media-intel-originals',
+      false,
+      262144000,
+      array[
+        'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/gif',
+        'video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v'
+      ]
+    )
+    on conflict (id) do update set
+      public = excluded.public,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
 
-    insert into storage.buckets (id, name, public)
-    values ('media-intel-derivatives', 'media-intel-derivatives', false)
-    on conflict (id) do update set public = excluded.public;
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values (
+      'media-intel-derivatives',
+      'media-intel-derivatives',
+      false,
+      262144000,
+      array[
+        'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/gif',
+        'video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v'
+      ]
+    )
+    on conflict (id) do update set
+      public = excluded.public,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
   end if;
 end $$;
 
@@ -162,11 +202,13 @@ begin
       and public.mil_is_staff()
     );
 
-  create policy "MIL originals insertable by staff"
+  -- Authenticated clients may only write quarantine paths. Final originals are
+  -- placed by service-role after grant finalization (no live signed-upload on final path).
+  create policy "MIL originals quarantine insert by staff"
     on storage.objects for insert to authenticated
     with check (
       bucket_id = 'media-intel-originals'
-      and name like 'mil/%'
+      and name like 'mil/quarantine/%'
       and public.mil_is_staff()
     );
 
@@ -183,24 +225,17 @@ begin
       and public.mil_is_staff()
     );
 
-  create policy "MIL derivatives insertable by staff"
+  create policy "MIL derivatives quarantine insert by staff"
     on storage.objects for insert to authenticated
     with check (
       bucket_id = 'media-intel-derivatives'
-      and name like 'mil/%'
+      and name like 'mil/quarantine/%'
       and public.mil_is_staff()
     );
 
-  -- Creators may upload reel drafts under mil/reels/, but must NOT read storage
-  -- objects directly. Preview/download goes through media-intel-sign (service role).
-  create policy "MIL derivatives creator reel upload"
-    on storage.objects for insert to authenticated
-    with check (
-      bucket_id = 'media-intel-derivatives'
-      and name like 'mil/reels/%'
-      and public.mil_is_creator()
-    );
-
+  -- Creators must NOT insert/read storage directly under mil/reels/%.
+  -- Reel uploads use server-minted grants + service-role completion.
+  drop policy if exists "MIL derivatives creator reel upload" on storage.objects;
   drop policy if exists "MIL derivatives creator reel read" on storage.objects;
 
   create policy "MIL derivatives service role"
@@ -323,7 +358,8 @@ create table if not exists public.mil_derivatives (
   asset_id uuid not null references public.mil_assets(id) on delete cascade,
   kind text not null check (kind in (
     'grid_thumb', 'detail_preview', 'website_optimized', 'creator_download',
-    'redacted_public', 'video_thumb', 'video_preview', 'reel_version', 'heic_preview'
+    'redacted_public', 'video_thumb', 'video_preview', 'reel_version', 'heic_preview',
+    'public_safe', 'ai_safe'
   )),
   bucket text not null default 'media-intel-derivatives',
   object_path text not null,
@@ -623,9 +659,9 @@ begin
   if new.use_key in ('website', 'social_media', 'reel_creation') and new.approved is true then
     select * into v_asset from public.mil_assets where id = new.asset_id;
     if v_asset.rights_status in ('ownership_unknown', 'permission_unknown', 'public_use_prohibited')
-       or v_asset.customer_permission_status = 'unknown'
+       or v_asset.customer_permission_status not in ('confirmed', 'not_required')
        or v_asset.privacy_status in ('needs_review', 'needs_redaction', 'restricted') then
-      raise exception 'Public/marketing use blocked until rights, permission, and privacy are cleared';
+      raise exception 'Public/marketing use blocked until rights, customer permission (confirmed|not_required), and privacy are cleared';
     end if;
   end if;
   return new;
@@ -706,34 +742,9 @@ alter table public.mil_website_promotions enable row level security;
 alter table public.mil_processing_jobs enable row level security;
 alter table public.mil_audit_events enable row level security;
 
-do $$
-declare
-  t text;
-begin
-  foreach t in array array[
-    'mil_tag_vocabulary','mil_upload_batches','mil_manifest_entries','mil_derivatives',
-    'mil_permitted_uses','mil_asset_tags','mil_ai_analyses','mil_verified_metadata',
-    'mil_quality_scores','mil_privacy_findings','mil_collections','mil_collection_items',
-    'mil_asset_relationships','mil_creator_assignments','mil_website_promotions',
-    'mil_processing_jobs','mil_audit_events'
-  ]
-  loop
-    execute format('drop policy if exists mil_staff_all_%s on public.%I', t, t);
-    execute format('drop policy if exists mil_staff_all_%s on public.%I', replace(t, 'mil_', ''), t);
-    execute format(
-      'create policy mil_staff_all_%s on public.%I for all to authenticated
-       using (public.mil_is_staff())
-       with check (public.mil_is_staff())',
-      t, t
-    );
-  end loop;
-end $$;
-
-drop policy if exists mil_staff_all_assets on public.mil_assets;
-create policy mil_staff_all_assets on public.mil_assets
-  for all to authenticated
-  using (public.mil_is_staff())
-  with check (public.mil_is_staff());
+-- Capability-matrix RLS is installed in 20260725140000_media_intel_pre_staging_hardening.sql
+-- (replaces broad mil_staff_all_* FOR ALL policies). Creator SELECT policies remain here
+-- as a baseline and are refined/recreated in the hardening migration.
 
 drop policy if exists mil_creator_select_assets on public.mil_assets;
 create policy mil_creator_select_assets on public.mil_assets
@@ -771,6 +782,7 @@ create policy mil_creator_select_collections on public.mil_collections
       where ca.collection_id = mil_collections.id
         and ca.creator_user_id = auth.uid()
         and ca.status = 'active'
+        and ca.revoked_at is null
     )
   );
 
@@ -785,6 +797,7 @@ create policy mil_creator_select_collection_items on public.mil_collection_items
       where c.id = mil_collection_items.collection_id
         and ca.creator_user_id = auth.uid()
         and ca.status = 'active'
+        and ca.revoked_at is null
         and c.visibility = 'creator_shared'
     )
   );
@@ -794,98 +807,7 @@ create policy mil_creator_select_assignments on public.mil_creator_assignments
   for select to authenticated
   using (public.mil_is_creator() and creator_user_id = auth.uid());
 
-drop policy if exists mil_staff_reels on public.mil_reel_projects;
-create policy mil_staff_reels on public.mil_reel_projects
-  for all to authenticated
-  using (public.mil_is_staff())
-  with check (public.mil_is_staff());
-
-drop policy if exists mil_creator_reels on public.mil_reel_projects;
-create policy mil_creator_reels on public.mil_reel_projects
-  for all to authenticated
-  using (public.mil_is_creator() and creator_user_id = auth.uid())
-  with check (public.mil_is_creator() and creator_user_id = auth.uid());
-
-drop policy if exists mil_staff_reel_versions on public.mil_reel_versions;
-create policy mil_staff_reel_versions on public.mil_reel_versions
-  for all to authenticated
-  using (public.mil_is_staff())
-  with check (public.mil_is_staff());
-
-drop policy if exists mil_creator_reel_versions on public.mil_reel_versions;
-create policy mil_creator_reel_versions on public.mil_reel_versions
-  for all to authenticated
-  using (
-    public.mil_is_creator()
-    and exists (
-      select 1 from public.mil_reel_projects p
-      where p.id = mil_reel_versions.project_id
-        and p.creator_user_id = auth.uid()
-    )
-  )
-  with check (
-    public.mil_is_creator()
-    and exists (
-      select 1 from public.mil_reel_projects p
-      where p.id = project_id
-        and p.creator_user_id = auth.uid()
-    )
-    and review_decision is null
-    and status not in ('approved_to_post')
-  );
-
-drop policy if exists mil_staff_reel_sources on public.mil_reel_source_media;
-create policy mil_staff_reel_sources on public.mil_reel_source_media
-  for all to authenticated
-  using (
-    public.mil_is_staff()
-    and exists (select 1 from public.mil_reel_versions v where v.id = reel_version_id)
-  )
-  with check (
-    public.mil_is_staff()
-    and exists (select 1 from public.mil_reel_versions v where v.id = reel_version_id)
-  );
-
-drop policy if exists mil_creator_reel_sources on public.mil_reel_source_media;
-create policy mil_creator_reel_sources on public.mil_reel_source_media
-  for all to authenticated
-  using (
-    public.mil_is_creator()
-    and exists (
-      select 1 from public.mil_reel_versions v
-      join public.mil_reel_projects p on p.id = v.project_id
-      where v.id = reel_version_id
-        and p.creator_user_id = auth.uid()
-    )
-    and public.mil_creator_can_view_asset(asset_id)
-  )
-  with check (
-    public.mil_is_creator()
-    and exists (
-      select 1 from public.mil_reel_versions v
-      join public.mil_reel_projects p on p.id = v.project_id
-      where v.id = reel_version_id
-        and p.creator_user_id = auth.uid()
-    )
-    and public.mil_creator_can_view_asset(asset_id)
-  );
-
-drop policy if exists mil_phone_uploader_batches on public.mil_upload_batches;
-create policy mil_phone_uploader_batches on public.mil_upload_batches
-  for select to authenticated
-  using (public.mil_is_phone_uploader() and uploader_user_id = auth.uid());
-
-drop policy if exists mil_phone_uploader_manifest on public.mil_manifest_entries;
-create policy mil_phone_uploader_manifest on public.mil_manifest_entries
-  for select to authenticated
-  using (
-    public.mil_is_phone_uploader()
-    and exists (
-      select 1 from public.mil_upload_batches b
-      where b.id = mil_manifest_entries.batch_id
-        and b.uploader_user_id = auth.uid()
-    )
-  );
+-- Phone dumps use scoped bearer sessions (service role), not a client phone_uploader role.
 
 insert into public.mil_tag_vocabulary (slug, label, category, is_system, synonyms)
 values

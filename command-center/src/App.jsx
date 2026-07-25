@@ -348,12 +348,17 @@ const MediaCrmAliasRedirect = () => {
 
 /**
  * Phone upload entry:
- * - ?session=TOKEN → scoped upload-only (no CRM auth / no library browse)
+ * - #session=TOKEN (preferred) or legacy ?session=TOKEN → scoped upload-only
+ *   (no CRM auth / no library browse). The fragment form is checked first and
+ *   preferred client-side (see MediaMobileUpload) so the token never appears in
+ *   the query string, but this gate must recognize either form or a hash-token
+ *   link would incorrectly fall through to the authenticated CRM login guard.
  * - otherwise → authenticated upload under session guard (not TenantGuard)
  */
 const MediaUploadEntry = () => {
+  const location = useLocation();
   const [params] = useSearchParams();
-  const hasSession = Boolean(params.get('session'));
+  const hasSession = Boolean(params.get('session')) || /(?:^#|[#&])session=/.test(location.hash || '');
 
   if (hasSession) {
     return (

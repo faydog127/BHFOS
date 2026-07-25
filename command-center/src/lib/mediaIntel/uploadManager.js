@@ -4,7 +4,6 @@ import { MIL_ORIGINALS_BUCKET } from './constants';
 import { sha256Hex, clientFileKey } from './checksum';
 import { mediaKindFromMime, resolveMimeType, safeStorageSegment, validateMediaFile } from './formats';
 import { saveUploadSession } from './uploadSessionStore';
-import { createImageGridThumb } from './derivatives';
 
 const TUS_ENDPOINT = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/upload/resumable`;
 
@@ -61,17 +60,6 @@ async function refreshBatchCounts(batchId) {
   return counts;
 }
 
-async function writeAudit({ action, targetType, targetId, details }) {
-  const { data: auth } = await supabase.auth.getUser();
-  await supabase.from('mil_audit_events').insert({
-    actor_user_id: auth?.user?.id || null,
-    action,
-    target_type: targetType,
-    target_id: targetId,
-    details: details || {},
-  });
-}
-
 export async function createUploadBatch({ sourceLabel, sourcePhone, sourcePerson, clientSessionKey }) {
   const { data: auth } = await supabase.auth.getUser();
   const { data, error } = await supabase
@@ -88,12 +76,9 @@ export async function createUploadBatch({ sourceLabel, sourcePhone, sourcePerson
     .single();
   if (error) throw error;
 
-  await writeAudit({
-    action: 'upload_batch_created',
-    targetType: 'mil_upload_batches',
-    targetId: data.id,
-    details: { sourceLabel, sourcePhone, sourcePerson },
-  });
+  // No client audit insert (pre-staging hardening) — server-side RPCs/edge functions
+  // audit their own privileged mutations. This client-authored batch-create row is
+  // uninteresting from a security standpoint (browse-only metadata).
 
   return data;
 }
@@ -152,7 +137,12 @@ export async function uploadFilesToBatch({ batch, files, onFileUpdate, controlle
     const validation = validateMediaFile(file);
     const mime = validation.ok ? validation.mime : resolveMimeType(file);
     const assetId = uuid();
-    const objectPath = `mil/originals/${batch.id}/${assetId}/${safeStorageSegment(file.name)}`;
+    // Pre-staging hardening: staff desktop uploads land in quarantine, never directly
+    // in the "originals" namespace. A trusted server-side checksum worker/finalize
+    // step must verify the object and promote it before it is treated as an
+    // authoritative original (see mil_finalize_upload_grant for the equivalent
+    // session-upload path).
+    const objectPath = `mil/quarantine/${batch.id}/${assetId}/${safeStorageSegment(file.name)}`;
 
     let manifestId = null;
     const emit = (patch) => onFileUpdate?.({ clientKey: key, filename: file.name, ...patch });
@@ -222,6 +212,11 @@ export async function uploadFilesToBatch({ batch, files, onFileUpdate, controlle
         onProgress: (p) => emit({ status: 'uploading', percent: p.percent }),
       });
 
+      // Insert an honest, unfinalized asset row pointing at the quarantine object.
+      // checksum_status='pending' + original_path under mil/quarantine/ signal that
+      // this is NOT yet a trusted original: a server-side checksum worker/finalize
+      // step (mirroring mil_finalize_upload_grant) must re-verify the object against
+      // `checksum` before it is promoted to mil/originals/ and treated as verified.
       const { data: asset, error: assetErr } = await supabase
         .from('mil_assets')
         .insert({
@@ -231,6 +226,8 @@ export async function uploadFilesToBatch({ batch, files, onFileUpdate, controlle
           mime_type: mime,
           byte_size: file.size,
           checksum_sha256: checksum,
+          client_checksum_sha256: checksum,
+          checksum_status: 'pending',
           original_filename: file.name,
           original_bucket: MIL_ORIGINALS_BUCKET,
           original_path: objectPath,
@@ -260,18 +257,13 @@ export async function uploadFilesToBatch({ batch, files, onFileUpdate, controlle
         status: 'queued',
       });
 
-      try {
-        await createImageGridThumb({ assetId: asset.id, file });
-      } catch (thumbErr) {
-        console.warn('MIL grid thumb skipped', thumbErr);
-      }
+      // Client-side derivative generation is intentionally skipped here — staff
+      // sessions have no INSERT policy on mil/derivatives/%, only mil/quarantine/%.
+      // Thumbnail generation is left to the trusted server-side worker after
+      // checksum verification/finalize. See derivatives.js.
 
-      await writeAudit({
-        action: 'upload',
-        targetType: 'mil_assets',
-        targetId: asset.id,
-        details: { batchId: batch.id, filename: file.name, checksum },
-      });
+      // No client audit insert — the trusted finalize step performs the durable
+      // audit record once the object is verified and promoted.
 
       emit({ status: 'uploaded', percent: 100, assetId: asset.id });
     } catch (err) {

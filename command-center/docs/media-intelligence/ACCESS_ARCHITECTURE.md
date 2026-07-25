@@ -10,7 +10,7 @@
 | Audience | Route | Shell |
 |---|---|---|
 | Owner / staff | `/media/*` | Media library shell (CRM nav link for staff) |
-| Mobile upload | `/media/upload` | Upload-only UI (+ optional `?session=` opaque token) |
+| Mobile upload | `/media/upload` | Upload-only UI; bearer token via **`#session=TOKEN`** (preferred) or legacy `?session=TOKEN` |
 | Reel creator | `/creator/*` | Focused creator portal — **no CRM chrome** |
 | Public website | existing `website_media` only | No MIL routes |
 
@@ -38,7 +38,7 @@ authenticated identity
 → asset status & permitted use
 → collection / creator assignment
 → derivative type
-→ upload-session scope
+→ upload-session scope (bearer token — not a library role)
 ```
 
 Enforced in: session guard, capability guard, RLS, storage policies, edge functions, signed-URL minting.
@@ -47,17 +47,35 @@ MIL does **not** require JWT `tenant_id`, route tenant segments, or `tenant_id` 
 
 ### Role → MIL capability matrix
 
-| Role | Browse library / originals | Upload (staff) | Verify / review | Approve reels | Invite/revoke creators | Create/revoke upload sessions | Promote website | Creator portal |
-|---|---|---|---|---|---|---|---|---|
-| `admin` | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Inspect only |
-| `manager` | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Inspect only |
-| `office` | Yes | Yes | Yes | No | No | No | No | No |
-| `media_reviewer` | Yes | Yes | Yes | No | No | No | No | No |
-| `technician` | **No** (default) | No | No | No | No | No | No | No |
-| `phone_uploader` | No | Session/own batches only | No | No | No | No | No | No |
-| `reel_creator` | Assigned media only | Reel drafts only | No | No | No | No | No | Yes |
+Legend: **Y** = allowed via RLS/RPC/edge when gates pass · **—** = denied · **S** = scoped bearer session only (no library browse)
 
-Managers are treated as owner/admin for sensitive MIL actions (invite/revoke, upload sessions, website promote, reel approve). Technicians keep CRM/tech access outside MIL; they do **not** receive complete library/original access by default. Field phone dumps use scoped upload sessions minted by owner/admin.
+| Capability | Admin / Manager | Reviewer (`media_reviewer`) | Office | Creator (`reel_creator`) | Session bearer |
+|---|---|---|---|---|---|
+| Browse library / derivatives | Y | Y | Y | Assigned only | — |
+| Browse private originals | Y | Y | Y | — (assigned previews via sign edge) | — |
+| Staff upload (desktop) | Y | Y | Y | — | — |
+| Phone / field upload | Y (mint session) | — | — | — | **S** (grant-bound TUS to quarantine) |
+| Verify / review writes | Y | Y | **—** (`mil_is_reviewer` excludes office) | — | — |
+| Approve / deny reels | Y | — | — | — | — |
+| Invite / assign / revoke creators | Y (edge `media-intel-creator-admin`) | — | — | — | — |
+| Create / revoke upload sessions | Y | — | — | — | — |
+| Website promote | **Disabled (503)** — see below | — | — | — | — |
+| Website unpublish | Y | — | — | — | — |
+| Creator portal | Inspect only | — | — | Y | — |
+| CRM / tech surfaces | Y | Y | Y | — | — |
+
+**Admin and manager** share the owner-admin column (`mil_is_owner_admin()`). Managers are treated as owner/admin for sensitive MIL actions (invite/revoke creators, upload sessions, reel approve; website promote when enabled). **Technician:** **No** MIL library access (CRM/tech routes only) — not a column in the matrix above because technicians never receive MIL capabilities.
+
+**`phone_uploader` is not a product library role.** Legacy rows may exist in `app_user_roles`, but phone dumps are authorized **only** by opaque bearer upload session tokens (`mil_upload_sessions` + `mil_upload_grants`). Do not grant library capabilities to `phone_uploader` in UI or docs.
+
+**Reviewer vs office:** Office may browse and upload (`mil_can_browse_library()`), but reviewer write policies use `mil_is_reviewer()` which is **admin, manager, media_reviewer only** — office cannot write verified metadata, privacy findings, asset tags, or B&A relationships via RLS.
+
+### Session bearer (phone upload)
+
+- Opaque token (hash stored server-side); URL fragment `#session=` preferred so tokens are less likely to leak via referrer logs.
+- Each mint creates `mil_upload_grants` binding session, batch, asset ID, exact quarantine path, content type, max bytes (default **250 MB**), expiry.
+- `complete_file` downloads quarantine bytes, SHA-256 hashes them, then calls **`mil_finalize_upload_grant`** (service_role RPC) — client checksum is advisory only.
+- Upload-only: cannot browse, search, preview library, approve, or promote.
 
 ### Creator isolation (role + resource — not tenancy)
 
@@ -65,23 +83,18 @@ Creators must not access CRM, customers/jobs, raw intake, private originals, res
 
 - `reel_creation` permitted use makes an asset **eligible for assignment**, not globally visible to every creator.
 - Access requires an **active** direct assignment or **active** assigned collection (revocation blocks new signed links).
-- Creators have **no** broad storage SELECT on `mil/reels/%`. Reel preview/download uses `media-intel-sign` with project-ownership checks and audit.
+- Creators have **no** broad storage SELECT on `mil/reels/%`. Reel preview/download uses `media-intel-sign` / `media-intel-reel-upload` with project-ownership checks and audit.
 
-### Upload-session scope
-
-Opaque token hash, authorized batch/session, permitted upload actions, issuing actor, expiration, revocation. No tenant identity.
-
-- Each mint creates a `mil_upload_grants` row binding session, batch, asset ID, exact object path, content type, max bytes, and expiry.
-- `complete_file` accepts completion only once against that exact grant after inspecting stored-object metadata.
-- Upload-only sessions cannot browse, search, preview, download, approve, or modify the library.
-
-### Website promotion
+### Website promotion (**disabled**)
 
 ```
-Private original → public_safe derivative (EXIF stripped) → explicit promote copy to website-public-media
+Private original → public_safe derivative (decode/re-encode + strip — NOT IMPLEMENTED)
+                → explicit promote copy to website-public-media
 ```
 
-Promotion never copies private originals into the public bucket.
+**Current state:** `media-intel-promote-website` returns **503 `not_implemented`** for `prepare_public_safe` and `promote`. Marker-only EXIF stripping does not prove public safety. **`unpublish`** remains for owner/admin to pull existing public copies.
+
+Promotion never copies private originals directly into the public bucket.
 
 ## Discovery notes (legacy V1 coexistence)
 
@@ -92,7 +105,7 @@ Promotion never copies private originals into the public bucket.
 | Roles | `app_user_roles` may still have a legacy `tenant_id` column | MIL role lookup by `user_id` only |
 | Inspection storage | JWT tenant folder segments | Untouched (**U**) |
 
-## Governing rules (enforced)
+## Governing rules (enforced in source; staging proof pending)
 
 - Not built into public Vent Guys website
 - Not a public gallery
@@ -102,3 +115,4 @@ Promotion never copies private originals into the public bucket.
 - No new domain in this assignment
 - Hidden nav is not authorization
 - No social scheduling or publishing in this slice
+- Single-company — no tenant ownership abstractions for MIL

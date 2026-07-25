@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
-import { audit } from '@/lib/mediaIntel/api';
 
 export default function MediaCollections() {
   const { caps } = useOutletContext();
@@ -28,7 +27,7 @@ export default function MediaCollections() {
     e.preventDefault();
     if (!caps.isReviewer) return;
     const { data: auth } = await supabase.auth.getUser();
-    const { data, error: err } = await supabase
+    const { error: err } = await supabase
       .from('mil_collections')
       .insert({
         title: title.trim(),
@@ -42,7 +41,6 @@ export default function MediaCollections() {
       setError(err.message);
       return;
     }
-    await audit('collection_created', 'mil_collections', data.id, { title });
     setTitle('');
     setDescription('');
     await load();
