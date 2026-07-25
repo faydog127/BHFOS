@@ -45,13 +45,43 @@ Enforced in: session guard, capability guard, RLS, storage policies, edge functi
 
 MIL does **not** require JWT `tenant_id`, route tenant segments, or `tenant_id` columns on `mil_*` tables.
 
+### Role → MIL capability matrix
+
+| Role | Browse library / originals | Upload (staff) | Verify / review | Approve reels | Invite/revoke creators | Create/revoke upload sessions | Promote website | Creator portal |
+|---|---|---|---|---|---|---|---|---|
+| `admin` | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Inspect only |
+| `manager` | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Inspect only |
+| `office` | Yes | Yes | Yes | No | No | No | No | No |
+| `media_reviewer` | Yes | Yes | Yes | No | No | No | No | No |
+| `technician` | **No** (default) | No | No | No | No | No | No | No |
+| `phone_uploader` | No | Session/own batches only | No | No | No | No | No | No |
+| `reel_creator` | Assigned media only | Reel drafts only | No | No | No | No | No | Yes |
+
+Managers are treated as owner/admin for sensitive MIL actions (invite/revoke, upload sessions, website promote, reel approve). Technicians keep CRM/tech access outside MIL; they do **not** receive complete library/original access by default. Field phone dumps use scoped upload sessions minted by owner/admin.
+
 ### Creator isolation (role + resource — not tenancy)
 
-Creators must not access CRM, customers/jobs, raw intake, private originals, restricted/unreviewed assets, unassigned work, owner/reviewer actions, rights admin, other creators’ assignments, website promotion, or social publishing. They receive only authorized creator derivatives.
+Creators must not access CRM, customers/jobs, raw intake, private originals, restricted/unreviewed assets, unassigned work, owner/reviewer actions, rights admin, other creators’ assignments, website promotion, or social publishing.
+
+- `reel_creation` permitted use makes an asset **eligible for assignment**, not globally visible to every creator.
+- Access requires an **active** direct assignment or **active** assigned collection (revocation blocks new signed links).
+- Creators have **no** broad storage SELECT on `mil/reels/%`. Reel preview/download uses `media-intel-sign` with project-ownership checks and audit.
 
 ### Upload-session scope
 
-Opaque token hash, authorized batch/session, permitted upload actions, issuing actor, expiration, revocation. No tenant identity. Upload-only sessions cannot browse, search, preview, download, approve, or modify the library.
+Opaque token hash, authorized batch/session, permitted upload actions, issuing actor, expiration, revocation. No tenant identity.
+
+- Each mint creates a `mil_upload_grants` row binding session, batch, asset ID, exact object path, content type, max bytes, and expiry.
+- `complete_file` accepts completion only once against that exact grant after inspecting stored-object metadata.
+- Upload-only sessions cannot browse, search, preview, download, approve, or modify the library.
+
+### Website promotion
+
+```
+Private original → public_safe derivative (EXIF stripped) → explicit promote copy to website-public-media
+```
+
+Promotion never copies private originals into the public bucket.
 
 ## Discovery notes (legacy V1 coexistence)
 

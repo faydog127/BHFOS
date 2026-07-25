@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
-import { audit, listAssets, submitReelVersion, signedUrl } from '@/lib/mediaIntel/api';
+import { audit, listAssets, submitReelVersion } from '@/lib/mediaIntel/api';
 import { MIL_DERIVATIVES_BUCKET } from '@/lib/mediaIntel/constants';
 import { safeStorageSegment } from '@/lib/mediaIntel/formats';
+import { requestSignedReelUrl } from '@/lib/mediaIntel/signedAccess';
 
 export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
   const outlet = useOutletContext() || {};
@@ -251,8 +252,12 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
                     type="button"
                     className="rounded-md border px-3 py-2 text-sm min-h-[44px]"
                     onClick={async () => {
-                      const url = await signedUrl(latest.storage_bucket, latest.storage_path);
-                      window.open(url, '_blank', 'noopener,noreferrer');
+                      try {
+                        const signed = await requestSignedReelUrl(latest.id, 'preview');
+                        window.open(signed.url, '_blank', 'noopener,noreferrer');
+                      } catch (err) {
+                        setError(err.message || 'Preview not authorized');
+                      }
                     }}
                   >
                     Preview

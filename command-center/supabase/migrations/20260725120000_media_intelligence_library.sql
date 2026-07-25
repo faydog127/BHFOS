@@ -64,6 +64,8 @@ begin
 end;
 $$;
 
+-- Library staff may browse private originals / library surfaces.
+-- Technicians are NOT library staff by default (field CRM/tech roles stay separate).
 create or replace function public.mil_is_staff()
 returns boolean
 language sql
@@ -71,7 +73,7 @@ stable
 security definer
 set search_path = public
 as $$
-  select public.mil_current_role() in ('admin', 'manager', 'office', 'media_reviewer', 'technician');
+  select public.mil_current_role() in ('admin', 'manager', 'office', 'media_reviewer');
 $$;
 
 create or replace function public.mil_is_owner_admin()
@@ -189,6 +191,8 @@ begin
       and public.mil_is_staff()
     );
 
+  -- Creators may upload reel drafts under mil/reels/, but must NOT read storage
+  -- objects directly. Preview/download goes through media-intel-sign (service role).
   create policy "MIL derivatives creator reel upload"
     on storage.objects for insert to authenticated
     with check (
@@ -197,13 +201,7 @@ begin
       and public.mil_is_creator()
     );
 
-  create policy "MIL derivatives creator reel read"
-    on storage.objects for select to authenticated
-    using (
-      bucket_id = 'media-intel-derivatives'
-      and name like 'mil/reels/%'
-      and public.mil_is_creator()
-    );
+  drop policy if exists "MIL derivatives creator reel read" on storage.objects;
 
   create policy "MIL derivatives service role"
     on storage.objects for all to service_role
@@ -639,6 +637,9 @@ create trigger mil_permitted_uses_gate
   before insert or update on public.mil_permitted_uses
   for each row execute function public.mil_enforce_public_use_gates();
 
+-- Eligibility (verified + privacy clear + reel_creation approved) does NOT grant access.
+-- Access requires an active direct assignment or active assigned collection for this creator.
+-- Revoked assignments (status <> 'active') immediately deny access / new signed links.
 create or replace function public.mil_creator_can_view_asset(p_asset_id uuid)
 returns boolean
 language sql
@@ -653,18 +654,19 @@ as $$
       and a.privacy_status = 'clear'
       and a.human_review_status = 'verified'
       and a.archived_at is null
+      and exists (
+        select 1 from public.mil_permitted_uses u
+        where u.asset_id = a.id
+          and u.use_key = 'reel_creation'
+          and u.approved = true
+      )
       and (
         exists (
-          select 1 from public.mil_permitted_uses u
-          where u.asset_id = a.id
-            and u.use_key = 'reel_creation'
-            and u.approved = true
-        )
-        or exists (
           select 1 from public.mil_creator_assignments ca
           where ca.creator_user_id = auth.uid()
             and ca.status = 'active'
             and ca.asset_id = a.id
+            and ca.revoked_at is null
         )
         or exists (
           select 1
@@ -672,6 +674,7 @@ as $$
           join public.mil_collection_items ci on ci.collection_id = ca.collection_id
           where ca.creator_user_id = auth.uid()
             and ca.status = 'active'
+            and ca.revoked_at is null
             and ci.asset_id = a.id
         )
       )

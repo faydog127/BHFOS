@@ -51,15 +51,24 @@ export default function MediaSettings() {
     if (!caps.canPromoteWebsite || !promoteAssetId) return;
     setError(null);
     setMessage(null);
+    // 1) Build private public_safe derivative with real EXIF strip
+    const prep = await supabase.functions.invoke('media-intel-promote-website', {
+      body: { action: 'prepare_public_safe', assetId: promoteAssetId },
+    });
+    if (prep.error || prep.data?.error) {
+      setError(prep.error?.message || prep.data?.error || 'Public-safe preparation failed');
+      return;
+    }
+    // 2) Promote only that derivative (never the private original)
     const { data, error: err } = await supabase.functions.invoke('media-intel-promote-website', {
-      body: { assetId: promoteAssetId },
+      body: { action: 'promote', assetId: promoteAssetId },
     });
     if (err || data?.error) {
       setError(err?.message || data?.error || 'Promotion failed');
       return;
     }
     await audit('website_promotion', 'mil_assets', promoteAssetId, { websiteMediaId: data?.websiteMediaId });
-    setMessage('Public derivative promoted to website-public-media. Private original unchanged.');
+    setMessage('Public-safe derivative promoted to website-public-media. Private original unchanged.');
   };
 
   const createUploadSession = async () => {
@@ -227,7 +236,7 @@ from auth.users where email = '${creatorEmail || 'creator@example.com'}';
         <section className="rounded-xl border bg-white p-4 space-y-3">
           <h3 className="font-medium">Promote to website media</h3>
           <p className="text-sm text-slate-600">
-            Explicit owner action only. Creates a privacy-stripped derivative in <code>website-public-media</code> and a <code>website_media</code> row. The website never reads private intake originals.
+            Explicit owner/admin action only. Prepares a private <code>public_safe</code> JPEG (EXIF stripped), then copies that derivative—never the original—into <code>website-public-media</code>.
           </p>
           <select
             className="w-full rounded-md border px-3 py-2 min-h-[44px]"

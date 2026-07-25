@@ -1,7 +1,9 @@
 import { supabase } from '@/lib/customSupabaseClient';
 
-const STAFF = new Set(['admin', 'manager', 'office', 'media_reviewer', 'technician']);
+/** Roles with Media Library browse / private-original access. Technicians excluded. */
+const LIBRARY_STAFF = new Set(['admin', 'manager', 'office', 'media_reviewer']);
 const REVIEWERS = new Set(['admin', 'manager', 'office', 'media_reviewer']);
+/** May invite/revoke creators, mint upload sessions, promote website media, approve reels. */
 const OWNERS = new Set(['admin', 'manager']);
 
 export function normalizeMilRole(role) {
@@ -36,20 +38,23 @@ export async function fetchMilRole() {
 
 export function milCapabilities(role) {
   const r = normalizeMilRole(role);
+  const isLibraryStaff = LIBRARY_STAFF.has(r);
   return {
     role: r,
-    isStaff: STAFF.has(r),
+    isStaff: isLibraryStaff,
     isReviewer: REVIEWERS.has(r),
     isOwnerAdmin: OWNERS.has(r),
     isCreator: r === 'reel_creator',
     isPhoneUploader: r === 'phone_uploader',
-    canUpload: STAFF.has(r) || r === 'phone_uploader',
+    isTechnician: r === 'technician',
+    canUpload: isLibraryStaff || r === 'phone_uploader',
     canVerify: REVIEWERS.has(r),
     canApproveReels: OWNERS.has(r),
     canManageCreatorAccess: OWNERS.has(r),
     canPromoteWebsite: OWNERS.has(r),
     canChangeSecuritySettings: OWNERS.has(r),
-    canBrowseLibrary: STAFF.has(r),
-    canAccessCrm: STAFF.has(r),
+    canBrowseLibrary: isLibraryStaff,
+    // Technicians use CRM/tech surfaces; they are not MIL library staff.
+    canAccessCrm: isLibraryStaff || r === 'technician',
   };
 }

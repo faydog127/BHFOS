@@ -1,5 +1,6 @@
 /**
  * Authorized short-lived signed URLs for MIL private media (single-company).
+ * Creators never get originals; reel/asset access is assignment- or ownership-bound.
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 import { corsHeaders } from '../_shared/cors.ts'
@@ -37,6 +38,7 @@ async function actorRole(userId: string) {
   return normalizeRole(String(data?.role || ''))
 }
 
+/** Assignment-bound creator access. Global reel_creation approval alone is never enough. */
 async function creatorCanView(userId: string, assetId: string) {
   const { data: asset } = await supabaseAdmin
     .from('mil_assets')
@@ -46,6 +48,7 @@ async function creatorCanView(userId: string, assetId: string) {
   if (!asset || asset.archived_at || asset.privacy_status !== 'clear' || asset.human_review_status !== 'verified') {
     return false
   }
+
   const { data: use } = await supabaseAdmin
     .from('mil_permitted_uses')
     .select('asset_id')
@@ -53,13 +56,14 @@ async function creatorCanView(userId: string, assetId: string) {
     .eq('use_key', 'reel_creation')
     .eq('approved', true)
     .maybeSingle()
-  if (use) return true
+  if (!use) return false
 
   const { data: assign } = await supabaseAdmin
     .from('mil_creator_assignments')
     .select('id')
     .eq('creator_user_id', userId)
     .eq('status', 'active')
+    .is('revoked_at', null)
     .eq('asset_id', assetId)
     .maybeSingle()
   if (assign) return true
@@ -69,6 +73,7 @@ async function creatorCanView(userId: string, assetId: string) {
     .select('collection_id')
     .eq('creator_user_id', userId)
     .eq('status', 'active')
+    .is('revoked_at', null)
     .not('collection_id', 'is', null)
   const collectionIds = (collAssign || []).map((r) => r.collection_id).filter(Boolean)
   if (!collectionIds.length) return false
@@ -92,18 +97,60 @@ Deno.serve(async (req) => {
     if (authError || !user) return json({ error: 'Sign in required' }, 401)
 
     const body = await req.json()
-    const assetId = String(body.assetId || '').trim()
+    const assetId = body.assetId ? String(body.assetId).trim() : ''
+    const reelVersionId = body.reelVersionId ? String(body.reelVersionId).trim() : ''
     const purpose = String(body.purpose || 'preview')
     const derivativeKind = body.derivativeKind ? String(body.derivativeKind) : null
     const allowOriginal = body.allowOriginal === true
-    if (!assetId) return json({ error: 'Missing asset' }, 400)
 
     const role = await actorRole(user.id)
-    const isStaff = ['admin', 'manager', 'office', 'media_reviewer', 'technician'].includes(role)
+    // Technicians are not MIL library staff for originals/browse signing.
+    const isStaff = ['admin', 'manager', 'office', 'media_reviewer'].includes(role)
     const isCreator = role === 'reel_creator'
     if (!isStaff && !isCreator) {
       return json({ error: 'You do not have access to this media.' }, 403)
     }
+
+    const ttl = purpose === 'download' ? DOWNLOAD_TTL : PREVIEW_TTL
+
+    // Reel version preview/download — ownership-bound for creators; staff may review.
+    if (reelVersionId) {
+      const { data: version } = await supabaseAdmin
+        .from('mil_reel_versions')
+        .select('id, storage_bucket, storage_path, project_id, mil_reel_projects!inner(id, creator_user_id)')
+        .eq('id', reelVersionId)
+        .maybeSingle()
+      if (!version) return json({ error: 'Reel version not found' }, 404)
+      const project = Array.isArray(version.mil_reel_projects)
+        ? version.mil_reel_projects[0]
+        : version.mil_reel_projects
+      if (isCreator && (!project || project.creator_user_id !== user.id)) {
+        return json({ error: 'This reel is not assigned to you.' }, 403)
+      }
+      if (!isStaff && !isCreator) return json({ error: 'Forbidden' }, 403)
+
+      const bucket = version.storage_bucket
+      const path = version.storage_path
+      if (bucket !== 'media-intel-derivatives' || !String(path).startsWith('mil/reels/')) {
+        return json({ error: 'Invalid reel storage target' }, 400)
+      }
+
+      const { data: signed, error: sErr } = await supabaseAdmin.storage
+        .from(bucket)
+        .createSignedUrl(path, ttl)
+      if (sErr) throw sErr
+
+      await supabaseAdmin.from('mil_audit_events').insert({
+        actor_user_id: user.id,
+        action: purpose === 'download' ? 'reel_download' : 'reel_preview',
+        target_type: 'mil_reel_versions',
+        target_id: reelVersionId,
+        details: { projectId: version.project_id, bucket, path, ttl, role },
+      })
+      return json({ url: signed.signedUrl, expiresIn: ttl, kind: 'reel_version' })
+    }
+
+    if (!assetId) return json({ error: 'Missing asset' }, 400)
 
     const { data: asset, error: assetErr } = await supabaseAdmin
       .from('mil_assets')
@@ -116,7 +163,6 @@ Deno.serve(async (req) => {
     if (isCreator) {
       const ok = await creatorCanView(user.id, assetId)
       if (!ok) return json({ error: 'This media is not shared with you.' }, 403)
-      // Creators never receive raw intake originals
       const { data: der } = await supabaseAdmin
         .from('mil_derivatives')
         .select('*')
@@ -126,7 +172,6 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle()
       if (!der) return json({ error: 'No approved downloadable copy is available yet.' }, 403)
-      const ttl = purpose === 'download' ? DOWNLOAD_TTL : PREVIEW_TTL
       const { data: signed, error: sErr } = await supabaseAdmin.storage
         .from(der.bucket)
         .createSignedUrl(der.object_path, ttl)
@@ -163,7 +208,7 @@ Deno.serve(async (req) => {
         .from('mil_derivatives')
         .select('*')
         .eq('asset_id', assetId)
-        .in('kind', ['detail_preview', 'grid_thumb', 'heic_preview', 'video_thumb', 'video_preview'])
+        .in('kind', ['detail_preview', 'grid_thumb', 'heic_preview', 'video_thumb', 'video_preview', 'public_safe'])
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
@@ -181,7 +226,6 @@ Deno.serve(async (req) => {
       return json({ error: 'Invalid storage path' }, 400)
     }
 
-    const ttl = purpose === 'download' ? DOWNLOAD_TTL : PREVIEW_TTL
     const { data: signed, error: sErr } = await supabaseAdmin.storage
       .from(bucket)
       .createSignedUrl(path, ttl)

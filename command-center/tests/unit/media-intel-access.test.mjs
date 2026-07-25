@@ -93,8 +93,9 @@ describe('MIL upload session + signed access (no tenant)', () => {
     const fn = read('supabase/functions/media-intel-sign/index.ts');
     assert.match(fn, /PREVIEW_TTL = 300/);
     assert.match(fn, /DOWNLOAD_TTL = 600/);
-    assert.match(fn, /Creators never receive raw intake originals/);
+    assert.match(fn, /Creators never get originals/);
     assert.match(fn, /creatorCanView/);
+    assert.match(fn, /creator_download|detail_preview|grid_thumb/);
     assert.doesNotMatch(fn, /tenant_id|tenantId/);
   });
 

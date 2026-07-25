@@ -1,4 +1,4 @@
--- Media Intelligence — scoped upload sessions + revocation helpers.
+-- Media Intelligence — scoped upload sessions + mint grants + revocation helpers.
 -- Single-company: no tenant_id.
 
 begin;
@@ -28,18 +28,48 @@ create index if not exists mil_upload_sessions_batch_idx
 comment on table public.mil_upload_sessions is
   'Scoped upload-only phone sessions. Opaque token never stored — only sha256 hash. Revocable and short-lived.';
 
+-- Server-side mint grants bind session → batch → asset → exact object path.
+create table if not exists public.mil_upload_grants (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null references public.mil_upload_sessions(id) on delete cascade,
+  batch_id uuid not null references public.mil_upload_batches(id) on delete cascade,
+  asset_id uuid not null,
+  object_path text not null,
+  bucket text not null default 'media-intel-originals',
+  content_type text not null,
+  max_bytes bigint not null,
+  original_filename text not null,
+  expires_at timestamptz not null,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (session_id, asset_id),
+  unique (object_path)
+);
+
+create index if not exists mil_upload_grants_session_idx
+  on public.mil_upload_grants (session_id, completed_at);
+
+comment on table public.mil_upload_grants is
+  'One-time upload mint grants. complete_file may only finalize the exact bound path/asset once.';
+
 drop trigger if exists mil_upload_sessions_updated on public.mil_upload_sessions;
 create trigger mil_upload_sessions_updated
   before update on public.mil_upload_sessions
   for each row execute function public.mil_touch_updated_at();
 
 alter table public.mil_upload_sessions enable row level security;
+alter table public.mil_upload_grants enable row level security;
 
 drop policy if exists mil_staff_upload_sessions on public.mil_upload_sessions;
 create policy mil_staff_upload_sessions on public.mil_upload_sessions
   for all to authenticated
-  using (public.mil_is_staff())
+  using (public.mil_is_owner_admin())
   with check (public.mil_is_owner_admin());
+
+drop policy if exists mil_staff_upload_grants on public.mil_upload_grants;
+create policy mil_staff_upload_grants on public.mil_upload_grants
+  for select to authenticated
+  using (public.mil_is_owner_admin());
 
 create or replace function public.mil_upload_session_is_active(p_session_id uuid)
 returns boolean

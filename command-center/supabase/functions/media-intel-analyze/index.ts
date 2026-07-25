@@ -40,7 +40,8 @@ function normalizeRole(role: string) {
   const r = role.toLowerCase().trim()
   if (['admin', 'super_admin', 'owner'].includes(r)) return 'admin'
   if (r === 'manager') return 'manager'
-  if (['office', 'csr', 'media_reviewer', 'reviewer', 'technician', 'tech'].includes(r)) return 'staff'
+  // Library analysis staff — technicians are not included by default.
+  if (['office', 'csr', 'media_reviewer', 'reviewer'].includes(r)) return 'staff'
   return 'other'
 }
 

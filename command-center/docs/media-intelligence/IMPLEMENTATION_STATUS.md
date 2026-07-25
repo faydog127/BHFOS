@@ -19,7 +19,8 @@
 - Explicit website promote edge function (gates only; no social publish)
 - Upload sessions + signed media edge (`media-intel-sign`)
 - Backup/export/rollback + env contract docs
-- Unit/contract tests (`npm run test:media-intel-helpers`)
+- Unit/contract + security authorization tests (`npm run test:media-intel-helpers`)
+- Security repair: assignment-only creator access, no broad reel storage SELECT, grant-bound upload completion, public_safe EXIF-stripped promote, technicians excluded from library staff
 
 ## Access surfaces
 

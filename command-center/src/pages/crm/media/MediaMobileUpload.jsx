@@ -99,7 +99,11 @@ export default function MediaMobileUpload() {
           token: sessionToken,
           filename: file.name,
           contentType: mime,
+          byteSize: file.size,
         });
+        if (!minted.grantId || !minted.assetId || !minted.objectPath) {
+          throw new Error('Upload grant was not minted');
+        }
 
         let uploadError = null;
         if (minted.signedUrl) {
@@ -123,12 +127,11 @@ export default function MediaMobileUpload() {
         const completed = await invokeSession({
           action: 'complete_file',
           token: sessionToken,
+          grantId: minted.grantId,
           assetId: minted.assetId,
           objectPath: minted.objectPath,
           checksumSha256: checksum,
-          mimeType: mime,
           byteSize: file.size,
-          originalFilename: file.name,
         });
         onFileUpdate({
           clientKey: key,
