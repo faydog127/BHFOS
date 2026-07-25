@@ -16,6 +16,7 @@ const EXPECTED_PRIMARY = [
   { name: 'Work Orders', path: '/crm/jobs' },
   { name: 'Quotes', path: '/crm/quotes' },
   { name: 'Inspections', path: '/crm/inspections' },
+  { name: 'Media', path: '/media' },
   { name: 'Analytics', path: '/crm/reporting' },
   { name: 'Settings', path: '/crm/settings' },
 ];

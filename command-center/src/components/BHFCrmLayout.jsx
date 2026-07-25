@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { NavLink, Outlet, useLocation, useParams } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { NavLink, Navigate, Outlet, useLocation, useParams } from 'react-router-dom';
 import BHFSidebar from '@/components/BHFSidebar';
 import { cn } from '@/lib/utils';
 import { Menu } from 'lucide-react';
@@ -8,12 +8,39 @@ import { DEFAULT_TENANT_ID } from '@/config/tenantDefaults';
 import { tenantPath } from '@/lib/tenantUtils';
 import { CRM_MOBILE_BOTTOM_NAV } from '@/config/crmPrimaryNav';
 import { CRM_PRODUCT_NAME } from '@/config/productBrand';
+import { fetchMilRole, milCapabilities } from '@/lib/mediaIntel/roles';
 
 const BHFCrmLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const { tenantId = DEFAULT_TENANT_ID } = useParams();
   const TENANT_ID = DEFAULT_TENANT_ID;
+  const [accessGate, setAccessGate] = useState('checking'); // checking | ok | creator
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const role = await fetchMilRole();
+      const caps = milCapabilities(role);
+      if (cancelled) return;
+      setAccessGate(caps.isCreator && !caps.isStaff ? 'creator' : 'ok');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Creators must never briefly browse CRM chrome — send them to the focused portal.
+  if (accessGate === 'checking') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-sm text-slate-500">
+        Checking access…
+      </div>
+    );
+  }
+  if (accessGate === 'creator') {
+    return <Navigate to="/creator" replace />;
+  }
   
   const isDemo = TENANT_ID === 'demo';
   const isInstallWorxs = TENANT_ID === 'installworxs';

@@ -19,6 +19,7 @@ export const FeatureFlagProvider = ({ children }) => {
     enableSMS: true,
     enableContacts: true,
     enableInspections: true,
+    enableMediaIntelligence: true,
     enablePricebook: true,
     enablePartners: true,
     enableTechPwa: String(import.meta?.env?.VITE_TECH_PWA_ENABLED || 'true').toLowerCase() !== 'false',

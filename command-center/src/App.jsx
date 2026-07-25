@@ -1,11 +1,12 @@
 
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import FeatureGuard from '@/components/FeatureGuard';
 import BHFCrmLayout from '@/components/BHFCrmLayout';
 import SelectTenant from '@/pages/SelectTenant';
 import { Loader2 } from 'lucide-react';
 import TenantGuard from '@/components/TenantGuard';
+import MediaSessionGuard from '@/components/media/MediaSessionGuard';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import {
   OAUTH_CALLBACK_MAX_WAIT_MS,
@@ -53,6 +54,19 @@ const FlowConsolePage = React.lazy(() => import('@/pages/crm/FlowConsole'));
 const InspectionsPage = React.lazy(() => import('@/pages/crm/Inspections'));
 const InspectionEditorPage = React.lazy(() => import('@/pages/crm/inspections/InspectionEditor'));
 const InspectionReportPage = React.lazy(() => import('@/pages/crm/inspections/InspectionReport'));
+const MediaOwnerShell = React.lazy(() => import('@/pages/crm/media/MediaOwnerShell'));
+const MediaDashboard = React.lazy(() => import('@/pages/crm/media/MediaDashboard'));
+const MediaUploads = React.lazy(() => import('@/pages/crm/media/MediaUploads'));
+const MediaMobileUpload = React.lazy(() => import('@/pages/crm/media/MediaMobileUpload'));
+const MediaReviewQueue = React.lazy(() => import('@/pages/crm/media/MediaReviewQueue'));
+const MediaAllMedia = React.lazy(() => import('@/pages/crm/media/MediaAllMedia'));
+const MediaCollections = React.lazy(() => import('@/pages/crm/media/MediaCollections'));
+const MediaBeforeAfter = React.lazy(() => import('@/pages/crm/media/MediaBeforeAfter'));
+const MediaReelReview = React.lazy(() => import('@/pages/crm/media/MediaReelReview'));
+const MediaApprovedToPost = React.lazy(() => import('@/pages/crm/media/MediaApprovedToPost'));
+const MediaArchive = React.lazy(() => import('@/pages/crm/media/MediaArchive'));
+const MediaSettings = React.lazy(() => import('@/pages/crm/media/MediaSettings'));
+const CreatorRoutesPage = React.lazy(() => import('@/pages/creator/CreatorRoutes'));
 const TechRoutesPage = React.lazy(() => import('@/pages/tech/TechRoutes'));
 
 // Sub-module Lazy Loads
@@ -318,6 +332,92 @@ const QuoteCompatRedirect = () => {
   return <Navigate to={`${targetPath}${location.search || ''}${location.hash || ''}`} replace />;
 };
 
+/**
+ * Temporary non-tenant alias: /crm/media/* → /media/*
+ * Why: CRM shell historically nested Media; bookmarks may use /crm/media.
+ * Auth: destination uses MediaSessionGuard + MediaCapabilityGuard / RLS — alias does not grant access.
+ * Loop prevention: one-way Navigate replace; /media never redirects back to /crm/media.
+ * Removal: after MIL is the sole entry and CRM nav no longer implies /crm/media (post V1 IA cleanup).
+ */
+const MediaCrmAliasRedirect = () => {
+  const location = useLocation();
+  const rest = location.pathname.replace(/^\/(?:[^/]+\/)?crm\/media\/?/, '');
+  const target = `/media/${rest || 'dashboard'}${location.search || ''}${location.hash || ''}`;
+  return <Navigate to={target} replace />;
+};
+
+/**
+ * Phone upload entry:
+ * - ?session=TOKEN → scoped upload-only (no CRM auth / no library browse)
+ * - otherwise → authenticated upload under session guard (not TenantGuard)
+ */
+const MediaUploadEntry = () => {
+  const [params] = useSearchParams();
+  const hasSession = Boolean(params.get('session'));
+
+  if (hasSession) {
+    return (
+      <div className="min-h-screen bg-slate-50 px-4 py-6">
+        <MediaMobileUpload />
+      </div>
+    );
+  }
+
+  return (
+    <MediaSessionGuard>
+      <RouteErrorBoundary>
+        <Suspense fallback={<LoadingFallback />}>
+          <FeatureGuard flag="enableMediaIntelligence">
+            <div className="min-h-screen bg-slate-50">
+              <div className="border-b bg-white px-4 py-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">Phone media transfer</div>
+                  <div className="text-xs text-slate-500">Upload-only · The Vent Guys</div>
+                </div>
+                <a href="/media/dashboard" className="text-sm text-blue-700 underline">
+                  Full library
+                </a>
+              </div>
+              <div className="px-4 py-5">
+                <MediaMobileUpload />
+              </div>
+            </div>
+          </FeatureGuard>
+        </Suspense>
+      </RouteErrorBoundary>
+    </MediaSessionGuard>
+  );
+};
+
+const MediaStaffLayout = () => (
+  <MediaSessionGuard>
+    <FeatureGuard flag="enableMediaIntelligence">
+      <MediaOwnerShell />
+    </FeatureGuard>
+  </MediaSessionGuard>
+);
+
+const MediaLibraryRoutes = () => (
+  <Routes>
+    {/* Session upload must not require CRM login */}
+    <Route path="upload" element={<MediaUploadEntry />} />
+    <Route element={<MediaStaffLayout />}>
+      <Route index element={<Navigate to="dashboard" replace />} />
+      <Route path="dashboard" element={<MediaDashboard />} />
+      <Route path="uploads" element={<MediaUploads />} />
+      <Route path="review" element={<MediaReviewQueue />} />
+      <Route path="all" element={<MediaAllMedia />} />
+      <Route path="collections" element={<MediaCollections />} />
+      <Route path="before-after" element={<MediaBeforeAfter />} />
+      <Route path="reel-review" element={<MediaReelReview />} />
+      <Route path="approved-to-post" element={<MediaApprovedToPost />} />
+      <Route path="archive" element={<MediaArchive />} />
+      <Route path="settings" element={<MediaSettings />} />
+      <Route path="*" element={<Navigate to="dashboard" replace />} />
+    </Route>
+  </Routes>
+);
+
 // Canonical CRM route tree (Sprint 1 route freeze).
 const CRMRoutes = () => (
   <Routes>
@@ -336,6 +436,8 @@ const CRMRoutes = () => (
       <Route path="inspections/new" element={<FeatureGuard flag="enableInspections"><InspectionEditorPage forceNew /></FeatureGuard>} />
       <Route path="inspections/:id/report" element={<FeatureGuard flag="enableInspections"><InspectionReportPage /></FeatureGuard>} />
       <Route path="inspections/:id" element={<FeatureGuard flag="enableInspections"><InspectionEditorPage /></FeatureGuard>} />
+      {/* Temporary alias: /:tenantId/crm/media/* → /media/* (non-tenant product routes). */}
+      <Route path="media/*" element={<MediaCrmAliasRedirect />} />
       {/* ML-P1 canonical Quotes surface (quotes table). estimates/proposals redirect only. */}
       <Route path="quotes" element={<FeatureGuard flag="enableEstimates"><ProposalList /></FeatureGuard>} />
       <Route path="quotes/p1-draft" element={<FeatureGuard flag="enableEstimates"><MlP1S1DraftQuotePage /></FeatureGuard>} />
@@ -380,6 +482,8 @@ function App() {
         <Route path="/quote-confirmation" element={<QuoteConfirmation />} />
         <Route path="/pay/:token" element={<PaymentPage />} />
         <Route path="/invoices/:token" element={<InvoiceView />} />
+        {/* Temporary top-level CRM alias may hit /crm/media — redirect before CrmAliasRedirect. */}
+        <Route path="/crm/media/*" element={<MediaCrmAliasRedirect />} />
         <Route path="/crm/*" element={<CrmAliasRedirect fromPrefix="/crm" />} />
         <Route path="/bhf/crm/*" element={<CrmAliasRedirect fromPrefix="/bhf/crm" />} />
         <Route path="/app/:tenantId/*" element={<AppAliasRedirect />} />
@@ -394,6 +498,31 @@ function App() {
                 </Suspense>
               </RouteErrorBoundary>
             </TenantGuard>
+          }
+        />
+        {/* MIL product routes — single-company; no tenant segment. */}
+        <Route
+          path="/media/*"
+          element={
+            <RouteErrorBoundary>
+              <Suspense fallback={<LoadingFallback />}>
+                <MediaLibraryRoutes />
+              </Suspense>
+            </RouteErrorBoundary>
+          }
+        />
+        <Route
+          path="/creator/*"
+          element={
+            <MediaSessionGuard>
+              <RouteErrorBoundary>
+                <Suspense fallback={<LoadingFallback />}>
+                  <FeatureGuard flag="enableMediaIntelligence">
+                    <CreatorRoutesPage />
+                  </FeatureGuard>
+                </Suspense>
+              </RouteErrorBoundary>
+            </MediaSessionGuard>
           }
         />
         <Route
