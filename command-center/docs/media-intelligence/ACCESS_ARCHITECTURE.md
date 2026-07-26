@@ -74,7 +74,7 @@ Legend: **Y** = allowed via RLS/RPC/edge when gates pass · **—** = denied · 
 
 - Opaque token (hash stored server-side); URL fragment `#session=` preferred so tokens are less likely to leak via referrer logs.
 - Each mint creates `mil_upload_grants` binding session, batch, asset ID, exact quarantine path, content type, max bytes (default **250 MB**), expiry.
-- `complete_file` downloads quarantine bytes, SHA-256 hashes them, then calls **`mil_finalize_upload_grant`** (service_role RPC) — client checksum is advisory only.
+- `complete_file` re-downloads the quarantine bytes and SHA-256 hashes them on every attempt, then drives the finalization state machine through service_role-only RPCs — **`mil_begin_upload_finalize`** (lease) → placement with `upsert:false` → **`mil_mark_upload_placed`** → **`mil_commit_upload_finalize`**, which proves the final object is visible in the storage catalog inside the committing transaction. The client checksum is advisory only, and an unproven outcome is reported as `pending_reconcile` (202), never as success.
 - Upload-only: cannot browse, search, preview library, approve, or promote.
 
 ### Creator isolation (role + resource — not tenancy)

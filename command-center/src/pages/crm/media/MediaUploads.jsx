@@ -1,11 +1,12 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Loader2, Pause, Play, RotateCcw, Upload, X } from 'lucide-react';
+import { Loader2, RotateCcw, Upload } from 'lucide-react';
 import { UPLOAD_PHONE_NOTICE } from '@/lib/mediaIntel/constants';
 import {
-  createUploadBatch,
+  UPLOAD_FILE_STATUS,
+  createUploadSession,
   fetchBatchManifest,
-  uploadFilesToBatch,
+  uploadFilesToSession,
 } from '@/lib/mediaIntel/uploadManager';
 import { listUploadSessions } from '@/lib/mediaIntel/uploadSessionStore';
 
@@ -13,24 +14,44 @@ const STATUS_STYLES = {
   pending: 'text-slate-600',
   hashing: 'text-slate-700',
   uploading: 'text-blue-700',
+  finalizing: 'text-blue-700',
   uploaded: 'text-emerald-700',
   duplicate: 'text-amber-800',
+  pending_reconcile: 'text-amber-800',
+  in_progress: 'text-amber-800',
   skipped: 'text-slate-500',
   failed: 'text-red-700',
-  cancelled: 'text-slate-500',
+  expired: 'text-red-700',
+  revoked: 'text-red-700',
+};
+
+const STATUS_LABELS = {
+  hashing: 'Reading file',
+  uploading: 'Uploading',
+  finalizing: 'Confirming with the server',
+  uploaded: 'In the library',
+  duplicate: 'Duplicate — existing copy kept',
+  pending_reconcile: 'Not confirmed yet — reconciling',
+  in_progress: 'Already finalizing elsewhere',
+  skipped: 'Skipped',
+  failed: 'Failed',
+  expired: 'Upload link expired',
+  revoked: 'Upload link revoked',
 };
 
 export default function MediaUploads() {
   const { caps } = useOutletContext();
   const inputRef = useRef(null);
   const folderRef = useRef(null);
-  const controllersRef = useRef({});
   const fileMapRef = useRef({});
+  // The session token stays in memory for the life of the tab. It is an upload
+  // credential, so it is never written to storage or the URL.
+  const tokenRef = useRef(null);
 
   const [sourceLabel, setSourceLabel] = useState('');
   const [sourcePhone, setSourcePhone] = useState('');
   const [sourcePerson, setSourcePerson] = useState('');
-  const [batch, setBatch] = useState(null);
+  const [session, setSession] = useState(null);
   const [fileStates, setFileStates] = useState({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -45,8 +66,10 @@ export default function MediaUploads() {
   }, []);
 
   const startUpload = async (fileList) => {
-    if (!caps.canUpload) {
-      setError('You do not have permission to upload private intake media.');
+    if (!caps.isOwnerAdmin) {
+      setError(
+        'Only owner/admin may start a transfer session. Ask an owner to mint an upload link for you.',
+      );
       return;
     }
     const files = Array.from(fileList || []);
@@ -59,22 +82,24 @@ export default function MediaUploads() {
     setBusy(true);
     setError(null);
     try {
-      const created =
-        batch ||
-        (await createUploadBatch({
-          sourceLabel,
+      let active = session;
+      if (!active || !tokenRef.current) {
+        active = await createUploadSession({
+          label: sourceLabel || 'Desktop transfer',
           sourcePhone,
           sourcePerson,
-        }));
-      setBatch(created);
-      await uploadFilesToBatch({
-        batch: created,
+        });
+        tokenRef.current = active.token;
+        setSession(active);
+      }
+
+      await uploadFilesToSession({
+        token: tokenRef.current,
+        batchId: active.batchId,
         files,
         onFileUpdate,
-        controllersRef,
       });
-      const m = await fetchBatchManifest(created.id);
-      setManifest(m);
+      setManifest(await fetchBatchManifest(active.batchId));
     } catch (err) {
       setError(err.message || 'Upload failed');
     } finally {
@@ -91,25 +116,20 @@ export default function MediaUploads() {
   const recoverSessions = async () => {
     const sessions = await listUploadSessions();
     if (!sessions.length) {
-      setError('No interrupted upload sessions found in this browser.');
+      setError('No previous transfer batches were recorded in this browser.');
       return;
     }
     const latest = sessions.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
-    const m = await fetchBatchManifest(latest.batchId);
-    setBatch(m.batch);
-    setManifest(m);
+    setManifest(await fetchBatchManifest(latest.batchId));
   };
 
   const entries = Object.values(fileStates);
-  const totals = entries.reduce(
-    (acc, f) => {
-      acc[f.status] = (acc[f.status] || 0) + 1;
-      return acc;
-    },
-    {},
-  );
+  const totals = entries.reduce((acc, f) => {
+    acc[f.status] = (acc[f.status] || 0) + 1;
+    return acc;
+  }, {});
 
-  if (!caps.canUpload && !caps.isStaff) {
+  if (!caps.isStaff) {
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700">
         Upload is limited to owner, admin, and internal staff. Creators use the Creator Workspace for reel drafts only.
@@ -122,13 +142,25 @@ export default function MediaUploads() {
       <div>
         <h2 className="text-lg font-semibold text-slate-900">Transfer uploads</h2>
         <p className="text-sm text-slate-600 mt-1">
-          Designed for large phone dumps. Uploads are resumable. Exact duplicates are flagged — originals are never auto-deleted.
+          Files are written to a server-minted quarantine path, re-hashed by the server, and only then
+          added to the library. A file counts as transferred when this page says “In the library”.
         </p>
       </div>
 
       <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950" role="note">
         {UPLOAD_PHONE_NOTICE}
       </div>
+
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700" role="note">
+        Uploads are not resumable in this release: each file is sent in a single request, so a dropped
+        connection means re-sending that file. Practical per-file limit is 250 MB.
+      </div>
+
+      {!caps.isOwnerAdmin && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          You can browse transfers, but only owner/admin may start one.
+        </div>
+      )}
 
       <div className="grid sm:grid-cols-3 gap-3">
         <label className="text-sm block">
@@ -177,17 +209,17 @@ export default function MediaUploads() {
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
-            className="rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white min-h-[44px]"
+            className="rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white min-h-[44px] disabled:opacity-50"
             onClick={() => inputRef.current?.click()}
-            disabled={busy}
+            disabled={busy || !caps.isOwnerAdmin}
           >
             Choose files
           </button>
           <button
             type="button"
-            className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 min-h-[44px]"
+            className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 min-h-[44px] disabled:opacity-50"
             onClick={() => folderRef.current?.click()}
-            disabled={busy}
+            disabled={busy || !caps.isOwnerAdmin}
           >
             Choose folder
           </button>
@@ -197,7 +229,7 @@ export default function MediaUploads() {
             onClick={recoverSessions}
             disabled={busy}
           >
-            Recover session
+            Show last batch
           </button>
         </div>
         <input
@@ -232,12 +264,22 @@ export default function MediaUploads() {
                 <Loader2 className="h-4 w-4 animate-spin" /> Uploading…
               </span>
             )}
-            <span className="text-emerald-700">Success: {totals.uploaded || 0}</span>
-            <span className="text-amber-800">Duplicates: {totals.duplicate || 0}</span>
-            <span className="text-slate-600">Skipped: {totals.skipped || 0}</span>
-            <span className="text-red-700">Failed: {totals.failed || 0}</span>
-            {batch && <span className="text-slate-500">Batch {batch.id.slice(0, 8)}…</span>}
+            <span className="text-emerald-700">In library: {totals[UPLOAD_FILE_STATUS.UPLOADED] || 0}</span>
+            <span className="text-amber-800">Duplicates: {totals[UPLOAD_FILE_STATUS.DUPLICATE] || 0}</span>
+            <span className="text-amber-800">
+              Reconciling: {totals[UPLOAD_FILE_STATUS.PENDING_RECONCILE] || 0}
+            </span>
+            <span className="text-slate-600">Skipped: {totals[UPLOAD_FILE_STATUS.SKIPPED] || 0}</span>
+            <span className="text-red-700">Failed: {totals[UPLOAD_FILE_STATUS.FAILED] || 0}</span>
+            {session?.batchId && <span className="text-slate-500">Batch {session.batchId.slice(0, 8)}…</span>}
           </div>
+
+          {(totals[UPLOAD_FILE_STATUS.PENDING_RECONCILE] || 0) > 0 && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Some files could not be confirmed in final storage yet. They are not in the library.
+              Keep the originals until the transfer manifest shows them as uploaded.
+            </div>
+          )}
 
           <ul className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
             {entries.map((f) => (
@@ -245,45 +287,12 @@ export default function MediaUploads() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium text-slate-800">{f.filename}</div>
                   <div className={STATUS_STYLES[f.status] || 'text-slate-600'}>
-                    {f.status}
-                    {typeof f.percent === 'number' ? ` · ${f.percent}%` : ''}
+                    {STATUS_LABELS[f.status] || f.status}
+                    {typeof f.percent === 'number' && f.status === UPLOAD_FILE_STATUS.UPLOADING
+                      ? ` · ${f.percent}%`
+                      : ''}
                     {f.message ? ` · ${f.message}` : ''}
                   </div>
-                  {f.status === 'uploading' && (
-                    <div className="mt-1 h-1.5 rounded bg-slate-100 overflow-hidden">
-                      <div className="h-full bg-blue-600" style={{ width: `${f.percent || 0}%` }} />
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-1">
-                  {f.status === 'uploading' && (
-                    <>
-                      <button
-                        type="button"
-                        aria-label="Pause"
-                        className="p-2 rounded hover:bg-slate-100 min-h-[40px] min-w-[40px]"
-                        onClick={() => controllersRef.current[f.clientKey]?.pause?.()}
-                      >
-                        <Pause className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Resume"
-                        className="p-2 rounded hover:bg-slate-100 min-h-[40px] min-w-[40px]"
-                        onClick={() => controllersRef.current[f.clientKey]?.resume?.()}
-                      >
-                        <Play className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Cancel"
-                        className="p-2 rounded hover:bg-slate-100 min-h-[40px] min-w-[40px]"
-                        onClick={() => controllersRef.current[f.clientKey]?.abort?.()}
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </>
-                  )}
                 </div>
               </li>
             ))}
@@ -303,14 +312,17 @@ export default function MediaUploads() {
               <RotateCcw className="h-3.5 w-3.5" /> Refresh
             </button>
           </div>
+          <p className="mt-2 text-xs text-slate-500">
+            These counts are recomputed by the server from upload grant states — they are not written by this browser.
+          </p>
           <dl className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
             <div><dt className="text-slate-500">Batch</dt><dd className="font-mono text-xs break-all">{manifest.batch.id}</dd></div>
             <div><dt className="text-slate-500">Source</dt><dd>{manifest.batch.source_label || '—'}</dd></div>
             <div><dt className="text-slate-500">Started</dt><dd>{new Date(manifest.batch.started_at).toLocaleString()}</dd></div>
             <div><dt className="text-slate-500">Status</dt><dd>{manifest.batch.status}</dd></div>
-            <div><dt className="text-slate-500">Success</dt><dd>{manifest.batch.success_count}</dd></div>
+            <div><dt className="text-slate-500">In library</dt><dd>{manifest.batch.success_count}</dd></div>
             <div><dt className="text-slate-500">Failed</dt><dd>{manifest.batch.failed_count}</dd></div>
-            <div><dt className="text-slate-500">Skipped</dt><dd>{manifest.batch.skipped_count}</dd></div>
+            <div><dt className="text-slate-500">Abandoned</dt><dd>{manifest.batch.abandoned_count ?? 0}</dd></div>
             <div><dt className="text-slate-500">Duplicates</dt><dd>{manifest.batch.duplicate_count}</dd></div>
           </dl>
           <div className="mt-4 overflow-x-auto">

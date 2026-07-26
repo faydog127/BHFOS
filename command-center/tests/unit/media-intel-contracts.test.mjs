@@ -19,7 +19,12 @@ const MIL_EDGE_FUNCTIONS = [
   'media-intel-reel-upload',
   'media-intel-sign',
   'media-intel-upload-session',
+  'media-intel-upload-reconcile',
 ];
+
+const LIFECYCLE_MIGRATION = 'supabase/migrations/20260726090000_media_intel_upload_finalization_lifecycle.sql';
+const UPLOAD_SESSION_FN = 'supabase/functions/media-intel-upload-session/index.ts';
+const RECONCILE_FN = 'supabase/functions/media-intel-upload-reconcile/index.ts';
 
 describe('MIL derivative kind SQL/JS parity', () => {
   it('ALL_DERIVATIVE_KINDS matches mil_derivatives.kind check in 20260725120000 migration', () => {
@@ -61,16 +66,188 @@ describe('MIL promote website honesty', () => {
 });
 
 describe('MIL upload session finalize contract', () => {
-  it('complete_file calls mil_finalize_upload_grant RPC', () => {
-    const fn = read('supabase/functions/media-intel-upload-session/index.ts');
-    assert.match(fn, /\.rpc\('mil_finalize_upload_grant'/);
+  const fn = read(UPLOAD_SESSION_FN);
+
+  it('complete_file drives the four-step finalization state machine', () => {
+    assert.match(fn, /\.rpc\('mil_begin_upload_finalize'/);
+    assert.match(fn, /\.rpc\('mil_mark_upload_placed'/);
+    assert.match(fn, /\.rpc\('mil_commit_upload_finalize'/);
+    assert.match(fn, /\.rpc\('mil_fail_upload_finalize'/);
+
+    // The placement path must run begin -> placed -> commit. (An earlier commit
+    // call exists for the duplicate short-circuit, which never places bytes, so
+    // the placement commit is the last one.)
+    const begin = fn.indexOf("rpc('mil_begin_upload_finalize'");
+    const placed = fn.indexOf("rpc('mil_mark_upload_placed'");
+    const commit = fn.lastIndexOf("rpc('mil_commit_upload_finalize'");
+    assert.ok(
+      begin < placed && placed < commit,
+      `finalization must run begin -> placed -> commit, got offsets ${begin}, ${placed}, ${commit}`,
+    );
+  });
+
+  it('the retired single-shot finalize RPC is gone from the edge', () => {
+    assert.doesNotMatch(fn, /mil_finalize_upload_grant/);
+    assert.doesNotMatch(fn, /mil_cleanup_expired_upload_grants/);
+  });
+
+  it('re-hashes the quarantine object rather than trusting the client checksum', () => {
     assert.match(fn, /crypto\.subtle\.digest\('SHA-256'/);
     assert.match(fn, /verifiedChecksum/);
   });
 
+  it('places the final object with upsert:false', () => {
+    assert.match(fn, /\.upload\(finalPath, bytes, \{ contentType: verifiedMime, upsert: false \}\)/);
+  });
+
+  it('derives the final path canonically instead of rewriting the quarantine path', () => {
+    assert.match(fn, /canonicalOriginalPath/);
+    assert.doesNotMatch(fn, /\.replace\(\s*['"`]mil\/quarantine/);
+  });
+
+  it('persists the signed upload token expiry at mint', () => {
+    assert.match(fn, /upload_token_expires_at/);
+    assert.match(fn, /function jwtExpiryIso/);
+    // Quarantine bytes are never deleted inline by the finalize path — cleanup
+    // is scheduled in SQL and swept later by the reconcile function.
+    assert.doesNotMatch(fn, /storage\.from\([^)]*\)\.remove\(/);
+  });
+
+  it('hands an indeterminate finalize to reconcile under an abort deadline', () => {
+    assert.match(fn, /new AbortController\(\)/);
+    assert.match(fn, /RECONCILE_INVOKE_TIMEOUT_MS = 5_?000/);
+    assert.match(fn, /functions\/v1\/media-intel-upload-reconcile/);
+  });
+
+  it('never reports an unproven finalize as success', () => {
+    assert.match(fn, /'pending_reconcile'/);
+    // 202 is the only status that may accompany pending_reconcile.
+    const pendingBlocks = [...fn.matchAll(/status: 'pending_reconcile'[\s\S]{0,400}?\}\s*,\s*(\d{3})/g)]
+      .map((m) => m[1]);
+    assert.ok(pendingBlocks.length > 0, 'no pending_reconcile responses found');
+    for (const code of pendingBlocks) {
+      assert.equal(code, '202', `pending_reconcile must return 202, found ${code}`);
+    }
+  });
+
   it('mint_upload uses #session= fragment in returned path', () => {
-    const fn = read('supabase/functions/media-intel-upload-session/index.ts');
     assert.match(fn, /#session=\$\{token\}/);
+  });
+});
+
+describe('MIL upload reconcile edge contract', () => {
+  const fn = read(RECONCILE_FN);
+
+  it('requires the shared reconcile key and refuses to run without it', () => {
+    assert.match(fn, /MIL_RECONCILE_KEY/);
+    assert.match(fn, /x-mil-reconcile-key/);
+    assert.match(fn, /503/);
+  });
+
+  it('compares the key without leaking length or position', () => {
+    assert.match(fn, /function secretsMatch/);
+    assert.doesNotMatch(fn, /provided === expected/);
+  });
+
+  it('exposes health, run and grant actions only', () => {
+    assert.match(fn, /action === 'health'/);
+    assert.match(fn, /action === 'run'/);
+    assert.match(fn, /action === 'grant'/);
+  });
+
+  it('reconciles and abandons through service_role RPCs, never direct state writes', () => {
+    assert.match(fn, /rpc\(\s*'mil_reconcile_upload_finalization'/);
+    assert.match(fn, /rpc\(\s*\n?\s*'mil_abandon_expired_upload_grants'/);
+    assert.doesNotMatch(fn, /from\('mil_upload_grants'\)\s*\.update\(\s*\{\s*finalize_state/);
+  });
+
+  it('only sweeps quarantine for grants whose bytes are already safe elsewhere', () => {
+    assert.match(fn, /committed/);
+    assert.match(fn, /duplicate/);
+    assert.match(fn, /quarantine_cleanup_after/);
+  });
+});
+
+describe('MIL upload finalization migration contract', () => {
+  const mig = read(LIFECYCLE_MIGRATION);
+
+  it('retires the single-shot finalize and cleanup RPCs', () => {
+    assert.match(mig, /drop function if exists public\.mil_finalize_upload_grant/);
+    assert.match(mig, /drop function if exists public\.mil_cleanup_expired_upload_grants/);
+  });
+
+  it('grants every finalization RPC to service_role only', () => {
+    const rpcs = [
+      'mil_begin_upload_finalize',
+      'mil_mark_upload_placed',
+      'mil_commit_upload_finalize',
+      'mil_fail_upload_finalize',
+      'mil_recount_upload_batch',
+      'mil_abandon_expired_upload_grants',
+      'mil_reconcile_upload_finalization',
+      'mil_storage_catalog_probe',
+      'mil_raise_integrity_alert',
+    ];
+    for (const rpc of rpcs) {
+      assert.match(mig, new RegExp(`create or replace function public\\.${rpc}\\(`), `${rpc} not defined`);
+      assert.match(mig, new RegExp(`revoke all on function public\\.${rpc}\\([^)]*\\) from public`), `${rpc} not revoked from public`);
+      assert.match(mig, new RegExp(`grant execute on function public\\.${rpc}\\([^)]*\\) to service_role`), `${rpc} not granted to service_role`);
+      assert.doesNotMatch(
+        mig,
+        new RegExp(`grant execute on function public\\.${rpc}\\([^)]*\\) to (authenticated|anon)`),
+        `${rpc} must not be callable by browser roles`,
+      );
+    }
+  });
+
+  it('removes client write grants on the lifecycle tables', () => {
+    for (const table of [
+      'mil_upload_batches',
+      'mil_upload_grants',
+      'mil_manifest_entries',
+      'mil_upload_sessions',
+      'mil_integrity_alerts',
+    ]) {
+      assert.match(
+        mig,
+        new RegExp(`revoke insert, update, delete on public\\.${table} from authenticated, anon`),
+        `${table} still client-writable`,
+      );
+    }
+    assert.match(mig, /revoke insert, delete on public\.mil_assets from authenticated, anon/);
+    assert.match(mig, /grant select, update on public\.mil_assets to authenticated/);
+  });
+
+  it('drops the staff batch write policies that made counters forgeable', () => {
+    assert.match(mig, /drop policy if exists mil_library_staff_write_upload_batches on public\.mil_upload_batches/);
+    assert.match(mig, /drop policy if exists mil_library_staff_update_upload_batches on public\.mil_upload_batches/);
+  });
+
+  it('never derives an object path by string replacement', () => {
+    assert.doesNotMatch(mig, /replace\s*\(\s*[a-z_.]*object_path/i);
+    assert.match(mig, /create or replace function public\.mil_original_object_path/);
+    assert.match(mig, /create or replace function public\.mil_quarantine_object_path/);
+  });
+
+  it('constrains finalize_state and both object paths', () => {
+    assert.match(mig, /mil_upload_grants_finalize_state_check/);
+    assert.match(mig, /mil_upload_grants_quarantine_path_check/);
+    assert.match(mig, /mil_upload_grants_final_path_check/);
+    assert.match(mig, /mil_upload_grants_committed_requires_proof/);
+  });
+
+  it('schedules quarantine cleanup only after the upload token can no longer be used', () => {
+    assert.match(
+      mig,
+      /coalesce\(v_grant\.upload_token_expires_at, v_grant\.expires_at, now\(\)\)\s*\+\s*interval '15 minutes'/,
+    );
+  });
+
+  it('adds the abandoned counter, integrity alerts and dedupe index', () => {
+    assert.match(mig, /add column if not exists abandoned_count/);
+    assert.match(mig, /create table if not exists public\.mil_integrity_alerts/);
+    assert.match(mig, /mil_assets_active_checksum_uniq/);
+    assert.match(mig, /mil_manifest_entries_grant_uniq/);
   });
 });
 
@@ -88,16 +265,41 @@ describe('MIL client security contracts', () => {
     assert.doesNotMatch(api, /from\('mil_audit_events'\)\.insert/);
   });
 
-  it('staff uploadManager uses mil/quarantine/ path', () => {
+  it('uploadManager never writes batches, manifests, grants or assets', () => {
     const upload = read('src/lib/mediaIntel/uploadManager.js');
-    assert.match(upload, /mil\/quarantine\//);
+    for (const table of [
+      'mil_upload_batches',
+      'mil_upload_grants',
+      'mil_manifest_entries',
+      'mil_assets',
+    ]) {
+      assert.doesNotMatch(
+        upload,
+        new RegExp(`from\\('${table}'\\)[\\s\\S]{0,80}?\\.(insert|update|upsert|delete)\\(`),
+        `uploadManager must not write ${table} — the server owns that state`,
+      );
+    }
+  });
+
+  it('uploadManager takes its paths from the server mint, never from client strings', () => {
+    const upload = read('src/lib/mediaIntel/uploadManager.js');
+    assert.doesNotMatch(upload, /['"`]mil\/quarantine\//);
+    assert.doesNotMatch(upload, /['"`]mil\/originals\//);
+    assert.match(upload, /minted\.path/);
+  });
+
+  it('uploadManager only calls success states on an explicit 200', () => {
+    const upload = read('src/lib/mediaIntel/uploadManager.js');
+    assert.match(upload, /function interpretCompletion/);
+    assert.match(upload, /if \(status === 200\)/);
+    assert.match(upload, /UPLOAD_FILE_STATUS\.PENDING_RECONCILE/);
   });
 });
 
 describe('MIL pre-staging hardening migration contracts', () => {
   const hardening = read('supabase/migrations/20260725140000_media_intel_pre_staging_hardening.sql');
 
-  it('defines mil_finalize_upload_grant granted to service_role', () => {
+  it('still defines the historical mil_finalize_upload_grant (superseded by 20260726090000)', () => {
     assert.match(hardening, /create or replace function public\.mil_finalize_upload_grant/);
     assert.match(hardening, /grant execute on function public\.mil_finalize_upload_grant[\s\S]* to service_role/);
   });

@@ -3,26 +3,29 @@ import { Link } from 'react-router-dom';
 import { useOutletContext } from 'react-router-dom';
 import { Loader2, Upload } from 'lucide-react';
 import { DEFAULT_TENANT_ID } from '@/config/tenantDefaults';
-import { supabase } from '@/lib/customSupabaseClient';
 import { UPLOAD_PHONE_NOTICE } from '@/lib/mediaIntel/constants';
-import { sha256Hex, clientFileKey } from '@/lib/mediaIntel/checksum';
-import { resolveMimeType, validateMediaFile } from '@/lib/mediaIntel/formats';
 import {
-  createUploadBatch,
-  uploadFilesToBatch,
+  UPLOAD_FILE_STATUS,
+  createUploadSession,
+  fetchSessionManifest,
+  uploadFilesToSession,
+  validateUploadSession,
 } from '@/lib/mediaIntel/uploadManager';
 import { fetchMilRole, milCapabilities } from '@/lib/mediaIntel/roles';
 
-async function invokeSession(body) {
-  const { data, error } = await supabase.functions.invoke('media-intel-upload-session', { body });
-  if (error) throw new Error(error.message || 'Upload session error');
-  if (data?.error) {
-    const err = new Error(data.error);
-    err.code = data.code;
-    throw err;
-  }
-  return data;
-}
+const STATUS_LABELS = {
+  hashing: 'Reading file',
+  uploading: 'Uploading',
+  finalizing: 'Confirming with the server',
+  uploaded: 'In the library',
+  duplicate: 'Duplicate — existing copy kept',
+  pending_reconcile: 'Not confirmed yet — reconciling',
+  in_progress: 'Already finalizing elsewhere',
+  skipped: 'Skipped',
+  failed: 'Failed',
+  expired: 'Upload link expired',
+  revoked: 'Upload link revoked',
+};
 
 /**
  * Prefer the URL fragment (#session=) over the query string (?session=): fragments
@@ -46,15 +49,17 @@ function extractSessionToken() {
 export default function MediaMobileUpload() {
   const outlet = useOutletContext() || {};
   const [caps, setCaps] = useState(outlet.caps || null);
-  const [sessionToken] = useState(extractSessionToken);
+  const [linkToken] = useState(extractSessionToken);
+  // Token minted for a signed-in owner/admin who opened this page without a link.
+  const mintedTokenRef = useRef(null);
 
   useEffect(() => {
-    if (!sessionToken) return;
+    if (!linkToken) return;
     // Move the token to memory only, then strip it from the visible URL
     // immediately so it never lingers in browser history, screen recordings,
     // or gets accidentally shared by copying the address bar.
     window.history.replaceState(null, '', window.location.pathname);
-  }, [sessionToken]);
+  }, [linkToken]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
@@ -79,16 +84,15 @@ export default function MediaMobileUpload() {
   const [fileStates, setFileStates] = useState({});
   const [busy, setBusy] = useState(false);
   const [manifest, setManifest] = useState(null);
-  const [staffBatch, setStaffBatch] = useState(null);
 
-  const mode = sessionToken ? 'session' : 'authenticated';
+  const mode = linkToken ? 'session' : 'authenticated';
 
   useEffect(() => {
-    if (!sessionToken) return undefined;
+    if (!linkToken) return undefined;
     let cancelled = false;
     (async () => {
       try {
-        const data = await invokeSession({ action: 'validate', token: sessionToken });
+        const data = await validateUploadSession(linkToken);
         if (!cancelled) setSessionInfo(data);
       } catch (err) {
         if (!cancelled) setSessionError(err.message);
@@ -97,10 +101,10 @@ export default function MediaMobileUpload() {
     return () => {
       cancelled = true;
     };
-  }, [sessionToken]);
+  }, [linkToken]);
 
   useEffect(() => {
-    if (sessionToken || outlet.caps) {
+    if (linkToken || outlet.caps) {
       if (outlet.caps) setCaps(outlet.caps);
       return undefined;
     }
@@ -112,7 +116,7 @@ export default function MediaMobileUpload() {
     return () => {
       cancelled = true;
     };
-  }, [sessionToken, outlet.caps]);
+  }, [linkToken, outlet.caps]);
 
   const onFileUpdate = useCallback((update) => {
     setFileStates((prev) => ({
@@ -121,82 +125,17 @@ export default function MediaMobileUpload() {
     }));
   }, []);
 
-  const uploadViaSession = async (files) => {
+  /**
+   * Both modes end up on the same server contract: mint a grant, PUT the bytes,
+   * ask the server to finalize. The only difference is where the session token
+   * came from.
+   */
+  const runUpload = async (files, token, batchId) => {
     setBusy(true);
     setSessionError(null);
-    // Continue past per-file failures so one bad file in a large phone dump
-    // doesn't stall or discard the rest of the batch. Each failure is recorded
-    // on its own file entry; totals below reflect the true per-file outcome.
-    for (const file of files) {
-      const key = clientFileKey(file);
-      try {
-        const validation = validateMediaFile(file);
-        if (!validation.ok) {
-          onFileUpdate({ clientKey: key, filename: file.name, status: 'skipped', message: validation.reason });
-          continue;
-        }
-        onFileUpdate({ clientKey: key, filename: file.name, status: 'hashing', percent: 0 });
-        const checksum = await sha256Hex(file);
-        const mime = resolveMimeType(file);
-
-        onFileUpdate({ clientKey: key, filename: file.name, status: 'uploading', percent: 5 });
-        const minted = await invokeSession({
-          action: 'mint_upload',
-          token: sessionToken,
-          filename: file.name,
-          contentType: mime,
-          byteSize: file.size,
-        });
-        if (!minted.grantId || !minted.assetId || !minted.objectPath) {
-          throw new Error('Upload grant was not minted');
-        }
-
-        let uploadError = null;
-        if (minted.signedUrl) {
-          const res = await fetch(minted.signedUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': mime },
-            body: file,
-          });
-          if (!res.ok) uploadError = new Error(`Upload failed (${res.status})`);
-        } else if (minted.token) {
-          const { error } = await supabase.storage
-            .from(minted.bucket)
-            .uploadToSignedUrl(minted.path, minted.token, file, { contentType: mime });
-          uploadError = error;
-        } else {
-          uploadError = new Error('No signed upload credentials returned');
-        }
-        if (uploadError) throw uploadError;
-
-        onFileUpdate({ clientKey: key, filename: file.name, status: 'uploading', percent: 90 });
-        // checksumSha256 is the client-computed SHA-256 — advisory only. It is
-        // stored alongside the server-verified checksum for later reconciliation
-        // but must never be treated as the security boundary; the server/finalize
-        // path is the source of truth for integrity.
-        const completed = await invokeSession({
-          action: 'complete_file',
-          token: sessionToken,
-          grantId: minted.grantId,
-          assetId: minted.assetId,
-          objectPath: minted.objectPath,
-          checksumSha256: checksum,
-          byteSize: file.size,
-        });
-        onFileUpdate({
-          clientKey: key,
-          filename: file.name,
-          status: completed.status === 'duplicate' ? 'duplicate' : 'uploaded',
-          percent: 100,
-          message: completed.status === 'duplicate' ? 'Exact duplicate — kept existing file' : undefined,
-        });
-      } catch (err) {
-        onFileUpdate({ clientKey: key, filename: file.name, status: 'failed', message: err?.message || 'Upload failed' });
-      }
-    }
     try {
-      const m = await invokeSession({ action: 'manifest', token: sessionToken });
-      setManifest(m);
+      await uploadFilesToSession({ token, batchId, files, onFileUpdate });
+      setManifest(await fetchSessionManifest(token));
     } catch (err) {
       setSessionError(err.message);
     } finally {
@@ -204,39 +143,32 @@ export default function MediaMobileUpload() {
     }
   };
 
-  const uploadAuthenticated = async (files) => {
-    if (!caps?.canUpload) {
-      setSessionError('Sign in with an upload-authorized account, or use a valid phone upload link.');
-      return;
-    }
-    setBusy(true);
-    try {
-      const batch =
-        staffBatch ||
-        (await createUploadBatch({
-          sourceLabel: 'Mobile browser upload',
-        }));
-      setStaffBatch(batch);
-      await uploadFilesToBatch({
-        batch,
-        files,
-        onFileUpdate,
-        controllersRef: { current: {} },
-      });
-      const { fetchBatchManifest } = await import('@/lib/mediaIntel/uploadManager');
-      setManifest(await fetchBatchManifest(batch.id));
-    } catch (err) {
-      setSessionError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const startUpload = (fileList) => {
+  const startUpload = async (fileList) => {
     const files = Array.from(fileList || []);
     if (!files.length) return;
-    if (mode === 'session') return uploadViaSession(files);
-    return uploadAuthenticated(files);
+
+    if (mode === 'session') {
+      return runUpload(files, linkToken, sessionInfo?.batchId);
+    }
+
+    if (!caps?.isOwnerAdmin) {
+      setSessionError(
+        'Open a phone upload link from the owner. Only owner/admin accounts can start a transfer directly.',
+      );
+      return undefined;
+    }
+
+    try {
+      if (!mintedTokenRef.current) {
+        const created = await createUploadSession({ label: 'Mobile browser upload' });
+        mintedTokenRef.current = created.token;
+        setSessionInfo(created);
+      }
+    } catch (err) {
+      setSessionError(err.message);
+      return undefined;
+    }
+    return runUpload(files, mintedTokenRef.current, sessionInfo?.batchId);
   };
 
   const totals = useMemo(() => {
@@ -246,6 +178,8 @@ export default function MediaMobileUpload() {
     });
     return acc;
   }, [fileStates]);
+
+  const canPickFiles = mode === 'session' ? Boolean(sessionInfo) : Boolean(caps?.isOwnerAdmin);
 
   if (mode === 'session' && !sessionInfo && !sessionError) {
     return (
@@ -272,15 +206,15 @@ export default function MediaMobileUpload() {
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{sessionError}</div>
       )}
 
-      {mode === 'session' && sessionInfo && (
+      {sessionInfo?.expiresAt && (
         <div className="rounded-lg border bg-white px-3 py-2 text-sm text-slate-700">
           Batch ready · expires {new Date(sessionInfo.expiresAt).toLocaleString()}
         </div>
       )}
 
-      {mode === 'authenticated' && !caps?.canUpload && (
+      {mode === 'authenticated' && !caps?.isOwnerAdmin && (
         <div className="rounded-lg border bg-white p-4 text-sm text-slate-700">
-          Open a phone upload link from the owner, or sign in with an authorized uploader account.
+          Open a phone upload link from the owner, or sign in with an owner/admin account.
           <div className="mt-3">
             {/* Legacy V1 login path until company-wide auth cleanup */}
             <Link className="text-blue-700 underline" to={`/${DEFAULT_TENANT_ID}/login?next=/media/upload`}>
@@ -290,10 +224,13 @@ export default function MediaMobileUpload() {
         </div>
       )}
 
-      {(mode === 'session' ? sessionInfo : caps?.canUpload) && (
+      {canPickFiles && (
         <div className="rounded-xl border-2 border-dashed border-slate-300 bg-white px-4 py-10 text-center">
           <Upload className="mx-auto h-8 w-8 text-slate-400" aria-hidden />
           <p className="mt-3 text-sm font-medium text-slate-800">Select photos and videos from this phone</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Each file is sent in one request and is not resumable. Up to 250 MB per file.
+          </p>
           <button
             type="button"
             disabled={busy}
@@ -317,18 +254,26 @@ export default function MediaMobileUpload() {
       {Object.keys(fileStates).length > 0 && (
         <div className="rounded-xl border bg-white p-3 space-y-2 text-sm">
           <div className="flex flex-wrap gap-3">
-            <span className="text-emerald-700">Success: {totals.uploaded || 0}</span>
-            <span className="text-amber-800">Duplicates: {totals.duplicate || 0}</span>
-            <span className="text-slate-600">Skipped: {totals.skipped || 0}</span>
-            <span className="text-red-700">Failed: {totals.failed || 0}</span>
+            <span className="text-emerald-700">In library: {totals[UPLOAD_FILE_STATUS.UPLOADED] || 0}</span>
+            <span className="text-amber-800">Duplicates: {totals[UPLOAD_FILE_STATUS.DUPLICATE] || 0}</span>
+            <span className="text-amber-800">
+              Reconciling: {totals[UPLOAD_FILE_STATUS.PENDING_RECONCILE] || 0}
+            </span>
+            <span className="text-slate-600">Skipped: {totals[UPLOAD_FILE_STATUS.SKIPPED] || 0}</span>
+            <span className="text-red-700">Failed: {totals[UPLOAD_FILE_STATUS.FAILED] || 0}</span>
           </div>
+          {(totals[UPLOAD_FILE_STATUS.PENDING_RECONCILE] || 0) > 0 && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-2 text-amber-900">
+              Some files are not in the library yet. Keep them on this phone until the transfer result
+              below shows them as uploaded.
+            </div>
+          )}
           <ul className="divide-y max-h-64 overflow-y-auto">
             {Object.values(fileStates).map((f) => (
               <li key={f.clientKey} className="py-2">
                 <div className="truncate font-medium">{f.filename}</div>
                 <div className="text-xs text-slate-500">
-                  {f.status}
-                  {typeof f.percent === 'number' ? ` · ${f.percent}%` : ''}
+                  {STATUS_LABELS[f.status] || f.status}
                   {f.message ? ` · ${f.message}` : ''}
                 </div>
               </li>
@@ -341,10 +286,13 @@ export default function MediaMobileUpload() {
         <div className="rounded-xl border bg-white p-3 text-sm" data-testid="mobile-transfer-manifest">
           <h3 className="font-medium">Transfer result</h3>
           <dl className="mt-2 grid grid-cols-2 gap-2">
-            <div><dt className="text-slate-500">Success</dt><dd>{manifest.batch.success_count}</dd></div>
+            <div><dt className="text-slate-500">In library</dt><dd>{manifest.batch.success_count}</dd></div>
             <div><dt className="text-slate-500">Failed</dt><dd>{manifest.batch.failed_count}</dd></div>
-            <div><dt className="text-slate-500">Skipped</dt><dd>{manifest.batch.skipped_count}</dd></div>
+            <div><dt className="text-slate-500">Abandoned</dt><dd>{manifest.batch.abandoned_count ?? 0}</dd></div>
             <div><dt className="text-slate-500">Duplicates</dt><dd>{manifest.batch.duplicate_count}</dd></div>
+            {typeof manifest.pendingCount === 'number' && (
+              <div><dt className="text-slate-500">Still finalizing</dt><dd>{manifest.pendingCount}</dd></div>
+            )}
           </dl>
         </div>
       )}

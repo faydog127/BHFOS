@@ -75,26 +75,62 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- 3. mil_finalize_upload_grant exists and is service_role only
+-- 3. The one-shot finalize is gone; the lifecycle RPCs replaced it
+--    mil_finalize_upload_grant inserted the asset row before storage placement,
+--    so it must not survive anywhere in the schema.
 -- ---------------------------------------------------------------------------
 do $$
 declare
-  v_proacl text;
+  v_leftover integer;
 begin
-  if to_regprocedure('public.mil_finalize_upload_grant(uuid,text,text,bigint,boolean,uuid)') is null then
-    raise exception 'public.mil_finalize_upload_grant(uuid,text,text,bigint,boolean,uuid) not found';
-  end if;
-
-  select array_to_string(p.proacl, ',')
-  into v_proacl
+  select count(*)
+  into v_leftover
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public'
-    and p.proname = 'mil_finalize_upload_grant';
+    and p.proname in ('mil_finalize_upload_grant', 'mil_cleanup_expired_upload_grants');
 
-  if v_proacl is null or v_proacl not ilike '%service_role%' then
-    raise exception 'mil_finalize_upload_grant must be granted to service_role; proacl=%', v_proacl;
+  if v_leftover > 0 then
+    raise exception
+      'Retired one-shot finalize helpers still exist (% overload(s)). They create assets before storage placement is proven.',
+      v_leftover;
   end if;
+end $$;
+
+do $$
+declare
+  v_name text;
+  v_proacl text;
+begin
+  foreach v_name in array array[
+    'mil_begin_upload_finalize',
+    'mil_mark_upload_placed',
+    'mil_commit_upload_finalize',
+    'mil_fail_upload_finalize',
+    'mil_recount_upload_batch',
+    'mil_abandon_expired_upload_grants',
+    'mil_reconcile_upload_finalization',
+    'mil_storage_catalog_probe',
+    'mil_raise_integrity_alert'
+  ]
+  loop
+    select array_to_string(p.proacl, ',')
+    into v_proacl
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = v_name;
+
+    if not found then
+      raise exception 'lifecycle RPC public.% not found', v_name;
+    end if;
+    if v_proacl is null or v_proacl not ilike '%service_role%' then
+      raise exception 'public.% must be granted to service_role; proacl=%', v_name, v_proacl;
+    end if;
+    if v_proacl ilike '%authenticated=%' or v_proacl ilike '%anon=%' then
+      raise exception 'public.% must NOT be executable by authenticated/anon; proacl=%', v_name, v_proacl;
+    end if;
+  end loop;
 end $$;
 
 -- ---------------------------------------------------------------------------

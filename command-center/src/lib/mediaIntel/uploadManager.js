@@ -1,321 +1,286 @@
-import { Upload } from 'tus-js-client';
+/**
+ * Media Intelligence upload client.
+ *
+ * The browser no longer writes anything to the library. It cannot: INSERT,
+ * UPDATE and DELETE on mil_upload_batches / mil_upload_grants /
+ * mil_manifest_entries / mil_assets were revoked from the `authenticated` role,
+ * so a client that tried would simply be refused.
+ *
+ * Every upload therefore runs through a server-minted upload session:
+ *
+ *   create        -> owner/admin mints a scoped, expiring session + batch
+ *   mint_upload   -> server binds one file to one quarantine path and asset id
+ *   PUT           -> the browser writes bytes to that path and nothing else
+ *   complete_file -> the server re-hashes, places, and proves the final object
+ *
+ * The status this module reports is whatever the server actually concluded.
+ * "pending_reconcile" is a real outcome and is surfaced as such rather than
+ * being rounded up to success or down to failure.
+ */
 import { supabase } from '@/lib/customSupabaseClient';
-import { MIL_ORIGINALS_BUCKET } from './constants';
 import { sha256Hex, clientFileKey } from './checksum';
-import { mediaKindFromMime, resolveMimeType, safeStorageSegment, validateMediaFile } from './formats';
+import { resolveMimeType, validateMediaFile } from './formats';
 import { saveUploadSession } from './uploadSessionStore';
 
-const TUS_ENDPOINT = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/upload/resumable`;
+const FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const RETRYABLE_RETRY_DELAY_MS = 1500;
 
-function uuid() {
-  return crypto.randomUUID();
-}
+/** Terminal per-file outcomes the UI may render. */
+export const UPLOAD_FILE_STATUS = Object.freeze({
+  HASHING: 'hashing',
+  UPLOADING: 'uploading',
+  FINALIZING: 'finalizing',
+  UPLOADED: 'uploaded',
+  DUPLICATE: 'duplicate',
+  PENDING_RECONCILE: 'pending_reconcile',
+  IN_PROGRESS: 'in_progress',
+  SKIPPED: 'skipped',
+  FAILED: 'failed',
+  EXPIRED: 'expired',
+  REVOKED: 'revoked',
+});
 
-async function getAccessToken() {
-  const { data, error } = await supabase.auth.getSession();
-  if (error) throw error;
-  const token = data?.session?.access_token;
-  if (!token) throw new Error('Sign in required to upload media.');
-  return token;
-}
+/**
+ * Raw fetch rather than supabase.functions.invoke: the finalization contract is
+ * expressed in HTTP status codes (202 pending, 409 conflict, 410 expired) and
+ * invoke() collapses every non-2xx into an opaque error.
+ */
+async function callUploadSession(body) {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token || ANON_KEY;
 
-async function findExactDuplicate(checksum) {
-  const { data, error } = await supabase
-    .from('mil_assets')
-    .select('id, original_filename, original_path, created_at')
-    .eq('checksum_sha256', checksum)
-    .is('archived_at', null)
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
-}
-
-async function refreshBatchCounts(batchId) {
-  const { data: rows, error } = await supabase
-    .from('mil_manifest_entries')
-    .select('upload_status')
-    .eq('batch_id', batchId);
-  if (error) throw error;
-
-  const counts = { success: 0, failed: 0, skipped: 0, duplicate: 0 };
-  for (const row of rows || []) {
-    if (row.upload_status === 'uploaded') counts.success += 1;
-    else if (row.upload_status === 'failed') counts.failed += 1;
-    else if (row.upload_status === 'skipped') counts.skipped += 1;
-    else if (row.upload_status === 'duplicate') counts.duplicate += 1;
+  let res;
+  try {
+    res = await fetch(`${FUNCTIONS_BASE}/media-intel-upload-session`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: ANON_KEY,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    return { status: 0, ok: false, payload: { error: err?.message || 'Network error', code: 'network' } };
   }
 
-  await supabase
-    .from('mil_upload_batches')
-    .update({
-      success_count: counts.success,
-      failed_count: counts.failed,
-      skipped_count: counts.skipped,
-      duplicate_count: counts.duplicate,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', batchId);
-
-  return counts;
+  let payload = {};
+  try {
+    payload = (await res.json()) || {};
+  } catch {
+    payload = {};
+  }
+  return { status: res.status, ok: res.ok, payload };
 }
 
-export async function createUploadBatch({ sourceLabel, sourcePhone, sourcePerson, clientSessionKey }) {
-  const { data: auth } = await supabase.auth.getUser();
-  const { data, error } = await supabase
-    .from('mil_upload_batches')
-    .insert({
-      source_label: sourceLabel || null,
-      source_phone: sourcePhone || null,
-      source_person: sourcePerson || null,
-      uploader_user_id: auth?.user?.id || null,
-      status: 'open',
-      client_session_key: clientSessionKey || uuid(),
-    })
-    .select('*')
-    .single();
-  if (error) throw error;
-
-  // No client audit insert (pre-staging hardening) — server-side RPCs/edge functions
-  // audit their own privileged mutations. This client-authored batch-create row is
-  // uninteresting from a security standpoint (browse-only metadata).
-
-  return data;
+function raiseSessionError(result, fallback) {
+  const err = new Error(result.payload?.error || fallback);
+  err.code = result.payload?.code;
+  err.status = result.status;
+  return err;
 }
 
-function tusUpload({ file, objectPath, mime, token, onProgress, signalController }) {
-  return new Promise((resolve, reject) => {
-    const upload = new Upload(file, {
-      endpoint: TUS_ENDPOINT,
-      retryDelays: [0, 1000, 3000, 5000, 10000],
-      headers: { authorization: `Bearer ${token}`, 'x-upsert': 'false' },
-      uploadDataDuringCreation: true,
-      removeFingerprintOnSuccess: true,
-      metadata: {
-        bucketName: MIL_ORIGINALS_BUCKET,
-        objectName: objectPath,
-        contentType: mime,
-        cacheControl: '3600',
-      },
-      chunkSize: 6 * 1024 * 1024,
-      onError(error) { reject(error); },
-      onProgress(bytesUploaded, bytesTotal) {
-        onProgress?.({
-          bytesUploaded,
-          bytesTotal,
-          percent: bytesTotal ? Math.round((bytesUploaded / bytesTotal) * 100) : 0,
-        });
-      },
-      onSuccess() { resolve(upload.url); },
-    });
-
-    signalController.abort = () => {
-      try { upload.abort(true); } catch { /* ignore */ }
-      reject(new Error('Upload cancelled'));
-    };
-    signalController.pause = () => upload.abort();
-    signalController.resume = () => upload.start();
-
-    upload.findPreviousUploads().then((previous) => {
-      if (previous?.length) upload.resumeFromPreviousUpload(previous[0]);
-      upload.start();
-    }).catch(() => upload.start());
+/** Owner/admin only — enforced by the edge function, not by this call. */
+export async function createUploadSession({ label, sourcePhone, sourcePerson, expiresHours } = {}) {
+  const result = await callUploadSession({
+    action: 'create',
+    label: label || null,
+    sourcePhone: sourcePhone || null,
+    sourcePerson: sourcePerson || null,
+    expiresHours: expiresHours || 12,
   });
+  if (!result.ok) throw raiseSessionError(result, 'Could not create an upload session');
+  return result.payload;
 }
 
-export async function uploadFilesToBatch({ batch, files, onFileUpdate, controllersRef }) {
-  const token = await getAccessToken();
-  const { data: auth } = await supabase.auth.getUser();
-  const sessionKey = batch.client_session_key || batch.id;
+export async function validateUploadSession(token) {
+  const result = await callUploadSession({ action: 'validate', token });
+  if (!result.ok) throw raiseSessionError(result, 'Upload session is not usable');
+  return result.payload;
+}
 
-  await supabase.from('mil_upload_batches').update({ status: 'uploading' }).eq('id', batch.id);
+export async function fetchSessionManifest(token) {
+  const result = await callUploadSession({ action: 'manifest', token });
+  if (!result.ok) throw raiseSessionError(result, 'Could not load the transfer manifest');
+  return result.payload;
+}
+
+async function putBytes({ minted, file, mime }) {
+  if (minted.signedUrl) {
+    const res = await fetch(minted.signedUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': mime, 'x-upsert': 'false' },
+      body: file,
+    });
+    if (!res.ok) throw new Error(`Storage rejected the upload (${res.status})`);
+    return;
+  }
+  if (minted.token) {
+    const { error } = await supabase.storage
+      .from(minted.bucket)
+      .uploadToSignedUrl(minted.path, minted.token, file, { contentType: mime });
+    if (error) throw error;
+    return;
+  }
+  throw new Error('No signed upload credentials were returned');
+}
+
+/**
+ * Translate the finalize HTTP contract into a UI state. Nothing here upgrades an
+ * unproven result: only an explicit 200 uploaded/duplicate counts as success.
+ */
+function interpretCompletion({ status, payload }) {
+  if (status === 200) {
+    if (payload.status === 'duplicate') {
+      return {
+        status: UPLOAD_FILE_STATUS.DUPLICATE,
+        message: 'Already in the library — kept the existing copy',
+        existingAssetId: payload.existingAssetId,
+      };
+    }
+    return { status: UPLOAD_FILE_STATUS.UPLOADED, assetId: payload.assetId };
+  }
+  if (status === 202) {
+    return {
+      status: UPLOAD_FILE_STATUS.PENDING_RECONCILE,
+      message: payload.error || 'Not confirmed yet — being reconciled. Keep the phone original.',
+      grantId: payload.grantId,
+    };
+  }
+  if (status === 409 && payload.code === 'in_progress') {
+    return {
+      status: UPLOAD_FILE_STATUS.IN_PROGRESS,
+      message: 'Already being finalized — check the manifest in a moment.',
+    };
+  }
+  if (status === 410) {
+    return {
+      status: UPLOAD_FILE_STATUS.EXPIRED,
+      message: payload.error || 'This upload link expired. Keep the phone original.',
+    };
+  }
+  if (status === 403) {
+    return {
+      status: UPLOAD_FILE_STATUS.REVOKED,
+      message: payload.error || 'This upload link was revoked.',
+    };
+  }
+  return {
+    status: UPLOAD_FILE_STATUS.FAILED,
+    message: payload.error || `Upload could not be completed (${status})`,
+    code: payload.code,
+  };
+}
+
+async function completeFile({ token, minted, checksum, byteSize }) {
+  const request = {
+    action: 'complete_file',
+    token,
+    grantId: minted.grantId,
+    assetId: minted.assetId,
+    objectPath: minted.objectPath,
+    checksumSha256: checksum,
+    byteSize,
+  };
+
+  let result = await callUploadSession(request);
+  // 503 means "try again", not "it failed". Exactly one retry, then report honestly.
+  if (result.status === 503 || result.status === 0) {
+    await new Promise((resolve) => setTimeout(resolve, RETRYABLE_RETRY_DELAY_MS));
+    result = await callUploadSession(request);
+  }
+  return interpretCompletion(result);
+}
+
+/**
+ * Upload files through an existing session token. Per-file failures never stop
+ * the batch: one unreadable file in a phone dump must not strand the rest.
+ */
+export async function uploadFilesToSession({ token, batchId, files, onFileUpdate }) {
+  if (!token) throw new Error('An upload session token is required');
 
   const fileList = Array.from(files || []);
-  for (let i = 0; i < fileList.length; i += 1) {
-    const file = fileList[i];
-    const key = clientFileKey(file);
-    const validation = validateMediaFile(file);
-    const mime = validation.ok ? validation.mime : resolveMimeType(file);
-    const assetId = uuid();
-    // Pre-staging hardening: staff desktop uploads land in quarantine, never directly
-    // in the "originals" namespace. A trusted server-side checksum worker/finalize
-    // step must verify the object and promote it before it is treated as an
-    // authoritative original (see mil_finalize_upload_grant for the equivalent
-    // session-upload path).
-    const objectPath = `mil/quarantine/${batch.id}/${assetId}/${safeStorageSegment(file.name)}`;
+  const totals = {
+    uploaded: 0,
+    duplicate: 0,
+    skipped: 0,
+    failed: 0,
+    pending_reconcile: 0,
+    in_progress: 0,
+    expired: 0,
+    revoked: 0,
+  };
 
-    let manifestId = null;
+  for (const file of fileList) {
+    const key = clientFileKey(file);
     const emit = (patch) => onFileUpdate?.({ clientKey: key, filename: file.name, ...patch });
 
     try {
+      const validation = validateMediaFile(file);
       if (!validation.ok) {
-        const { data: entry } = await supabase
-          .from('mil_manifest_entries')
-          .insert({
-            batch_id: batch.id,
-            original_filename: file.name,
-            mime_type: mime,
-            byte_size: file.size,
-            upload_status: 'skipped',
-            client_file_key: key,
-            error_message: validation.reason,
-          })
-          .select('id')
-          .single();
-        manifestId = entry?.id;
-        emit({ status: 'skipped', message: validation.reason });
+        totals.skipped += 1;
+        emit({ status: UPLOAD_FILE_STATUS.SKIPPED, message: validation.reason });
         continue;
       }
 
-      emit({ status: 'hashing', percent: 0 });
+      const mime = validation.mime || resolveMimeType(file);
+      emit({ status: UPLOAD_FILE_STATUS.HASHING, percent: 0 });
+      // Advisory only. The server hashes the stored bytes itself and that digest
+      // is the one recorded against the asset.
       const checksum = await sha256Hex(file);
-      const dup = await findExactDuplicate(checksum);
-      if (dup) {
-        await supabase.from('mil_manifest_entries').insert({
-          batch_id: batch.id,
-          asset_id: dup.id,
-          original_filename: file.name,
-          mime_type: mime,
-          byte_size: file.size,
-          checksum_sha256: checksum,
-          upload_status: 'duplicate',
-          duplicate_status: 'exact',
-          client_file_key: key,
-          error_message: `Exact duplicate of ${dup.original_filename}`,
-        });
-        emit({ status: 'duplicate', message: 'Exact duplicate of existing asset', percent: 100 });
-        continue;
+
+      emit({ status: UPLOAD_FILE_STATUS.UPLOADING, percent: 5 });
+      const mintResult = await callUploadSession({
+        action: 'mint_upload',
+        token,
+        filename: file.name,
+        contentType: mime,
+        byteSize: file.size,
+      });
+      if (!mintResult.ok) throw raiseSessionError(mintResult, 'Upload grant was not minted');
+      const minted = mintResult.payload;
+      if (!minted.grantId || !minted.assetId || !minted.objectPath) {
+        throw new Error('Upload grant was not minted');
       }
 
-      const { data: manifest, error: manifestErr } = await supabase
-        .from('mil_manifest_entries')
-        .insert({
-          batch_id: batch.id,
-          original_filename: file.name,
-          mime_type: mime,
-          byte_size: file.size,
-          checksum_sha256: checksum,
-          upload_status: 'uploading',
-          client_file_key: key,
-        })
-        .select('*')
-        .single();
-      if (manifestErr) throw manifestErr;
-      manifestId = manifest.id;
+      await putBytes({ minted, file, mime });
 
-      const controller = { abort() {}, pause() {}, resume() {} };
-      if (controllersRef) controllersRef.current[key] = controller;
-
-      emit({ status: 'uploading', percent: 0 });
-      const tusUrl = await tusUpload({
-        file, objectPath, mime, token, signalController: controller,
-        onProgress: (p) => emit({ status: 'uploading', percent: p.percent }),
+      emit({ status: UPLOAD_FILE_STATUS.FINALIZING, percent: 90 });
+      const outcome = await completeFile({
+        token,
+        minted,
+        checksum,
+        byteSize: file.size,
       });
 
-      // Insert an honest, unfinalized asset row pointing at the quarantine object.
-      // checksum_status='pending' + original_path under mil/quarantine/ signal that
-      // this is NOT yet a trusted original: a server-side checksum worker/finalize
-      // step (mirroring mil_finalize_upload_grant) must re-verify the object against
-      // `checksum` before it is promoted to mil/originals/ and treated as verified.
-      const { data: asset, error: assetErr } = await supabase
-        .from('mil_assets')
-        .insert({
-          id: assetId,
-          batch_id: batch.id,
-          media_kind: mediaKindFromMime(mime),
-          mime_type: mime,
-          byte_size: file.size,
-          checksum_sha256: checksum,
-          client_checksum_sha256: checksum,
-          checksum_status: 'pending',
-          original_filename: file.name,
-          original_bucket: MIL_ORIGINALS_BUCKET,
-          original_path: objectPath,
-          processing_status: 'queued',
-          human_review_status: 'pending',
-          privacy_status: 'needs_review',
-          created_by_user_id: auth?.user?.id || null,
-        })
-        .select('*')
-        .single();
-      if (assetErr) throw assetErr;
-
-      await supabase
-        .from('mil_manifest_entries')
-        .update({
-          asset_id: asset.id,
-          upload_status: 'uploaded',
-          processing_status: 'queued',
-          tus_upload_url: tusUrl || null,
-        })
-        .eq('id', manifestId);
-
-      await supabase.from('mil_processing_jobs').insert({
-        asset_id: asset.id,
-        batch_id: batch.id,
-        job_type: 'ai_analyze',
-        status: 'queued',
-      });
-
-      // Client-side derivative generation is intentionally skipped here — staff
-      // sessions have no INSERT policy on mil/derivatives/%, only mil/quarantine/%.
-      // Thumbnail generation is left to the trusted server-side worker after
-      // checksum verification/finalize. See derivatives.js.
-
-      // No client audit insert — the trusted finalize step performs the durable
-      // audit record once the object is verified and promoted.
-
-      emit({ status: 'uploaded', percent: 100, assetId: asset.id });
+      totals[outcome.status] = (totals[outcome.status] || 0) + 1;
+      emit({ ...outcome, percent: 100 });
     } catch (err) {
-      const message = err?.message || 'Upload failed';
-      if (manifestId) {
-        const { data: prior } = await supabase
-          .from('mil_manifest_entries')
-          .select('retry_count')
-          .eq('id', manifestId)
-          .maybeSingle();
-        await supabase
-          .from('mil_manifest_entries')
-          .update({
-            upload_status: message.includes('cancelled') ? 'cancelled' : 'failed',
-            error_message: message,
-            retry_count: (prior?.retry_count || 0) + 1,
-          })
-          .eq('id', manifestId);
-      } else {
-        await supabase.from('mil_manifest_entries').insert({
-          batch_id: batch.id,
-          original_filename: file.name,
-          mime_type: mime,
-          byte_size: file.size,
-          upload_status: 'failed',
-          client_file_key: key,
-          error_message: message,
-        });
-      }
-      emit({ status: 'failed', message });
+      totals.failed += 1;
+      emit({ status: UPLOAD_FILE_STATUS.FAILED, message: err?.message || 'Upload failed' });
     }
 
-    await saveUploadSession({ sessionKey, batchId: batch.id, updatedAt: Date.now() });
+    if (batchId) {
+      await saveUploadSession({ sessionKey: `batch:${batchId}`, batchId, updatedAt: Date.now() });
+    }
   }
 
-  const counts = await refreshBatchCounts(batch.id);
-  const done = counts.failed === 0 ? 'completed' : 'interrupted';
-  await supabase
-    .from('mil_upload_batches')
-    .update({
-      status: done,
-      completed_at: done === 'completed' ? new Date().toISOString() : null,
-    })
-    .eq('id', batch.id);
-
-  return counts;
+  return totals;
 }
 
+/**
+ * Batch + manifest read for signed-in library staff. Read-only: counters are
+ * derived server-side from grant states and cannot be written from here.
+ */
 export async function fetchBatchManifest(batchId) {
   const [{ data: batch }, { data: entries }] = await Promise.all([
-    supabase.from('mil_upload_batches').select('*').eq('id', batchId).single(),
-    supabase.from('mil_manifest_entries').select('*').eq('batch_id', batchId).order('created_at', { ascending: true }),
+    supabase.from('mil_upload_batches').select('*').eq('id', batchId).maybeSingle(),
+    supabase
+      .from('mil_manifest_entries')
+      .select('*')
+      .eq('batch_id', batchId)
+      .order('created_at', { ascending: true }),
   ]);
   return { batch, entries: entries || [] };
 }

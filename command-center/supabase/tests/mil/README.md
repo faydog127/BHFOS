@@ -38,8 +38,13 @@ npx supabase test db
 
 | File | Asserts |
 |---|---|
-| `00_schema_contract.sql` | Derivative kinds incl. `public_safe`/`ai_safe`; customer permission gate; `mil_finalize_upload_grant` exists (service_role); no `mil_staff_all*` policies; `mil_is_reviewer` excludes office |
+| `00_schema_contract.sql` | Derivative kinds incl. `public_safe`/`ai_safe`; customer permission gate; the nine finalization RPCs exist and are `service_role`-only; the retired `mil_finalize_upload_grant` / `mil_cleanup_expired_upload_grants` are gone; no `mil_staff_all*` policies; `mil_is_reviewer` excludes office |
 | `01_rls_matrix.sql` | Capability-matrix policies via `pg_policies` — browse, reviewer write, owner-admin, creator reel, no `phone_uploader` policies |
+| `02_upload_finalization_lifecycle.sql` | Structural contract for 20260726090000 — `abandoned_count`, grant finalize columns, `finalize_state` / canonical path / commit-proof constraints, `mil_integrity_alerts` RLS, `mil_manifest_entries.grant_id` partial unique index, `mil_assets_active_checksum_uniq`, no `replace()` path derivation, client write grants removed, retired batch write policies gone |
+| `03_upload_lifecycle_behavior.sql` | Behavioral lifecycle, run inside a rolled-back transaction — lease contention, non-canonical quarantine rejection, MIME mismatch, catalog absent/mismatch at commit, successful commit, duplicate, quarantine bytes changed between attempts, expiry → abandonment, reconcile of a stranded `placed` grant, plus the counter and integrity-alert side effects |
+| `04_upload_privilege_matrix.sql` | Behavioral privilege matrix — `authenticated`/`anon` are denied every lifecycle write and every finalization RPC, browse SELECT and the reviewer `mil_assets` UPDATE still work, `service_role` keeps its table and EXECUTE rights |
+
+Note on grants: 20260726090000 states the surviving privileges explicitly (`grant select …`) instead of relying on the environment's default privileges. A disposable local stack and the hosted project do not start from the same table ACL, and `02`/`04` would otherwise pass or fail for reasons unrelated to the migration.
 
 ## Execution status
 
@@ -47,8 +52,11 @@ Executed successfully on disposable local Supabase after `npx supabase db reset`
 
 - `mil 00_schema_contract: PASS`
 - `mil 01_rls_matrix: PASS (structural)`
+- `mil 02_upload_finalization_lifecycle: PASS`
+- `mil 03_upload_lifecycle_behavior: PASS`
+- `mil 04_upload_privilege_matrix: PASS`
 
-These prove schema/RLS structure on local Postgres only. They are **not** staging/production proof.
+These prove schema/RLS structure and RPC behavior on local Postgres only. They are **not** staging/production proof. `03` simulates storage by inserting into `storage.objects`; it does not exercise the Storage API, so the edge-side placement path is unproven here.
 
 ## Related
 

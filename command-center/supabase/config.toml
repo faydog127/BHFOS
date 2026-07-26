@@ -139,3 +139,9 @@ port = 25434
 
 [functions.inspection-report-send]
   verify_jwt = false
+
+# Media Intelligence functions keep the default verify_jwt = true. The reconciler
+# is listed explicitly because it also demands the x-mil-reconcile-key secret;
+# neither control may be relaxed without an authorized decision.
+[functions.media-intel-upload-reconcile]
+  verify_jwt = true

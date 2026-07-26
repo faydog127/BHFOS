@@ -218,17 +218,30 @@ describe('Upload grant binding', () => {
     assert.match(mig, /completed_at/);
   });
 
-  it('complete_file requires grant match and rejects replay', () => {
+  it('complete_file requires grant match and answers a replay from recorded state', () => {
     const fn = read('supabase/functions/media-intel-upload-session/index.ts');
     assert.match(fn, /mil_upload_grants/);
     assert.match(fn, /Grant mismatch/);
-    assert.match(fn, /code: 'replay'/);
-    assert.match(fn, /Uploaded object not found for grant path/);
+    // A repeat call is answered from the grant's committed/duplicate state
+    // rather than re-running the transfer.
+    assert.match(fn, /begun\.status === 'already_committed'/);
+    assert.match(fn, /begun\.status === 'already_duplicate'/);
+    assert.match(fn, /replay: true/);
+    assert.match(fn, /The uploaded file is not in quarantine storage/);
     assert.match(fn, /ALLOWED_MIME/);
     assert.match(fn, /MAX_UPLOAD_BYTES/);
-    // Must not delete arbitrary client paths — only grant.object_path
+  });
+
+  it('complete_file never deletes storage inline — cleanup is the reconciler\'s job', () => {
+    const fn = read('supabase/functions/media-intel-upload-session/index.ts');
+    assert.doesNotMatch(fn, /\.remove\(/);
+  });
+
+  it('the reconciler only removes the grant-bound quarantine path', () => {
+    const fn = read('supabase/functions/media-intel-upload-reconcile/index.ts');
     assert.match(fn, /remove\(\[grant\.object_path\]\)/);
     assert.doesNotMatch(fn, /remove\(\[objectPath\]\)/);
+    assert.doesNotMatch(fn, /remove\(\[body\./);
   });
 
   it('mint generates server assetId and records grant before signed upload', () => {

@@ -212,9 +212,10 @@ describe('MIL client API single-company contracts', () => {
     assert.match(roles, /export async function fetchMilRole\(\)/);
     assert.doesNotMatch(api, /tenantId|tenant_id/);
     assert.doesNotMatch(upload, /tenantId|tenant_id/);
-    // Pre-staging hardening: staff desktop uploads land in quarantine, never
-    // written directly as a trusted "original".
-    assert.match(upload, /mil\/quarantine\//);
+    // Staff desktop uploads still land in quarantine first, but the path is now
+    // minted by the server; the client must not construct storage paths at all.
+    assert.doesNotMatch(upload, /['"`]mil\/quarantine\//);
+    assert.match(upload, /mint_upload/);
   });
 
   it('phone_uploader role carries no library upload capability (bearer session tokens only)', () => {
