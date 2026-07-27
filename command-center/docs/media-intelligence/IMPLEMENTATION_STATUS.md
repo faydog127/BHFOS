@@ -4,7 +4,7 @@
 **Verified HEAD at this status edit:** parent tip before hosting tooling commit; see git log after push  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
 
-## Hosted frontend correction (2026-07-27) — PARTIAL (Cloudflare DNS pending)
+## Hosted frontend correction (2026-07-27) — PASS
 
 | Field | Value |
 |---|---|
@@ -15,16 +15,15 @@
 | **bhfos.com testing root** | `/home/u986242606/domains/bhfos.com/public_html` |
 | **app.bhfos.com CRM root** | `/home/u986242606/domains/app.bhfos.com/public_html` |
 | Isolation | MIL subdomain recreated with `directory=mil`, `is_using_public_directory=false` (no longer shares bare `public_html`) |
-| Deploy | Staging-built artifact uploaded to `mil.bhfos.com` via Hostinger Files/TUS; verified over Hostinger CDN with `Host: mil.bhfos.com` |
-| build-info | `environment=mil-staging`, commit `a7c52ce857e8d72944fe859f9e4011cbfd34b2e4` |
-| Auth | Staging `uri_allow_list` includes `https://mil.bhfos.com` (+ localhost preserved); `site_url` remains `http://localhost:3000` |
-| Edge | Secret `MIL_ALLOWED_ORIGINS` set on staging (includes `https://mil.bhfos.com`) |
-| **Blocker** | Cloudflare is authoritative NS for `bhfos.com`; public `mil.bhfos.com` is still **NXDOMAIN**. No Cloudflare API token in operator env. Hostinger DNS already has `mil` A/AAAA/ALIAS, but those records are not served publicly. |
-| Neighbors | `https://bhfos.com` testing site and `https://app.bhfos.com` CRM verified still up after MIL deploy |
-| Rollback archive | local `command-center/tmp/mil-staging-a7c52ce857e8-*.zip` (+ copy under `tmp/mil-hosting-backup-20260727/`) |
-| Tooling | `TARGETS['mil-staging']` in `tools/deploy-lib.mjs`; `tools/package-mil-staging-archive.mjs` |
-
-**Owner DNS action required (Cloudflare → bhfos.com zone):** create `mil` record, DNS-only initially, target Hostinger (`mil.bhfos.com.cdn.hstgr.net` CNAME **or** A `92.112.189.92` per Hostinger zone). Then confirm Hostinger SSL for `mil.bhfos.com` and re-run hosted browser acceptance.
+| DNS | Cloudflare CNAME `mil` → `mil.bhfos.com.cdn.hstgr.net` (owner-applied; public resolve verified) |
+| HTTPS | Let's Encrypt cert `CN=mil.bhfos.com`; HTTP→HTTPS 301 verified |
+| Deploy | Staging-built artifact on Hostinger; `build-info` `environment=mil-staging`, commit `a7c52ce857e8d72944fe859f9e4011cbfd34b2e4` |
+| Auth | Staging `uri_allow_list` includes `https://mil.bhfos.com` (+ localhost); unauthenticated `/media/dashboard` → login; staging admin reaches MIL |
+| Edge | `MIL_ALLOWED_ORIGINS` set; hosted `media-intel-analyze` `config_status` **200** `configured: true` |
+| Hosted routes | `/`, `/media/dashboard`, `/media/uploads`, `/media/all`, `/media/review`, `/uploads`, `/all`, `/review` SPA OK |
+| Neighbors | `bhfos.com` testing site + `app.bhfos.com` CRM still up |
+| Rollback archive | local `command-center/tmp/mil-staging-a7c52ce857e8-*.zip` |
+| Tooling tip | `fe0fb01362ee368aa2916b311efb0293e3ec276d` |
 
 ---
 
