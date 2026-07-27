@@ -4,8 +4,8 @@
 **Historical / document baseline (branch ancestry from `main`):** `9369d206bfbcaf32267e9e88518b222146e11de8`  
 **MIL packet baseline (finalization lifecycle):** `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9`  
 **Authorized staging-apply tip (pre-write gate):** `ad8aaa60c63bae08a39c3ab587ca373810cc1461`  
-**Verified HEAD at this status edit:** (docs commit on tip of `ad8aaa60…` after staging-identity hard stop)  
-**Upstream at gate:** `origin/feat/media-intelligence-library` == `ad8aaa60…` (0 ahead / 0 behind before this docs commit)  
+**Verified HEAD at this status edit:** `41a281697aa5ecbcfa5c1f57c3af39b12c22cc83` (hard-stop docs atop authorized apply tip `ad8aaa60…`)  
+**Upstream at gate:** before hard-stop docs, `origin/feat/media-intelligence-library` == `ad8aaa60…` (0 ahead / 0 behind); this tip is +1 docs commit  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)  
 **Working tree at edit:** only untracked `command-center/build-out.txt` (**not** ignored; must never be modified, deleted, ignored, staged, or committed) — **no remote migration apply, no edge deploy, no merge, no prod**
 
