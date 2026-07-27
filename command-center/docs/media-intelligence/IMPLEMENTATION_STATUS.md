@@ -2,9 +2,9 @@
 
 **Branch:** `feat/media-intelligence-library`  
 **Baseline:** `9369d206bfbcaf32267e9e88518b222146e11de8`  
-**Verified tip at last status sync:** `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9` (HEAD unchanged; local uncommitted build cycle below — recovered + continued 2026-07-27)  
+**Verified tip at last status sync:** `771796fa54bc98b7c672e5fe97ddbf9e455a89dc` (local accepted cycle committed 2026-07-27; ahead of `origin` by 1; baseline was `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9`)  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)  
-**Working tree:** local implementation cycle in progress — **no remote migration apply, no edge deploy, no merge, no prod**
+**Working tree:** clean except ignored `build-out.txt` — **no remote migration apply, no edge deploy, no merge, no prod**
 
 **Last consolidated review:** 2026-07-27
 
@@ -94,7 +94,7 @@ Shared CORS helper: `supabase/functions/_shared/milCors.ts` (**1** — imported 
 | Before/after confirm UI | **1 + 3** | Confirm/reject errors + busy disable wired; needs staging data for USABLE |
 | Collections membership | **1 + 3** | Create / add / remove by asset UUID; no picker yet; needs staging proof |
 | Reel review | **1 + 3** | Approve/deny/revision via RPC; error honesty + no-publish copy; needs staging proof |
-| Dashboard counts | **3** | Queries `mil_*` tables (empty until migrations applied) |
+| Dashboard counts | **1 + 3** | Queries `mil_*`; throws on query errors (no silent zero mask); empty-state + on-demand AI copy. Still needs staging data for USABLE |
 | Settings / approved-to-post | **1** | Explicit “no social publishing” copy |
 
 ## Security / access hardening (**1** locally, **2** on live DB)
@@ -162,9 +162,9 @@ Social connections, scheduling, automatic publishing, facial recognition, phone 
 | **Quarantine retention** | Bytes for `failed` and `abandoned` grants are deliberately **not** deleted, so a customer's only copy is never destroyed by an automated sweep. Those objects accumulate and need an operator decision, not a cron job |
 | **Backfill of pre-existing grants** | The migration classifies existing rows from `completed_at` and asset ownership. Any historical row that was already inconsistent stays inconsistent — it is labelled, not repaired |
 
-## Local build cycle (2026-07-27) — uncommitted until Founder asks for commit
+## Local build cycle (2026-07-27) — committed as `771796f`
 
-Accepted locally (SOURCE + unit/contract tests + local SQL where noted; staging-unproven):
+Accepted (SOURCE + unit/contract tests + local SQL where noted; staging-unproven):
 
 - AI on-demand enqueue repair (`api.js` + `media-intel-analyze` `ensureAndClaimJob`)
 - Client + edge reviewer role alignment (office excluded from reviewer writes)
@@ -179,18 +179,18 @@ Accepted locally (SOURCE + unit/contract tests + local SQL where noted; staging-
 - Operator reconcile runbook: [`RECONCILE_OPERATOR.md`](./RECONCILE_OPERATOR.md) + Uploads/Settings copy (no client reconcile trigger)
 - Client table grants migration `20260727130000` (RLS was unreachable without GRANT)
 - JWT-seeded RLS behavioral SQL `05_jwt_rls_behavior.sql` **PASS** locally + sign/storage source contracts
-- Helper suite: `npm run test:media-intel-helpers` **128 pass / 0 fail** (recovery + grants/JWT/sign/B&A/reel contracts)
+- Before/after + reel review UI error/busy honesty + no-publish copy
+- Staging apply packet (docs only): [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md)
+- Helper suite: `npm run test:media-intel-helpers` **128 pass / 0 fail**
 
-Done this recovery continuation (2026-07-27 second chat loss — Request IDs `72cfb4e0…` / `4d85bd56…`):
+Still open locally (next executable):
 
-- Before/after UI: catch confirm/reject errors, busy disable, honest status line (still needs staging data for USABLE)
-- Reel review UI: same error/busy honesty; explicit no-publish / no-schedule copy + contracts
-- Staging apply packet (docs only): [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) — migrations, secrets, edge deploy order, evidence plan; **no remote apply**
+1. **Blocked on Founder:** staging apply/deploy per [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) — no remote apply/deploy from Build Controller without explicit go
+2. Optional further UI polish only if Founder requests; local Definition-of-Done remaining items otherwise wait on staging
 
-Still open locally (next executable after this commit):
+Post-`771796f` accepted (pending commit):
 
-1. Optional dashboard count / empty-state honesty polish under local contracts only
-2. **Blocked on Founder:** staging apply/deploy per [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) — no remote apply/deploy from Build Controller without explicit go
+- Dashboard: throw on count query errors; empty-state honesty; “on-demand AI” / manual-post labels + contracts (`129` helper pass)
 
 ### Orchestration note (chat-loss recovery)
 

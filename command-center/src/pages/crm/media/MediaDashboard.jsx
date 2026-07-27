@@ -58,21 +58,32 @@ export default function MediaDashboard() {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800" role="alert">
         {error}
         <p className="mt-2 text-red-700">
-          If this is a fresh environment, apply the media intelligence migration first.
+          If mil_* tables are missing, apply the Media Intelligence migrations on this project first
+          (see docs/media-intelligence/STAGING_APPLY_PACKET.md). Zeros are not shown when the query fails.
         </p>
       </div>
     );
   }
+
+  const libraryEmpty =
+    (stats.totalPhotos || 0) === 0 &&
+    (stats.totalVideos || 0) === 0 &&
+    (stats.recentlyUploaded || 0) === 0;
 
   return (
     <div className="space-y-6" data-testid="media-dashboard">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Operations overview</h2>
-          <p className="text-sm text-slate-600">Live counts from private media intake — not sample data.</p>
+          <p className="text-sm text-slate-600">
+            Live counts from private media intake — not sample data.
+            {libraryEmpty
+              ? ' Library is empty until uploads land (or migrations are applied on this project).'
+              : ''}
+          </p>
         </div>
         {caps.canUpload && (
           <Link
@@ -84,11 +95,23 @@ export default function MediaDashboard() {
         )}
       </div>
 
+      {libraryEmpty && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700" data-testid="media-dashboard-empty">
+          No media rows yet. AI and review queues stay empty until files finalize into the library.
+          Analysis is invoke-on-demand only — there is no background worker draining the queue.
+        </div>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
         <Stat label="Photos" value={stats.totalPhotos} to="/media/all?kind=photo" />
         <Stat label="Videos" value={stats.totalVideos} to="/media/all?kind=video" />
         <Stat label="Uploaded last 7 days" value={stats.recentlyUploaded} />
-        <Stat label="Awaiting AI analysis" value={stats.awaitingAi} to="/media/review" tone={stats.awaitingAi ? 'warn' : 'default'} />
+        <Stat
+          label="Awaiting on-demand AI"
+          value={stats.awaitingAi}
+          to="/media/review"
+          tone={stats.awaitingAi ? 'warn' : 'default'}
+        />
         <Stat label="Awaiting human review" value={stats.awaitingHumanReview} to="/media/review" tone={stats.awaitingHumanReview ? 'warn' : 'default'} />
         <Stat label="Possible duplicates" value={stats.possibleDuplicates} to="/media/all?dup=1" />
         <Stat label="Possible before & after" value={stats.possibleBeforeAfter} to="/media/before-after" />
@@ -96,7 +119,7 @@ export default function MediaDashboard() {
         <Stat label="Approved for marketing use" value={stats.approvedForMarketing} tone="ok" />
         <Stat label="Assigned to creator" value={stats.assignedToCreator} to="/media/settings" />
         <Stat label="Reels awaiting review" value={stats.reelsAwaitingReview} to="/media/reel-review" tone={stats.reelsAwaitingReview ? 'warn' : 'default'} />
-        <Stat label="Approved reels ready to post" value={stats.approvedReelsReady} to="/media/approved-to-post" tone="ok" />
+        <Stat label="Approved reels (manual post)" value={stats.approvedReelsReady} to="/media/approved-to-post" tone="ok" />
         <Stat label="Failed processing jobs" value={stats.failedJobs} tone={stats.failedJobs ? 'danger' : 'default'} />
       </div>
 
@@ -113,7 +136,7 @@ export default function MediaDashboard() {
             <Link className="text-blue-700 underline-offset-2 hover:underline" to="/media/review">
               Review AI suggestions
             </Link>
-            {' '}— nothing is verified until a person confirms it.
+            {' '}— nothing is verified until a person confirms it. AI runs only when explicitly invoked.
           </li>
           <li>
             <Link className="text-blue-700 underline-offset-2 hover:underline" to="/media/reel-review">

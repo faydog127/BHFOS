@@ -99,6 +99,20 @@ describe('MIL dashboard navigation contracts', () => {
     assert.doesNotMatch(dash, /resumable batches/i);
   });
 
+  it('dashboard empty/error honesty: no silent zeros on query failure; AI is on-demand', () => {
+    const dash = read('src/pages/crm/media/MediaDashboard.jsx');
+    const api = read('src/lib/mediaIntel/api.js');
+    assert.match(dash, /media-dashboard-empty|Library is empty/);
+    assert.match(dash, /invoke-on-demand|on-demand AI/i);
+    assert.match(dash, /Approval never publishes/);
+    assert.match(dash, /role="alert"/);
+    assert.match(dash, /STAGING_APPLY_PACKET/);
+    const start = api.indexOf('export async function fetchDashboardStats');
+    const body = api.slice(start, start + 1800);
+    assert.match(body, /firstError/);
+    assert.match(body, /if \(firstError\) throw firstError/);
+  });
+
   it('All Media honors dup=1 via listAssets duplicatesOnly', () => {
     const page = read('src/pages/crm/media/MediaAllMedia.jsx');
     const api = read('src/lib/mediaIntel/api.js');

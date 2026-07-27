@@ -24,10 +24,7 @@ export function audit() {
 export async function fetchDashboardStats() {
   const base = () => supabase.from('mil_assets').select('id', { count: 'exact', head: true });
 
-  const [
-    photos, videos, recent, awaitingAi, awaitingReview, duplicates, privacy,
-    marketing, assigned, failedJobs, baUnverified, reelsAwaiting, reelsApproved,
-  ] = await Promise.all([
+  const results = await Promise.all([
     base().eq('media_kind', 'photo').is('archived_at', null),
     base().eq('media_kind', 'video').is('archived_at', null),
     base().is('archived_at', null).gte('created_at', new Date(Date.now() - 7 * 864e5).toISOString()),
@@ -42,6 +39,14 @@ export async function fetchDashboardStats() {
     supabase.from('mil_reel_versions').select('id', { count: 'exact', head: true }).eq('status', 'submitted_for_review'),
     supabase.from('mil_reel_versions').select('id', { count: 'exact', head: true }).eq('status', 'approved_to_post'),
   ]);
+
+  const firstError = results.find((r) => r?.error)?.error;
+  if (firstError) throw firstError;
+
+  const [
+    photos, videos, recent, awaitingAi, awaitingReview, duplicates, privacy,
+    marketing, assigned, failedJobs, baUnverified, reelsAwaiting, reelsApproved,
+  ] = results;
 
   return {
     totalPhotos: photos.count || 0,
