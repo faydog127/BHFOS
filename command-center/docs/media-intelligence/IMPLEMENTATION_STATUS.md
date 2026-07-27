@@ -2,7 +2,7 @@
 
 **Branch:** `feat/media-intelligence-library`  
 **Baseline:** `9369d206bfbcaf32267e9e88518b222146e11de8`  
-**Verified tip at last status sync:** `771796fa54bc98b7c672e5fe97ddbf9e455a89dc` (local accepted cycle committed 2026-07-27; ahead of `origin` by 1; baseline was `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9`)  
+**Verified tip at last status sync:** `89bb72e9512c5c922feaae045a1a1753c618a16d` (ahead of `origin` by 2; prior cycle `771796f`; baseline `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9`)  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)  
 **Working tree:** clean except ignored `build-out.txt` — **no remote migration apply, no edge deploy, no merge, no prod**
 
@@ -162,7 +162,7 @@ Social connections, scheduling, automatic publishing, facial recognition, phone 
 | **Quarantine retention** | Bytes for `failed` and `abandoned` grants are deliberately **not** deleted, so a customer's only copy is never destroyed by an automated sweep. Those objects accumulate and need an operator decision, not a cron job |
 | **Backfill of pre-existing grants** | The migration classifies existing rows from `completed_at` and asset ownership. Any historical row that was already inconsistent stays inconsistent — it is labelled, not repaired |
 
-## Local build cycle (2026-07-27) — committed as `771796f`
+## Local build cycle (2026-07-27) — committed through `89bb72e`
 
 Accepted (SOURCE + unit/contract tests + local SQL where noted; staging-unproven):
 
@@ -170,7 +170,7 @@ Accepted (SOURCE + unit/contract tests + local SQL where noted; staging-unproven
 - Client + edge reviewer role alignment (office excluded from reviewer writes)
 - Mobile authenticated upload batchId race fix
 - Review archive/restrict entry UI
-- Dashboard nav honesty + All Media `dup=1`
+- Dashboard nav honesty + All Media `dup=1` + count/empty-state honesty (`89bb72e`)
 - Website `website-public-media` bucket migration added (unapplied remotely)
 - Creator portal single-workspace honesty + retryable reel upload
 - Unpublish UI in Media Settings (promote still disabled)
@@ -181,16 +181,23 @@ Accepted (SOURCE + unit/contract tests + local SQL where noted; staging-unproven
 - JWT-seeded RLS behavioral SQL `05_jwt_rls_behavior.sql` **PASS** locally + sign/storage source contracts
 - Before/after + reel review UI error/busy honesty + no-publish copy
 - Staging apply packet (docs only): [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md)
-- Helper suite: `npm run test:media-intel-helpers` **128 pass / 0 fail**
+- Helper suite: `npm run test:media-intel-helpers` **129 pass / 0 fail**
 
 Still open locally (next executable):
 
 1. **Blocked on Founder:** staging apply/deploy per [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) — no remote apply/deploy from Build Controller without explicit go
-2. Optional further UI polish only if Founder requests; local Definition-of-Done remaining items otherwise wait on staging
+2. Optional further UI polish only if Founder requests; remaining Definition-of-Done items wait on staging
 
-Post-`771796f` accepted (pending commit):
+### Active defects (honest)
 
-- Dashboard: throw on count query errors; empty-state honesty; “on-demand AI” / manual-post labels + contracts (`129` helper pass)
+| Defect | Standing |
+|---|---|
+| Hosted/staging unproven | Migrations + edges never applied/deployed remotely |
+| Promote website | Still **503** `not_implemented` by design |
+| No reconcile schedule | Stranded `pending_reconcile` until inline/manual run |
+| Uploads not resumable | Deferred |
+| Edge Storage HTTP path | SQL simulates `storage.objects`; real upload/download unproven |
+| Large-file `ai_safe` derivative | Still incomplete; analyze may skip |
 
 ### Orchestration note (chat-loss recovery)
 
