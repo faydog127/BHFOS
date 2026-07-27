@@ -1,6 +1,6 @@
 # Media Library — Single-Company Architectural Correction
 
-**Status:** PAUSED — inspection complete; no migrations applied; no edge functions deployed; awaiting owner review before implementation continues.  
+**Status:** SUPERSEDED AS GATE — single-company correction is the governing architecture; implementation continued on `feat/media-intelligence-library` (see `IMPLEMENTATION_STATUS.md`). Still **no remote migration apply / edge deploy** without Founder authorization.  
 **Branch:** `feat/media-intelligence-library`  
 **Baseline:** `9369d206bfbcaf32267e9e88518b222146e11de8`  
 **Authoritative decision:** BHFOS is a single-company OS for The Vent Guys. Multi-tenant product architecture is rejected for Media Library V2.

@@ -94,7 +94,7 @@ export default function MediaDashboard() {
         <Stat label="Possible before & after" value={stats.possibleBeforeAfter} to="/media/before-after" />
         <Stat label="Privacy warnings" value={stats.privacyWarnings} to="/media/review" tone={stats.privacyWarnings ? 'danger' : 'default'} />
         <Stat label="Approved for marketing use" value={stats.approvedForMarketing} tone="ok" />
-        <Stat label="Assigned to creator" value={stats.assignedToCreator} to="/media/creator" />
+        <Stat label="Assigned to creator" value={stats.assignedToCreator} to="/media/settings" />
         <Stat label="Reels awaiting review" value={stats.reelsAwaitingReview} to="/media/reel-review" tone={stats.reelsAwaitingReview ? 'warn' : 'default'} />
         <Stat label="Approved reels ready to post" value={stats.approvedReelsReady} to="/media/approved-to-post" tone="ok" />
         <Stat label="Failed processing jobs" value={stats.failedJobs} tone={stats.failedJobs ? 'danger' : 'default'} />
@@ -107,7 +107,7 @@ export default function MediaDashboard() {
             <Link className="text-blue-700 underline-offset-2 hover:underline" to="/media/uploads">
               Upload from phones
             </Link>
-            {' '}— resumable batches with transfer manifests.
+            {' '}— phone or desktop transfer with honest pending/failed states (not resumable yet).
           </li>
           <li>
             <Link className="text-blue-700 underline-offset-2 hover:underline" to="/media/review">

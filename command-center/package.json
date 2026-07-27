@@ -25,7 +25,7 @@
     "test:ml-p1-s1-helpers": "node --test tests/unit/ml-p1-s1-foundation.test.mjs",
     "test:ml-p1-s2-helpers": "node --test tests/unit/ml-p1-s2-lifecycle.test.mjs",
     "test:ux-refactor-helpers": "node --test tests/unit/ux-refactor-nav-ia.test.mjs",
-    "test:media-intel-helpers": "node --test tests/unit/media-intel-core.test.mjs tests/unit/media-intel-access.test.mjs tests/unit/media-intel-security.test.mjs tests/unit/media-intel-contracts.test.mjs",
+    "test:media-intel-helpers": "node --test tests/unit/media-intel-core.test.mjs tests/unit/media-intel-access.test.mjs tests/unit/media-intel-security.test.mjs tests/unit/media-intel-contracts.test.mjs tests/unit/media-intel-upload-client.test.mjs",
     "test:ux-polish-helpers": "node --test tests/unit/ux-polish-brand-hygiene.test.mjs",
     "test:uxv2-helpers": "node --test tests/unit/uxv2-app-polish.test.mjs",
     "test:uxv2-percy": "percy exec -- playwright test tests/smoke/uxv2-percy-baselines.spec.js",

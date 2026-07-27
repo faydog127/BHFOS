@@ -37,7 +37,7 @@ export default function MediaAllMedia() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState(params.get('q') || '');
-  const [selected, setSelected] = useState(() => new Set());
+  const duplicatesOnly = params.get('dup') === '1';
 
   const filters = useMemo(
     () => ({
@@ -45,6 +45,7 @@ export default function MediaAllMedia() {
       humanReviewStatus: params.get('review') || undefined,
       privacyStatus: params.get('privacy') || undefined,
       search: params.get('q') || undefined,
+      duplicatesOnly: params.get('dup') === '1' || undefined,
       archived: false,
       limit: 120,
     }),
@@ -137,38 +138,31 @@ export default function MediaAllMedia() {
         </div>
       ) : assets.length === 0 ? (
         <div className="rounded-xl border bg-white p-8 text-center text-sm text-slate-600">
-          No media matches these filters. Upload a phone dump to populate the library.
+          {duplicatesOnly
+            ? 'No duplicate candidates match these filters.'
+            : 'No media matches these filters. Upload a phone dump to populate the library.'}
         </div>
       ) : (
         <>
           <div className="text-sm text-slate-600">
-            Showing {assets.length} · selected {selected.size}
-            {selected.size > 0 && caps.canVerify && (
-              <span className="ml-2 text-slate-500">Bulk actions available in review for safe repeated metadata.</span>
-            )}
+            Showing {assets.length}
+            {duplicatesOnly ? ' · duplicate candidates (linked via duplicate_of_asset_id)' : ''}
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3">
             {assets.map((asset) => (
-              <label key={asset.id} className="block rounded-lg border bg-white p-2 cursor-pointer focus-within:ring-2 focus-within:ring-blue-500">
-                <div className="flex items-center gap-2 mb-2">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(asset.id)}
-                    onChange={(e) => {
-                      setSelected((prev) => {
-                        const next = new Set(prev);
-                        if (e.target.checked) next.add(asset.id);
-                        else next.delete(asset.id);
-                        return next;
-                      });
-                    }}
-                  />
-                  <span className="text-[11px] text-slate-500 truncate">{HUMAN_REVIEW_LABELS[asset.human_review_status]}</span>
+              <div key={asset.id} className="rounded-lg border bg-white p-2">
+                <div className="mb-2 text-[11px] text-slate-500 truncate">
+                  {HUMAN_REVIEW_LABELS[asset.human_review_status]}
                 </div>
                 <Thumb asset={asset} />
                 <div className="mt-2 text-xs font-medium text-slate-800 truncate">{asset.original_filename}</div>
                 <div className="text-[11px] text-slate-500">{PRIVACY_LABELS[asset.privacy_status]}</div>
-              </label>
+                {asset.duplicate_of_asset_id && (
+                  <div className="text-[10px] text-amber-800 mt-1 truncate" title={asset.duplicate_of_asset_id}>
+                    Duplicate of {String(asset.duplicate_of_asset_id).slice(0, 8)}…
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         </>

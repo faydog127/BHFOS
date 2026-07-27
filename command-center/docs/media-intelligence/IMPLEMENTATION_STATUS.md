@@ -2,10 +2,11 @@
 
 **Branch:** `feat/media-intelligence-library`  
 **Baseline:** `9369d206bfbcaf32267e9e88518b222146e11de8`  
+**Verified tip at last status sync:** `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9` (HEAD unchanged; local uncommitted build cycle below — recovered + continued 2026-07-27)  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)  
-**Working tree:** pre-staging hardening — **no remote migration apply, no edge deploy, no merge, no prod**
+**Working tree:** local implementation cycle in progress — **no remote migration apply, no edge deploy, no merge, no prod**
 
-**Last consolidated review:** 2026-07-25
+**Last consolidated review:** 2026-07-27
 
 ## Status buckets (used throughout MIL docs)
 
@@ -26,8 +27,10 @@
 | `20260725140000_media_intel_pre_staging_hardening.sql` | Capability-matrix RLS (drops `mil_staff_all_*`), SECURITY DEFINER RPCs, `mil_finalize_upload_grant`, `mil_is_reviewer` excludes `office` |
 | `20260725150000_media_intel_analyze_honesty.sql` | Honest analyze skip reasons (`skipped_needs_ai_safe_derivative`, etc.) |
 | `20260726090000_media_intel_upload_finalization_lifecycle.sql` | Durable upload finalization state machine; `abandoned_count`; `mil_integrity_alerts`; nine `service_role`-only RPCs; **drops** `mil_finalize_upload_grant` and `mil_cleanup_expired_upload_grants`; removes client write grants on all lifecycle tables |
+| `20260727120000_media_intel_website_public_bucket.sql` | Idempotent `website-public-media` bucket (public read) + anon/authenticated SELECT + `service_role` all; does **not** enable promote |
+| `20260727130000_media_intel_client_table_grants.sql` | States `authenticated` SELECT (+ intended writes) and `service_role` full DML on non-lifecycle `mil_*` tables so capability-matrix RLS is reachable; does **not** restore client INSERT/DELETE on `mil_assets` or lifecycle tables |
 
-None of the above are applied outside disposable local testing. **Do not treat RLS or storage behavior as proven until staging apply + pgTAP/SQL tests run.**
+None of the above are applied outside disposable local testing (local stack may have both 20260727* migrations applied for verification). **Do not treat RLS or storage behavior as proven until staging apply + SQL tests run.**
 
 ### Why 20260726090000 exists
 
@@ -76,20 +79,28 @@ Shared CORS helper: `supabase/functions/_shared/milCors.ts` (**1** — imported 
 | CRM alias `/crm/media/*` → `/media/*` | **1** | Redirect only; grants no extra access |
 | `MediaSessionGuard` + capability guards | **1** | Client hints; **RLS is authoritative** |
 | Upload client (`uploadManager.js`) | **1** | Rewritten onto `media-intel-upload-session`. The browser no longer writes batches, manifests, grants or asset rows, and no longer constructs storage paths — every path is minted by the server |
+| Authenticated mobile upload batchId | **1** | `MediaMobileUpload` keeps minted `token`+`batchId` in a ref so the first upload after `createUploadSession` does not race stale React state |
 | Upload resumability | **4 — deferred** | **Uploads are not resumable in this release.** The previous IndexedDB/TUS resume path was removed with the client rewrite: it resumed against client-chosen paths that the server no longer trusts. An interrupted transfer must be re-selected and re-sent |
 | Honest per-file upload states | **1** | `uploaded` / `duplicate` / `pending_reconcile` / `in_progress` / `expired` / `revoked` / `failed` / `skipped`. Only an explicit **200** becomes a success state; a `202 pending_reconcile` is shown as unfinished, never as saved |
+| Operator reconcile runbook + UI copy | **1** | [`RECONCILE_OPERATOR.md`](./RECONCILE_OPERATOR.md); Media Uploads / Settings explain stranded `pending_reconcile` — **no** browser reconcile button (`MIL_RECONCILE_KEY` stays edge-only) |
 | Practical max upload **250 MB** | **1** | `checksum.js` / `constants.js`; not 2 GB (memory/hashing honesty) |
 | Phone upload link format `#session=` | **1** | Fragment preferred over `?session=` (see `MediaSettings.jsx`, `MediaMobileUpload.jsx`) |
 | Client `signedUrl()` / `audit()` | **5** | Throw — use `requestSignedMediaUrl` + server RPC audit |
 | Grid thumb derivatives (client JPEG) | **3** | Preview path exists; staff cannot write trusted derivatives to storage (quarantine-only INSERT policy) |
-| Review queue, collections, B&A, creator workspace, reel review | **3** | UI + RPC wiring; needs staging proof |
+| Review queue | **1 + 3** | Verify / permitted-use / on-demand AI await+errors / archive+restrict wired; still needs staging data for USABLE proof |
+| All Media `dup=1` | **1** | Honors dashboard duplicate deep-link via `listAssets({ duplicatesOnly })`; removed fake bulk-selection affordance |
+| Dashboard nav honesty | **1** | Creator assignments → `/media/settings`; upload copy no longer claims resumable |
+| Creator workspace IA | **1 + 3** | Single honest `/creator` workspace (fake media/reels/upload tabs removed); reel-upload failures are retryable with deploy-unavailable copy. Still needs deployed `media-intel-reel-upload` for USABLE proof |
+| Before/after confirm UI | **1 + 3** | Confirm/reject errors + busy disable wired; needs staging data for USABLE |
+| Collections membership | **1 + 3** | Create / add / remove by asset UUID; no picker yet; needs staging proof |
+| Reel review | **1 + 3** | Approve/deny/revision via RPC; error honesty + no-publish copy; needs staging proof |
 | Dashboard counts | **3** | Queries `mil_*` tables (empty until migrations applied) |
 | Settings / approved-to-post | **1** | Explicit “no social publishing” copy |
 
 ## Security / access hardening (**1** locally, **2** on live DB)
 
 - **Capability-matrix RLS** replaces broad `mil_staff_all_*` policies (**1** in migration source; **2** until applied).
-- **`mil_is_reviewer()`** = admin, manager, media_reviewer only — **office excluded** from reviewer write surfaces (**1** contract tests + SQL tests).
+- **`mil_is_reviewer()`** = admin, manager, media_reviewer only — **office excluded** from reviewer write surfaces (**1** contract tests + SQL tests). Client `REVIEWERS` and edge `isMilReviewer` now match SQL (office may still browse/upload via library staff).
 - **`phone_uploader` is NOT a product library role** — phone dumps authorized only by bearer upload session tokens minted by owner/admin (**1**).
 - **Durable finalization lifecycle** (service_role only, nine RPCs): the edge re-hashes the quarantine bytes on **every** attempt, places with `upsert:false`, and the database proves storage-catalog visibility inside the commit transaction (**1** source + unit + local SQL behavior tests; **2** e2e).
 - **Time-based leases** on grant finalization, so a dead worker releases the grant instead of blocking it forever, and two workers cannot finalize one grant (**1** local behavior test).
@@ -101,13 +112,15 @@ Shared CORS helper: `supabase/functions/_shared/milCors.ts` (**1** — imported 
 ## AI / processing queue (honest)
 
 - `mil_processing_jobs` rows are created `queued` on finalize, but **there is no always-on worker**.
-- **`media-intel-analyze` is invoke-on-demand** (client `queueAiAnalysis` calls the edge function directly). Uninvoked jobs stay `queued` forever — that reflects real architecture, not a hidden background worker claim.
+- **`media-intel-analyze` is invoke-on-demand** — client `queueAiAnalysis` **awaits** the edge only (no client job/asset writes). Edge `ensureAndClaimJob` claims a queued row or inserts one via service_role for reanalyze. Uninvoked finalize jobs stay `queued` forever — honest architecture, not a fake worker.
+- Status: **IMPLEMENTED LOCALLY** (unit/contract tests); **staging-unproven** until edge deploy.
 - OpenAI path requires key; no-key → honest skip (**1** edge source + tests).
+- Large originals still `skipped_needs_ai_safe_derivative` until an `ai_safe` derivative exists (**4** / incomplete).
 - Near-duplicate perceptual similarity, HEIC worker, video thumbs/transcripts: **4 — deferred**.
 
-## Website promotion (**5**)
+## Website promotion (**5** promote / **1+2** unpublish)
 
-`prepare_public_safe` and `promote` are **disabled (503)** until a proven decode → re-encode → strip pipeline exists. Marker-only EXIF removal does **not** prove public safety. `unpublish` remains for pulling existing public copies.
+`prepare_public_safe` and `promote` are **disabled (503)** until a proven decode → re-encode → strip pipeline exists. Marker-only EXIF removal does **not** prove public safety. Owner/admin **unpublish** is wired in Media Settings → `unpublishWebsiteMedia` → edge `action: 'unpublish'` (**1** source + contracts; **2** until staging deploy).
 
 ## Backup / restore / export
 
@@ -119,8 +132,8 @@ Documented in `BACKUP_RESTORE_EXPORT.md`. Procedures are **2 — not proven reco
 |---|---|
 | `npm run test:media-intel-helpers` | **1** — unit/contract tests (Node, no Docker) |
 | `tests/unit/media-intel-contracts.test.mjs` | **1** — static cross-file contracts |
-| `supabase/tests/mil/*.sql` | **1** — five files, all PASS after local `npx supabase db reset` (schema contract, RLS matrix, lifecycle structure, lifecycle behavior, privilege matrix) |
-| Local `supabase db reset` | **1** — applied all five MIL migrations on disposable local stack (2026-07-25). Requires conditional skip in `20260721120000_ml_p1_rs101_deny_estimates_insert.sql` when `public.estimates` is absent. **Not applied to staging/production.** |
+| `supabase/tests/mil/*.sql` | **1** — six files; `00`–`04` PASS after local reset; `05_jwt_rls_behavior` PASS on disposable local stack after `20260727130000` grants (2026-07-27) |
+| Local `supabase db reset` | **1** — MIL migrations applied on disposable local stack. Requires conditional skip in `20260721120000_ml_p1_rs101_deny_estimates_insert.sql` when `public.estimates` is absent. **Not applied to staging/production.** |
 
 ### What the tests do **not** prove
 
@@ -145,16 +158,50 @@ Social connections, scheduling, automatic publishing, facial recognition, phone 
 | **250 MB per-file ceiling** | The edge must hold the whole object in memory to hash it. Longer phone videos will be rejected rather than silently truncated. Raising `MIL_MAX_UPLOAD_BYTES` without confirming edge memory headroom will turn rejections into crashes |
 | **No resumable uploads** | Removed with the client rewrite (see the client table). A dropped connection means re-selecting the file. Desktop owner/admin uploads use the same session path — there is no TUS fallback for them |
 | **Reel lifecycle** | Untouched by this change and still unproven. Out of scope |
-| **`queueAiAnalysis` is broken** | The client-side analyze trigger does not reliably reach `media-intel-analyze`. Jobs stay `queued`. Not repaired here — repairing it was explicitly out of scope, and pretending analysis runs would be worse than leaving it visibly queued |
+| **`queueAiAnalysis` (local fix; staging-unproven)** | Client no longer inserts jobs; edge ensure/claim path is in source + unit tests. Still requires deployed `media-intel-analyze` (+ optional `OPENAI_API_KEY`) for USABLE proof |
 | **Quarantine retention** | Bytes for `failed` and `abandoned` grants are deliberately **not** deleted, so a customer's only copy is never destroyed by an automated sweep. Those objects accumulate and need an operator decision, not a cron job |
 | **Backfill of pre-existing grants** | The migration classifies existing rows from `completed_at` and asset ownership. Any historical row that was already inconsistent stays inconsistent — it is labelled, not repaired |
 
+## Local build cycle (2026-07-27) — uncommitted until Founder asks for commit
+
+Accepted locally (SOURCE + unit/contract tests + local SQL where noted; staging-unproven):
+
+- AI on-demand enqueue repair (`api.js` + `media-intel-analyze` `ensureAndClaimJob`)
+- Client + edge reviewer role alignment (office excluded from reviewer writes)
+- Mobile authenticated upload batchId race fix
+- Review archive/restrict entry UI
+- Dashboard nav honesty + All Media `dup=1`
+- Website `website-public-media` bucket migration added (unapplied remotely)
+- Creator portal single-workspace honesty + retryable reel upload
+- Unpublish UI in Media Settings (promote still disabled)
+- Upload `interpretCompletion` / 503-retry honesty unit tests
+- Collections membership workflow (create / add / remove by asset UUID; honest “no picker yet” copy) + contracts
+- Operator reconcile runbook: [`RECONCILE_OPERATOR.md`](./RECONCILE_OPERATOR.md) + Uploads/Settings copy (no client reconcile trigger)
+- Client table grants migration `20260727130000` (RLS was unreachable without GRANT)
+- JWT-seeded RLS behavioral SQL `05_jwt_rls_behavior.sql` **PASS** locally + sign/storage source contracts
+- Helper suite: `npm run test:media-intel-helpers` **128 pass / 0 fail** (recovery + grants/JWT/sign/B&A/reel contracts)
+
+Done this recovery continuation (2026-07-27 second chat loss — Request IDs `72cfb4e0…` / `4d85bd56…`):
+
+- Before/after UI: catch confirm/reject errors, busy disable, honest status line (still needs staging data for USABLE)
+- Reel review UI: same error/busy honesty; explicit no-publish / no-schedule copy + contracts
+- Staging apply packet (docs only): [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) — migrations, secrets, edge deploy order, evidence plan; **no remote apply**
+
+Still open locally (next executable after this commit):
+
+1. Optional dashboard count / empty-state honesty polish under local contracts only
+2. **Blocked on Founder:** staging apply/deploy per [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) — no remote apply/deploy from Build Controller without explicit go
+
+### Orchestration note (chat-loss recovery)
+
+Controlling conversation Request IDs `72cfb4e0-f28c-4206-ab12-96f3823ee101` and `4d85bd56-cf23-428f-9c67-8b0f01a8a22d` are not recoverable. Repository documents + commits are authoritative. Do not re-implement accepted items above from missing chat memory.
+
 ## Remaining for Definition of Done (requires owner authorization)
 
-1. Apply migrations + deploy edge functions to authorized staging Supabase
+1. Founder authorizes + execute [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) (migrations + secrets + edge deploy)
 2. Set `MIL_RECONCILE_KEY` in staging edge secrets **before** deploying either upload function
-3. Run `supabase/tests/mil/*.sql` after reset; capture evidence
-3. End-to-end acceptance scenarios (upload → review → creator → unpublish)
-4. Accessibility + responsive screenshot suite
-5. Large synthetic library performance harness
-6. Owner authorization before CRM staging deploy / merge
+3. Run `supabase/tests/mil/*.sql` after apply; capture evidence
+4. End-to-end acceptance scenarios (upload → review → creator → unpublish)
+5. Accessibility + responsive screenshot suite
+6. Large synthetic library performance harness
+7. Owner authorization before CRM staging deploy / merge

@@ -87,12 +87,12 @@ Status buckets: **1** locally proven · **2** staging proof required · **3** sc
 
 | Plan slice | Status | Honest notes |
 |---|---|---|
-| 1. Schema + buckets + RLS + role helpers + audit | **2** | Four migrations written (`20260725120000`–`20260725150000`); **unapplied** outside disposable local testing. Capability-matrix RLS in `140000` drops `mil_staff_all_*`. |
+| 1. Schema + buckets + RLS + role helpers + audit | **2** | Five migrations written (`20260725120000`–`20260726090000` lifecycle); **unapplied** outside disposable local testing. Capability-matrix RLS in `140000` drops `mil_staff_all_*`. |
 | 2. Media shell (11 nav destinations) + dashboard | **3** | Routes/components wired; counts empty until DB exists. |
-| 3. Resumable upload + manifest + recovery | **1 + 2** | Client/TUS + unit tests (**1**); grant finalize + quarantine path requires staging (**2**). Max **250 MB** practical (not 2 GB). Phone auth = bearer `#session=` token, **not** `phone_uploader` library role. |
+| 3. Upload + manifest + recovery | **1 + 2** | Session mint/PUT/finalize client (**1**); **resumable TUS deferred** (not in this release). Grant finalize + quarantine path requires staging (**2**). Max **250 MB** practical (not 2 GB). Phone auth = bearer `#session=` token, **not** `phone_uploader` library role. |
 | 4. Derivatives/previews + original immutability | **3 + 5** | Client grid thumbs (**3**); `public_safe` transform **5 — disabled** until decode/re-encode pipeline proven. |
 | 5. AI adapter + review queue + provenance | **2** | Edge + RPCs exist; analyze is **invoke-on-demand only** (no background worker). Jobs stay `queued` if never invoked. |
-| 6. Collections + before/after confirmation | **3** | UI + RPC wiring; staging proof pending. |
+| 6. Collections + before/after confirmation | **1 + 3** | Membership + B&A confirm/reject honesty wired locally; staging proof pending. |
 | 7. Creator workspace + reel versioning/review | **2 + 3** | `media-intel-creator-admin` + `media-intel-reel-upload` written, **not deployed**. UI scaffold. |
 | 8. Website promote + backup/export docs + tests | **5 + 2** | Promote **503 disabled**; unpublish only. Backup docs exist; **restore not proven**. Unit + SQL contract tests added; SQL tests need Docker + `supabase db reset`. |
 

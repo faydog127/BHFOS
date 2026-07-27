@@ -61,7 +61,6 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [reelUploadDisabled, setReelUploadDisabled] = useState(false);
 
   const load = async () => {
     try {
@@ -131,11 +130,11 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
       setNotes('');
       await load();
     } catch (err) {
-      // The edge mint/complete step is the only authorized path to create a reel
-      // version. If it is unavailable, disable further attempts with an honest
-      // message instead of silently falling back to a forbidden direct write.
-      setReelUploadDisabled(true);
+      // Edge mint/complete is the only authorized path — never fall back to a
+      // direct storage/table write. Surface deploy/unavailable honestly and keep
+      // the control enabled so the creator can retry after deploy or transient fail.
       setError(REEL_UPLOAD_UNAVAILABLE_MESSAGE);
+      if (fileRef.current) fileRef.current.value = '';
       if (project?.id) {
         // Roll back the orphaned draft project — it has no version and never will.
         await supabase.from('mil_reel_projects').delete().eq('id', project.id).eq('status', 'creator_draft');
@@ -171,7 +170,6 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
       setMessage(`Version ${nextNum} uploaded. Fresh owner approval is required.`);
       await load();
     } catch (err) {
-      setReelUploadDisabled(true);
       setError(REEL_UPLOAD_UNAVAILABLE_MESSAGE);
     } finally {
       setBusy(false);
@@ -207,31 +205,26 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
 
       <section className="rounded-xl border bg-white p-4 space-y-3">
         <h3 className="font-medium text-slate-900">Upload draft or completed reel</h3>
-        {reelUploadDisabled ? (
-          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-            {REEL_UPLOAD_UNAVAILABLE_MESSAGE}
-          </p>
-        ) : (
-          <>
-            <label className="block text-sm">
-              <span className="font-medium">Title</span>
-              <input className="mt-1 w-full rounded-md border px-3 py-2 min-h-[44px]" value={title} onChange={(e) => setTitle(e.target.value)} />
-            </label>
-            <label className="block text-sm">
-              <span className="font-medium">Notes / questions for owner</span>
-              <textarea className="mt-1 w-full rounded-md border px-3 py-2" value={notes} onChange={(e) => setNotes(e.target.value)} />
-            </label>
-            <input ref={fileRef} type="file" accept="video/*,.mp4,.mov" className="hidden" onChange={(e) => uploadReel(e.target.files?.[0])} />
-            <button
-              type="button"
-              disabled={busy}
-              className="rounded-md bg-blue-600 text-white px-4 py-2.5 text-sm min-h-[44px]"
-              onClick={() => fileRef.current?.click()}
-            >
-              {busy ? 'Uploading…' : 'Choose reel file'}
-            </button>
-          </>
-        )}
+        <p className="text-xs text-slate-500">
+          Submitting a draft requests owner review only — approval is not publishing.
+        </p>
+        <label className="block text-sm">
+          <span className="font-medium">Title</span>
+          <input className="mt-1 w-full rounded-md border px-3 py-2 min-h-[44px]" value={title} onChange={(e) => setTitle(e.target.value)} />
+        </label>
+        <label className="block text-sm">
+          <span className="font-medium">Notes / questions for owner</span>
+          <textarea className="mt-1 w-full rounded-md border px-3 py-2" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </label>
+        <input ref={fileRef} type="file" accept="video/*,.mp4,.mov" className="hidden" onChange={(e) => uploadReel(e.target.files?.[0])} />
+        <button
+          type="button"
+          disabled={busy}
+          className="rounded-md bg-blue-600 text-white px-4 py-2.5 text-sm min-h-[44px]"
+          onClick={() => fileRef.current?.click()}
+        >
+          {busy ? 'Uploading…' : 'Choose reel file'}
+        </button>
       </section>
 
       <section className="space-y-3">
@@ -264,13 +257,14 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
                     Submit for review
                   </button>
                 )}
-                {!reelUploadDisabled && ['denied', 'revision_requested', 'approved_to_post'].includes(latest?.status) && (
+                {['denied', 'revision_requested', 'approved_to_post'].includes(latest?.status) && (
                   <label className="rounded-md border px-3 py-2 text-sm min-h-[44px] inline-flex items-center cursor-pointer">
                     Upload new version
                     <input
                       type="file"
                       accept="video/*,.mp4,.mov"
                       className="hidden"
+                      disabled={busy}
                       onChange={(e) => e.target.files?.[0] && uploadRevision(p, e.target.files[0])}
                     />
                   </label>

@@ -8,6 +8,7 @@ export default function MediaBeforeAfter() {
   const [rows, setRows] = useState([]);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
+  const [busyId, setBusyId] = useState(null);
 
   const load = async () => {
     const { data, error: err } = await supabase
@@ -21,10 +22,16 @@ export default function MediaBeforeAfter() {
         .select('*')
         .in('relationship_type', ['possible_before_after', 'before_after'])
         .order('created_at', { ascending: false });
-      if (simple.error) setError(simple.error.message);
-      else setRows(simple.data || []);
+      if (simple.error) {
+        setError(simple.error.message);
+        setRows([]);
+      } else {
+        setError(null);
+        setRows(simple.data || []);
+      }
       return;
     }
+    setError(null);
     setRows(data || []);
   };
 
@@ -32,15 +39,32 @@ export default function MediaBeforeAfter() {
     load();
   }, []);
 
+  const decide = async (relationshipId, confirm) => {
+    if (busyId) return;
+    setBusyId(relationshipId);
+    setError(null);
+    setMessage(null);
+    try {
+      await confirmBeforeAfter(relationshipId, confirm);
+      setMessage(confirm ? 'Relationship confirmed.' : 'Proposal rejected.');
+      await load();
+    } catch (err) {
+      setError(err?.message || (confirm ? 'Confirm failed' : 'Reject failed'));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <div className="space-y-4 max-w-3xl" data-testid="media-before-after">
       <div>
         <h2 className="text-lg font-semibold text-slate-900">Before &amp; after</h2>
         <p className="text-sm text-slate-600">
-          AI may propose pairs. Until a person confirms same job, system, order, and angle, relationships stay labeled unverified.
+          AI may propose pairs. Until a reviewer confirms same job, system, order, and angle,
+          relationships stay unverified — never treated as marketing-ready.
         </p>
       </div>
-      {error && <div className="text-sm text-red-700">{error}</div>}
+      {error && <div className="text-sm text-red-700" role="alert">{error}</div>}
       {message && <div className="text-sm text-emerald-700">{message}</div>}
       <ul className="space-y-3">
         {rows.length === 0 && (
@@ -49,9 +73,13 @@ export default function MediaBeforeAfter() {
           </li>
         )}
         {rows.map((r) => (
-          <li key={r.id} className="rounded-xl border bg-white p-4 space-y-2">
+          <li key={r.id} className="rounded-xl border bg-white p-4 space-y-2" data-testid="media-before-after-row">
             <div className="text-sm font-medium text-slate-900">
               {r.left?.original_filename || r.left_asset_id} → {r.right?.original_filename || r.right_asset_id}
+            </div>
+            <div className="text-xs text-slate-500">
+              Status: {r.verification_status}
+              {r.relationship_type ? ` · ${r.relationship_type}` : ''}
             </div>
             {r.verification_status !== 'confirmed' ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
@@ -66,23 +94,17 @@ export default function MediaBeforeAfter() {
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  className="rounded-md bg-blue-600 text-white px-3 py-2 text-sm min-h-[44px]"
-                  onClick={async () => {
-                    await confirmBeforeAfter(r.id, true);
-                    setMessage('Relationship confirmed.');
-                    await load();
-                  }}
+                  disabled={Boolean(busyId)}
+                  className="rounded-md bg-blue-600 text-white px-3 py-2 text-sm min-h-[44px] disabled:opacity-60"
+                  onClick={() => decide(r.id, true)}
                 >
-                  Confirm
+                  {busyId === r.id ? 'Saving…' : 'Confirm'}
                 </button>
                 <button
                   type="button"
-                  className="rounded-md border px-3 py-2 text-sm min-h-[44px]"
-                  onClick={async () => {
-                    await confirmBeforeAfter(r.id, false);
-                    setMessage('Proposal rejected.');
-                    await load();
-                  }}
+                  disabled={Boolean(busyId)}
+                  className="rounded-md border px-3 py-2 text-sm min-h-[44px] disabled:opacity-60"
+                  onClick={() => decide(r.id, false)}
                 >
                   Reject
                 </button>

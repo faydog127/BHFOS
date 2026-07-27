@@ -314,6 +314,32 @@ describe('Role capability narrowing', () => {
     assert.match(roles, /isTechnician/);
   });
 
+  it('client isReviewer excludes office; library staff browse/upload still includes office', () => {
+    const roles = read('src/lib/mediaIntel/roles.js');
+    assert.match(roles, /LIBRARY_STAFF = new Set\(\['admin', 'manager', 'office', 'media_reviewer'\]\)/);
+    assert.match(roles, /REVIEWERS = new Set\(\['admin', 'manager', 'media_reviewer'\]\)/);
+    assert.doesNotMatch(roles, /REVIEWERS = new Set\(\[[^\]]*['"]office['"]/);
+    assert.match(roles, /isReviewer:\s*REVIEWERS\.has\(r\)/);
+    assert.match(roles, /canVerify:\s*REVIEWERS\.has\(r\)/);
+    assert.match(roles, /canBrowseLibrary:\s*isLibraryStaff/);
+    assert.match(roles, /canUpload:\s*isLibraryStaff/);
+  });
+
+  it('edge isMilReviewer matches SQL mil_is_reviewer (excludes office, not aliased to staff)', () => {
+    const src = read('supabase/functions/_shared/milRoles.ts');
+    const reviewerFn = src.slice(
+      src.indexOf('export async function isMilReviewer'),
+      src.indexOf('export async function isMilCreator'),
+    );
+    assert.match(reviewerFn, /resolveMilRole/);
+    assert.match(reviewerFn, /\['admin', 'manager', 'media_reviewer'\]/);
+    assert.doesNotMatch(reviewerFn, /isMilStaff/);
+    assert.doesNotMatch(reviewerFn, /office/);
+    assert.doesNotMatch(reviewerFn, /technician/);
+    assert.doesNotMatch(reviewerFn, /reel_creator/);
+    assert.doesNotMatch(reviewerFn, /phone_uploader/);
+  });
+
   it('docs define role capability matrix including manager owner/admin actions', () => {
     const doc = read('docs/media-intelligence/ACCESS_ARCHITECTURE.md');
     assert.match(doc, /Role → MIL capability matrix/);

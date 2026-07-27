@@ -127,10 +127,18 @@ async function putBytes({ minted, file, mime }) {
 }
 
 /**
+ * 503 (and network status 0) mean "try again", not "it failed".
+ * Exported for unit tests — completeFile retries exactly once when this is true.
+ */
+export function isRetryableCompletionStatus(status) {
+  return status === 503 || status === 0;
+}
+
+/**
  * Translate the finalize HTTP contract into a UI state. Nothing here upgrades an
  * unproven result: only an explicit 200 uploaded/duplicate counts as success.
  */
-function interpretCompletion({ status, payload }) {
+export function interpretCompletion({ status, payload }) {
   if (status === 200) {
     if (payload.status === 'duplicate') {
       return {
@@ -185,8 +193,8 @@ async function completeFile({ token, minted, checksum, byteSize }) {
   };
 
   let result = await callUploadSession(request);
-  // 503 means "try again", not "it failed". Exactly one retry, then report honestly.
-  if (result.status === 503 || result.status === 0) {
+  // Exactly one retry on retryable status, then interpret whatever came back.
+  if (isRetryableCompletionStatus(result.status)) {
     await new Promise((resolve) => setTimeout(resolve, RETRYABLE_RETRY_DELAY_MS));
     result = await callUploadSession(request);
   }

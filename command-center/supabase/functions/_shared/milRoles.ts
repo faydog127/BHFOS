@@ -77,8 +77,10 @@ export async function isMilStaff(userId: string): Promise<boolean> {
   return ['admin', 'manager', 'office', 'media_reviewer'].includes(role)
 }
 
+/** Reviewer writes: mirrors SQL mil_is_reviewer() — office excluded. */
 export async function isMilReviewer(userId: string): Promise<boolean> {
-  return isMilStaff(userId)
+  const role = await resolveMilRole(userId)
+  return ['admin', 'manager', 'media_reviewer'].includes(role)
 }
 
 export async function isMilCreator(userId: string): Promise<boolean> {

@@ -3,10 +3,12 @@ import { useOutletContext } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import {
   acceptAiSuggestions,
+  archiveAsset,
   assetPreviewUrl,
   fetchReviewBundle,
   listAssets,
   queueAiAnalysis,
+  restrictAsset,
   setPermittedUse,
   verifyAssetMetadata,
 } from '@/lib/mediaIntel/api';
@@ -28,7 +30,15 @@ export default function MediaReviewQueue() {
     try {
       const rows = await listAssets({ humanReviewStatus: 'pending', archived: false, limit: 100 });
       setAssets(rows);
-      if (!selectedId && rows[0]) setSelectedId(rows[0].id);
+      if (selectedId && !rows.some((r) => r.id === selectedId)) {
+        setSelectedId(rows[0]?.id || null);
+        if (!rows[0]) {
+          setBundle(null);
+          setPreviewUrl(null);
+        }
+      } else if (!selectedId && rows[0]) {
+        setSelectedId(rows[0].id);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -94,6 +104,7 @@ export default function MediaReviewQueue() {
   const saveVerify = async () => {
     if (!caps.canVerify) return;
     setSaving(true);
+    setError(null);
     setMessage(null);
     try {
       await verifyAssetMetadata(selectedId, form);
@@ -101,6 +112,27 @@ export default function MediaReviewQueue() {
       await loadQueue();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runArchiveAction = async (action) => {
+    if (!caps.canVerify || !selectedId) return;
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      if (action === 'archive') {
+        await archiveAsset(selectedId);
+        setMessage('Asset archived.');
+      } else {
+        await restrictAsset(selectedId);
+        setMessage('Asset restricted for privacy review.');
+      }
+      await loadQueue();
+    } catch (err) {
+      setError(err.message || `${action} failed`);
     } finally {
       setSaving(false);
     }
@@ -191,7 +223,17 @@ export default function MediaReviewQueue() {
                       <button
                         type="button"
                         className="underline"
-                        onClick={() => queueAiAnalysis(selectedId)}
+                        onClick={async () => {
+                          try {
+                            setError(null);
+                            setMessage(null);
+                            await queueAiAnalysis(selectedId);
+                            setMessage('Analysis started.');
+                            await loadQueue();
+                          } catch (err) {
+                            setError(err.message || 'Analysis failed to start');
+                          }
+                        }}
                       >
                         Queue analysis
                       </button>
@@ -271,11 +313,36 @@ export default function MediaReviewQueue() {
                 type="button"
                 className="rounded-md border px-4 py-2.5 text-sm min-h-[44px]"
                 onClick={async () => {
-                  await queueAiAnalysis(selectedId);
-                  setMessage('Reanalysis queued. Verified human fields will not be overwritten automatically.');
+                  try {
+                    setError(null);
+                    setMessage(null);
+                    await queueAiAnalysis(selectedId);
+                    setMessage('Reanalysis finished. Verified human fields will not be overwritten automatically.');
+                    await loadQueue();
+                  } catch (err) {
+                    setError(err.message || 'Reanalysis failed');
+                  }
                 }}
               >
                 Reanalyze (keep verified)
+              </button>
+              <button
+                type="button"
+                disabled={saving || !selectedId}
+                onClick={() => runArchiveAction('archive')}
+                className="rounded-md border px-4 py-2.5 text-sm min-h-[44px]"
+                data-testid="media-review-archive"
+              >
+                Archive
+              </button>
+              <button
+                type="button"
+                disabled={saving || !selectedId}
+                onClick={() => runArchiveAction('restrict')}
+                className="rounded-md border border-amber-300 text-amber-900 px-4 py-2.5 text-sm min-h-[44px]"
+                data-testid="media-review-restrict"
+              >
+                Restrict
               </button>
             </div>
           </>

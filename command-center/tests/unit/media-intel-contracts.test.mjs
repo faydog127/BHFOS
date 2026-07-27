@@ -23,6 +23,7 @@ const MIL_EDGE_FUNCTIONS = [
 ];
 
 const LIFECYCLE_MIGRATION = 'supabase/migrations/20260726090000_media_intel_upload_finalization_lifecycle.sql';
+const WEBSITE_BUCKET_MIGRATION = 'supabase/migrations/20260727120000_media_intel_website_public_bucket.sql';
 const UPLOAD_SESSION_FN = 'supabase/functions/media-intel-upload-session/index.ts';
 const RECONCILE_FN = 'supabase/functions/media-intel-upload-reconcile/index.ts';
 
@@ -62,6 +63,48 @@ describe('MIL promote website honesty', () => {
     assert.match(fn, /503/);
     assert.match(fn, /not_implemented/);
     assert.match(fn, /public_safe_transform_not_implemented/);
+  });
+
+  it('unpublishWebsiteMedia invokes edge with action unpublish + assetId only', () => {
+    const api = read('src/lib/mediaIntel/api.js');
+    const start = api.indexOf('export async function unpublishWebsiteMedia');
+    assert.ok(start >= 0, 'unpublishWebsiteMedia export not found');
+    const next = api.indexOf('\nexport ', start + 1);
+    const src = next === -1 ? api.slice(start) : api.slice(start, next);
+    assert.match(src, /media-intel-promote-website/);
+    assert.match(src, /action:\s*['"]unpublish['"]/);
+    assert.match(src, /assetId:\s*id/);
+    assert.doesNotMatch(src, /action:\s*['"]promote['"]/);
+    assert.doesNotMatch(src, /prepare_public_safe/);
+  });
+
+  it('MediaSettings keeps promote disabled and wires owner/admin unpublish', () => {
+    const settings = read('src/pages/crm/media/MediaSettings.jsx');
+    assert.match(settings, /unpublishWebsiteMedia/);
+    assert.match(settings, /mil_website_promotions/);
+    assert.match(settings, /data-testid="website-unpublish"/);
+    assert.match(settings, /Promote public derivative \(disabled\)/);
+    assert.match(settings, /Promote disabled/);
+    // Promote control must stay hard-disabled in the UI.
+    assert.match(settings, /title="Disabled pending proven public-safe transform pipeline"/);
+    assert.doesNotMatch(settings, /action:\s*['"]promote['"]/);
+    assert.doesNotMatch(settings, /action:\s*['"]prepare_public_safe['"]/);
+  });
+});
+
+describe('MIL website-public-media bucket migration', () => {
+  const mig = read(WEBSITE_BUCKET_MIGRATION);
+
+  it('creates public website-public-media bucket with service_role writes only', () => {
+    assert.match(mig, /website-public-media/);
+    assert.match(mig, /insert into storage\.buckets/);
+    // New bucket row is public read; conflict path only forces public=true.
+    assert.match(mig, /'website-public-media',\s*\n\s*'website-public-media',\s*\n\s*true,/);
+    assert.match(mig, /on conflict \(id\) do update set\s*\n\s*public = true/);
+    assert.match(mig, /for select to anon, authenticated/);
+    assert.match(mig, /for all to service_role/);
+    assert.doesNotMatch(mig, /for insert to (authenticated|anon)/);
+    assert.doesNotMatch(mig, /inspection-photos|inspection-reports/);
   });
 });
 
@@ -290,7 +333,7 @@ describe('MIL client security contracts', () => {
 
   it('uploadManager only calls success states on an explicit 200', () => {
     const upload = read('src/lib/mediaIntel/uploadManager.js');
-    assert.match(upload, /function interpretCompletion/);
+    assert.match(upload, /export function interpretCompletion/);
     assert.match(upload, /if \(status === 200\)/);
     assert.match(upload, /UPLOAD_FILE_STATUS\.PENDING_RECONCILE/);
   });
@@ -334,6 +377,21 @@ describe('MIL UI session fragment preference', () => {
     assert.match(mobile, /#session=/);
     assert.match(mobile, /Prefer the URL fragment/);
   });
+
+  it('MediaMobileUpload authenticated path passes freshly minted batchId (not stale sessionInfo)', () => {
+    const mobile = read('src/pages/crm/media/MediaMobileUpload.jsx');
+    // Session bearer path still uses validated sessionInfo.
+    assert.match(mobile, /runUpload\(files, linkToken, sessionInfo\?\.batchId\)/);
+    // Authenticated mint must stash createUploadSession result and pass that batchId.
+    assert.match(mobile, /mintedSessionRef\.current = \{ token: created\.token, batchId: created\.batchId \}/);
+    assert.match(mobile, /return runUpload\(files, minted\.token, minted\.batchId\)/);
+    // Guard the race: do not call runUpload with sessionInfo?.batchId after mint.
+    const authReturn = mobile.match(
+      /if \(!caps\?\.isOwnerAdmin\)[\s\S]*?return runUpload\(([^)]+)\)/,
+    );
+    assert.ok(authReturn, 'authenticated startUpload runUpload call not found');
+    assert.doesNotMatch(authReturn[1], /sessionInfo/);
+  });
 });
 
 describe('MIL practical upload limit honesty', () => {
@@ -343,5 +401,160 @@ describe('MIL practical upload limit honesty', () => {
     assert.match(checksum, /MAX_PRACTICAL_HASH_BYTES = 250 \* 1024 \* 1024/);
     assert.match(constants, /MAX_PRACTICAL_HASH_BYTES/);
     assert.match(constants, /Do not advertise 2 GB/);
+  });
+});
+
+describe('MIL on-demand AI analysis queue contract', () => {
+  const api = read('src/lib/mediaIntel/api.js');
+  const analyze = read('supabase/functions/media-intel-analyze/index.ts');
+
+  /** Isolate queueAiAnalysis (last export) without brittle brace matching. */
+  function queueAiAnalysisSource() {
+    const start = api.indexOf('export async function queueAiAnalysis');
+    assert.ok(start >= 0, 'queueAiAnalysis export not found');
+    const next = api.indexOf('\nexport ', start + 1);
+    return next === -1 ? api.slice(start) : api.slice(start, next);
+  }
+
+  function ensureAndClaimJobSource() {
+    const start = analyze.indexOf('async function ensureAndClaimJob');
+    const end = analyze.indexOf('async function settleJob');
+    assert.ok(start >= 0, 'ensureAndClaimJob not found');
+    assert.ok(end > start, 'settleJob must follow ensureAndClaimJob');
+    return analyze.slice(start, end);
+  }
+
+  it('queueAiAnalysis does not insert mil_processing_jobs or update mil_assets', () => {
+    const src = queueAiAnalysisSource();
+    assert.doesNotMatch(
+      src,
+      /from\(['"]mil_processing_jobs['"]\)/,
+      'client must not touch mil_processing_jobs (RLS is SELECT-only)',
+    );
+    assert.doesNotMatch(
+      src,
+      /from\(['"]mil_assets['"]\)/,
+      'client must not update mil_assets.processing_status',
+    );
+    assert.doesNotMatch(src, /\.insert\(/);
+    assert.doesNotMatch(src, /\.update\(/);
+  });
+
+  it('queueAiAnalysis awaits invoke and surfaces errors (no fire-and-forget swallow)', () => {
+    const src = queueAiAnalysisSource();
+    assert.match(src, /await supabase\.functions\.invoke\(['"]media-intel-analyze['"]/);
+    assert.match(src, /action:\s*['"]analyze['"]/);
+    assert.match(src, /if \(error\)/);
+    assert.match(src, /throw new Error/);
+    assert.doesNotMatch(src, /\.catch\(\s*\(\)\s*=>\s*\{\s*\}\s*\)/);
+    assert.doesNotMatch(src, /functions\.invoke\([\s\S]*?\)\.catch\(/);
+  });
+
+  it('analyze edge ensures/claims a job server-side when no queued row exists', () => {
+    assert.match(analyze, /async function claimQueuedJob/);
+    assert.match(analyze, /const job = await ensureAndClaimJob\(assetId\)/);
+    const ensureBody = ensureAndClaimJobSource();
+    assert.match(ensureBody, /supabaseAdmin/);
+    assert.match(
+      ensureBody,
+      /from\(['"]mil_processing_jobs['"]\)\s*\n?\s*\.insert\(/,
+    );
+    assert.match(ensureBody, /job_type:\s*['"]ai_analyze['"]/);
+    assert.match(ensureBody, /status:\s*['"]queued['"]/);
+    assert.match(ensureBody, /claimQueuedJob/);
+    // Prefer new queued rows over rewriting succeeded/cancelled history.
+    assert.doesNotMatch(
+      ensureBody,
+      /\.update\(\s*\{\s*status:\s*['"]queued['"]/,
+      'must not reset historical job rows back to queued',
+    );
+  });
+
+  it('analyze edge keeps staff gate and honest skip statuses', () => {
+    assert.match(analyze, /isMilStaff/);
+    assert.match(analyze, /skipped_no_key/);
+    assert.match(analyze, /skipped_unsupported/);
+    assert.match(analyze, /skipped_needs_ai_safe_derivative/);
+    assert.match(analyze, /Do NOT write into mil_verified_metadata/);
+  });
+});
+
+describe('MIL before/after confirmation honesty', () => {
+  const api = read('src/lib/mediaIntel/api.js');
+  const page = read('src/pages/crm/media/MediaBeforeAfter.jsx');
+
+  it('confirmBeforeAfter updates relationship verification via RLS-gated table write', () => {
+    assert.match(api, /export async function confirmBeforeAfter/);
+    const start = api.indexOf('export async function confirmBeforeAfter');
+    const body = api.slice(start, start + 500);
+    assert.match(body, /mil_asset_relationships/);
+    assert.match(body, /verification_status/);
+    assert.match(body, /confirmed|rejected/);
+    assert.match(body, /if \(error\) throw error/);
+  });
+
+  it('MediaBeforeAfter surfaces confirm/reject errors and busy-disables actions', () => {
+    assert.match(page, /confirmBeforeAfter/);
+    assert.match(page, /caps\.canVerify/);
+    assert.match(page, /role="alert"/);
+    assert.match(page, /Confirm failed|Reject failed|err\?\.message/);
+    assert.match(page, /setBusyId/);
+    assert.match(page, /catch \(err\)/);
+    assert.match(page, /disabled=\{Boolean\(busyId\)\}/);
+  });
+});
+
+describe('MIL reel review honesty', () => {
+  const page = read('src/pages/crm/media/MediaReelReview.jsx');
+
+  it('MediaReelReview catches approve/deny errors and never claims publish', () => {
+    assert.match(page, /reviewReelVersion/);
+    assert.match(page, /caps\.canApproveReels/);
+    assert.match(page, /role="alert"/);
+    assert.match(page, /setBusyId/);
+    assert.match(page, /catch \(err\)/);
+    assert.match(page, /disabled=\{Boolean\(busyId\)\}/);
+    assert.match(page, /Nothing was published or scheduled|does not publish or schedule/);
+    assert.doesNotMatch(page, /scheduled.*publish|auto.?post|social publish/i);
+  });
+});
+
+describe('MIL collections membership honesty', () => {
+  const api = read('src/lib/mediaIntel/api.js');
+  const page = read('src/pages/crm/media/MediaCollections.jsx');
+  const hardening = read('supabase/migrations/20260725140000_media_intel_pre_staging_hardening.sql');
+
+  it('staff write policies exist for collections and collection items (no inventing RPCs)', () => {
+    assert.match(hardening, /mil_library_staff_write_collections/);
+    assert.match(hardening, /mil_library_staff_write_collection_items/);
+    assert.match(hardening, /mil_can_browse_library\(\)/);
+    assert.doesNotMatch(api, /rpc\(['"]mil_.*collection/);
+  });
+
+  it('api exposes thin direct-table helpers for list/create/add/remove', () => {
+    assert.match(api, /export async function listCollections/);
+    assert.match(api, /export async function createCollection/);
+    assert.match(api, /export async function listCollectionItems/);
+    assert.match(api, /export async function addCollectionItem/);
+    assert.match(api, /export async function removeCollectionItem/);
+    assert.match(api, /from\(['"]mil_collections['"]\)/);
+    assert.match(api, /from\(['"]mil_collection_items['"]\)/);
+    assert.match(api, /normalizeMilAssetId/);
+  });
+
+  it('MediaCollections wires membership UI and surfaces item counts', () => {
+    assert.match(page, /listCollections/);
+    assert.match(page, /createCollection/);
+    assert.match(page, /addCollectionItem/);
+    assert.match(page, /removeCollectionItem/);
+    assert.match(page, /caps\?\.isStaff/);
+    assert.match(page, /\{count\} \{count === 1 \? 'item' : 'items'\}/);
+    assert.match(page, /Asset UUID/);
+    assert.match(page, /data-testid="media-collection-add-item"/);
+    assert.match(page, /data-testid="media-collection-remove-item"/);
+    // Membership is UUID add/remove only — no browse/search/drag editor affordance.
+    assert.doesNotMatch(page, /drag.?and.?drop/i);
+    assert.doesNotMatch(page, /search assets/i);
+    assert.doesNotMatch(page, /type="file"/);
   });
 });

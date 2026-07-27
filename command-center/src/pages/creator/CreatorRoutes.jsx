@@ -25,15 +25,19 @@ function CreatorWorkspacePage() {
   return <MediaCreatorWorkspace caps={caps} />;
 }
 
+/**
+ * One honest Creator workspace. Legacy /creator/media|reels|upload bookmarks
+ * redirect here — those were never distinct sections.
+ */
 export default function CreatorRoutes() {
   return (
     <Routes>
       <Route element={<CreatorPortalLayout />}>
-        <Route index element={<Navigate to="media" replace />} />
-        <Route path="media" element={<CreatorWorkspacePage />} />
-        <Route path="reels" element={<CreatorWorkspacePage />} />
-        <Route path="upload" element={<CreatorWorkspacePage />} />
-        <Route path="*" element={<Navigate to="media" replace />} />
+        <Route index element={<CreatorWorkspacePage />} />
+        <Route path="media" element={<Navigate to="/creator" replace />} />
+        <Route path="reels" element={<Navigate to="/creator" replace />} />
+        <Route path="upload" element={<Navigate to="/creator" replace />} />
+        <Route path="*" element={<Navigate to="/creator" replace />} />
       </Route>
     </Routes>
   );

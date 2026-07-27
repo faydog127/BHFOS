@@ -43,8 +43,9 @@ npx supabase test db
 | `02_upload_finalization_lifecycle.sql` | Structural contract for 20260726090000 — `abandoned_count`, grant finalize columns, `finalize_state` / canonical path / commit-proof constraints, `mil_integrity_alerts` RLS, `mil_manifest_entries.grant_id` partial unique index, `mil_assets_active_checksum_uniq`, no `replace()` path derivation, client write grants removed, retired batch write policies gone |
 | `03_upload_lifecycle_behavior.sql` | Behavioral lifecycle, run inside a rolled-back transaction — lease contention, non-canonical quarantine rejection, MIME mismatch, catalog absent/mismatch at commit, successful commit, duplicate, quarantine bytes changed between attempts, expiry → abandonment, reconcile of a stranded `placed` grant, plus the counter and integrity-alert side effects |
 | `04_upload_privilege_matrix.sql` | Behavioral privilege matrix — `authenticated`/`anon` are denied every lifecycle write and every finalization RPC, browse SELECT and the reviewer `mil_assets` UPDATE still work, `service_role` keeps its table and EXECUTE rights |
+| `05_jwt_rls_behavior.sql` | JWT-seeded behavioral RLS — seeds `auth.users` + `app_user_roles`, acts as admin/reviewer/office/creator/technician via `request.jwt.claim.sub`, proves office≠reviewer, staff browse, collection membership writes, quarantine-only storage INSERT, creator/tech denied originals SELECT |
 
-Note on grants: 20260726090000 states the surviving privileges explicitly (`grant select …`) instead of relying on the environment's default privileges. A disposable local stack and the hosted project do not start from the same table ACL, and `02`/`04` would otherwise pass or fail for reasons unrelated to the migration.
+Note on grants: `20260726090000` states lifecycle privileges explicitly; `20260727130000` states the remaining client/service_role table privileges so RLS policies are reachable. A disposable local stack and the hosted project do not start from the same table ACL.
 
 ## Execution status
 
@@ -55,8 +56,9 @@ Executed successfully on disposable local Supabase after `npx supabase db reset`
 - `mil 02_upload_finalization_lifecycle: PASS`
 - `mil 03_upload_lifecycle_behavior: PASS`
 - `mil 04_upload_privilege_matrix: PASS`
+- `mil 05_jwt_rls_behavior: PASS` (2026-07-27; requires `20260727130000` client table grants)
 
-These prove schema/RLS structure and RPC behavior on local Postgres only. They are **not** staging/production proof. `03` simulates storage by inserting into `storage.objects`; it does not exercise the Storage API, so the edge-side placement path is unproven here.
+These prove schema/RLS structure and RPC behavior on local Postgres only. They are **not** staging/production proof. `03`/`05` simulate storage by inserting into `storage.objects`; they do not exercise the Storage HTTP API, so the edge-side placement/sign path is unproven here.
 
 ## Related
 

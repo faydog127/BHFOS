@@ -50,8 +50,10 @@ export default function MediaMobileUpload() {
   const outlet = useOutletContext() || {};
   const [caps, setCaps] = useState(outlet.caps || null);
   const [linkToken] = useState(extractSessionToken);
-  // Token minted for a signed-in owner/admin who opened this page without a link.
-  const mintedTokenRef = useRef(null);
+  // Session minted for a signed-in owner/admin who opened this page without a link.
+  // Keep token + batchId in a ref so the first upload after createUploadSession
+  // does not read a stale sessionInfo from before setState flushes.
+  const mintedSessionRef = useRef(null);
 
   useEffect(() => {
     if (!linkToken) return;
@@ -159,16 +161,17 @@ export default function MediaMobileUpload() {
     }
 
     try {
-      if (!mintedTokenRef.current) {
+      if (!mintedSessionRef.current) {
         const created = await createUploadSession({ label: 'Mobile browser upload' });
-        mintedTokenRef.current = created.token;
+        mintedSessionRef.current = { token: created.token, batchId: created.batchId };
         setSessionInfo(created);
       }
     } catch (err) {
       setSessionError(err.message);
       return undefined;
     }
-    return runUpload(files, mintedTokenRef.current, sessionInfo?.batchId);
+    const minted = mintedSessionRef.current;
+    return runUpload(files, minted.token, minted.batchId);
   };
 
   const totals = useMemo(() => {

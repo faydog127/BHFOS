@@ -34,7 +34,8 @@ function validateMediaFile(file) {
   if (!MIL_SUPPORTED_MIME.includes(mime) && !EXT_MIME[extensionOf(file.name)]) {
     return { ok: false, reason: `Unsupported type: ${file.name}` };
   }
-  if (file.size > 2 * 1024 * 1024 * 1024) return { ok: false, reason: 'too large' };
+  // Mirror product cap (MIL_MAX_FILE_BYTES / checksum practical hash) — not 2 GB.
+  if (file.size > 250 * 1024 * 1024) return { ok: false, reason: 'too large' };
   if (file.size <= 0) return { ok: false, reason: 'empty' };
   return { ok: true, mime };
 }

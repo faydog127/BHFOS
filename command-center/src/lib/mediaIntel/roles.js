@@ -2,7 +2,8 @@ import { supabase } from '@/lib/customSupabaseClient';
 
 /** Roles with Media Library browse / private-original access. Technicians excluded. */
 const LIBRARY_STAFF = new Set(['admin', 'manager', 'office', 'media_reviewer']);
-const REVIEWERS = new Set(['admin', 'manager', 'office', 'media_reviewer']);
+/** Aligns with SQL mil_is_reviewer() — office may browse/upload but cannot review. */
+const REVIEWERS = new Set(['admin', 'manager', 'media_reviewer']);
 /** May invite/revoke creators, mint upload sessions, promote website media, approve reels. */
 const OWNERS = new Set(['admin', 'manager']);
 

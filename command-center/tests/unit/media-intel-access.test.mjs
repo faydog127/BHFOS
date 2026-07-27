@@ -53,6 +53,21 @@ describe('MIL creator isolation UI', () => {
     assert.doesNotMatch(layout, /CRM_PRIMARY_NAV/);
   });
 
+  it('creator IA is one workspace — no fake media/reels/upload tabs; upload stays retryable', () => {
+    const layout = read('src/pages/creator/CreatorPortalLayout.jsx');
+    const routes = read('src/pages/creator/CreatorRoutes.jsx');
+    const workspace = read('src/pages/crm/media/MediaCreatorWorkspace.jsx');
+    assert.doesNotMatch(layout, /to=\{`\/creator\/\$\{item\.path\}`\}/);
+    assert.doesNotMatch(layout, /Available media/);
+    assert.doesNotMatch(layout, /My reels/);
+    assert.match(routes, /index element=\{<CreatorWorkspacePage/);
+    assert.match(routes, /path="media" element=\{<Navigate to="\/creator"/);
+    assert.doesNotMatch(routes, /path="media" element=\{<CreatorWorkspacePage/);
+    assert.doesNotMatch(workspace, /reelUploadDisabled|setReelUploadDisabled/);
+    assert.match(workspace, /REEL_UPLOAD_UNAVAILABLE_MESSAGE/);
+    assert.match(workspace, /approval is not publishing/i);
+  });
+
   it('CRM layout redirects creator-only accounts to /creator', () => {
     const layout = read('src/components/BHFCrmLayout.jsx');
     assert.match(layout, /accessGate/);
@@ -72,6 +87,25 @@ describe('MIL creator isolation UI', () => {
     assert.match(guard, /fetchMilRole\(\)/);
     assert.doesNotMatch(guard, /useParams/);
     assert.doesNotMatch(guard, /tenantId/);
+  });
+});
+
+describe('MIL dashboard navigation contracts', () => {
+  it('does not link to dead /media/creator; duplicates use /media/all?dup=1', () => {
+    const dash = read('src/pages/crm/media/MediaDashboard.jsx');
+    assert.doesNotMatch(dash, /to="\/media\/creator"/);
+    assert.match(dash, /to="\/media\/settings"/);
+    assert.match(dash, /to="\/media\/all\?dup=1"/);
+    assert.doesNotMatch(dash, /resumable batches/i);
+  });
+
+  it('All Media honors dup=1 via listAssets duplicatesOnly', () => {
+    const page = read('src/pages/crm/media/MediaAllMedia.jsx');
+    const api = read('src/lib/mediaIntel/api.js');
+    assert.match(page, /params\.get\('dup'\) === '1'/);
+    assert.match(page, /duplicatesOnly/);
+    assert.match(api, /filters\.duplicatesOnly/);
+    assert.match(api, /duplicate_of_asset_id/);
   });
 });
 
@@ -99,6 +133,48 @@ describe('MIL upload session + signed access (no tenant)', () => {
     assert.match(fn, /creatorCanView/);
     assert.match(fn, /creator_download|detail_preview|grid_thumb/);
     assert.doesNotMatch(fn, /tenant_id|tenantId/);
+  });
+
+  it('sign function is fail-closed: auth, purpose, staff/creator gate, no client createSignedUrl', () => {
+    const fn = read('supabase/functions/media-intel-sign/index.ts');
+    const api = read('src/lib/mediaIntel/api.js');
+    assert.match(fn, /auth\.getUser\(\)/);
+    assert.match(fn, /VALID_PURPOSES/);
+    assert.match(fn, /STAFF_ROLES/);
+    assert.match(fn, /You do not have access to this media/);
+    assert.match(fn, /allowOriginal === true/);
+    assert.match(fn, /createSignedUrl/);
+    // Browser must not mint storage signed URLs; only the edge may.
+    assert.match(api, /requestSignedMediaUrl|media-intel-sign/);
+    assert.doesNotMatch(api, /storage\.from\([^)]*\)\.createSignedUrl/);
+  });
+
+  it('storage policies keep client inserts on quarantine paths only', () => {
+    const core = read('supabase/migrations/20260725120000_media_intelligence_library.sql');
+    assert.match(core, /create policy "MIL originals quarantine insert by staff"/);
+    assert.match(core, /name like 'mil\/quarantine\/%'/);
+    assert.match(core, /mil_is_staff\(\)/);
+    // Legacy broad insert policy names may appear only in DROP IF EXISTS cleanup.
+    assert.doesNotMatch(core, /create policy "MIL originals insertable by staff/);
+  });
+
+  it('client table grants migration states SELECT/write privileges explicitly', () => {
+    const grants = read('supabase/migrations/20260727130000_media_intel_client_table_grants.sql');
+    assert.match(grants, /grant select on public\.mil_collections to authenticated/);
+    assert.match(grants, /grant insert, update, delete on public\.mil_collection_items to authenticated/);
+    assert.match(grants, /grant insert, update, delete on public\.mil_verified_metadata to authenticated/);
+    assert.match(grants, /grant select, insert, update, delete on public\.mil_collections to service_role/);
+    assert.match(grants, /Correct-looking RLS without GRANT/);
+    assert.doesNotMatch(grants, /grant insert on public\.mil_assets to authenticated/);
+  });
+
+  it('JWT-seeded RLS behavioral SQL test exists', () => {
+    const sql = read('supabase/tests/mil/05_jwt_rls_behavior.sql');
+    assert.match(sql, /request\.jwt\.claim\.sub/);
+    assert.match(sql, /mil_is_reviewer\(\)/);
+    assert.match(sql, /office must NOT be mil_is_reviewer/);
+    assert.match(sql, /mil\/quarantine\//);
+    assert.match(sql, /mil 05_jwt_rls_behavior: PASS/);
   });
 
   it('access migration adds mil_upload_sessions without tenant_id', () => {

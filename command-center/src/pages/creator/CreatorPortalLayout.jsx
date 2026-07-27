@@ -1,19 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Clapperboard, FolderOpen, LogOut, Upload } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Outlet, useNavigate } from 'react-router-dom';
+import { LogOut } from 'lucide-react';
 import { DEFAULT_TENANT_ID } from '@/config/tenantDefaults';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { fetchMilRole, milCapabilities } from '@/lib/mediaIntel/roles';
 
-const NAV = [
-  { name: 'Available media', path: 'media', icon: FolderOpen },
-  { name: 'My reels', path: 'reels', icon: Clapperboard },
-  { name: 'Upload', path: 'upload', icon: Upload },
-];
-
 /**
  * Focused reel-creator portal — intentionally not the CRM shell.
+ * Single workspace surface (no fake section tabs).
  */
 export default function CreatorPortalLayout() {
   const { signOut, user } = useSupabaseAuth();
@@ -92,23 +86,6 @@ export default function CreatorPortalLayout() {
             </button>
           </div>
         </div>
-        <nav className="mx-auto max-w-5xl px-2 pb-2 flex gap-1 overflow-x-auto" aria-label="Creator sections">
-          {NAV.map((item) => (
-            <NavLink
-              key={item.path}
-              to={`/creator/${item.path}`}
-              className={({ isActive }) =>
-                cn(
-                  'inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium min-h-[44px]',
-                  isActive ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100',
-                )
-              }
-            >
-              <item.icon className="h-4 w-4" />
-              {item.name}
-            </NavLink>
-          ))}
-        </nav>
       </header>
       <main className="mx-auto max-w-5xl px-4 py-5 pb-16">
         <Outlet />

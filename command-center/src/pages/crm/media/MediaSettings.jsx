@@ -2,11 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { supabase } from '@/lib/customSupabaseClient';
-import { getAiConfigState, listAssets } from '@/lib/mediaIntel/api';
+import { getAiConfigState, listAssets, unpublishWebsiteMedia } from '@/lib/mediaIntel/api';
 import { UPLOAD_PHONE_NOTICE } from '@/lib/mediaIntel/constants';
 
 const CREATOR_ADMIN_UNAVAILABLE_MESSAGE =
   'Creator invite/roster requires deployed media-intel-creator-admin — not available until staging deploy.';
+
+const PROMOTE_DISABLED_COPY =
+  'Website promotion is paused pending a proven, end-to-end-validated public-safe transform pipeline (EXIF/metadata strip + derivative verification). Promotion must never copy a private original — see mil_website_promotions table comment for the current gate.';
 
 /** Throws with `.edgeUnavailable = true` when the edge function itself cannot be reached. */
 async function invokeCreatorAdmin(body) {
@@ -25,6 +28,9 @@ export default function MediaSettings() {
   const [ai, setAi] = useState(null);
   const [promoteAssetId, setPromoteAssetId] = useState('');
   const [candidates, setCandidates] = useState([]);
+  const [promotions, setPromotions] = useState([]);
+  const [unpublishAssetId, setUnpublishAssetId] = useState('');
+  const [unpublishing, setUnpublishing] = useState(false);
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
   const [creatorEmail, setCreatorEmail] = useState('');
@@ -66,16 +72,53 @@ export default function MediaSettings() {
     }
   };
 
+  const refreshPromotions = async () => {
+    const { data, error: promoErr } = await supabase
+      .from('mil_website_promotions')
+      .select('id, asset_id, website_media_id, promoted_at, notes, mil_assets(id, original_filename)')
+      .order('promoted_at', { ascending: false })
+      .limit(50);
+    if (promoErr) throw promoErr;
+    setPromotions(data || []);
+  };
+
   useEffect(() => {
     getAiConfigState().then(setAi);
     if (caps.canPromoteWebsite) {
       listAssets({ humanReviewStatus: 'verified', privacyStatus: 'clear', archived: false, limit: 50 })
         .then(setCandidates)
         .catch((err) => setError(err.message));
+      refreshPromotions().catch((err) => setError(err.message));
     }
     refreshAccess().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caps.canPromoteWebsite, caps.canManageCreatorAccess]);
+
+  const handleUnpublish = async (assetId) => {
+    setError(null);
+    setMessage(null);
+    const id = (assetId || unpublishAssetId || '').trim();
+    if (!id) {
+      setError('Select a promoted asset to unpublish.');
+      return;
+    }
+    setUnpublishing(true);
+    try {
+      const result = await unpublishWebsiteMedia(id);
+      const count = Array.isArray(result?.results) ? result.results.length : 0;
+      setMessage(
+        count
+          ? `Unpublished website promotion for asset ${id.slice(0, 8)}… (${count} record${count === 1 ? '' : 's'}).`
+          : `Unpublished website promotion for asset ${id.slice(0, 8)}…`,
+      );
+      setUnpublishAssetId('');
+      await refreshPromotions();
+    } catch (err) {
+      setError(err.message || 'Website unpublish failed');
+    } finally {
+      setUnpublishing(false);
+    }
+  };
 
   const inviteCreator = async () => {
     setError(null);
@@ -202,6 +245,30 @@ export default function MediaSettings() {
         <h3 className="font-medium">Transfer policy</h3>
         <p className="text-sm text-slate-700">{UPLOAD_PHONE_NOTICE}</p>
       </section>
+
+      {caps.isOwnerAdmin && (
+        <section
+          className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-2"
+          data-testid="reconcile-operator-settings"
+        >
+          <h3 className="font-medium text-slate-900">Upload reconciliation</h3>
+          <p className="text-sm text-slate-700">
+            Files stuck as <code className="text-xs">pending_reconcile</code> are not in the library.
+            They stay that way until finalize invokes reconcile edge-to-edge, or an operator runs{' '}
+            <code className="text-xs">media-intel-upload-reconcile</code> (
+            <code className="text-xs">health</code> / <code className="text-xs">run</code> /{' '}
+            <code className="text-xs">grant</code>) with a project JWT and the edge secret{' '}
+            <code className="text-xs">MIL_RECONCILE_KEY</code>. Open integrity concerns appear in{' '}
+            <code className="text-xs">mil_integrity_alerts</code> (read-only here).
+          </p>
+          <p className="text-sm text-slate-700">
+            Runbook:{' '}
+            <code className="text-xs">docs/media-intelligence/RECONCILE_OPERATOR.md</code>. No
+            schedule is configured; Founder authorization is required to activate a scheduler. This
+            UI does not call reconcile — the key must never enter Vite env or the browser bundle.
+          </p>
+        </section>
+      )}
 
       {caps.canManageCreatorAccess && (
         <section className="rounded-xl border bg-white p-4 space-y-3" data-testid="upload-session-manager">
@@ -358,18 +425,17 @@ export default function MediaSettings() {
       )}
 
       {caps.canPromoteWebsite && (
-        <section className="rounded-xl border bg-white p-4 space-y-3">
-          <h3 className="font-medium">Promote to website media</h3>
+        <section className="rounded-xl border bg-white p-4 space-y-3" data-testid="website-media-settings">
+          <h3 className="font-medium">Website media</h3>
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            <strong>Disabled.</strong> Website promotion is paused pending a proven, end-to-end-validated public-safe
-            transform pipeline (EXIF/metadata strip + derivative verification). Promotion must never copy a private
-            original — see <code>mil_website_promotions</code> table comment for the current gate.
+            <strong>Promote disabled.</strong> {PROMOTE_DISABLED_COPY}
           </div>
           <select
             className="w-full rounded-md border px-3 py-2 min-h-[44px] disabled:opacity-60"
             value={promoteAssetId}
             onChange={(e) => setPromoteAssetId(e.target.value)}
             disabled
+            aria-label="Promote asset (disabled)"
           >
             <option value="">Select verified, privacy-clear asset…</option>
             {candidates.map((a) => (
@@ -384,6 +450,68 @@ export default function MediaSettings() {
           >
             Promote public derivative (disabled)
           </button>
+
+          <div className="pt-3 border-t space-y-3" data-testid="website-unpublish">
+            <h4 className="text-sm font-medium">Unpublish existing promotions</h4>
+            <p className="text-sm text-slate-600">
+              Owner/admin only. Marks linked <code>website_media</code> unavailable and removes public storage
+              objects for every promotion on the selected asset. Promote remains unavailable.
+            </p>
+            <select
+              className="w-full rounded-md border px-3 py-2 min-h-[44px]"
+              value={unpublishAssetId}
+              onChange={(e) => setUnpublishAssetId(e.target.value)}
+              disabled={unpublishing || promotions.length === 0}
+              aria-label="Select promoted asset to unpublish"
+            >
+              <option value="">
+                {promotions.length === 0 ? 'No website promotions recorded…' : 'Select promoted asset…'}
+              </option>
+              {[...new Map(promotions.map((p) => [p.asset_id, p])).values()].map((p) => {
+                const name = p.mil_assets?.original_filename || `Asset ${p.asset_id.slice(0, 8)}…`;
+                const when = p.promoted_at ? new Date(p.promoted_at).toLocaleString() : 'unknown date';
+                return (
+                  <option key={p.asset_id} value={p.asset_id}>
+                    {name} · {when}
+                  </option>
+                );
+              })}
+            </select>
+            <button
+              type="button"
+              className="rounded-md bg-red-700 text-white px-4 py-2.5 text-sm min-h-[44px] disabled:opacity-60 disabled:cursor-not-allowed"
+              disabled={unpublishing || !unpublishAssetId}
+              onClick={() => handleUnpublish(unpublishAssetId)}
+            >
+              {unpublishing ? 'Unpublishing…' : 'Unpublish from website'}
+            </button>
+            <ul className="text-xs text-slate-600 space-y-1">
+              {promotions.length === 0 && (
+                <li className="text-slate-500">No rows in <code>mil_website_promotions</code>.</li>
+              )}
+              {promotions.slice(0, 12).map((p) => (
+                <li key={p.id} className="flex justify-between gap-2 border-t py-2">
+                  <span className="truncate">
+                    {p.mil_assets?.original_filename || p.asset_id.slice(0, 8)}
+                    {p.website_media_id ? ` · media ${p.website_media_id.slice(0, 8)}…` : ''}
+                    {' · '}
+                    {p.promoted_at ? new Date(p.promoted_at).toLocaleString() : '—'}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-red-700 underline shrink-0 disabled:opacity-50"
+                    disabled={unpublishing}
+                    onClick={() => {
+                      setUnpublishAssetId(p.asset_id);
+                      handleUnpublish(p.asset_id);
+                    }}
+                  >
+                    Unpublish
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </section>
       )}
 

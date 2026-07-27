@@ -73,6 +73,7 @@ export async function listAssets(filters = {}) {
   if (filters.processingStatus) q = q.eq('processing_status', filters.processingStatus);
   if (filters.archived === true) q = q.not('archived_at', 'is', null);
   else if (filters.archived === false) q = q.is('archived_at', null);
+  if (filters.duplicatesOnly) q = q.not('duplicate_of_asset_id', 'is', null);
   if (filters.search) {
     q = q.or(`original_filename.ilike.%${filters.search}%,id.eq.${filters.search}`);
   }
@@ -248,15 +249,136 @@ export async function getAiConfigState() {
   }
 }
 
+/**
+ * On-demand AI analysis. The browser must NOT insert mil_processing_jobs or
+ * mutate mil_assets.processing_status — RLS only allows SELECT on jobs, and
+ * finalize already creates queued rows server-side. This invokes the edge
+ * function (staff-gated), which claims or creates the job via service_role.
+ */
 export async function queueAiAnalysis(assetId) {
-  const { error } = await supabase.from('mil_processing_jobs').insert({
-    asset_id: assetId,
-    job_type: 'ai_analyze',
-    status: 'queued',
-  });
-  if (error) throw error;
-  await supabase.from('mil_assets').update({ processing_status: 'queued' }).eq('id', assetId);
-  supabase.functions.invoke('media-intel-analyze', {
+  if (!assetId) throw new Error('Missing assetId');
+  const { data, error } = await supabase.functions.invoke('media-intel-analyze', {
     body: { action: 'analyze', assetId },
-  }).catch(() => {});
+  });
+  if (error) {
+    const detail = (data && data.error) || error.message || 'AI analysis invoke failed';
+    throw new Error(detail);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
+/**
+ * Owner/admin only (edge-enforced). Pulls existing website promotions for an asset.
+ * Promote / prepare_public_safe remain 503 on the edge — do not call them from the client.
+ *
+ * Body contract: { action: 'unpublish', assetId }
+ * Success: { ok: true, results: [{ promotionId, ok }] }
+ */
+export async function unpublishWebsiteMedia(assetId) {
+  const id = typeof assetId === 'string' ? assetId.trim() : '';
+  if (!id) throw new Error('Missing assetId');
+  const { data, error } = await supabase.functions.invoke('media-intel-promote-website', {
+    body: { action: 'unpublish', assetId: id },
+  });
+  if (error) {
+    const detail = (data && data.error) || error.message || 'Website unpublish failed';
+    throw new Error(detail);
+  }
+  if (data?.error) throw new Error(data.error);
+  if (data?.ok === false) {
+    const failed = (data.results || []).filter((r) => !r.ok).map((r) => r.error || r.promotionId);
+    throw new Error(failed.length ? `Unpublish incomplete: ${failed.join('; ')}` : 'Unpublish incomplete');
+  }
+  return data;
+}
+
+const MIL_ASSET_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Normalize + validate an asset UUID for collection membership writes. */
+export function normalizeMilAssetId(value) {
+  const id = typeof value === 'string' ? value.trim() : '';
+  if (!MIL_ASSET_UUID_RE.test(id)) return null;
+  return id.toLowerCase();
+}
+
+/**
+ * Collections membership uses direct table RLS
+ * (mil_library_staff_write_collections / mil_library_staff_write_collection_items
+ * gated by mil_can_browse_library). No SECURITY DEFINER RPC exists for these
+ * tables — keep helpers thin and do not invent privileged paths.
+ */
+export async function listCollections() {
+  const { data, error } = await supabase
+    .from('mil_collections')
+    .select('*, mil_collection_items(count)')
+    .is('archived_at', null)
+    .order('updated_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createCollection({ title, description } = {}) {
+  const trimmed = typeof title === 'string' ? title.trim() : '';
+  if (!trimmed) throw new Error('Collection title is required');
+  const ownerUserId = await actorId();
+  const { data, error } = await supabase
+    .from('mil_collections')
+    .insert({
+      title: trimmed,
+      description: typeof description === 'string' && description.trim()
+        ? description.trim()
+        : null,
+      owner_user_id: ownerUserId,
+      visibility: 'internal',
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function listCollectionItems(collectionId) {
+  const id = typeof collectionId === 'string' ? collectionId.trim() : '';
+  if (!id) throw new Error('Missing collectionId');
+  const { data, error } = await supabase
+    .from('mil_collection_items')
+    .select('collection_id, asset_id, sort_order, notes, added_at, mil_assets(id, original_filename, media_kind)')
+    .eq('collection_id', id)
+    .order('sort_order', { ascending: true })
+    .order('added_at', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function addCollectionItem(collectionId, assetId) {
+  const cid = typeof collectionId === 'string' ? collectionId.trim() : '';
+  const aid = normalizeMilAssetId(assetId);
+  if (!cid) throw new Error('Missing collectionId');
+  if (!aid) throw new Error('Enter a valid asset UUID');
+  const { data, error } = await supabase
+    .from('mil_collection_items')
+    .insert({
+      collection_id: cid,
+      asset_id: aid,
+      added_by: await actorId(),
+    })
+    .select('collection_id, asset_id, sort_order, notes, added_at')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function removeCollectionItem(collectionId, assetId) {
+  const cid = typeof collectionId === 'string' ? collectionId.trim() : '';
+  const aid = normalizeMilAssetId(assetId);
+  if (!cid) throw new Error('Missing collectionId');
+  if (!aid) throw new Error('Enter a valid asset UUID');
+  const { error } = await supabase
+    .from('mil_collection_items')
+    .delete()
+    .eq('collection_id', cid)
+    .eq('asset_id', aid);
+  if (error) throw error;
 }

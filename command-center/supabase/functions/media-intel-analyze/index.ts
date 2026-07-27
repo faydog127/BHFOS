@@ -3,14 +3,14 @@
  * humans verify (see mil_verified_metadata / mil_verify_asset). This function
  * never fabricates a result for content it cannot actually analyze.
  *
- * Job consumer note: `mil_processing_jobs` rows are created with status
- * 'queued' whenever an upload finalizes (phone session or staff upload) — but
- * there is no background worker draining that queue. This function IS the
- * worker, and it is invoke-on-demand only: the client (`queueAiAnalysis` in
- * `src/lib/mediaIntel/api.js`) inserts the queued job row and then calls this
- * function directly. If this function is never invoked for a given asset, its
- * job row honestly stays 'queued' forever — that reflects the real
- * architecture and is not hidden behind a fake background-worker claim.
+ * Job consumer note: upload finalize often inserts `mil_processing_jobs` with
+ * status 'queued', but there is no background worker draining that queue. This
+ * function IS the worker, invoke-on-demand only. The client (`queueAiAnalysis`)
+ * must NOT insert jobs or update asset processing_status (RLS is SELECT-only on
+ * jobs); it only awaits this edge. Here we claim an existing queued job, or
+ * insert a new queued row via service_role (reanalyze / missing job), then run
+ * analysis. If never invoked, a finalize-created job stays 'queued' forever —
+ * that reflects the real architecture, not a fake background-worker claim.
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 import { milCorsHeaders, milCorsPreflight } from '../_shared/milCors.ts'
@@ -90,7 +90,7 @@ quality (object keyed by homepage_hero, website_service_proof, social_photo, ree
   return { model, suggested, confidence: 0.6 }
 }
 
-/** Find the queued ai_analyze job for this asset, if any, and claim it as running. */
+/** Find the newest queued ai_analyze job for this asset and claim it as running. */
 async function claimQueuedJob(assetId: string) {
   const { data: job } = await supabaseAdmin
     .from('mil_processing_jobs')
@@ -107,6 +107,33 @@ async function claimQueuedJob(assetId: string) {
     .update({ status: 'running', attempts: (job.attempts || 0) + 1 })
     .eq('id', job.id)
   return job
+}
+
+/**
+ * Ensure a job exists for this invoke: claim an existing queued row, or insert a
+ * new queued ai_analyze job via service_role then claim it. Prefer inserting a
+ * fresh row for reanalyze (succeeded/cancelled/failed history stays intact).
+ */
+async function ensureAndClaimJob(assetId: string) {
+  const existing = await claimQueuedJob(assetId)
+  if (existing) return existing
+
+  const { data: created, error } = await supabaseAdmin
+    .from('mil_processing_jobs')
+    .insert({
+      asset_id: assetId,
+      job_type: 'ai_analyze',
+      status: 'queued',
+    })
+    .select('*')
+    .single()
+  if (error) throw error
+
+  await supabaseAdmin
+    .from('mil_processing_jobs')
+    .update({ status: 'running', attempts: (created.attempts || 0) + 1 })
+    .eq('id', created.id)
+  return created
 }
 
 /**
@@ -164,7 +191,7 @@ Deno.serve(async (req) => {
     if (assetErr) throw assetErr
     if (!asset) return respond({ error: 'Asset not found' }, 404)
 
-    const job = await claimQueuedJob(assetId)
+    const job = await ensureAndClaimJob(assetId)
 
     if (asset.exclude_from_ai) {
       await supabaseAdmin.from('mil_ai_analyses').insert({

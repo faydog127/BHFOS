@@ -156,6 +156,24 @@ export default function MediaUploads() {
         connection means re-sending that file. Practical per-file limit is 250 MB.
       </div>
 
+      {caps.isOwnerAdmin && (
+        <div
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 space-y-1"
+          role="note"
+          data-testid="reconcile-operator-note"
+        >
+          <p className="font-medium">If a file stays “Not confirmed yet — reconciling”</p>
+          <p>
+            It is not in the library. Keep the original until the transfer manifest shows it uploaded.
+            The server may finish that grant during finalize; otherwise an operator must run{' '}
+            <code className="text-xs">media-intel-upload-reconcile</code> (see{' '}
+            <code className="text-xs">docs/media-intelligence/RECONCILE_OPERATOR.md</code>). No
+            reconcile schedule is configured — Founder authorization is required to add one. This
+            page cannot start reconcile: the reconcile key never lives in the browser.
+          </p>
+        </div>
+      )}
+
       {!caps.isOwnerAdmin && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           You can browse transfers, but only owner/admin may start one.
@@ -275,9 +293,20 @@ export default function MediaUploads() {
           </div>
 
           {(totals[UPLOAD_FILE_STATUS.PENDING_RECONCILE] || 0) > 0 && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Some files could not be confirmed in final storage yet. They are not in the library.
-              Keep the originals until the transfer manifest shows them as uploaded.
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 space-y-1">
+              <p>
+                Some files could not be confirmed in final storage yet. They are not in the library.
+                Keep the originals until the transfer manifest shows them as uploaded.
+              </p>
+              {caps.isOwnerAdmin && (
+                <p>
+                  Stranded files can stay pending until reconcile runs (inline during finalize, or
+                  an operator invoke per{' '}
+                  <code className="text-xs">docs/media-intelligence/RECONCILE_OPERATOR.md</code>).
+                  There is no in-app “Reconcile now” — that would require a secret that must not
+                  enter this browser.
+                </p>
+              )}
             </div>
           )}
 

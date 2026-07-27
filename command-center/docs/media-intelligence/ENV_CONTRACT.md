@@ -45,7 +45,11 @@ schedules `action=run` (staging first), reconciliation only happens when
 `media-intel-upload-session` invokes it during a failed finalize, or when an
 operator calls it by hand. Stranded grants in an unscheduled environment stay
 stranded and visible in `mil_integrity_alerts` rather than being silently
-resolved.
+resolved. **Founder authorization is required** before activating any cron or
+Supabase scheduler for reconcile.
+
+Operator steps (health / run / grant, curl examples, integrity alerts): see
+[`RECONCILE_OPERATOR.md`](./RECONCILE_OPERATOR.md).
 
 ## Behavior without `OPENAI_API_KEY`
 
