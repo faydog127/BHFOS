@@ -127,6 +127,7 @@ async function saveInvoiceRecord(invoicePayload, invoiceId = null) {
     body: {
       invoice_id: invoiceId,
       tenant_id: getTenantId(),
+      checkout_generation: invoicePayload.checkout_generation,
       invoice: invoicePayload,
       items: invoicePayload.items || [],
     },
@@ -882,8 +883,8 @@ const InvoiceBuilder = () => {
         tax_amount: taxAmount,
         discount_amount: invoice.discount_amount,
         total_amount: total,
-        amount_paid: amountPaid,
         // `balance_due` is a generated column in prod; never attempt to write it.
+        checkout_generation: invoice.checkout_generation,
         invoice_number: invoice.invoice_number,
         public_token: publicToken,
         sent_at: shouldSendNow && invoice.status !== 'sent' ? new Date() : invoice.sent_at,

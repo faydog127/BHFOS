@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/components/ui/use-toast';
 import { fetchPublicInvoiceByToken, getPublicTenantContext } from '@/lib/publicDocumentApi';
+import { classifyInvoicePaymentState } from '../../../supabase/functions/_shared/publicPaymentRules.js';
 
 const GOOGLE_REVIEW_URL = import.meta.env.VITE_GOOGLE_REVIEW_URL || 'https://g.page/r/CQLGsjITxWS6EBM/review';
 const COMPANY_NAME = 'The Vent Guys';
@@ -40,11 +41,6 @@ const PaymentPage = () => {
     return format(parsed, 'MMM d, yyyy');
   };
 
-  const isInvoicePaid = (invoiceRow) =>
-    String(invoiceRow?.status || '').toLowerCase() === 'paid' ||
-    Number(invoiceRow?.amount_paid || 0) > 0 ||
-    Number(invoiceRow?.balance_due ?? Number.POSITIVE_INFINITY) <= 0;
-
   const getReceiptAmount = (invoiceRow) =>
     Number(invoiceRow?.amount_paid || invoiceRow?.total_amount || invoiceRow?.balance_due || 0);
 
@@ -53,9 +49,14 @@ const PaymentPage = () => {
 
     try {
       const publicInvoice = await fetchPublicInvoiceByToken(token);
+      const state = classifyInvoicePaymentState(publicInvoice);
       setInvoice(publicInvoice);
-      setPaymentSuccess(isInvoicePaid(publicInvoice));
-      setPaymentError('');
+      setPaymentSuccess(state.kind === 'paid');
+      setPaymentError(
+        state.kind === 'nonpayable' || state.kind === 'invalid'
+          ? 'This invoice is not available for online payment. Please contact us for assistance.'
+          : '',
+      );
       return publicInvoice;
     } catch (error) {
       console.error('Invoice fetch error:', error);
@@ -67,6 +68,11 @@ const PaymentPage = () => {
 
   const startCheckout = async ({ suppressRedirectToast = false } = {}) => {
     if (!invoice || paying) return;
+    const state = classifyInvoicePaymentState(invoice);
+    if (state.kind !== 'payable') {
+      setPaymentError('This invoice is not available for online payment. Please contact us for assistance.');
+      return;
+    }
 
     setPaying(true);
     setPaymentError('');
@@ -83,7 +89,7 @@ const PaymentPage = () => {
         },
         body: JSON.stringify({
           token,
-          amount: invoice.balance_due,
+          amount: state.balanceCents / 100,
           method: 'card',
         }),
       });
@@ -130,7 +136,15 @@ const PaymentPage = () => {
   }, [token, checkoutState]);
 
   useEffect(() => {
-    if (loading || !invoice || paymentSuccess || checkoutState || autoRedirectStartedRef.current) {
+    const state = classifyInvoicePaymentState(invoice);
+    if (
+      loading ||
+      !invoice ||
+      state.kind !== 'payable' ||
+      paymentSuccess ||
+      checkoutState ||
+      autoRedirectStartedRef.current
+    ) {
       return;
     }
 
@@ -186,6 +200,7 @@ const PaymentPage = () => {
   }
 
   const amountDue = Number(invoice.balance_due || 0).toFixed(2);
+  const invoicePaymentState = classifyInvoicePaymentState(invoice);
   const invoiceItems = Array.isArray(invoice.invoice_items) ? invoice.invoice_items : [];
   const billToName =
     invoice.customer_name ||
@@ -323,7 +338,7 @@ const PaymentPage = () => {
                   type="button"
                   className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-base font-bold shadow-sm"
                   onClick={() => void startCheckout()}
-                  disabled={paying || Number(invoice.balance_due) <= 0}
+                  disabled={paying || invoicePaymentState.kind !== 'payable'}
                 >
                   {paying ? (
                     <>

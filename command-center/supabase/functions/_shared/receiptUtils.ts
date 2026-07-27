@@ -343,6 +343,20 @@ const sendReceiptForPaidInvoice = async (input: SendReceiptInput) => {
     return { status: 'task_created', reason: 'missing_recipient' } as const;
   }
 
+  if (!receiptEmail) {
+    if (tenantId) {
+      await createMoneyLoopTask({
+        tenantId,
+        sourceType: 'invoice',
+        sourceId: input.invoice.id,
+        title: 'Send Receipt',
+        leadId: input.invoice.lead_id ?? null,
+        metadata: { ...receiptPayload, reason: 'missing_email_recipient' },
+      });
+    }
+    return { status: 'task_created', reason: 'missing_email_recipient' } as const;
+  }
+
   if (wantsEmail && EMAIL_DELIVERY_MODE !== 'mock' && !Deno.env.get('RESEND_API_KEY')) {
     if (tenantId) {
       await createMoneyLoopTask({

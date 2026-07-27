@@ -1,6 +1,11 @@
 import { corsHeaders } from '../_lib/cors.ts';
 import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
 import { getTenantIdFromClaims, getVerifiedClaims } from '../_shared/auth.ts';
+import {
+  finishInvoiceCheckoutMutation,
+  prepareInvoiceCheckoutMutation,
+} from '../_shared/checkoutInvalidation.ts';
+import { changesPayableState } from '../_shared/publicPaymentRules.js';
 
 const INVOICE_SELECT = `
   id,
@@ -27,6 +32,7 @@ const INVOICE_SELECT = `
   total_amount,
   amount_paid,
   balance_due,
+  checkout_generation,
   paid_at,
   payment_method,
   invoice_number,
@@ -133,9 +139,6 @@ const buildInvoicePatch = (input: Record<string, unknown>, tenantId: string) => 
   if ('tax_amount' in input) patch.tax_amount = asNullableNumber(input.tax_amount);
   if ('discount_amount' in input) patch.discount_amount = asNullableNumber(input.discount_amount);
   if ('total_amount' in input) patch.total_amount = asNullableNumber(input.total_amount);
-  if ('amount_paid' in input) patch.amount_paid = asNullableNumber(input.amount_paid);
-  if ('balance_due' in input) patch.balance_due = asNullableNumber(input.balance_due);
-  if ('paid_at' in input) patch.paid_at = asIsoDateTime(input.paid_at);
   if ('payment_method' in input) patch.payment_method = asNullableString(input.payment_method);
   if ('invoice_number' in input) patch.invoice_number = asNullableString(input.invoice_number);
   if ('public_token' in input) patch.public_token = asNullableString(input.public_token);
@@ -158,17 +161,31 @@ const normalizeInvoiceItems = (items: unknown) => {
   });
 };
 
-const upsertInvoice = async (invoiceId: string | null, patch: Record<string, unknown>) => {
+const upsertInvoice = async (
+  invoiceId: string | null,
+  patch: Record<string, unknown>,
+  checkoutGeneration: number | null,
+) => {
   let nextPatch = { ...patch };
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const query = invoiceId
-      ? supabaseAdmin.from('invoices').update(nextPatch).eq('id', invoiceId).eq('tenant_id', patch.tenant_id).select(INVOICE_SELECT).maybeSingle()
+    let query = invoiceId
+      ? supabaseAdmin.from('invoices').update(nextPatch).eq('id', invoiceId).eq('tenant_id', patch.tenant_id)
+      : null;
+    if (query && checkoutGeneration !== null) {
+      query = query
+        .eq('checkout_generation', checkoutGeneration)
+        .eq('checkout_mutation_pending', true);
+    }
+    const saveQuery = query
+      ? query.select(INVOICE_SELECT).maybeSingle()
       : supabaseAdmin.from('invoices').insert(nextPatch).select(INVOICE_SELECT).single();
 
-    const { data, error } = await query;
-    if (!error && data) return data;
-    if (!error && !data) throw new Error('Invoice not found after save.');
+    const { data, error } = await saveQuery;
+    if (!error) {
+      if (data) return data;
+      throw new Error('Invoice not found after save.');
+    }
 
     const retriableColumn = getRetriableColumnName(error);
     if (!retriableColumn || !Object.prototype.hasOwnProperty.call(nextPatch, retriableColumn)) {
@@ -213,6 +230,7 @@ Deno.serve(async (req) => {
     const requestedTenantId = asNullableString(body?.tenant_id);
     const invoiceInput = body?.invoice;
     const itemsInput = body?.items;
+    const observedCheckoutGeneration = Number(body?.checkout_generation ?? invoiceInput?.checkout_generation);
 
     if (!requestedTenantId) {
       return json({ error: 'Missing tenant_id' }, 400);
@@ -225,40 +243,116 @@ Deno.serve(async (req) => {
     }
 
     const patch = buildInvoicePatch(invoiceInput as Record<string, unknown>, jwtTenantId);
-    const savedInvoice = await upsertInvoice(invoiceId, patch);
-    const invoiceItems = normalizeInvoiceItems(itemsInput);
+    const relationships = [
+      { field: 'lead_id', table: 'leads' },
+      { field: 'quote_id', table: 'quotes' },
+      { field: 'job_id', table: 'jobs' },
+    ] as const;
+    for (const relationship of relationships) {
+      const relatedId = asNullableString(patch[relationship.field]);
+      if (!relatedId) continue;
+      const { data: relatedRow, error: relationshipError } = await supabaseAdmin
+        .from(relationship.table)
+        .select('id')
+        .eq('id', relatedId)
+        .eq('tenant_id', jwtTenantId)
+        .maybeSingle();
+      if (relationshipError) {
+        console.error(`invoice-save ${relationship.field} validation failed:`, relationshipError.message);
+        return json({ error: 'Invoice relationship could not be validated.' }, 500);
+      }
+      if (!relatedRow?.id) {
+        return json({ error: `Invalid ${relationship.field} for tenant.` }, 400);
+      }
+    }
+    let checkoutGeneration: number | null = null;
+    if (invoiceId) {
+      const { data: currentInvoice, error: currentInvoiceError } = await supabaseAdmin
+        .from('invoices')
+        .select(INVOICE_SELECT)
+        .eq('id', invoiceId)
+        .eq('tenant_id', jwtTenantId)
+        .maybeSingle();
 
-    await supabaseAdmin.from('invoice_items').delete().eq('invoice_id', savedInvoice.id);
+      if (currentInvoiceError || !currentInvoice) {
+        return json({ error: currentInvoiceError?.message || 'Invoice not found' }, 404);
+      }
 
-    if (invoiceItems.length > 0) {
-      const insertRows = invoiceItems.map((item) => ({
-        invoice_id: savedInvoice.id,
-        description: item.description,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        total_price: item.total_price,
-      }));
-
-      const { error: itemsError } = await supabaseAdmin.from('invoice_items').insert(insertRows);
-      if (itemsError) {
-        console.error('invoice-save invoice_items failed:', itemsError);
-        return json({ error: itemsError.message }, 500);
+      if (changesPayableState(currentInvoice, patch)) {
+        if (
+          !Number.isSafeInteger(observedCheckoutGeneration) ||
+          observedCheckoutGeneration < 0 ||
+          observedCheckoutGeneration !== Number(currentInvoice.checkout_generation ?? 0)
+        ) {
+          return json({ error: 'Invoice changed since it was opened. Reload before saving.' }, 409);
+        }
+        checkoutGeneration = await prepareInvoiceCheckoutMutation({
+          tenantId: jwtTenantId,
+          invoiceId,
+          expectedGeneration: observedCheckoutGeneration,
+        });
       }
     }
 
-    const { data: hydratedInvoice, error: hydrateError } = await supabaseAdmin
-      .from('invoices')
-      .select(INVOICE_SELECT)
-      .eq('id', savedInvoice.id)
-      .eq('tenant_id', jwtTenantId)
-      .maybeSingle();
+    try {
+      const savedInvoice = await upsertInvoice(invoiceId, patch, checkoutGeneration);
+      const invoiceItems = normalizeInvoiceItems(itemsInput);
 
-    if (hydrateError || !hydratedInvoice) {
-      console.error('invoice-save hydrate failed:', hydrateError);
-      return json({ error: hydrateError?.message || 'Invoice saved but could not be reloaded.' }, 500);
+      if (invoiceId && checkoutGeneration !== null) {
+        const { data: itemsReplaced, error: itemsReplaceError } = await supabaseAdmin.rpc(
+          'replace_invoice_items_fenced',
+          {
+            p_tenant_id: jwtTenantId,
+            p_invoice_id: savedInvoice.id,
+            p_checkout_generation: checkoutGeneration,
+            p_items: invoiceItems,
+          },
+        );
+        if (itemsReplaceError || itemsReplaced !== true) {
+          console.error('invoice-save fenced invoice_items replacement failed:', itemsReplaceError);
+          return json({ error: 'Invoice items could not be saved.' }, 409);
+        }
+      } else {
+        await supabaseAdmin.from('invoice_items').delete().eq('invoice_id', savedInvoice.id);
+        const insertRows = invoiceItems.map((item) => ({
+          invoice_id: savedInvoice.id,
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_price: item.total_price,
+        }));
+
+        if (insertRows.length > 0) {
+          const { error: itemsError } = await supabaseAdmin.from('invoice_items').insert(insertRows);
+          if (itemsError) {
+            console.error('invoice-save invoice_items failed:', itemsError);
+            return json({ error: 'Invoice items could not be saved.' }, 500);
+          }
+        }
+      }
+
+      const { data: hydratedInvoice, error: hydrateError } = await supabaseAdmin
+        .from('invoices')
+        .select(INVOICE_SELECT)
+        .eq('id', savedInvoice.id)
+        .eq('tenant_id', jwtTenantId)
+        .maybeSingle();
+
+      if (hydrateError || !hydratedInvoice) {
+        console.error('invoice-save hydrate failed:', hydrateError);
+        return json({ error: hydrateError?.message || 'Invoice saved but could not be reloaded.' }, 500);
+      }
+
+      return json({ invoice: hydratedInvoice });
+    } finally {
+      if (invoiceId && checkoutGeneration !== null) {
+        await finishInvoiceCheckoutMutation({
+          tenantId: jwtTenantId,
+          invoiceId,
+          generation: checkoutGeneration,
+        });
+      }
     }
-
-    return json({ invoice: hydratedInvoice });
   } catch (error) {
     const message = getErrorMessage(error);
     console.error('invoice-save failed:', error);

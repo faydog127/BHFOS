@@ -12,6 +12,16 @@ const respondJson = (body: Record<string, unknown>, status = 200) =>
 
 const formatError = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+const getInvoiceTenantId = async (invoiceId: string) => {
+  const { data, error } = await supabaseAdmin
+    .from('invoices')
+    .select('tenant_id')
+    .eq('id', invoiceId)
+    .maybeSingle();
+  if (error) throw new Error('INVOICE_TENANT_LOOKUP_FAILED');
+  return typeof data?.tenant_id === 'string' ? data.tenant_id : null;
+};
+
 const getStripeEvent = async (req: Request) => {
   const isLocalRequest = () => {
     const supabaseUrl = (Deno.env.get('SUPABASE_URL') ?? '').trim();
@@ -72,7 +82,8 @@ Deno.serve(async (req) => {
   try {
     event = await getStripeEvent(req);
   } catch (err) {
-    return respondJson({ error: 'Invalid signature', details: formatError(err) }, 400);
+    console.error('payment-webhook signature validation failed:', formatError(err));
+    return respondJson({ error: 'Invalid signature' }, 400);
   }
 
   if (!event?.type) {
@@ -91,7 +102,17 @@ Deno.serve(async (req) => {
     return respondJson({ received: true, ignored: 'missing_provider_payment_id' }, 200);
   }
 
-  const metadata = (eventObject?.metadata ?? null) as Record<string, unknown> | null;
+  let metadata = (eventObject?.metadata ?? null) as Record<string, unknown> | null;
+  if (event.type === 'charge.succeeded' && paymentIntentRef && metadata?.payment_origin !== 'public_pay') {
+    try {
+      const stripe = new Stripe((Deno.env.get('STRIPE_SECRET_KEY') ?? '').trim(), { apiVersion: '2024-06-20' });
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentRef);
+      metadata = (paymentIntent.metadata ?? null) as Record<string, unknown> | null;
+    } catch (error) {
+      console.error('payment-webhook payment origin lookup failed:', formatError(error));
+      return respondJson({ error: 'Webhook processing failed' }, 500);
+    }
+  }
   const invoiceIdFromMetadata = typeof metadata?.invoice_id === 'string' ? metadata.invoice_id : null;
   const amountCentsRaw =
     typeof eventObject?.amount_received === 'number'
@@ -120,7 +141,7 @@ Deno.serve(async (req) => {
       payload: event as unknown as Record<string, unknown>,
       processed_status: 'ignored_unsupported',
       processed_at: new Date().toISOString(),
-    }).catch(() => null);
+    });
 
     return respondJson({ received: true, ignored: 'unsupported_event' }, 200);
   }
@@ -138,60 +159,79 @@ Deno.serve(async (req) => {
 
     const isDuplicate = receiptError?.code === '23505';
     if (!isDuplicate && receiptError) {
-      return respondJson({ error: 'Failed to record webhook receipt', details: receiptError.message }, 500);
+      console.error('payment-webhook receipt persistence failed:', receiptError.message);
+      return respondJson({ error: 'Webhook processing failed' }, 500);
     }
 
     if (invoiceIdFromMetadata) {
-      await createMoneyLoopTask({
-        tenantId: null,
-        sourceType: 'invoice',
-        sourceId: invoiceIdFromMetadata,
-        title: 'Payment Failed - Reconcile',
-        leadId: null,
-        metadata: { provider: 'stripe', provider_payment_id: providerPaymentId, gateway_event_id: event.id },
-      });
+      const taskTenantId = await getInvoiceTenantId(invoiceIdFromMetadata);
+      if (taskTenantId) {
+        await createMoneyLoopTask({
+          tenantId: taskTenantId,
+          sourceType: 'invoice',
+          sourceId: invoiceIdFromMetadata,
+          title: 'Payment Failed - Reconcile',
+          leadId: null,
+          metadata: { provider: 'stripe', provider_payment_id: providerPaymentId, gateway_event_id: event.id },
+        });
+      }
     }
 
     return respondJson({ received: true, ok: true, duplicate_event: isDuplicate }, 200);
   }
 
   // Final success: dual-idempotency + settlement is enforced in DB via RPC.
-  const rpc = await supabaseAdmin.rpc('record_stripe_webhook_payment', {
+  const settlementPayload = {
+    ...(event as unknown as Record<string, unknown>),
+    data: {
+      ...((event.data ?? {}) as unknown as Record<string, unknown>),
+      object: { ...(eventObject ?? {}), metadata },
+    },
+  };
+  const rpc = await supabaseAdmin.rpc('record_stripe_webhook_payment_validated', {
     p_gateway_event_id: event.id,
     p_event_type: event.type,
     p_provider_payment_id: providerPaymentId,
     p_amount_cents: amountCents,
     p_currency: currency,
-    p_payload: event as unknown as Record<string, unknown>,
+    p_payload: settlementPayload,
     p_invoice_id: invoiceIdFromMetadata,
   });
 
   if (rpc.error) {
-    return respondJson({ error: rpc.error.message || 'Webhook processing failed' }, 500);
+    console.error('payment-webhook settlement RPC failed:', rpc.error.message);
+    return respondJson({ error: 'Webhook processing failed' }, 500);
   }
 
   const row = Array.isArray(rpc.data) ? rpc.data[0] : rpc.data;
 
   if (row?.reconciliation_required || row?.quarantined) {
-    await createMoneyLoopTask({
-      tenantId: null,
-      sourceType: row?.invoice_id ? 'invoice' : 'webhook',
-      sourceId: row?.invoice_id ? String(row.invoice_id) : String(row?.transaction_id ?? providerPaymentId),
-      title: 'Payment Reconciliation Required',
-      leadId: null,
-      metadata: {
-        provider: 'stripe',
-        gateway_event_id: event.id,
-        provider_payment_id: providerPaymentId,
-        quarantine_reason: row?.quarantine_reason ?? null,
-        transaction_id: row?.transaction_id ?? null,
-        invoice_id: row?.invoice_id ?? null,
-      },
-    });
+    const reconciliationInvoiceId = row?.invoice_id ? String(row.invoice_id) : null;
+    const taskTenantId = reconciliationInvoiceId
+      ? await getInvoiceTenantId(reconciliationInvoiceId)
+      : null;
+    if (taskTenantId) {
+      await createMoneyLoopTask({
+        tenantId: taskTenantId,
+        sourceType: 'invoice',
+        sourceId: reconciliationInvoiceId as string,
+        title: 'Payment Reconciliation Required',
+        leadId: null,
+        metadata: {
+          provider: 'stripe',
+          gateway_event_id: event.id,
+          provider_payment_id: providerPaymentId,
+          quarantine_reason: row?.quarantine_reason ?? null,
+          transaction_id: row?.transaction_id ?? null,
+          invoice_id: row?.invoice_id ?? null,
+        },
+      });
+    }
   }
 
-  // Canonical event emission only when a new financial effect was created.
-  if (row?.financial_effect_created && row?.invoice_id) {
+  // Downstream effects are individually idempotent and also run on settlement
+  // replay so a transient failure after the atomic RPC can recover.
+  if (row?.invoice_id && row?.transaction_id && !row?.reconciliation_required && !row?.quarantined) {
     const invoiceId = String(row.invoice_id);
     const { data: invoice } = await supabaseAdmin
       .from('invoices')
@@ -245,8 +285,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (invoice) {
-      await convertContactToCustomer({ leadId: invoice.lead_id ?? null });
+    if (invoice && tenantId) {
+      await convertContactToCustomer({
+        tenantId,
+        leadId: invoice.lead_id ?? null,
+      });
 
       try {
         await closeFollowUpTasks({

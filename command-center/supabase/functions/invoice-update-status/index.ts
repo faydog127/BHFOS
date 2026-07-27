@@ -3,6 +3,10 @@ import { getTenantIdFromClaims, getVerifiedClaims } from '../_shared/auth.ts';
 import { buildCorsHeaders, readJson } from '../_shared/publicUtils.ts';
 import { closeFollowUpTasks } from '../_shared/taskUtils.ts';
 import { logMoneyLoopEvent } from '../_shared/moneyLoopUtils.ts';
+import {
+  finishInvoiceCheckoutMutation,
+  prepareInvoiceCheckoutMutation,
+} from '../_shared/checkoutInvalidation.ts';
 
 const PAYMENT_ROLES = new Set(['tech', 'technician', 'dispatcher', 'admin', 'super_admin']);
 
@@ -121,15 +125,26 @@ const getRetriableColumnName = (error: { code?: string | null; message?: string 
   return null;
 };
 
-const updateInvoiceRow = async (invoiceId: string, tenantId: string, patch: Record<string, unknown>) => {
+const updateInvoiceRow = async (
+  invoiceId: string,
+  tenantId: string,
+  patch: Record<string, unknown>,
+  checkoutGeneration: number | null = null,
+) => {
   let nextPatch = { ...patch };
 
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    const { data, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('invoices')
       .update(nextPatch)
       .eq('id', invoiceId)
-      .eq('tenant_id', tenantId)
+      .eq('tenant_id', tenantId);
+    if (checkoutGeneration !== null) {
+      query = query
+        .eq('checkout_generation', checkoutGeneration)
+        .eq('checkout_mutation_pending', true);
+    }
+    const { data, error } = await query
       .select('id, status, tenant_id, total_amount, amount_paid, balance_due, paid_at, sent_at')
       .maybeSingle();
 
@@ -165,7 +180,11 @@ Deno.serve(async (req) => {
   try {
     ({ claims } = await getVerifiedClaims(req));
   } catch (error) {
-    return respondJson({ error: String(error?.message ?? error) }, 401, cors.headers);
+    return respondJson(
+      { error: error instanceof Error ? error.message : String(error) },
+      401,
+      cors.headers,
+    );
   }
 
   const jwtTenantId = getTenantIdFromClaims(claims);
@@ -199,7 +218,7 @@ Deno.serve(async (req) => {
 
   const { data: existingInvoice, error: invoiceError } = await supabaseAdmin
     .from('invoices')
-    .select('id, status, tenant_id, total_amount, amount_paid, paid_at, sent_at, balance_due, payment_method, job_id, quote_id, lead_id')
+    .select('id, status, tenant_id, total_amount, amount_paid, paid_at, sent_at, balance_due, payment_method, job_id, quote_id, lead_id, checkout_generation')
     .eq('id', invoiceId)
     .eq('tenant_id', jwtTenantId)
     .maybeSingle();
@@ -226,8 +245,27 @@ Deno.serve(async (req) => {
     }
     const reference = referenceValidation.normalized ?? null;
     const methodWithRef = buildMethodWithReference(method, reference);
+    let checkoutGeneration: number;
+    try {
+      checkoutGeneration = await prepareInvoiceCheckoutMutation({
+        tenantId: jwtTenantId,
+        invoiceId,
+        expectedGeneration: Number(existingInvoice.checkout_generation ?? 0),
+      });
+    } catch (error) {
+      console.error(
+        'invoice-update-status checkout invalidation failed:',
+        error instanceof Error ? error.message : 'unknown',
+      );
+      return respondJson(
+        { error: 'Active online checkout could not be invalidated. Payment was not recorded.' },
+        409,
+        cors.headers,
+      );
+    }
 
-    const currentStatus = asString(existingInvoice.status).toLowerCase() || 'draft';
+    try {
+      const currentStatus = asString(existingInvoice.status).toLowerCase() || 'draft';
 
     let autoSent = false;
     // Some guardrails block draft -> paid/partial directly. Move through sent first.
@@ -241,7 +279,7 @@ Deno.serve(async (req) => {
         updated_at: nowIso,
       };
 
-      const sentResult = await updateInvoiceRow(invoiceId, jwtTenantId, sentPatch);
+      const sentResult = await updateInvoiceRow(invoiceId, jwtTenantId, sentPatch, checkoutGeneration);
       if (sentResult.error) {
         return respondJson({ error: sentResult.error?.message || 'Failed to move invoice to sent before payment.' }, 409, cors.headers);
       }
@@ -249,7 +287,7 @@ Deno.serve(async (req) => {
     }
 
     const actorUserId = asString(claims?.sub) || null;
-    const rpcResult = await supabaseAdmin.rpc('record_offline_manual_payment', {
+    const rpcResult = await supabaseAdmin.rpc('record_offline_manual_payment_fenced', {
       p_tenant_id: jwtTenantId,
       p_invoice_id: invoiceId,
       p_amount: paymentAmount,
@@ -257,6 +295,7 @@ Deno.serve(async (req) => {
       p_manual_reference_raw: referenceRaw || reference || '',
       p_actor_user_id: actorUserId,
       p_request_id: sourceScreen,
+      p_checkout_generation: checkoutGeneration,
     });
 
     if (rpcResult.error) {
@@ -334,18 +373,25 @@ Deno.serve(async (req) => {
       });
     }
 
-    return respondJson(
-      {
-        ok: true,
-        duplicate,
-        transaction_id: transactionId,
-        financial_effect_created: !duplicate,
-        event_emitted: !duplicate,
-        invoice,
-      },
-      200,
-      cors.headers,
-    );
+      return respondJson(
+        {
+          ok: true,
+          duplicate,
+          transaction_id: transactionId,
+          financial_effect_created: !duplicate,
+          event_emitted: !duplicate,
+          invoice,
+        },
+        200,
+        cors.headers,
+      );
+    } finally {
+      await finishInvoiceCheckoutMutation({
+        tenantId: jwtTenantId,
+        invoiceId,
+        generation: checkoutGeneration,
+      });
+    }
   }
 
   // Legacy status-only path (non-payment).
@@ -378,11 +424,43 @@ Deno.serve(async (req) => {
     nextPatch.sent_at = nowIso;
   }
 
-  const { data: invoice, error } = await updateInvoiceRow(invoiceId, jwtTenantId, nextPatch);
-
-  if (error || !invoice) {
-    return respondJson({ error: error?.message || 'Invoice not found' }, 404, cors.headers);
+  let checkoutGeneration: number;
+  try {
+    checkoutGeneration = await prepareInvoiceCheckoutMutation({
+      tenantId: jwtTenantId,
+      invoiceId,
+      expectedGeneration: Number(existingInvoice.checkout_generation ?? 0),
+    });
+  } catch (error) {
+    console.error(
+      'invoice-update-status checkout invalidation failed:',
+      error instanceof Error ? error.message : 'unknown',
+    );
+    return respondJson(
+      { error: 'Active online checkout could not be invalidated. Status was not changed.' },
+      409,
+      cors.headers,
+    );
   }
 
-  return respondJson({ invoice }, 200, cors.headers);
+  try {
+    const { data: invoice, error } = await updateInvoiceRow(
+      invoiceId,
+      jwtTenantId,
+      nextPatch,
+      checkoutGeneration,
+    );
+
+    if (error || !invoice) {
+      return respondJson({ error: error?.message || 'Invoice not found' }, 404, cors.headers);
+    }
+
+    return respondJson({ invoice }, 200, cors.headers);
+  } finally {
+    await finishInvoiceCheckoutMutation({
+      tenantId: jwtTenantId,
+      invoiceId,
+      generation: checkoutGeneration,
+    });
+  }
 });

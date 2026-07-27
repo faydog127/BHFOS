@@ -131,6 +131,7 @@ const upsertAutomationSuspension = async (params: {
 };
 
 const convertContactToCustomer = async (params: {
+  tenantId: string;
   contactId?: string | null;
   leadId?: string | null;
 }) => {
@@ -141,6 +142,7 @@ const convertContactToCustomer = async (params: {
         .from('leads')
         .select('contact_id')
         .eq('id', params.leadId)
+        .eq('tenant_id', params.tenantId)
         .maybeSingle();
       contactId = lead?.contact_id ?? null;
     }
@@ -154,6 +156,7 @@ const convertContactToCustomer = async (params: {
       .from('contacts')
       .select('is_customer, customer_created_at')
       .eq('id', contactId)
+      .eq('tenant_id', params.tenantId)
       .maybeSingle();
 
     const updateData: Record<string, unknown> = {
@@ -169,7 +172,8 @@ const convertContactToCustomer = async (params: {
     await supabaseAdmin
       .from('contacts')
       .update(updateData)
-      .eq('id', contactId);
+      .eq('id', contactId)
+      .eq('tenant_id', params.tenantId);
 
     return contactId;
   } catch (err) {

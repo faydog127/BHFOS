@@ -274,7 +274,9 @@ Deno.serve(async (req) => {
     .select(`
       id,
       lead_id,
+      job_id,
       status,
+      settlement_status,
       paid_at,
       invoice_number,
       issue_date,
@@ -298,17 +300,6 @@ Deno.serve(async (req) => {
         quantity,
         unit_price,
         total_price
-      ),
-      jobs (
-        service_address,
-        scheduled_start
-      ),
-      leads (
-        first_name,
-        last_name,
-        company,
-        email,
-        phone
       )
     `)
     .eq('public_token', token)
@@ -319,7 +310,7 @@ Deno.serve(async (req) => {
   if (error || rows.length === 0) {
     await logPublicEvent({
       kind: 'public_invoice_view',
-      tenantId: requestedTenantId,
+      tenantId: null,
       token,
       status: 'not_found',
       ip,
@@ -332,7 +323,7 @@ Deno.serve(async (req) => {
   if (rows.length > 1) {
     await logPublicEvent({
       kind: 'public_invoice_view',
-      tenantId: requestedTenantId,
+      tenantId: null,
       token,
       status: 'token_ambiguous',
       ip,
@@ -347,7 +338,7 @@ Deno.serve(async (req) => {
   if (!derivedTenantId) {
     await logPublicEvent({
       kind: 'public_invoice_view',
-      tenantId: requestedTenantId,
+      tenantId: null,
       invoiceId: String(invoice.id ?? '').trim() || null,
       token,
       status: 'tenant_missing',
@@ -361,7 +352,7 @@ Deno.serve(async (req) => {
   if (requestedTenantId && requestedTenantId !== derivedTenantId) {
     await logPublicEvent({
       kind: 'public_invoice_view',
-      tenantId: requestedTenantId,
+      tenantId: derivedTenantId,
       invoiceId: String(invoice.id ?? '').trim() || null,
       token,
       status: 'tenant_mismatch',
@@ -372,16 +363,48 @@ Deno.serve(async (req) => {
     return respondJson({ error: 'Tenant mismatch' }, 403, cors.headers);
   }
 
-  const jobRecord = Array.isArray((data as Record<string, unknown>).jobs)
-    ? ((data as Record<string, unknown>).jobs as Array<Record<string, unknown>>)[0] ?? null
-    : ((data as Record<string, unknown>).jobs as Record<string, unknown> | null);
+  invoice.leads = [];
+  const relatedLeadId = typeof invoice.lead_id === 'string' ? invoice.lead_id.trim() : '';
+  if (relatedLeadId) {
+    const { data: relatedLead, error: relatedLeadError } = await supabaseAdmin
+      .from('leads')
+      .select('first_name, last_name, company, email, phone')
+      .eq('id', relatedLeadId)
+      .eq('tenant_id', derivedTenantId)
+      .maybeSingle();
+    if (relatedLeadError) {
+      console.error('public-invoice lead lookup failed:', relatedLeadError.message);
+      return respondJson({ error: 'Invoice could not be loaded.' }, 500, cors.headers);
+    }
+    if (relatedLead) invoice.leads = [relatedLead];
+  }
+
+  invoice.jobs = [];
+  const relatedJobId = typeof invoice.job_id === 'string' ? invoice.job_id.trim() : '';
+  if (relatedJobId) {
+    const { data: relatedJob, error: relatedJobError } = await supabaseAdmin
+      .from('jobs')
+      .select('service_address, scheduled_start')
+      .eq('id', relatedJobId)
+      .eq('tenant_id', derivedTenantId)
+      .maybeSingle();
+    if (relatedJobError) {
+      console.error('public-invoice job lookup failed:', relatedJobError.message);
+      return respondJson({ error: 'Invoice could not be loaded.' }, 500, cors.headers);
+    }
+    if (relatedJob) invoice.jobs = [relatedJob];
+  }
+
+  const jobRecord = Array.isArray(invoice.jobs)
+    ? (invoice.jobs as Array<Record<string, unknown>>)[0] ?? null
+    : (invoice.jobs as Record<string, unknown> | null);
 
   if (jobRecord?.service_address) {
-    (data as Record<string, unknown>).service_address = jobRecord.service_address;
+    invoice.service_address = jobRecord.service_address;
   }
 
   if (jobRecord?.scheduled_start) {
-    (data as Record<string, unknown>).service_date = jobRecord.scheduled_start;
+    invoice.service_date = jobRecord.scheduled_start;
   }
 
   await logPublicEvent({
@@ -396,7 +419,7 @@ Deno.serve(async (req) => {
   });
 
   const invoiceId = String(invoice.id ?? '').trim();
-  const leadId = invoice.lead_id ?? null;
+  const leadId = typeof invoice.lead_id === 'string' && invoice.lead_id.trim() ? invoice.lead_id.trim() : null;
   const actorType = 'public';
   const isPaidInvoice =
     String(invoice.status ?? '').toLowerCase() === 'paid' ||
@@ -405,33 +428,33 @@ Deno.serve(async (req) => {
 
   if (isPaidInvoice) {
     if (!returnPdf) {
-      return respondJson({ invoice: data }, 200, cors.headers);
+      return respondJson({ invoice }, 200, cors.headers);
     }
   }
 
   if (returnPdf) {
-    const invoiceNumber = String(data.invoice_number ?? '').trim() || 'pending';
-    const lead = Array.isArray((data as Record<string, unknown>).leads)
-      ? ((data as Record<string, unknown>).leads as Array<Record<string, unknown>>)[0] ?? null
-      : ((data as Record<string, unknown>).leads as Record<string, unknown> | null);
+    const invoiceNumber = String(invoice.invoice_number ?? '').trim() || 'pending';
+    const lead = Array.isArray(invoice.leads)
+      ? (invoice.leads as Array<Record<string, unknown>>)[0] ?? null
+      : (invoice.leads as Record<string, unknown> | null);
     const billTo =
-      String((data as Record<string, unknown>).customer_name ?? '').trim() ||
+      String(invoice.customer_name ?? '').trim() ||
       String(lead?.company ?? '').trim() ||
       `${String(lead?.first_name ?? '').trim()} ${String(lead?.last_name ?? '').trim()}`.trim() ||
       'Customer';
-    const serviceAddress = String((data as Record<string, unknown>).service_address ?? '').trim();
-    const items = Array.isArray((data as Record<string, unknown>).invoice_items)
-      ? ((data as Record<string, unknown>).invoice_items as Array<Record<string, unknown>>)
+    const serviceAddress = String(invoice.service_address ?? '').trim();
+    const items = Array.isArray(invoice.invoice_items)
+      ? (invoice.invoice_items as Array<Record<string, unknown>>)
       : [];
-    const subtotal = Number((data as Record<string, unknown>).subtotal ?? 0) || 0;
-    const taxRate = Number((data as Record<string, unknown>).tax_rate ?? 0) || 0;
-    const taxAmount = Number((data as Record<string, unknown>).tax_amount ?? 0) || 0;
-    const totalAmount = Number((data as Record<string, unknown>).total_amount ?? 0) || 0;
-    const amountPaid = Number((data as Record<string, unknown>).amount_paid ?? 0) || 0;
-    const balanceDue = Number((data as Record<string, unknown>).balance_due ?? 0) || 0;
-    const issueDate = String((data as Record<string, unknown>).issue_date ?? '').trim();
-    const dueDate = String((data as Record<string, unknown>).due_date ?? '').trim();
-    const publicToken = String((data as Record<string, unknown>).public_token ?? token).trim();
+    const subtotal = Number(invoice.subtotal ?? 0) || 0;
+    const taxRate = Number(invoice.tax_rate ?? 0) || 0;
+    const taxAmount = Number(invoice.tax_amount ?? 0) || 0;
+    const totalAmount = Number(invoice.total_amount ?? 0) || 0;
+    const amountPaid = Number(invoice.amount_paid ?? 0) || 0;
+    const balanceDue = Number(invoice.balance_due ?? 0) || 0;
+    const issueDate = String(invoice.issue_date ?? '').trim();
+    const dueDate = String(invoice.due_date ?? '').trim();
+    const publicToken = String(invoice.public_token ?? token).trim();
     const payLink = `https://app.bhfos.com/pay/${encodeURIComponent(publicToken)}`;
 
     const wantsHtml = String(pdfRenderer || '').toLowerCase() !== 'text';
@@ -490,7 +513,7 @@ Deno.serve(async (req) => {
 
     return respondJson(
       {
-        invoice: data,
+        invoice,
         pdf,
         pdf_renderer_used: pdfRendererUsed,
         pdf_renderer_error: pdfRendererError,
@@ -556,6 +579,7 @@ Deno.serve(async (req) => {
     await supabaseAdmin
       .from('leads')
       .update({ last_human_signal_at: new Date().toISOString() })
+      .eq('tenant_id', derivedTenantId)
       .eq('id', leadId);
   }
 
@@ -568,5 +592,5 @@ Deno.serve(async (req) => {
     metadata: { run_id: runId },
   });
 
-  return respondJson({ invoice: data }, 200, cors.headers);
+  return respondJson({ invoice }, 200, cors.headers);
 });

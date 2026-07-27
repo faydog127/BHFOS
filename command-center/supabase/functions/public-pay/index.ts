@@ -16,6 +16,15 @@ import {
 } from '../_shared/moneyLoopUtils.ts';
 import { sendReceiptForPaidInvoice } from '../_shared/receiptUtils.ts';
 import { closeFollowUpTasks } from '../_shared/taskUtils.ts';
+import {
+  canReuseCheckoutAttempt,
+  classifyInvoicePaymentState,
+  derivePublicPayIdempotencyKey,
+  isLocalCheckoutUrl,
+  isStripeCheckoutUrl,
+  normalizePaymentMethod,
+} from '../_shared/publicPaymentRules.js';
+import { requireCheckoutRegistration } from '../_shared/publicPaymentPersistence.js';
 import Stripe from 'https://esm.sh/stripe@14.25.0?target=deno';
 
 const respondJson = (body: Record<string, unknown>, status: number, headers: Record<string, string>) =>
@@ -92,16 +101,6 @@ const isExplicitTestModeEnabled = async () => {
   }
 };
 
-const deriveIdempotencyKey = (invoiceId: string, amountCents: number, method: string, clientKey?: string | null) => {
-  const stableClientKey = typeof clientKey === 'string' && clientKey.trim().length >= 12 ? clientKey.trim() : null;
-  if (stableClientKey) return `publicpay:${invoiceId}:${stableClientKey}`;
-
-  // Time-bucketed key: prevents double-click/retry duplicates but allows a fresh session after expiry window.
-  const bucketMinutes = 15;
-  const bucket = Math.floor(Date.now() / (bucketMinutes * 60 * 1000));
-  return `publicpay:v1:${invoiceId}:${amountCents}:${method}:${bucket}`;
-};
-
 Deno.serve(async (req) => {
   const origin = req.headers.get('origin');
   const cors = buildCorsHeaders(origin);
@@ -135,7 +134,7 @@ Deno.serve(async (req) => {
   const token = body?.token || null;
   const requestedTenantId = body?.tenant_id != null ? String(body.tenant_id).trim() : null;
   const requestedAmount = body?.amount;
-  const method = body?.method || 'card';
+  const method = normalizePaymentMethod(body?.method || 'card');
   const runId = body?.run_id || null;
   const clientIdempotencyKey = body?.idempotency_key != null ? String(body.idempotency_key).trim() : null;
 
@@ -153,7 +152,21 @@ Deno.serve(async (req) => {
 
   const { data, error: invoiceError } = await supabaseAdmin
     .from('invoices')
-    .select('*')
+    .select(`
+      id,
+      tenant_id,
+      lead_id,
+      status,
+      settlement_status,
+      paid_at,
+      invoice_number,
+      total_amount,
+      amount_paid,
+      balance_due,
+      customer_email,
+      checkout_generation,
+      checkout_mutation_pending
+    `)
     .eq('public_token', token)
     .limit(2);
 
@@ -162,7 +175,7 @@ Deno.serve(async (req) => {
   if (invoiceError || invoiceRows.length === 0) {
     await logPublicEvent({
       kind: 'public_pay',
-      tenantId: requestedTenantId,
+      tenantId: null,
       token,
       status: 'not_found',
       ip,
@@ -175,7 +188,7 @@ Deno.serve(async (req) => {
   if (invoiceRows.length > 1) {
     await logPublicEvent({
       kind: 'public_pay',
-      tenantId: requestedTenantId,
+      tenantId: null,
       token,
       status: 'token_ambiguous',
       ip,
@@ -190,7 +203,7 @@ Deno.serve(async (req) => {
   if (!derivedTenantId) {
     await logPublicEvent({
       kind: 'public_pay',
-      tenantId: requestedTenantId,
+      tenantId: null,
       invoiceId: String(invoice.id ?? '').trim() || null,
       token,
       status: 'tenant_missing',
@@ -204,7 +217,7 @@ Deno.serve(async (req) => {
   if (requestedTenantId && requestedTenantId !== derivedTenantId) {
     await logPublicEvent({
       kind: 'public_pay',
-      tenantId: requestedTenantId,
+      tenantId: derivedTenantId,
       invoiceId: String(invoice.id ?? '').trim() || null,
       token,
       status: 'tenant_mismatch',
@@ -216,18 +229,27 @@ Deno.serve(async (req) => {
   }
 
   const tenantId = derivedTenantId;
+  const invoiceId = String(invoice.id ?? '').trim();
+  const leadId = typeof invoice.lead_id === 'string' && invoice.lead_id.trim() ? invoice.lead_id.trim() : null;
+  const checkoutGeneration = Number(invoice.checkout_generation ?? 0);
+  if (!invoiceId) {
+    return respondJson({ error: 'Invoice is not payable.', blocked: true }, 409, cors.headers);
+  }
+  if (invoice.checkout_mutation_pending || !Number.isSafeInteger(checkoutGeneration) || checkoutGeneration < 0) {
+    return respondJson(
+      { error: 'Invoice is being updated. Please retry.', blocked: true, code: 'INVOICE_UPDATE_PENDING' },
+      409,
+      cors.headers,
+    );
+  }
 
-  const alreadyPaid =
-    invoice.status === 'paid' ||
-    Boolean(invoice.paid_at) ||
-    Number(invoice.balance_due || 0) <= 0 ||
-    Number(invoice.amount_paid || 0) > 0;
+  const paymentState = classifyInvoicePaymentState(invoice);
 
-  if (alreadyPaid) {
+  if (paymentState.kind === 'paid') {
     await logPublicEvent({
       kind: 'public_pay',
       tenantId,
-      invoiceId: String(invoice.id ?? '').trim(),
+      invoiceId,
       token,
       status: 'already_paid',
       ip,
@@ -237,25 +259,46 @@ Deno.serve(async (req) => {
     return respondJson({ success: true, already_paid: true }, 200, cors.headers);
   }
 
-  const amountToCharge = Number(invoice.balance_due || invoice.total_amount || 0);
-  const amountToChargeRounded = Math.round(amountToCharge * 100) / 100;
+  if (paymentState.kind !== 'payable') {
+    await logPublicEvent({
+      kind: 'public_pay',
+      tenantId,
+      invoiceId,
+      token,
+      status: 'not_payable',
+      ip,
+      userAgent,
+      metadata: { run_id: runId, reason: paymentState.reason },
+    });
+    return respondJson(
+      { error: 'Invoice is not payable.', blocked: true, code: 'INVOICE_NOT_PAYABLE' },
+      409,
+      cors.headers,
+    );
+  }
+
+  const amountCents = Number(paymentState.balanceCents);
+  const amountToCharge = amountCents / 100;
   const requestedAmountNum = requestedAmount == null ? null : Number(requestedAmount);
 
   // Server-authoritative amount: the client amount is allowed only as a verification hint.
+  if (requestedAmountNum != null && !Number.isFinite(requestedAmountNum)) {
+    return respondJson({ error: 'Invalid amount' }, 400, cors.headers);
+  }
+
   if (
     requestedAmountNum != null &&
-    Number.isFinite(requestedAmountNum) &&
-    Math.abs(requestedAmountNum - amountToChargeRounded) > 0.009
+    Math.abs(Math.round(requestedAmountNum * 100) - amountCents) > 0
   ) {
     await logPublicEvent({
       kind: 'public_pay',
       tenantId,
-      invoiceId: invoice.id,
+      invoiceId,
       token,
       status: 'amount_mismatch',
       ip,
       userAgent,
-      metadata: { run_id: runId, requested_amount: requestedAmountNum, authoritative_amount: amountToChargeRounded },
+      metadata: { run_id: runId, requested_amount: requestedAmountNum, authoritative_amount: amountToCharge },
     });
     return respondJson({ error: 'Amount mismatch' }, 400, cors.headers);
   }
@@ -273,6 +316,7 @@ Deno.serve(async (req) => {
   }
 
   if (paymentsMode && paymentsMode.startsWith('stripe')) {
+    let unregisteredSessionId: string | null = null;
     try {
       if (method !== 'card') {
         const message = 'ACH checkout is not configured on this payment page yet.';
@@ -280,7 +324,7 @@ Deno.serve(async (req) => {
         await logPublicEvent({
           kind: 'public_pay',
           tenantId,
-          invoiceId: invoice.id,
+          invoiceId,
           token,
           status: 'blocked',
           ip,
@@ -291,34 +335,213 @@ Deno.serve(async (req) => {
         return respondJson({ error: message, blocked: true }, 501, cors.headers);
       }
 
-      const invoiceId = invoice.id as string;
-
-      const amountCents = Math.round(amountToCharge * 100);
       if (!Number.isFinite(amountCents) || amountCents <= 0) {
         return respondJson({ error: 'Invalid invoice total' }, 400, cors.headers);
       }
 
-      const idempotencyKey = deriveIdempotencyKey(invoiceId, amountCents, String(method), clientIdempotencyKey);
+      const returnBaseUrl = `${getPublicPayBaseUrl()}/pay/${token}`;
+      const isLocalBypass =
+        req.headers.get('x-test-pay') === '1' &&
+        isLocalRequest(req) &&
+        (await isExplicitTestModeEnabled());
+      const stripeSecretKey = (Deno.env.get('STRIPE_SECRET_KEY') ?? '').trim();
+      if (!stripeSecretKey && !isLocalBypass) {
+        const message = 'Payment processing is not configured.';
+        await logPublicEvent({
+          kind: 'public_pay',
+          tenantId,
+          invoiceId,
+          token,
+          status: 'blocked',
+          ip,
+          userAgent,
+          metadata: { run_id: runId, error: 'missing_stripe_secret_key', payments_mode: paymentsMode },
+        });
+        return respondJson({ error: message, blocked: true }, 501, cors.headers);
+      }
 
-      // DB-backed duplicate protection: if we already created an attempt for this invoice+idempotency, reuse it.
-      const { data: existingAttempts } = await supabaseAdmin
+      const stripe = isLocalBypass ? null : new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
+      const baseIdempotencyKey = await derivePublicPayIdempotencyKey({
+        invoiceId,
+        amountCents,
+        method,
+        callerKey: clientIdempotencyKey,
+      });
+      const idempotencyKey = baseIdempotencyKey;
+
+      // Reconcile every active attempt for this invoice. A caller key may refine
+      // provider idempotency, but it cannot create a second simultaneously open checkout.
+      const { data: existingAttempts, error: existingAttemptError } = await supabaseAdmin
         .from('public_payment_attempts')
-        .select('*')
+        .select(`
+          id,
+          invoice_id,
+          method,
+          currency,
+          amount_cents,
+          idempotency_key,
+          checkout_session_id,
+          checkout_url,
+          checkout_expires_at,
+          checkout_generation,
+          provider_payment_id,
+          attempt_status
+        `)
         .eq('tenant_id', tenantId)
         .eq('invoice_id', invoiceId)
-        .eq('idempotency_key', idempotencyKey)
-        .limit(1);
+        .in('attempt_status', ['initiated', 'pending'])
+        .order('created_at', { ascending: false });
 
-      if (Array.isArray(existingAttempts) && existingAttempts.length === 1) {
-        const existing = existingAttempts[0] as Record<string, unknown>;
-        const checkoutUrl = typeof existing.checkout_url === 'string' ? existing.checkout_url : null;
+      if (existingAttemptError) {
+        throw new Error('PERSISTENCE_ATTEMPT_LOOKUP_FAILED');
+      }
+
+      const activeAttempts = (Array.isArray(existingAttempts) ? existingAttempts : []) as Record<string, unknown>[];
+      if (isLocalBypass && activeAttempts.some((attempt) => !isLocalCheckoutUrl(attempt.checkout_url))) {
+        throw new Error('LOCAL_BYPASS_PROVIDER_RECONCILIATION_REQUIRED');
+      }
+      const providerSessions = new Map<string, Stripe.Checkout.Session>();
+      if (!isLocalBypass) {
+        for (const existing of activeAttempts) {
+          const sessionId = typeof existing.checkout_session_id === 'string' ? existing.checkout_session_id.trim() : '';
+          if (!sessionId) throw new Error('PROVIDER_CHECKOUT_SESSION_MISSING');
+          providerSessions.set(sessionId, await stripe!.checkout.sessions.retrieve(sessionId));
+        }
+      }
+
+      if ([...providerSessions.values()].some((session) => session.status === 'complete')) {
+        for (const existing of activeAttempts) {
+          const sessionId = typeof existing.checkout_session_id === 'string' ? existing.checkout_session_id.trim() : '';
+          const session = sessionId ? providerSessions.get(sessionId) : null;
+          if (session?.status === 'complete') continue;
+          if (session?.status === 'open') {
+            await stripe!.checkout.sessions.expire(sessionId);
+          } else if (session && session.status !== 'expired') {
+            throw new Error('PROVIDER_CHECKOUT_STATE_UNKNOWN');
+          }
+          const { data: staleAttempt, error: staleAttemptError } = await supabaseAdmin
+            .from('public_payment_attempts')
+            .update({
+              attempt_status: 'expired',
+              checkout_url: null,
+              checkout_expires_at: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('tenant_id', tenantId)
+            .eq('invoice_id', invoiceId)
+            .eq('id', existing.id)
+            .in('attempt_status', ['initiated', 'pending'])
+            .select('id')
+            .maybeSingle();
+          if (staleAttemptError || !staleAttempt?.id) throw new Error('PERSISTENCE_STALE_ATTEMPT_FAILED');
+        }
+        return respondJson(
+          { error: 'Payment confirmation is pending.', blocked: true, code: 'PAYMENT_CONFIRMATION_PENDING' },
+          409,
+          cors.headers,
+        );
+      }
+
+      let reusableAttempt: {
+        existing: (typeof activeAttempts)[number];
+        providerPaymentId: string | null;
+        sessionId: string | null;
+        checkoutUrl: string;
+      } | null = null;
+
+      for (const existing of activeAttempts) {
         const providerPaymentId = typeof existing.provider_payment_id === 'string' ? existing.provider_payment_id : null;
         const sessionId = typeof existing.checkout_session_id === 'string' ? existing.checkout_session_id : null;
+        let checkoutUrl = typeof existing.checkout_url === 'string' ? existing.checkout_url : null;
+        let providerSessionReusable = canReuseCheckoutAttempt({
+          attempt: existing,
+          invoiceId,
+          amountCents,
+          method,
+          idempotencyKey,
+          checkoutUrlValidator: isLocalBypass ? isLocalCheckoutUrl : isStripeCheckoutUrl,
+          requireIdempotencyKey: false,
+          checkoutGeneration,
+        });
 
-        await supabaseAdmin
+        let providerSessionStatus: string | null = null;
+        if (!isLocalBypass && sessionId) {
+          const providerSession = providerSessions.get(sessionId);
+          if (!providerSession) throw new Error('PROVIDER_CHECKOUT_SESSION_MISSING');
+          providerSessionStatus = providerSession.status;
+          checkoutUrl = providerSession.url;
+          providerSessionReusable =
+             providerSessionReusable &&
+             providerSession.status === 'open' &&
+             isStripeCheckoutUrl(checkoutUrl);
+        }
+
+        if (providerSessionReusable && checkoutUrl && reusableAttempt === null) {
+          reusableAttempt = { existing, providerPaymentId, sessionId, checkoutUrl };
+          continue;
+        }
+
+        if (!isLocalBypass) {
+          if (!sessionId || providerSessionStatus === null) {
+            throw new Error('PROVIDER_CHECKOUT_SESSION_MISSING');
+          }
+          if (providerSessionStatus === 'open') {
+            await stripe!.checkout.sessions.expire(sessionId);
+          } else if (providerSessionStatus !== 'expired') {
+            throw new Error('PROVIDER_CHECKOUT_STATE_UNKNOWN');
+          }
+        }
+        const { data: staleAttempt, error: staleAttemptError } = await supabaseAdmin
           .from('public_payment_attempts')
-          .update({ last_seen_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-          .eq('id', existing.id);
+          .update({
+            attempt_status: 'expired',
+            checkout_url: null,
+            checkout_expires_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('tenant_id', tenantId)
+          .eq('invoice_id', invoiceId)
+          .eq('id', existing.id)
+          .in('attempt_status', ['initiated', 'pending'])
+          .select('id')
+          .maybeSingle();
+        if (staleAttemptError || !staleAttempt?.id) throw new Error('PERSISTENCE_STALE_ATTEMPT_FAILED');
+      }
+
+      if (reusableAttempt) {
+        const { existing, providerPaymentId, sessionId, checkoutUrl } = reusableAttempt;
+        const { data: touchedAttempt, error: attemptTouchError } = await supabaseAdmin
+          .from('public_payment_attempts')
+          .update({
+            checkout_url: checkoutUrl,
+            last_seen_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('tenant_id', tenantId)
+          .eq('invoice_id', invoiceId)
+          .eq('id', existing.id)
+          .in('attempt_status', ['initiated', 'pending'])
+          .select('id')
+          .maybeSingle();
+        if (attemptTouchError || !touchedAttempt?.id) throw new Error('PERSISTENCE_ATTEMPT_REFRESH_FAILED');
+
+        const invoicePointerPatch: Record<string, unknown> = {
+          provider_payment_status: 'initiated',
+          updated_at: new Date().toISOString(),
+        };
+        if (providerPaymentId && !providerPaymentId.startsWith('checkout_session:')) {
+          invoicePointerPatch.provider_payment_id = providerPaymentId;
+        }
+        const { data: invoicePointer, error: invoicePointerError } = await supabaseAdmin
+          .from('invoices')
+          .update(invoicePointerPatch)
+          .eq('tenant_id', tenantId)
+          .eq('id', invoiceId)
+          .eq('checkout_generation', checkoutGeneration)
+          .eq('checkout_mutation_pending', false)
+          .select('id')
+          .maybeSingle();
+        if (invoicePointerError || !invoicePointer?.id) throw new Error('PERSISTENCE_INVOICE_PROVIDER_FAILED');
 
         await logPublicEvent({
           kind: 'public_pay',
@@ -330,86 +553,41 @@ Deno.serve(async (req) => {
           userAgent,
           metadata: { run_id: runId, checkout_session_id: sessionId, provider_payment_id: providerPaymentId },
         });
-
-        if (checkoutUrl) {
-          return respondJson(
-            {
-              success: true,
-              mode: 'stripe_checkout',
-              duplicate: true,
-              checkout_url: checkoutUrl,
-              session_id: sessionId,
-              provider_payment_id: providerPaymentId,
-              payment_status: 'pending_confirmation',
-            },
-            200,
-            cors.headers,
-          );
-        }
+        return respondJson(
+          {
+            success: true,
+            mode: 'stripe_checkout',
+            duplicate: true,
+            checkout_url: checkoutUrl,
+            session_id: sessionId,
+            provider_payment_id: providerPaymentId,
+            payment_status: 'pending_confirmation',
+          },
+          200,
+          cors.headers,
+        );
       }
 
       let customerEmail: string | undefined;
       if (typeof invoice.customer_email === 'string' && invoice.customer_email.trim()) {
         customerEmail = invoice.customer_email.trim();
-      } else if (invoice.lead_id) {
+      } else if (leadId) {
         const { data: leadRow } = await supabaseAdmin
           .from('leads')
           .select('email')
           .eq('tenant_id', tenantId)
-          .eq('id', invoice.lead_id)
+          .eq('id', leadId)
           .maybeSingle();
         customerEmail = leadRow?.email || undefined;
       }
 
       const invoiceLabel = invoice.invoice_number ? `Invoice #${invoice.invoice_number}` : `Invoice ${invoiceId}`;
-      const returnBaseUrl = `${getPublicPayBaseUrl()}/pay/${token}`;
-      const isLocalBypass =
-        req.headers.get('x-test-pay') === '1' &&
-        isLocalRequest(req) &&
-        (await isExplicitTestModeEnabled());
-
-      const stripeSecretKey = (Deno.env.get('STRIPE_SECRET_KEY') ?? '').trim();
-      if (!stripeSecretKey && !isLocalBypass) {
-        const message = 'Payment processing is not configured.';
-
-        await logPublicEvent({
-          kind: 'public_pay',
-          tenantId,
-          invoiceId: invoice.id,
-          token,
-          status: 'blocked',
-          ip,
-          userAgent,
-          metadata: { run_id: runId, error: 'missing_stripe_secret_key', payments_mode: paymentsMode },
-        });
-
-        await logMoneyLoopEvent({
-          tenantId,
-          entityType: 'invoice',
-          entityId: invoice.id,
-          eventType: 'PaymentFailed',
-          actorType: 'public',
-          payload: { amount: amountToCharge, method, run_id: runId, error: 'missing_stripe_secret_key' },
-        });
-
-        await createMoneyLoopTask({
-          tenantId,
-          sourceType: 'invoice',
-          sourceId: invoice.id,
-          title: 'Payment Failed - Follow Up',
-          leadId: invoice.lead_id ?? null,
-          metadata: { run_id: runId, error: 'missing_stripe_secret_key' },
-        });
-
-        return respondJson({ error: message, blocked: true }, 501, cors.headers);
-      }
-
-      const stripe = isLocalBypass ? null : new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
-
+      const publicOriginKey = idempotencyKey;
       const session = isLocalBypass
         ? ({
             id: `cs_test_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`,
-            url: `${returnBaseUrl}?checkout=success`,
+             url: `${returnBaseUrl}?checkout=success`,
+             expires_at: Math.floor(Date.now() / 1000) + 24 * 60 * 60,
             payment_intent: { id: `pi_test_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}` },
           } as unknown as Stripe.Checkout.Session)
         : await stripe!.checkout.sessions.create(
@@ -434,21 +612,25 @@ Deno.serve(async (req) => {
               ],
               payment_intent_data: {
                 metadata: {
-                  invoice_id: invoiceId,
-                  tenant_id: tenantId,
-                  method,
+                   invoice_id: invoiceId,
+                   tenant_id: tenantId,
+                   method,
+                   payment_origin: 'public_pay',
+                   public_origin_key: publicOriginKey,
                 },
                 description: invoiceLabel,
               },
               metadata: {
-                invoice_id: invoiceId,
-                tenant_id: tenantId,
-                token,
+                 invoice_id: invoiceId,
+                 tenant_id: tenantId,
+                 payment_origin: 'public_pay',
+                 public_origin_key: publicOriginKey,
               },
               expand: ['payment_intent'],
             },
             { idempotencyKey },
           );
+      unregisteredSessionId = session.id;
 
       let paymentIntentId =
         typeof (session as unknown as Record<string, unknown>)?.payment_intent === 'string'
@@ -459,61 +641,50 @@ Deno.serve(async (req) => {
             ? String(((session as unknown as Record<string, unknown>).payment_intent as Record<string, unknown>).id)
             : null;
 
-      if (!paymentIntentId && !isLocalBypass) {
-        try {
-          const retrieved = await stripe.checkout.sessions.retrieve(session.id, { expand: ['payment_intent'] });
-          paymentIntentId =
-            typeof (retrieved as unknown as Record<string, unknown>)?.payment_intent === 'string'
-              ? String((retrieved as unknown as Record<string, unknown>).payment_intent)
-              : typeof (retrieved as unknown as Record<string, unknown>)?.payment_intent === 'object' &&
-                  (retrieved as unknown as Record<string, unknown>).payment_intent &&
-                  typeof ((retrieved as unknown as Record<string, unknown>).payment_intent as Record<string, unknown>).id ===
-                    'string'
-                ? String(((retrieved as unknown as Record<string, unknown>).payment_intent as Record<string, unknown>).id)
-                : null;
-        } catch {
-          // ignore and enforce below
-        }
-      }
-
-      if (!paymentIntentId) {
-        throw new Error('Missing provider_payment_id');
-      }
+      const registeredProviderPaymentId = paymentIntentId ?? `checkout_session:${session.id}`;
       const checkoutUrl = session?.url ?? null;
+      const checkoutExpiresAt = Number(session?.expires_at);
+      if (!(isLocalBypass ? isLocalCheckoutUrl(checkoutUrl) : isStripeCheckoutUrl(checkoutUrl))) {
+        if (!isLocalBypass && session?.id) {
+          await stripe!.checkout.sessions.expire(session.id);
+        }
+        throw new Error('PROVIDER_CHECKOUT_URL_INVALID');
+      }
+      if (!Number.isFinite(checkoutExpiresAt) || checkoutExpiresAt * 1000 <= Date.now()) {
+        if (!isLocalBypass && session?.id) {
+          await stripe!.checkout.sessions.expire(session.id);
+        }
+        throw new Error('PROVIDER_CHECKOUT_EXPIRY_INVALID');
+      }
 
-      // Record initiation attempt (DB-backed idempotency + linkage to webhook provider_payment_id).
-      await supabaseAdmin.from('public_payment_attempts').upsert(
-        {
-          tenant_id: tenantId,
-          invoice_id: invoiceId,
-          public_token: token,
-          provider: 'stripe',
-          method: 'card',
-          currency: 'usd',
-          amount_cents: amountCents,
-          idempotency_key: idempotencyKey,
-          checkout_session_id: session.id,
-          checkout_url: checkoutUrl,
-          provider_payment_id: paymentIntentId,
-          attempt_status: 'initiated',
-          run_id: runId,
-          client_ip: ip,
-          user_agent: userAgent,
-          last_seen_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'invoice_id,idempotency_key' },
-      );
-
-      await supabaseAdmin
-        .from('invoices')
-        .update({
-          provider_payment_id: paymentIntentId ? (invoice.provider_payment_id ?? paymentIntentId) : invoice.provider_payment_id ?? null,
-          provider_payment_status: 'initiated',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('tenant_id', tenantId)
-        .eq('id', invoiceId);
+      const registration = await supabaseAdmin.rpc('register_public_checkout_attempt', {
+        p_tenant_id: tenantId,
+        p_invoice_id: invoiceId,
+        p_public_token: token,
+        p_public_origin_key: publicOriginKey,
+        p_expected_generation: checkoutGeneration,
+        p_amount_cents: amountCents,
+        p_method: method,
+        p_currency: 'usd',
+        p_idempotency_key: idempotencyKey,
+        p_checkout_session_id: session.id,
+        p_checkout_url: checkoutUrl,
+        p_checkout_expires_at: new Date(checkoutExpiresAt * 1000).toISOString(),
+        p_provider_payment_id: registeredProviderPaymentId,
+        p_run_id: runId,
+        p_client_ip: ip,
+        p_user_agent: userAgent,
+      });
+      try {
+        requireCheckoutRegistration(registration);
+      } catch (registrationError) {
+        if (!isLocalBypass) {
+          await stripe!.checkout.sessions.expire(session.id);
+        }
+        unregisteredSessionId = null;
+        throw registrationError;
+      }
+      unregisteredSessionId = null;
 
       await logPublicEvent({
         kind: 'public_pay',
@@ -526,7 +697,7 @@ Deno.serve(async (req) => {
         metadata: {
           run_id: runId,
           checkout_session_id: session.id,
-          provider_payment_id: paymentIntentId,
+          provider_payment_id: registeredProviderPaymentId,
           payments_mode: paymentsMode,
         },
       });
@@ -576,18 +747,19 @@ Deno.serve(async (req) => {
           }
 
       // Gap 7: Null-safe lead linkage - suspend lead+update timestamp if exists
-      if (invoice.lead_id) {
+      if (leadId) {
         await ensureSuspension({
           tenantId,
           entityType: 'lead',
-          entityId: invoice.lead_id,
+          entityId: leadId,
           reason: 'payment_attempt',
         });
 
         await supabaseAdmin
           .from('leads')
           .update({ last_human_signal_at: new Date().toISOString() })
-          .eq('id', invoice.lead_id);
+          .eq('tenant_id', tenantId)
+          .eq('id', leadId);
       }
 
       return respondJson(
@@ -595,7 +767,7 @@ Deno.serve(async (req) => {
           success: true,
           mode: 'stripe_checkout',
           payment_status: 'pending_confirmation',
-          checkout_url: session.url,
+          checkout_url: checkoutUrl,
           session_id: session.id,
           provider_payment_id: paymentIntentId,
         },
@@ -604,11 +776,27 @@ Deno.serve(async (req) => {
       );
     } catch (err) {
       const message = formatError(err);
+      if (!isLocalRequest(req) && unregisteredSessionId) {
+        try {
+          const cleanupStripe = new Stripe((Deno.env.get('STRIPE_SECRET_KEY') ?? '').trim(), { apiVersion: '2024-06-20' });
+          const cleanupSession = await cleanupStripe.checkout.sessions.retrieve(unregisteredSessionId);
+          if (cleanupSession.status === 'open') {
+            await cleanupStripe.checkout.sessions.expire(unregisteredSessionId);
+          }
+        } catch (cleanupError) {
+          console.error('public-pay unregistered checkout cleanup failed:', formatError(cleanupError));
+        }
+      }
+      const failureStage = message.startsWith('PERSISTENCE_')
+        ? 'persistence'
+        : message === 'PROVIDER_CHECKOUT_URL_INVALID'
+          ? 'provider_checkout_url'
+          : 'provider_or_processing';
 
       await logPublicEvent({
         kind: 'public_pay',
         tenantId,
-        invoiceId: invoice.id,
+        invoiceId,
         token,
         status: 'failed',
         ip,
@@ -619,7 +807,7 @@ Deno.serve(async (req) => {
       await logMoneyLoopEvent({
         tenantId,
         entityType: 'invoice',
-        entityId: invoice.id,
+        entityId: invoiceId,
         eventType: 'PaymentFailed',
         actorType: 'public',
         payload: { amount: amountToCharge, method, run_id: runId, error: message },
@@ -628,23 +816,32 @@ Deno.serve(async (req) => {
       await createMoneyLoopTask({
         tenantId,
         sourceType: 'invoice',
-        sourceId: invoice.id,
+        sourceId: invoiceId,
         title: 'Payment Failed - Follow Up',
-        leadId: invoice.lead_id ?? null,
+        leadId,
         metadata: { run_id: runId, error: message },
       });
 
-      return respondJson({ error: 'Payment failed', blocked: false }, 400, cors.headers);
+      return respondJson(
+        {
+          error: 'Payment could not be started.',
+          blocked: false,
+          code: 'PAYMENT_INITIATION_FAILED',
+          failure_stage: failureStage,
+        },
+        message.startsWith('PERSISTENCE_') ? 503 : 400,
+        cors.headers,
+      );
     }
   }
 
   // Initiation-only boundary: do not fall back to any direct settlement/money mutation path here.
-  await logPublicEvent({
-    kind: 'public_pay',
-    tenantId,
-    invoiceId: invoice.id,
-    token,
-    status: 'blocked',
+        await logPublicEvent({
+          kind: 'public_pay',
+          tenantId,
+          invoiceId,
+          token,
+          status: 'blocked',
     ip,
     userAgent,
     metadata: { run_id: runId, payments_mode: paymentsMode ?? null },
