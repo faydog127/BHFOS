@@ -4,10 +4,10 @@
 **Historical / document baseline (branch ancestry from `main`):** `9369d206bfbcaf32267e9e88518b222146e11de8`  
 **MIL packet baseline (finalization lifecycle):** `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9`  
 **Authorized staging-apply tip (pre-write gate):** `ad8aaa60c63bae08a39c3ab587ca373810cc1461`  
-**Verified HEAD at this status edit:** `9f77e3e42d98c4345da81365ec8322466a3fe3d6`  
-**Upstream at edit:** `origin/feat/media-intelligence-library` == HEAD (0 ahead / 0 behind)  
+**Verified HEAD at this status edit:** `65853fcd76f76845deb1a4a1fffe68f49f968cb8`  
+**Upstream at edit:** origin/feat/media-intelligence-library...HEAD = 0 behind / **1 ahead** (local commit `65853fc` not pushed)  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)  
-**Working tree at edit:** modified `IMPLEMENTATION_STATUS.md`; untracked `20260727140000_media_intel_finalize_rpc_execute_acl.sql`, `command-center/build-out.txt`, incidental `supabase/.temp/` (**build-out untouched**; never ignore/stage/commit) — **no link, no commit, no push, no merge, no prod**
+**Working tree at edit:** untracked `command-center/build-out.txt` + incidental `supabase/.temp/` + gitignored `.env.local` (staging URL/anon for local USABLE; **never commit**) — **no link, no push, no merge, no prod Hostinger**
 
 **Relay:** root [`AGENTS.md`](../../../AGENTS.md) + [`docs/RELAY_PROTOCOL.md`](../RELAY_PROTOCOL.md)  
 **Last consolidated review:** 2026-07-27
