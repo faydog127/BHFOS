@@ -58,7 +58,10 @@ export default function MediaAllMedia() {
       try {
         setLoading(true);
         const rows = await listAssets(filters);
-        if (!cancelled) setAssets(rows);
+        if (!cancelled) {
+          setAssets(rows);
+          setError(null);
+        }
       } catch (err) {
         if (!cancelled) setError(err.message);
       } finally {
@@ -74,6 +77,8 @@ export default function MediaAllMedia() {
     return <div className="text-sm text-slate-600">Sign in with an authorized media role.</div>;
   }
 
+  const activeSearch = (params.get('q') || '').trim();
+
   return (
     <div className="space-y-4" data-testid="media-all">
       <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
@@ -86,7 +91,8 @@ export default function MediaAllMedia() {
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 const next = new URLSearchParams(params);
-                if (search) next.set('q', search);
+                const trimmed = search.trim();
+                if (trimmed) next.set('q', trimmed);
                 else next.delete('q');
                 setParams(next);
               }
@@ -140,7 +146,9 @@ export default function MediaAllMedia() {
         <div className="rounded-xl border bg-white p-8 text-center text-sm text-slate-600">
           {duplicatesOnly
             ? 'No duplicate candidates match these filters.'
-            : 'No media matches these filters. Upload a phone dump to populate the library.'}
+            : activeSearch
+              ? 'No media matches this search.'
+              : 'No media matches these filters. Upload a phone dump to populate the library.'}
         </div>
       ) : (
         <>

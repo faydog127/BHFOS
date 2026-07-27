@@ -4,10 +4,10 @@
 **Historical / document baseline (branch ancestry from `main`):** `9369d206bfbcaf32267e9e88518b222146e11de8`  
 **MIL packet baseline (finalization lifecycle):** `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9`  
 **Authorized staging-apply tip (pre-write gate):** `ad8aaa60c63bae08a39c3ab587ca373810cc1461`  
-**Verified HEAD at this status edit:** `65853fcd76f76845deb1a4a1fffe68f49f968cb8`  
-**Upstream at edit:** origin/feat/media-intelligence-library...HEAD = 0 behind / **1 ahead** (local commit `65853fc` not pushed)  
-**Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)  
-**Working tree at edit:** untracked `command-center/build-out.txt` + incidental `supabase/.temp/` + gitignored `.env.local` (staging URL/anon for local USABLE; **never commit**) — **no link, no push, no merge, no prod Hostinger**
+**Verified HEAD at this status edit:** parent `043d94235dd45138094d066df8a930deca80d996`; this document ships in the local search-repair commit
+**Upstream at edit:** origin/feat/media-intelligence-library...HEAD was 0 behind / **3 ahead** before the local search-repair commit
+**Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
+**Working tree at edit:** search repair + tests + package script + this status update; untracked `command-center/build-out.txt` + incidental `supabase/.temp/` + gitignored `.env.local` remain untracked — **no link, no push, no merge, no prod Hostinger**
 
 **Relay:** root [`AGENTS.md`](../../../AGENTS.md) + [`docs/RELAY_PROTOCOL.md`](../RELAY_PROTOCOL.md)  
 **Last consolidated review:** 2026-07-27
@@ -43,8 +43,46 @@ Founder authorized [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) agains
 | Client exposure | **None** — absent from `src/`, `dist/`, `build-out.txt`; no `VITE_OPENAI_*`; build-production disallows `VITE_OPENAI_API_KEY` |
 | Staging secret | Set on `sdzhdupekcnekesbtxsl` as `OPENAI_API_KEY` |
 | `config_status` | **PASS** `configured: true` |
-| Analyze smoke (synthetic 64×64 JPEG asset) | **FAIL** provider `OpenAI error 403` — key lists models but lacks `gpt-4o-mini` / chat completions access; MIL wiring OK |
+| Analyze smoke (synthetic 64×64 JPEG asset) | Earlier 403 on default model; after `MIL_OPENAI_MODEL=gpt-5.2` synthetic smoke **PASS** (`provider=openai`, `model=gpt-5.2`, `status=succeeded`) |
 | Production / excluded | **Not** configured |
+
+### Representative fixture browser acceptance (2026-07-27) — FAIL (search defect)
+
+Gate against `sdzhdupekcnekesbtxsl` using local Vite + staging Auth (`mil-staging-admin@672803569.test`). **REPRESENTATIVE FIXTURE ACCEPTANCE** (sanitized generated vent before/after + low-quality JPEGs; no real customer media; no EXIF APP1).
+
+| Check | Result |
+|---|---|
+| Staging identity | `BHFOS MIL Staging` / `sdzhdupekcnekesbtxsl` confirmed before writes |
+| UI upload (3 fixtures) | **PASS** — transfer session → `In the library` / `uploaded`; assets `ce6eb7ed…`, `cc8c7c1c…`, `f85280f5…`; no duplicates |
+| UI on-demand analyze | **PASS** — Review Queue `Queue analysis` → `media-intel-analyze`; all three `mil_ai_analyses.status=succeeded`, `provider=openai`, `model=gpt-5.2`, jobs `succeeded` |
+| Analysis usefulness | **PASS for fixtures** — honest/cautious; before/after tagged; low-q marked unusable for marketing; no invented conclusive mold/damage claims |
+| Results in UI + after reload | **PASS** (reselect asset after analyze; full reload still shows `openai/gpt-5.2`) |
+| Before/after | AI did **not** propose a pair; reviewer-allowed insert of `possible_before_after` then UI **Confirm** → `before_after` / `confirmed` |
+| Tag/filename search | **FAIL** — `listAssets` `id.eq.${search}` throws `invalid input syntax for type uuid` on non-UUID queries; placeholder claims tags but search does not join tags |
+| Dashboard counts | Photos **5→8** after upload; fixtures later **archived** via Review Queue Archive |
+| Secrets / stacks in UI | **None** observed |
+| ACL (9 finalize RPCs) | `anon_exec=false`, `authenticated_exec=false`, `service_role_exec=true` |
+| Promote / website objects / `pg_cron` | Still **0** / **0** / not installed |
+| Cleanup | Fixtures archived in staging; disposable `public/mil-acceptance-tmp` removed; no production touch |
+
+**Gate verdict:** **FAIL** — core upload/analyze/display/persist passed; All Media search is a material usability defect.
+
+### All Media search repair + acceptance retest (2026-07-27) — PASS
+
+| Item | Detail |
+|---|---|
+| Defect repaired | `listAssets` no longer applies `id.eq.${search}` to arbitrary text; UUID equality only when syntactically valid; filename ILIKE via quoted/safe filters; tag search against authoritative `mil_asset_tags.tag_slug` |
+| Code | `src/lib/mediaIntel/assetSearch.js` (new); `api.js` `listAssets`; `MediaAllMedia.jsx` trim + empty-search copy; `tests/unit/media-intel-search.test.mjs`; `package.json` helper script includes search tests |
+| Focused tests | `npm run test:media-intel-helpers` → **148 pass / 0 fail** (includes search suite) |
+| Browser retest | Local Vite + staging `sdzhdupekcnekesbtxsl`; fixtures `sr_before_vent_lint.jpg` / `sr_after_vent_clean.jpg` / `sr_lowq_ambiguous.jpg` |
+| Upload + gpt-5.2 analyze + UI display + hard-reload persist | **PASS** |
+| Filename / tag / UUID / clear / no-match / special-char search | **PASS** in All Media UI (no UUID PostgREST errors); `vent` overlap returned 2 unique assets |
+| ACL / promote / cron / website objects | Unchanged (`anon`/`authenticated` cannot EXECUTE finalize RPCs; promotions/objects/`pg_cron` = 0) |
+| Cleanup | Retest fixtures archived; disposable `public/mil-search-retest-tmp` removed |
+
+**Known search scale limits (documented, not expanded this gate):** tag-row lookup `.limit(1000)`; unique tag-derived `id.in` capped at 200 for URL safety; final asset page still uses existing `limit` (UI 120). Adequate for current internal single-company volume; not a full-text search index.
+
+**Gate verdict:** **PASS** — search works safely by UUID, filename, and persisted tag; representative upload/analyze/store/display/refresh still passes; security intact. Does **not** authorize push/merge/Hostinger/production.
 
 ### Verification
 
@@ -260,22 +298,24 @@ Accepted (SOURCE + unit/contract tests + local SQL where noted; staging-unproven
 
 Still open (next executable after staging proof):
 
-1. **Exact next action:** Founder supplies an OpenAI key with chat/completions + vision (`gpt-4o-mini` or set `MIL_OPENAI_MODEL`) and re-run analyze smoke; optionally seed minimal TVG tenant membership if hub routes must be USABLE on this staging project
+1. **Exact next action:** Review the uncommitted All Media search repair + staging retest evidence for controlled local commit / branch publication authorization
 2. **Authorization boundary:** no production Hostinger deploy (no staging Hostinger target), no merge/push unless authorized, no reconcile cron, no promotion enablement
-3. Local commits of ACL migration + status are on branch (ahead of origin; not pushed)
+3. Local commits of ACL migration + status remain ahead of origin (not pushed); search repair is uncommitted until authorized
 
 ### Active defects (honest)
 
 | Defect | Standing |
 |---|---|
-| Hosted default EXECUTE on finalization RPCs | **Closed on staging** via forward migration `20260727140000` (source present; uncommitted) |
+| Hosted default EXECUTE on finalization RPCs | **Closed on staging** via forward migration `20260727140000` |
 | Promote website | Still **503** `not_implemented` by design |
 | No reconcile schedule | Intentional; stranded `pending_reconcile` until inline/manual run |
 | Uploads not resumable | Deferred |
-| Staging OpenAI analyze | Secret set + `configured: true`; provider **403** — key cannot call chat completions / no `gpt-4o-mini` |
+| All Media search | **Closed** (source + staging browser retest PASS 2026-07-27) |
+| Review Queue analysis panel | After `Queue analysis`, panel does not refresh until asset reselect |
+| AI before/after proposals | Analyze does not auto-create `possible_before_after`; no user-visible pair-creation UI (confirm-only) |
 | Large-file `ai_safe` derivative | Still incomplete; analyze may skip |
 | CRM Hostinger staging frontend | **Does not exist** — Hostinger tooling is production-only |
-| CRM browser USABLE vs staging | **Partial USABLE (local Vite)** — login + `/media/dashboard` + `/media/all` against `sdzhdupekcnekesbtxsl` via gitignored `.env.local`; CRM hub `/tvg/crm` blocked (no tenant org on empty MIL staging) |
+| CRM browser USABLE vs staging | Local Vite USABLE for `/media/*`; CRM hub `/tvg/crm` blocked (no tenant org on empty MIL staging) |
 
 ### Orchestration note (chat-loss recovery)
 
@@ -288,7 +328,7 @@ Fresh chats use the standardized **RELAY HANDOFF** in [`docs/RELAY_PROTOCOL.md`]
 1. ~~Founder supplies staging ref + URL~~ → `sdzhdupekcnekesbtxsl`
 2. ~~Execute staging apply packet~~ → done 2026-07-27 (see above)
 3. ~~Forward ACL backport `20260727140000`~~ → staging-applied + `00`/`04` PASS
-4. Browser/USABLE acceptance on CRM staging frontend pointed at staging (separate auth)
+4. Browser/USABLE acceptance on CRM staging frontend pointed at staging — representative fixture gate **FAIL (search)** then search-repair retest **PASS** (2026-07-27)
 5. Accessibility + responsive screenshot suite
 6. Large synthetic library performance harness
 7. Owner authorization before merge / production

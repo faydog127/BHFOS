@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/customSupabaseClient';
 import { PREVIEW_DERIVATIVE_KINDS } from './derivativeKinds';
+import { buildAssetSearchPlan, buildTextSearchOrFilter } from './assetSearch.js';
 
 async function actorId() {
   const { data } = await supabase.auth.getUser();
@@ -66,6 +67,9 @@ export async function fetchDashboardStats() {
 }
 
 export async function listAssets(filters = {}) {
+  const plan = buildAssetSearchPlan(filters.search);
+  if (plan.kind === 'no_match') return [];
+
   let q = supabase
     .from('mil_assets')
     .select('*, mil_derivatives(id, kind, object_path, bucket), mil_verified_metadata(*)')
@@ -79,8 +83,25 @@ export async function listAssets(filters = {}) {
   if (filters.archived === true) q = q.not('archived_at', 'is', null);
   else if (filters.archived === false) q = q.is('archived_at', null);
   if (filters.duplicatesOnly) q = q.not('duplicate_of_asset_id', 'is', null);
-  if (filters.search) {
-    q = q.or(`original_filename.ilike.%${filters.search}%,id.eq.${filters.search}`);
+
+  if (plan.kind === 'uuid') {
+    // UUID comparison only when the term is a syntactically valid UUID.
+    q = q.eq('id', plan.uuid);
+  } else if (plan.kind === 'text') {
+    // Authoritative tags: mil_asset_tags.tag_slug (RLS: mil_browse_asset_tags).
+    // Tag lookup is capped (1000 rows) and unique asset ids fed to id.in are
+    // further capped in buildTextSearchOrFilter — safe for internal MIL volume;
+    // not a full-library search index.
+    const { data: tagRows, error: tagErr } = await supabase
+      .from('mil_asset_tags')
+      .select('asset_id')
+      .ilike('tag_slug', plan.ilikePattern)
+      .limit(1000);
+    if (tagErr) throw tagErr;
+    const tagAssetIds = [...new Set((tagRows || []).map((r) => r.asset_id).filter(Boolean))];
+    const orFilter = buildTextSearchOrFilter(plan.literal, tagAssetIds);
+    if (!orFilter) return [];
+    q = q.or(orFilter);
   }
 
   const { data, error } = await q;
