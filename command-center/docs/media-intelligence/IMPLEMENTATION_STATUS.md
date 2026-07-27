@@ -4,30 +4,82 @@
 **Historical / document baseline (branch ancestry from `main`):** `9369d206bfbcaf32267e9e88518b222146e11de8`  
 **MIL packet baseline (finalization lifecycle):** `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9`  
 **Authorized staging-apply tip (pre-write gate):** `ad8aaa60c63bae08a39c3ab587ca373810cc1461`  
-**Verified HEAD at this status edit:** `41a281697aa5ecbcfa5c1f57c3af39b12c22cc83` (hard-stop docs atop authorized apply tip `ad8aaa60…`)  
-**Upstream at gate:** before hard-stop docs, `origin/feat/media-intelligence-library` == `ad8aaa60…` (0 ahead / 0 behind); this tip is +1 docs commit  
+**Verified HEAD at this status edit:** `9f77e3e42d98c4345da81365ec8322466a3fe3d6`  
+**Upstream at edit:** `origin/feat/media-intelligence-library` == HEAD (0 ahead / 0 behind)  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)  
-**Working tree at edit:** only untracked `command-center/build-out.txt` (**not** ignored; must never be modified, deleted, ignored, staged, or committed) — **no remote migration apply, no edge deploy, no merge, no prod**
+**Working tree at edit:** modified `IMPLEMENTATION_STATUS.md`; untracked `20260727140000_media_intel_finalize_rpc_execute_acl.sql`, `command-center/build-out.txt`, incidental `supabase/.temp/` (**build-out untouched**; never ignore/stage/commit) — **no link, no commit, no push, no merge, no prod**
 
 **Relay:** root [`AGENTS.md`](../../../AGENTS.md) + [`docs/RELAY_PROTOCOL.md`](../RELAY_PROTOCOL.md)  
 **Last consolidated review:** 2026-07-27
 
-## Staging apply attempt (2026-07-27) — HARD STOP (no remote write)
+## Staging apply (2026-07-27) — EXECUTED on designated MIL staging
 
-Founder authorized non-production staging execution of [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) against tip `ad8aaa60c63bae08a39c3ab587ca373810cc1461`. Pre-write gate results:
+Founder authorized [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) against designated project only:
+
+| Field | Value |
+|---|---|
+| Name | BHFOS MIL Staging |
+| Ref | `sdzhdupekcnekesbtxsl` |
+| URL | `https://sdzhdupekcnekesbtxsl.supabase.co` |
+| Org / region / status | The Vent Guys · us-east-1 · `ACTIVE_HEALTHY` |
+| Repo link | **None** (apply via Management API + `--project-ref`) |
+| Production / excluded | `wwyxohjnyqnegzbxtuxs`, `glkrykpksbsqmmilmjhs`, `rngfowbxiqeyslnncblw` — **untouched** |
+
+### Applied migrations (8)
+
+`20260725120000`, `20260725130000`, `20260725140000`, `20260725150000`, `20260726090000`, `20260727120000`, `20260727130000`, **`20260727140000`** — recorded in `supabase_migrations.schema_migrations`.
+
+### Secrets / Edge Functions
+
+- Secrets set (names only): `MIL_RECONCILE_KEY`, **`OPENAI_API_KEY`** (staging only; sourced from operator env, not `VITE_*` / not in `src`/`dist`/`build-out`)
+- Deployed ACTIVE: `media-intel-upload-session`, `media-intel-upload-reconcile`, `media-intel-sign`, `media-intel-analyze`, `media-intel-promote-website`, `media-intel-creator-admin`, `media-intel-reel-upload`
+- Reconcile cron / `pg_cron`: **not configured** (`health.scheduler` = none; no `pg_cron` extension)
+
+### OpenAI staging config (2026-07-27)
 
 | Check | Result |
 |---|---|
-| Repository | `F:/Dev/BHFOS-media-intel` |
-| Branch / HEAD / origin tip | `feat/media-intelligence-library` · local HEAD = origin = authorized SHA `ad8aaa60…` |
-| `command-center/build-out.txt` | Untracked; untouched |
-| Linked Supabase project | **None** (`supabase link` not run; CLI: “Cannot find project ref”) |
-| Production identity (known) | `wwyxohjnyqnegzbxtuxs` — name `TVG Website-CRM`; URL `https://wwyxohjnyqnegzbxtuxs.supabase.co` — **explicitly production** in governance/docs; **not** a staging target |
-| Other accessible projects | `glkrykpksbsqmmilmjhs` (`faydog127's Project`, us-east-1, ACTIVE_HEALTHY); `rngfowbxiqeyslnncblw` (`faydog127's Project`, us-west-2, **INACTIVE**) — **neither named or documented as MIL staging** |
-| Packet named staging `<ref>` | **Absent** — packet still uses placeholder `<ref>` |
-| Env / credential config for staging | **Absent** — no `SUPABASE_*` / `STAGING_*` / `DATABASE_URL` / `MIL_*` in shell; no linked `.temp/project-ref` |
+| Key location | Operator environment `OPENAI_API_KEY` (prefix `sk-`); **not** in frontend env names |
+| Client exposure | **None** — absent from `src/`, `dist/`, `build-out.txt`; no `VITE_OPENAI_*`; build-production disallows `VITE_OPENAI_API_KEY` |
+| Staging secret | Set on `sdzhdupekcnekesbtxsl` as `OPENAI_API_KEY` |
+| `config_status` | **PASS** `configured: true` |
+| Analyze smoke (synthetic 64×64 JPEG asset) | **FAIL** provider `OpenAI error 403` — key lists models but lacks `gpt-4o-mini` / chat completions access; MIL wiring OK |
+| Production / excluded | **Not** configured |
 
-**Verdict:** Target cannot be conclusively identified as non-production staging. Per authorization rule 6 and packet hard stop, **zero remote writes** were performed (no migration apply, no secret set, no edge deploy, no smoke against hosted). MIL remains **SOURCE + locally verified only**; staging-unproven.
+### Verification
+
+| Suite | Result |
+|---|---|
+| SQL `00`–`05` | **PASS** (initial apply); `00`/`04` **re-PASS** after `20260727140000` |
+| Smoke upload mint→PUT→complete | **PASS** (`status=uploaded`; asset visible) |
+| Smoke verify / collections / B&A | **PASS** |
+| Smoke promote | **503** `not_implemented` (expected) |
+| Smoke unpublish (no prior promotion) | **404** honest empty |
+| Smoke reconcile health | **PASS** `configured: true`, scheduler none |
+| Smoke analyze config_status | **PASS** initially `configured: false`; after secret set **PASS** `configured: true` |
+| Smoke sign / creator-admin / reel review / reel-upload mint | **PASS** |
+
+### Documented deviations (empty-project staging)
+
+1. **Prerequisite:** created minimal `public.app_user_roles` (`user_id`, `role`, `tenant_id`, `created_at`) — required by MIL role helpers / SQL `05` on an empty project (not one of the original seven packet files).
+
+### Forward ACL backport (2026-07-27) — `20260727140000`
+
+Created and applied **only** on `sdzhdupekcnekesbtxsl` (did **not** rewrite prior migrations):
+
+| Item | Detail |
+|---|---|
+| File | `supabase/migrations/20260727140000_media_intel_finalize_rpc_execute_acl.sql` |
+| Intent | Explicit `REVOKE ALL … FROM public, anon, authenticated` on the nine finalization RPCs; re-`GRANT EXECUTE` to `service_role` only |
+| Before (hosted-like reseed for proof) | `anon_exec=true`, `authenticated_exec=true`, `service_role_exec=true` on all nine |
+| After | `anon_exec=false`, `authenticated_exec=false`, `service_role_exec=true`; `proacl=postgres=X/postgres,service_role=X/postgres` |
+| Re-verify | SQL `00_schema_contract` **PASS**; `04_upload_privilege_matrix` **PASS** |
+
+### Staging inventory (post-smoke)
+
+25 `mil_*` tables; buckets `media-intel-originals`, `media-intel-derivatives`, `website-public-media`; smoke users/objects present from verification only.
+
+**Evidence label:** migrations + edges are **staging-applied / staging-deployed** with SQL + smoke evidence on `sdzhdupekcnekesbtxsl`. Not production. Not merged. CRM frontend staging deploy not performed.
 
 ## Status buckets (used throughout MIL docs)
 
@@ -39,7 +91,7 @@ Founder authorized non-production staging execution of [`STAGING_APPLY_PACKET.md
 | **4. Deferred** | Explicitly out of scope for this slice |
 | **5. Disabled pending safe implementation** | Code path exists but intentionally returns blocked/disabled until a proven pipeline exists |
 
-## Migrations (all **2 — staging proof required**)
+## Migrations (staging-applied on `sdzhdupekcnekesbtxsl`; still **not** production)
 
 | File | Scope |
 |---|---|
@@ -50,8 +102,9 @@ Founder authorized non-production staging execution of [`STAGING_APPLY_PACKET.md
 | `20260726090000_media_intel_upload_finalization_lifecycle.sql` | Durable upload finalization state machine; `abandoned_count`; `mil_integrity_alerts`; nine `service_role`-only RPCs; **drops** `mil_finalize_upload_grant` and `mil_cleanup_expired_upload_grants`; removes client write grants on all lifecycle tables |
 | `20260727120000_media_intel_website_public_bucket.sql` | Idempotent `website-public-media` bucket (public read) + anon/authenticated SELECT + `service_role` all; does **not** enable promote |
 | `20260727130000_media_intel_client_table_grants.sql` | States `authenticated` SELECT (+ intended writes) and `service_role` full DML on non-lifecycle `mil_*` tables so capability-matrix RLS is reachable; does **not** restore client INSERT/DELETE on `mil_assets` or lifecycle tables |
+| `20260727140000_media_intel_finalize_rpc_execute_acl.sql` | Hosted ACL backport: revoke finalization RPC EXECUTE from `anon`/`authenticated` (and `public`); preserve `service_role` EXECUTE — **staging-applied** on `sdzhdupekcnekesbtxsl` |
 
-None of the above are applied outside disposable local testing (local stack may have both 20260727* migrations applied for verification). **Do not treat RLS or storage behavior as proven until staging apply + SQL tests run.**
+Packet migrations through `20260727130000` plus ACL backport `20260727140000` are **staging-applied** on `sdzhdupekcnekesbtxsl`. Still **not** production.
 
 ### Why 20260726090000 exists
 
@@ -78,7 +131,7 @@ Two further consequences of that migration:
   environment happened to have, because the local disposable stack and the hosted
   project do not start from the same table ACL.
 
-## Edge functions (all **2 — deploy required**)
+## Edge functions (staging-deployed on `sdzhdupekcnekesbtxsl`; still **not** production)
 
 | Function | Status |
 |---|---|
@@ -205,23 +258,24 @@ Accepted (SOURCE + unit/contract tests + local SQL where noted; staging-unproven
 - Cursor Relay Protocol (docs only): root [`AGENTS.md`](../../../AGENTS.md) + [`docs/RELAY_PROTOCOL.md`](../RELAY_PROTOCOL.md)
 - Helper suite: `npm run test:media-intel-helpers` **129 pass / 0 fail**
 
-Still open locally (next executable):
+Still open (next executable after staging proof):
 
-1. **Exact next action:** Founder names the exact non-production staging Supabase **project ref** (and URL) for MIL — must be proven ≠ `wwyxohjnyqnegzbxtuxs` — then re-authorize packet execution against that ref
-2. **Authorization boundary:** no remote migration apply, edge deploy, secret set, CRM staging frontend deploy, merge, or production until staging identity is conclusive; this session already held Founder auth but stopped on identity uncertainty
-3. Optional further UI polish only if Founder requests; remaining Definition-of-Done items wait on staging
+1. **Exact next action:** Founder supplies an OpenAI key with chat/completions + vision (`gpt-4o-mini` or set `MIL_OPENAI_MODEL`) for staging analyze USABLE; separately authorize local-browser USABLE against staging (Hostinger has **no** staging target — only production `app.bhfos.com`)
+2. **Authorization boundary:** no production Hostinger deploy, no merge, no reconcile cron, no promotion enablement without new explicit Founder auth
+3. Optional: local commit of `20260727140000` + status doc when Founder requests
 
 ### Active defects (honest)
 
 | Defect | Standing |
 |---|---|
-| Staging project identity unknown | Packet + workspace cannot prove a non-prod staging `<ref>`; apply blocked 2026-07-27 |
-| Hosted/staging unproven | Migrations + edges never applied/deployed remotely |
+| Hosted default EXECUTE on finalization RPCs | **Closed on staging** via forward migration `20260727140000` (source present; uncommitted) |
 | Promote website | Still **503** `not_implemented` by design |
-| No reconcile schedule | Stranded `pending_reconcile` until inline/manual run |
+| No reconcile schedule | Intentional; stranded `pending_reconcile` until inline/manual run |
 | Uploads not resumable | Deferred |
-| Edge Storage HTTP path | SQL simulates `storage.objects`; real upload/download unproven |
+| Staging OpenAI analyze | Secret set + `configured: true`; provider **403** — key cannot call chat completions / no `gpt-4o-mini` |
 | Large-file `ai_safe` derivative | Still incomplete; analyze may skip |
+| CRM Hostinger staging frontend | **Does not exist** — Hostinger tooling is production-only |
+| CRM browser USABLE vs staging | Pending local Vite + staging `VITE_SUPABASE_*` (gitignored `.env.local` prepared) |
 
 ### Orchestration note (chat-loss recovery)
 
@@ -231,11 +285,10 @@ Fresh chats use the standardized **RELAY HANDOFF** in [`docs/RELAY_PROTOCOL.md`]
 
 ## Remaining for Definition of Done (requires owner authorization)
 
-1. Founder supplies conclusive non-production staging project **ref + URL** (not production `wwyxohjnyqnegzbxtuxs`)
-2. Founder re-authorizes + execute [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) against that ref (migrations + secrets + edge deploy)
-3. Set `MIL_RECONCILE_KEY` in staging edge secrets **before** deploying either upload function
-4. Run `supabase/tests/mil/*.sql` after apply; capture evidence
-5. End-to-end acceptance scenarios (upload → review → creator → unpublish)
-6. Accessibility + responsive screenshot suite
-7. Large synthetic library performance harness
-8. Owner authorization before CRM staging deploy / merge
+1. ~~Founder supplies staging ref + URL~~ → `sdzhdupekcnekesbtxsl`
+2. ~~Execute staging apply packet~~ → done 2026-07-27 (see above)
+3. ~~Forward ACL backport `20260727140000`~~ → staging-applied + `00`/`04` PASS
+4. Browser/USABLE acceptance on CRM staging frontend pointed at staging (separate auth)
+5. Accessibility + responsive screenshot suite
+6. Large synthetic library performance harness
+7. Owner authorization before merge / production
