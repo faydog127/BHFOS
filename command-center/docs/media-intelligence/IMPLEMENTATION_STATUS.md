@@ -260,9 +260,9 @@ Accepted (SOURCE + unit/contract tests + local SQL where noted; staging-unproven
 
 Still open (next executable after staging proof):
 
-1. **Exact next action:** Founder supplies an OpenAI key with chat/completions + vision (`gpt-4o-mini` or set `MIL_OPENAI_MODEL`) for staging analyze USABLE; separately authorize local-browser USABLE against staging (Hostinger has **no** staging target — only production `app.bhfos.com`)
-2. **Authorization boundary:** no production Hostinger deploy, no merge, no reconcile cron, no promotion enablement without new explicit Founder auth
-3. Optional: local commit of `20260727140000` + status doc when Founder requests
+1. **Exact next action:** Founder supplies an OpenAI key with chat/completions + vision (`gpt-4o-mini` or set `MIL_OPENAI_MODEL`) and re-run analyze smoke; optionally seed minimal TVG tenant membership if hub routes must be USABLE on this staging project
+2. **Authorization boundary:** no production Hostinger deploy (no staging Hostinger target), no merge/push unless authorized, no reconcile cron, no promotion enablement
+3. Local commits of ACL migration + status are on branch (ahead of origin; not pushed)
 
 ### Active defects (honest)
 
@@ -275,7 +275,7 @@ Still open (next executable after staging proof):
 | Staging OpenAI analyze | Secret set + `configured: true`; provider **403** — key cannot call chat completions / no `gpt-4o-mini` |
 | Large-file `ai_safe` derivative | Still incomplete; analyze may skip |
 | CRM Hostinger staging frontend | **Does not exist** — Hostinger tooling is production-only |
-| CRM browser USABLE vs staging | Pending local Vite + staging `VITE_SUPABASE_*` (gitignored `.env.local` prepared) |
+| CRM browser USABLE vs staging | **Partial USABLE (local Vite)** — login + `/media/dashboard` + `/media/all` against `sdzhdupekcnekesbtxsl` via gitignored `.env.local`; CRM hub `/tvg/crm` blocked (no tenant org on empty MIL staging) |
 
 ### Orchestration note (chat-loss recovery)
 
