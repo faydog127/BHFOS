@@ -2,7 +2,7 @@
 
 **Branch:** `feat/media-intelligence-library`  
 **Baseline:** `9369d206bfbcaf32267e9e88518b222146e11de8`  
-**Verified tip at last status sync:** `2258341` (ahead of `origin` by 3; feature tip `89bb72e` + status sync; baseline `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9`)  
+**Verified tip at last status sync:** `2801f403138047c324580e7f65c078c1d1d7341e` (ahead of `origin` by 4; feature `89bb72e` + docs; baseline `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9`)  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)  
 **Working tree:** clean except ignored `build-out.txt` — **no remote migration apply, no edge deploy, no merge, no prod**
 
