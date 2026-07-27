@@ -1,11 +1,14 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Baseline:** `9369d206bfbcaf32267e9e88518b222146e11de8`  
-**Verified tip at last status sync:** `86403d50e56df3767ddf75f189eeb8faa685bd46` (ahead of `origin` by 5; baseline `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9`)  
+**Historical / document baseline (branch ancestry from `main`):** `9369d206bfbcaf32267e9e88518b222146e11de8`  
+**MIL packet baseline (finalization lifecycle):** `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9`  
+**Verified HEAD at this status edit:** `b98a64dad96aba7cc3e8978d9435dfb78427ca4d`  
+**Upstream:** ahead **6** of `origin/feat/media-intelligence-library` (0 behind) — a documentation commit on top of this edit advances tip by +1  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)  
-**Working tree:** clean except ignored `build-out.txt` — **no remote migration apply, no edge deploy, no merge, no prod**
+**Working tree at edit:** only untracked `command-center/build-out.txt` (**not** ignored; must never be modified, deleted, ignored, staged, or committed) — **no remote migration apply, no edge deploy, no merge, no prod**
 
+**Relay:** root [`AGENTS.md`](../../../AGENTS.md) + [`docs/RELAY_PROTOCOL.md`](../RELAY_PROTOCOL.md)  
 **Last consolidated review:** 2026-07-27
 
 ## Status buckets (used throughout MIL docs)
@@ -181,12 +184,14 @@ Accepted (SOURCE + unit/contract tests + local SQL where noted; staging-unproven
 - JWT-seeded RLS behavioral SQL `05_jwt_rls_behavior.sql` **PASS** locally + sign/storage source contracts
 - Before/after + reel review UI error/busy honesty + no-publish copy
 - Staging apply packet (docs only): [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md)
+- Cursor Relay Protocol (docs only): root [`AGENTS.md`](../../../AGENTS.md) + [`docs/RELAY_PROTOCOL.md`](../RELAY_PROTOCOL.md)
 - Helper suite: `npm run test:media-intel-helpers` **129 pass / 0 fail**
 
 Still open locally (next executable):
 
-1. **Blocked on Founder:** staging apply/deploy per [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) — no remote apply/deploy from Build Controller without explicit go
-2. Optional further UI polish only if Founder requests; remaining Definition-of-Done items wait on staging
+1. **Exact next action:** Founder-authorized staging apply/deploy per [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) — capture the **execution commit SHA immediately before** staging; packet is prep only
+2. **Authorization boundary:** no remote migration apply, edge deploy, secret set, CRM staging frontend deploy, push, merge, or production from Build Controller / relay chats without explicit Founder go
+3. Optional further UI polish only if Founder requests; remaining Definition-of-Done items wait on staging
 
 ### Active defects (honest)
 
@@ -202,6 +207,8 @@ Still open locally (next executable):
 ### Orchestration note (chat-loss recovery)
 
 Controlling conversation Request IDs `72cfb4e0-f28c-4206-ab12-96f3823ee101` and `4d85bd56-cf23-428f-9c67-8b0f01a8a22d` are not recoverable. Repository documents + commits are authoritative. Do not re-implement accepted items above from missing chat memory.
+
+Fresh chats use the standardized **RELAY HANDOFF** in [`docs/RELAY_PROTOCOL.md`](../RELAY_PROTOCOL.md) (repository/branch, HEAD/baseline ancestry, upstream divergence, worktree, verified state, verification results, accepted changes, remaining defects, exact next action, authorization boundary).
 
 ## Remaining for Definition of Done (requires owner authorization)
 

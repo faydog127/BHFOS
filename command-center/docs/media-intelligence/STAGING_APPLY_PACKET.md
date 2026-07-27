@@ -1,7 +1,8 @@
 # Media Intelligence — Staging Apply Packet (prep only)
 
 **Status:** DOCUMENT ONLY — not an authorization to apply or deploy.  
-**Branch tip when packet authored:** `feat/media-intelligence-library` @ `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9` (+ local accepted cycle; see `IMPLEMENTATION_STATUS.md`).  
+**Packet baseline (historical):** authored against MIL packet baseline `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9`; subsequent local accepted cycle is recorded in `IMPLEMENTATION_STATUS.md`.  
+**Execution tip:** do **not** treat any fixed SHA in this packet as the live apply tip. Capture `git rev-parse HEAD` (and confirm clean intended tree) **immediately before** staging apply/deploy.  
 **Hard stop:** Founder must explicitly authorize remote migration apply, edge deploy, CRM staging deploy, merge, and any reconcile scheduler.
 
 Related: [`ENV_CONTRACT.md`](./ENV_CONTRACT.md), [`RECONCILE_OPERATOR.md`](./RECONCILE_OPERATOR.md), [`IMPLEMENTATION_STATUS.md`](./IMPLEMENTATION_STATUS.md), [`BACKUP_RESTORE_EXPORT.md`](./BACKUP_RESTORE_EXPORT.md).
