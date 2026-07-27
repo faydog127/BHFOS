@@ -49,11 +49,16 @@ Note on grants: `20260726090000` states lifecycle privileges explicitly; `202607
 
 ## Execution status
 
-Executed successfully on disposable local Supabase after `npx supabase db reset` (2026-07-25):
+Executed successfully on disposable local Supabase (2026-07-25 after reset; re-verified 2026-07-27 recovery):
 
 - `mil 00_schema_contract: PASS`
 - `mil 01_rls_matrix: PASS (structural)`
 - `mil 02_upload_finalization_lifecycle: PASS`
+- `mil 03_upload_lifecycle_behavior: PASS`
+- `mil 04_upload_privilege_matrix: PASS`
+- `mil 05_jwt_rls_behavior: PASS` (2026-07-27; requires `20260727130000` client table grants)
+
+These prove schema/RLS structure and RPC behavior on local Postgres only. They are **not** staging/production proof. `03`/`05` simulate storage by inserting into `storage.objects`; they do not exercise the Storage HTTP API, so the edge-side placement/sign path is unproven here.
 - `mil 03_upload_lifecycle_behavior: PASS`
 - `mil 04_upload_privilege_matrix: PASS`
 - `mil 05_jwt_rls_behavior: PASS` (2026-07-27; requires `20260727130000` client table grants)

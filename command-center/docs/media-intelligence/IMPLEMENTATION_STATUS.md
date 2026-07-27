@@ -2,7 +2,7 @@
 
 **Branch:** `feat/media-intelligence-library`  
 **Baseline:** `9369d206bfbcaf32267e9e88518b222146e11de8`  
-**Verified tip at last status sync:** `89bb72e9512c5c922feaae045a1a1753c618a16d` (ahead of `origin` by 2; prior cycle `771796f`; baseline `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9`)  
+**Verified tip at last status sync:** `2258341` (ahead of `origin` by 3; feature tip `89bb72e` + status sync; baseline `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9`)  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)  
 **Working tree:** clean except ignored `build-out.txt` — **no remote migration apply, no edge deploy, no merge, no prod**
 
@@ -132,7 +132,7 @@ Documented in `BACKUP_RESTORE_EXPORT.md`. Procedures are **2 — not proven reco
 |---|---|
 | `npm run test:media-intel-helpers` | **1** — unit/contract tests (Node, no Docker) |
 | `tests/unit/media-intel-contracts.test.mjs` | **1** — static cross-file contracts |
-| `supabase/tests/mil/*.sql` | **1** — six files; `00`–`04` PASS after local reset; `05_jwt_rls_behavior` PASS on disposable local stack after `20260727130000` grants (2026-07-27) |
+| `supabase/tests/mil/*.sql` | **1** — six files; `00`–`05` **PASS** on disposable local stack 2026-07-27 recovery re-verify (after `20260727130000` grants) |
 | Local `supabase db reset` | **1** — MIL migrations applied on disposable local stack. Requires conditional skip in `20260721120000_ml_p1_rs101_deny_estimates_insert.sql` when `public.estimates` is absent. **Not applied to staging/production.** |
 
 ### What the tests do **not** prove

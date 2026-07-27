@@ -67,7 +67,7 @@ npm run test:media-intel-helpers
 # Against disposable local DB after migrations applied:
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/mil/00_schema_contract.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/mil/01_rls_matrix.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/mil/02_upload_lifecycle_structure.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/mil/02_upload_finalization_lifecycle.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/mil/03_upload_lifecycle_behavior.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/mil/04_upload_privilege_matrix.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/mil/05_jwt_rls_behavior.sql
