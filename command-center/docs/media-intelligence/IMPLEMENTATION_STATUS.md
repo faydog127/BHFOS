@@ -3,13 +3,31 @@
 **Branch:** `feat/media-intelligence-library`  
 **Historical / document baseline (branch ancestry from `main`):** `9369d206bfbcaf32267e9e88518b222146e11de8`  
 **MIL packet baseline (finalization lifecycle):** `c1767e4427e24d0a9c45638bf8fdd7607d0ab8b9`  
-**Verified HEAD at this status edit:** `b98a64dad96aba7cc3e8978d9435dfb78427ca4d`  
-**Upstream:** ahead **6** of `origin/feat/media-intelligence-library` (0 behind) — a documentation commit on top of this edit advances tip by +1  
+**Authorized staging-apply tip (pre-write gate):** `ad8aaa60c63bae08a39c3ab587ca373810cc1461`  
+**Verified HEAD at this status edit:** (docs commit on tip of `ad8aaa60…` after staging-identity hard stop)  
+**Upstream at gate:** `origin/feat/media-intelligence-library` == `ad8aaa60…` (0 ahead / 0 behind before this docs commit)  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)  
 **Working tree at edit:** only untracked `command-center/build-out.txt` (**not** ignored; must never be modified, deleted, ignored, staged, or committed) — **no remote migration apply, no edge deploy, no merge, no prod**
 
 **Relay:** root [`AGENTS.md`](../../../AGENTS.md) + [`docs/RELAY_PROTOCOL.md`](../RELAY_PROTOCOL.md)  
 **Last consolidated review:** 2026-07-27
+
+## Staging apply attempt (2026-07-27) — HARD STOP (no remote write)
+
+Founder authorized non-production staging execution of [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) against tip `ad8aaa60c63bae08a39c3ab587ca373810cc1461`. Pre-write gate results:
+
+| Check | Result |
+|---|---|
+| Repository | `F:/Dev/BHFOS-media-intel` |
+| Branch / HEAD / origin tip | `feat/media-intelligence-library` · local HEAD = origin = authorized SHA `ad8aaa60…` |
+| `command-center/build-out.txt` | Untracked; untouched |
+| Linked Supabase project | **None** (`supabase link` not run; CLI: “Cannot find project ref”) |
+| Production identity (known) | `wwyxohjnyqnegzbxtuxs` — name `TVG Website-CRM`; URL `https://wwyxohjnyqnegzbxtuxs.supabase.co` — **explicitly production** in governance/docs; **not** a staging target |
+| Other accessible projects | `glkrykpksbsqmmilmjhs` (`faydog127's Project`, us-east-1, ACTIVE_HEALTHY); `rngfowbxiqeyslnncblw` (`faydog127's Project`, us-west-2, **INACTIVE**) — **neither named or documented as MIL staging** |
+| Packet named staging `<ref>` | **Absent** — packet still uses placeholder `<ref>` |
+| Env / credential config for staging | **Absent** — no `SUPABASE_*` / `STAGING_*` / `DATABASE_URL` / `MIL_*` in shell; no linked `.temp/project-ref` |
+
+**Verdict:** Target cannot be conclusively identified as non-production staging. Per authorization rule 6 and packet hard stop, **zero remote writes** were performed (no migration apply, no secret set, no edge deploy, no smoke against hosted). MIL remains **SOURCE + locally verified only**; staging-unproven.
 
 ## Status buckets (used throughout MIL docs)
 
@@ -189,14 +207,15 @@ Accepted (SOURCE + unit/contract tests + local SQL where noted; staging-unproven
 
 Still open locally (next executable):
 
-1. **Exact next action:** Founder-authorized staging apply/deploy per [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) — capture the **execution commit SHA immediately before** staging; packet is prep only
-2. **Authorization boundary:** no remote migration apply, edge deploy, secret set, CRM staging frontend deploy, push, merge, or production from Build Controller / relay chats without explicit Founder go
+1. **Exact next action:** Founder names the exact non-production staging Supabase **project ref** (and URL) for MIL — must be proven ≠ `wwyxohjnyqnegzbxtuxs` — then re-authorize packet execution against that ref
+2. **Authorization boundary:** no remote migration apply, edge deploy, secret set, CRM staging frontend deploy, merge, or production until staging identity is conclusive; this session already held Founder auth but stopped on identity uncertainty
 3. Optional further UI polish only if Founder requests; remaining Definition-of-Done items wait on staging
 
 ### Active defects (honest)
 
 | Defect | Standing |
 |---|---|
+| Staging project identity unknown | Packet + workspace cannot prove a non-prod staging `<ref>`; apply blocked 2026-07-27 |
 | Hosted/staging unproven | Migrations + edges never applied/deployed remotely |
 | Promote website | Still **503** `not_implemented` by design |
 | No reconcile schedule | Stranded `pending_reconcile` until inline/manual run |
@@ -212,10 +231,11 @@ Fresh chats use the standardized **RELAY HANDOFF** in [`docs/RELAY_PROTOCOL.md`]
 
 ## Remaining for Definition of Done (requires owner authorization)
 
-1. Founder authorizes + execute [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) (migrations + secrets + edge deploy)
-2. Set `MIL_RECONCILE_KEY` in staging edge secrets **before** deploying either upload function
-3. Run `supabase/tests/mil/*.sql` after apply; capture evidence
-4. End-to-end acceptance scenarios (upload → review → creator → unpublish)
-5. Accessibility + responsive screenshot suite
-6. Large synthetic library performance harness
-7. Owner authorization before CRM staging deploy / merge
+1. Founder supplies conclusive non-production staging project **ref + URL** (not production `wwyxohjnyqnegzbxtuxs`)
+2. Founder re-authorizes + execute [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md) against that ref (migrations + secrets + edge deploy)
+3. Set `MIL_RECONCILE_KEY` in staging edge secrets **before** deploying either upload function
+4. Run `supabase/tests/mil/*.sql` after apply; capture evidence
+5. End-to-end acceptance scenarios (upload → review → creator → unpublish)
+6. Accessibility + responsive screenshot suite
+7. Large synthetic library performance harness
+8. Owner authorization before CRM staging deploy / merge
