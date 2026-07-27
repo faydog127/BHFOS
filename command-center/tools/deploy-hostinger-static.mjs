@@ -57,26 +57,35 @@ function shaFromBuildInfo(app) {
 }
 
 function printHelp() {
-  console.log(`bhfos deploy-hostinger-static — static deploy CLI (default: non-mutating)
-
-Commands:
-  --help                 Show this help and exit (no network).
-  --dry-run              Validate the deploy plan; ZERO network operations.
-  --execute              Attempt a mutating deploy (requires the full flag set).
-
-Dry-run / plan options:
-  --app=<crm|tis>        App to deploy (default: crm).
-  --environment=<env>    Target environment (known: ${Object.keys(TARGETS).join(', ')}).
-  --sha=<40-hex>         Intended commit SHA (never fabricated).
-  --release=<id>         Release identifier (optional; else from build-info).
-  --json                 Machine-readable output.
-
-Mutation (all required together):
-  --execute --environment=<env> --authorization=<ref> --sha=<hex> --i-understand-production
-
-Safety: ordinary validation (lint/build/test) never invokes this CLI, and a
-dry run performs no network mutation. Remote deletion and server-side rollback
-are intentionally not implemented.`);
+  const known = Object.keys(TARGETS).join(', ');
+  console.log(
+    [
+      'bhfos deploy-hostinger-static - static deploy CLI (default: non-mutating)',
+      '',
+      'Commands:',
+      '  --help                 Show this help and exit (no network).',
+      '  --dry-run              Validate the deploy plan; ZERO network operations.',
+      '  --execute              Attempt a mutating deploy (requires the full flag set).',
+      '',
+      'Dry-run / plan options:',
+      '  --app=<crm|tis>        App to deploy (default: crm).',
+      `  --environment=<env>    Target environment (known: ${known}).`,
+      '  --sha=<40-hex>         Intended commit SHA (never fabricated).',
+      '  --release=<id>         Release identifier (optional; else from build-info).',
+      '  --json                 Machine-readable output.',
+      '',
+      'Mutation (all required together):',
+      '  --execute --environment=<env> --authorization=<ref> --sha=<hex>',
+      '  --archive=<path>',
+      '  and ONE of:',
+      '    --i-understand-production     (required when environment=production)',
+      '    --i-understand-mil-staging    (required when environment=mil-staging)',
+      '',
+      'Safety: ordinary validation (lint/build/test) never invokes this CLI, and a',
+      'dry run performs no network mutation. Remote deletion and server-side rollback',
+      'are intentionally not implemented. mil-staging refuses remoteRoot=public_html.',
+    ].join('\n')
+  );
 }
 
 function resolveIntendedSha(args) {
@@ -183,11 +192,15 @@ async function main() {
 
   let gate;
   try {
+    const isMil = String(environment || '').trim() === 'mil-staging';
+    const acknowledged = isMil
+      ? args['i-understand-mil-staging'] === true
+      : args['i-understand-production'] === true;
     gate = createMutationGate({
       environment,
       authorization,
       intendedSha,
-      acknowledged: args['i-understand-production'] === true,
+      acknowledged,
     });
   } catch (err) {
     console.error(`[deploy][execute] STOP — ${err.message}`);
