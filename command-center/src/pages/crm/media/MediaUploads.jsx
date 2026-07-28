@@ -11,6 +11,7 @@ import {
   createUploadSession,
   fetchBatchManifest,
   isOnline,
+  reconcileStaleUploadQueue,
   restoreUploadQueue,
   retryQueueItem,
   uploadFilesToSession,
@@ -177,6 +178,32 @@ export default function MediaUploads() {
     };
     // Intentionally omit source fields — restore once per mount / caps change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caps.isOwnerAdmin, onFileUpdate]);
+
+  // Keep clearing local leftovers once the same file is already in Review / library.
+  useEffect(() => {
+    if (!caps.isOwnerAdmin) return undefined;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        await reconcileStaleUploadQueue({ onFileUpdate });
+      } catch {
+        // best-effort
+      }
+    };
+    run();
+    const timer = window.setInterval(() => {
+      if (!cancelled) run();
+    }, 12000);
+    const onVis = () => {
+      if (document.visibilityState === 'visible' && !cancelled) run();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVis);
+    };
   }, [caps.isOwnerAdmin, onFileUpdate]);
 
   const startUpload = async (fileList) => {

@@ -96,9 +96,21 @@ describe('MIL resilient upload + analysis', () => {
     assert.match(queue, /blob/);
     assert.match(upload, /uploadViaSignedTus/);
     assert.match(upload, /restoreUploadQueue/);
+    assert.match(upload, /reconcileStaleUploadQueue/);
+    assert.match(upload, /findSuccessfulServerMatch/);
+    assert.match(upload, /Already in Review Queue/);
     assert.match(upload, /pollAnalysisUntilSettled/);
     assert.match(upload, /requestUploadWakeLock/);
     assert.match(upload, /beforeunload|bindUploadExitWarning/);
+  });
+
+  it('Uploads pages reconcile stale rows against Review/library success', () => {
+    const uploads = read('src/pages/crm/media/MediaUploads.jsx');
+    const mobile = read('src/pages/crm/media/MediaMobileUpload.jsx');
+    assert.match(uploads, /reconcileStaleUploadQueue/);
+    assert.match(mobile, /reconcileStaleUploadQueue/);
+    assert.match(uploads, /dismissFromUploads/);
+    assert.match(mobile, /dismissFromUploads/);
   });
 
   it('login preserves MIL next destinations', () => {

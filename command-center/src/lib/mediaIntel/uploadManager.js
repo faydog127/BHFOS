@@ -796,33 +796,151 @@ export async function uploadFilesToSession({ token, batchId, files, onFileUpdate
   }
 }
 
-/** Restore durable queue UI state and optionally resume interrupted items. */
-export async function restoreUploadQueue({ token, onFileUpdate, autoResume = true } = {}) {
-  await markMissingBlobsForReselect();
-  let items = await listQueueItems();
+function assetIsPastUploadSuccess(asset) {
+  if (!asset || asset.archived_at) return false;
+  const review = String(asset.human_review_status || '');
+  const processing = String(asset.processing_status || '');
+  const upload = String(asset.upload_status || '');
+  if (['pending', 'in_review', 'verified', 'rejected'].includes(review)) return true;
+  if (['analyzed', 'queued', 'analyzing', 'processing_failed'].includes(processing)) return true;
+  if (['uploaded', 'duplicate'].includes(upload)) return true;
+  return false;
+}
 
-  // Analysis-complete items belong in Review, not the Uploads worklist.
-  for (const item of items) {
-    if (item.phase === UPLOAD_PHASE.ANALYSIS_COMPLETE) {
-      try {
-        await deleteQueueItem(item.clientUploadId);
-      } catch {
-        // best-effort
+function grantIsUploadSuccess(grant) {
+  return grant && ['committed', 'duplicate'].includes(String(grant.finalize_state || ''));
+}
+
+async function fetchAssetById(assetId) {
+  if (!assetId) return null;
+  const { data } = await supabase
+    .from('mil_assets')
+    .select('id, original_filename, byte_size, processing_status, human_review_status, upload_status, archived_at')
+    .eq('id', assetId)
+    .maybeSingle();
+  return data || null;
+}
+
+/**
+ * If the server already has a successful copy of this transfer (in library /
+ * awaiting review), the local Uploads row is stale and should be removed.
+ */
+async function findSuccessfulServerMatch(item) {
+  if (!item) return null;
+
+  if (item.assetId) {
+    const asset = await fetchAssetById(item.assetId);
+    if (assetIsPastUploadSuccess(asset)) return { asset, reason: 'asset_id' };
+  }
+
+  if (item.grantId) {
+    const { data: grant } = await supabase
+      .from('mil_upload_grants')
+      .select('id, asset_id, finalize_state, client_upload_id, original_filename, verified_bytes, max_bytes')
+      .eq('id', item.grantId)
+      .maybeSingle();
+    if (grantIsUploadSuccess(grant)) {
+      const asset = await fetchAssetById(grant.asset_id);
+      if (assetIsPastUploadSuccess(asset) || grantIsUploadSuccess(grant)) {
+        return { asset, grant, reason: 'grant_id' };
       }
-      onFileUpdate?.({
-        clientKey: item.clientUploadId,
-        clientUploadId: item.clientUploadId,
-        filename: item.filename,
-        status: UPLOAD_FILE_STATUS.ANALYSIS_COMPLETE,
-        phase: UPLOAD_PHASE.ANALYSIS_COMPLETE,
-        message: 'Ready for review',
-        assetId: item.assetId,
-        dismissFromUploads: true,
-      });
     }
   }
 
-  items = await listQueueItems();
+  if (item.clientUploadId) {
+    const { data: grants } = await supabase
+      .from('mil_upload_grants')
+      .select('id, asset_id, finalize_state, client_upload_id, original_filename, verified_bytes, max_bytes, created_at')
+      .eq('client_upload_id', item.clientUploadId)
+      .in('finalize_state', ['committed', 'duplicate'])
+      .order('created_at', { ascending: false })
+      .limit(3);
+    for (const grant of grants || []) {
+      const asset = await fetchAssetById(grant.asset_id);
+      if (assetIsPastUploadSuccess(asset) || grantIsUploadSuccess(grant)) {
+        return { asset, grant, reason: 'client_upload_id' };
+      }
+    }
+  }
+
+  // Later successful re-upload of the same phone file — match name + size.
+  if (item.filename && item.byteSize) {
+    const { data: grants } = await supabase
+      .from('mil_upload_grants')
+      .select('id, asset_id, finalize_state, client_upload_id, original_filename, verified_bytes, max_bytes, created_at')
+      .eq('original_filename', item.filename)
+      .in('finalize_state', ['committed', 'duplicate'])
+      .order('created_at', { ascending: false })
+      .limit(8);
+    for (const grant of grants || []) {
+      const size = grant.verified_bytes || grant.max_bytes;
+      if (size && Number(size) !== Number(item.byteSize)) continue;
+      const asset = await fetchAssetById(grant.asset_id);
+      if (assetIsPastUploadSuccess(asset)) {
+        return { asset, grant, reason: 'filename_size' };
+      }
+    }
+  }
+
+  return null;
+}
+
+async function dismissQueueItemAsSettled(item, onFileUpdate, message = 'Already in Review Queue') {
+  try {
+    await deleteQueueItem(item.clientUploadId);
+  } catch {
+    // best-effort
+  }
+  onFileUpdate?.({
+    clientKey: item.clientUploadId,
+    clientUploadId: item.clientUploadId,
+    filename: item.filename,
+    status: UPLOAD_FILE_STATUS.ANALYSIS_COMPLETE,
+    phase: UPLOAD_PHASE.ANALYSIS_COMPLETE,
+    message,
+    assetId: item.assetId || null,
+    dismissFromUploads: true,
+  });
+}
+
+/**
+ * Drop frozen/stale Uploads rows when the server already accepted the file
+ * (committed/duplicate grant and/or asset awaiting review).
+ */
+export async function reconcileStaleUploadQueue({ onFileUpdate } = {}) {
+  const items = await listQueueItems();
+  let dismissed = 0;
+  for (const item of items) {
+    if (item.phase === UPLOAD_PHASE.ANALYSIS_COMPLETE) {
+      await dismissQueueItemAsSettled(item, onFileUpdate, 'Ready for review');
+      dismissed += 1;
+      continue;
+    }
+    // Keep truly in-flight rows that have no server success yet.
+    try {
+      const match = await findSuccessfulServerMatch(item);
+      if (!match) continue;
+      await dismissQueueItemAsSettled(
+        { ...item, assetId: match.asset?.id || item.assetId },
+        onFileUpdate,
+        match.asset?.human_review_status === 'pending' || match.asset?.human_review_status === 'in_review'
+          ? 'Already in Review Queue'
+          : 'Already in the library',
+      );
+      dismissed += 1;
+    } catch {
+      // Network/RLS — leave local row; next reconcile will retry.
+    }
+  }
+  return { dismissed, remaining: (await listQueueItems()).length };
+}
+
+/** Restore durable queue UI state and optionally resume interrupted items. */
+export async function restoreUploadQueue({ token, onFileUpdate, autoResume = true } = {}) {
+  await markMissingBlobsForReselect();
+  // Clear local leftovers that already succeeded on the server (e.g. Review Queue).
+  await reconcileStaleUploadQueue({ onFileUpdate });
+  let items = await listQueueItems();
 
   // After a refresh, mid-flight "uploading" is no longer actively transferring.
   // Only offer Retry when the local file is still readable; otherwise Reselect.

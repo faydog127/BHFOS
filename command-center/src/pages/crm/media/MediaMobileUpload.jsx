@@ -11,6 +11,7 @@ import {
   bindUploadExitWarning,
   createUploadSession,
   fetchSessionManifest,
+  reconcileStaleUploadQueue,
   restoreUploadQueue,
   retryQueueItem,
   uploadFilesToSession,
@@ -212,6 +213,30 @@ export default function MediaMobileUpload() {
       cancelled = true;
     };
   }, [linkToken, onFileUpdate, mode, caps?.isOwnerAdmin]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        await reconcileStaleUploadQueue({ onFileUpdate });
+      } catch {
+        // best-effort
+      }
+    };
+    run();
+    const timer = window.setInterval(() => {
+      if (!cancelled) run();
+    }, 12000);
+    const onVis = () => {
+      if (document.visibilityState === 'visible' && !cancelled) run();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [onFileUpdate]);
 
   /**
    * Both modes end up on the same server contract: mint a grant, resumable TUS
