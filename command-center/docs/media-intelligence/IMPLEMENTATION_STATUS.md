@@ -50,15 +50,20 @@
 | Evidence tier | **DEPLOYED** (not contributor browser USABLE PASS yet) |
 | Neighbors | `bhfos.com` / `app.bhfos.com` HTTP 200 after deploy |
 
-## Contributor polish pass (2026-07-28) — COMMITTED; deploy next
+## Contributor polish pass (2026-07-28) — FRONTEND DEPLOYED; owner USABLE pending
 
 | Field | Value |
 |---|---|
+| Commit | `bd729820333f707d6e8a829dfd786a46c4b47fbc` |
 | Owner | Assign form requires creative **Brief** (`isValidContributorBrief`); rejects empty / inventory notes |
 | Contributor | Primary **Download all** CTA; denser 2/3-col square grid; pack summary + due prominence; quieter standing rules; “Next: submit” hint |
-| Staging fixture brief | Active pack assignments get a shared creative `instructions` brief (inventory notes cleared from brief fields) |
-| Ship checklist | Commit → polish deploy → fixture brief → distinct-identity USABLE (owner) → prove reel submit → authorized merge/prod |
-| Evidence tier | **SOURCE-ONLY** until mil-staging frontend redeploy of this commit |
+| Staging fixture brief | **Done** — 10 active pack assignments share creative `instructions`; inventory `notes` cleared |
+| Hosted frontend | `https://mil.bhfos.com` `frontendAssetVersion=53a0c11ef74623ba` / `mil-staging` / SHA **bd729820333f** / Supabase only `sdzhdupekcnekesbtxsl`; `CreatorRoutes-605d0d43.js` + `MediaSettings-0697d218.js` polish markers verified |
+| Deploy archive | `command-center/tmp/mil-staging-bd729820333f-20260728T224523Z.zip` (auth `MIL-CONTRIBUTOR-POLISH-FRONTEND-2026-07-28`) |
+| Reel upload edge | Contributor JWT mint against `media-intel-reel-upload` returned HTTP 200 (edge reachable); full browser submit USABLE still owner-gated |
+| Neighbors | `bhfos.com` / `app.bhfos.com` HTTP 200 |
+| Ship checklist remaining | Distinct-identity browser USABLE (brief → download → submit → owner review) → authorized push/PR/merge → production plan |
+| Evidence tier | **DEPLOYED** (not owner/contributor USABLE PASS yet) |
 
 ## Quality Cleanup workflow (2026-07-28) — staging-applied + API verified
 
