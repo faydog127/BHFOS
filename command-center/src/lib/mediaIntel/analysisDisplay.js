@@ -18,9 +18,31 @@ const USE_LABELS = {
   reel_short_video: 'Reel / short video',
 };
 
+function asPlainText(value) {
+  if (value == null) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value).trim();
+  }
+  if (Array.isArray(value)) {
+    return value.map((v) => asPlainText(v)).filter(Boolean).join('; ');
+  }
+  if (typeof value === 'object') {
+    const preferred = [value.label, value.type, value.kind, value.risk, value.message, value.detail, value.description]
+      .map((v) => (typeof v === 'string' ? v.trim() : ''))
+      .filter(Boolean);
+    if (preferred.length) return preferred.join(' — ');
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '';
+    }
+  }
+  return '';
+}
+
 function asStringArray(value) {
   if (!Array.isArray(value)) return [];
-  return value.map((v) => String(v || '').trim()).filter(Boolean);
+  return value.map((v) => asPlainText(v)).filter(Boolean);
 }
 
 function qualitySummary(quality) {

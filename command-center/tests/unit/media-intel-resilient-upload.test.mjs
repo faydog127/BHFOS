@@ -33,7 +33,10 @@ describe('MIL resilient upload + analysis', () => {
           condition_notes: 'Visible lint at cap',
           recommended_uses: ['inspection_report'],
           unsuitable_uses: ['homepage_hero'],
-          privacy_risks: ['house number visible'],
+          privacy_risks: [
+            'house number visible',
+            { type: 'face', detail: 'possible face in frame' },
+          ],
           quality: {
             inspection_report: { suitable: true, score: 0.8 },
             homepage_hero: { suitable: false, score: 0.2 },
@@ -46,6 +49,9 @@ describe('MIL resilient upload + analysis', () => {
     assert.ok(outcome.tags.includes('lint'));
     assert.equal(outcome.usability, 'usable');
     assert.ok(outcome.needsHumanReview);
+    assert.ok(outcome.privacyWarnings.some((w) => /house number/i.test(w)));
+    assert.ok(outcome.privacyWarnings.some((w) => /face/i.test(w)));
+    assert.ok(!outcome.privacyWarnings.some((w) => /\[object Object\]/i.test(w)));
     const answers = analysisOutcomeAnswers(outcome);
     assert.match(answers.whatItShows, /Dryer vent/i);
     assert.equal(answers.needsReview, true);
