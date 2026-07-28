@@ -119,11 +119,39 @@ export default function MediaUploads() {
     let cancelled = false;
     (async () => {
       try {
-        await restoreUploadQueue({
-          token: tokenRef.current,
+        // Always hydrate UI from IndexedDB first (even with no in-memory session token).
+        let items = await restoreUploadQueue({
+          token: null,
           onFileUpdate,
-          autoResume: Boolean(tokenRef.current),
+          autoResume: false,
         });
+        if (cancelled) return;
+        const resumable = (items || []).some((i) =>
+          ['interrupted', 'queued', 'uploading', 'retrying', 'finalizing', 'awaiting_authorization', 'preparing'].includes(
+            i.phase,
+          ) && i.blob instanceof Blob,
+        );
+        if (resumable && !tokenRef.current) {
+          const active = await createUploadSession({
+            label: sourceLabel || 'Desktop transfer (resume)',
+            sourcePhone,
+            sourcePerson,
+          });
+          if (cancelled) return;
+          tokenRef.current = active.token;
+          setSession(active);
+          items = await restoreUploadQueue({
+            token: active.token,
+            onFileUpdate,
+            autoResume: true,
+          });
+        } else if (tokenRef.current) {
+          await restoreUploadQueue({
+            token: tokenRef.current,
+            onFileUpdate,
+            autoResume: true,
+          });
+        }
       } catch {
         if (!cancelled) {
           // restore is best-effort
@@ -133,6 +161,8 @@ export default function MediaUploads() {
     return () => {
       cancelled = true;
     };
+    // Intentionally omit source fields — restore once per mount / caps change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caps.isOwnerAdmin, onFileUpdate]);
 
   const startUpload = async (fileList) => {
@@ -193,11 +223,38 @@ export default function MediaUploads() {
     setManifest(await fetchBatchManifest(latest.batchId));
   };
 
-  const entries = Object.values(fileStates);
+  const entries = Object.values(fileStates).sort((a, b) => {
+    const rank = (f) => {
+      const s = f.status || f.phase || '';
+      if (['uploading', 'retrying', 'hashing', 'finalizing', 'queued', 'interrupted', 'needs_reselect'].includes(s)) {
+        return 0;
+      }
+      if (['analysis_complete', 'uploaded', 'analyzing'].includes(s)) return 1;
+      return 2;
+    };
+    return rank(a) - rank(b);
+  });
   const totals = entries.reduce((acc, f) => {
     acc[f.status] = (acc[f.status] || 0) + 1;
     return acc;
   }, {});
+  const inFlightCount = entries.filter((f) =>
+    ['queued', 'uploading', 'hashing', 'finalizing', 'interrupted', 'retrying', 'needs_reselect'].includes(
+      f.status || f.phase,
+    ),
+  ).length;
+
+  const ensureUploadToken = async () => {
+    if (tokenRef.current) return tokenRef.current;
+    const active = await createUploadSession({
+      label: sourceLabel || 'Desktop transfer (resume)',
+      sourcePhone,
+      sourcePerson,
+    });
+    tokenRef.current = active.token;
+    setSession(active);
+    return active.token;
+  };
 
   if (!caps.isStaff) {
     return (
@@ -364,6 +421,11 @@ export default function MediaUploads() {
                 <Loader2 className="h-4 w-4 animate-spin" /> Uploading…
               </span>
             )}
+            {inFlightCount > 0 && (
+              <span className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-amber-950 font-medium">
+                {inFlightCount} still transferring — listed first below
+              </span>
+            )}
             <span className="text-emerald-700">In library: {totals[UPLOAD_FILE_STATUS.UPLOADED] || 0}</span>
             <span className="text-amber-800">Duplicates: {totals[UPLOAD_FILE_STATUS.DUPLICATE] || 0}</span>
             <span className="text-amber-800">
@@ -392,7 +454,7 @@ export default function MediaUploads() {
             </div>
           )}
 
-          <ul className="divide-y divide-slate-100 max-h-[28rem] overflow-y-auto">
+          <ul className="divide-y divide-slate-100">
             {entries.map((f) => (
               <li key={f.clientKey || f.clientUploadId} className="py-2 text-sm space-y-2">
                 <div className="flex items-start gap-3">
@@ -409,7 +471,9 @@ export default function MediaUploads() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-1 shrink-0">
-                    {(f.status === 'interrupted' || f.phase === 'interrupted') && tokenRef.current && (
+                    {['interrupted', 'uploading', 'retrying', 'queued', 'finalizing'].includes(
+                      f.status || f.phase,
+                    ) && (
                       <button
                         type="button"
                         className="text-xs text-blue-700 underline"
@@ -417,8 +481,9 @@ export default function MediaUploads() {
                         onClick={async () => {
                           try {
                             setBusy(true);
+                            const token = await ensureUploadToken();
                             await retryQueueItem({
-                              token: tokenRef.current,
+                              token,
                               clientUploadId: f.clientUploadId || f.clientKey,
                               onFileUpdate,
                             });

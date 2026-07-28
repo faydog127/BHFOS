@@ -7,6 +7,7 @@ import { UPLOAD_PHONE_NOTICE } from '@/lib/mediaIntel/constants';
 import {
   UPLOAD_FILE_STATUS,
   UPLOAD_PHASE_LABELS,
+  attachReselectedFile,
   bindUploadExitWarning,
   createUploadSession,
   fetchSessionManifest,
@@ -93,6 +94,8 @@ export default function MediaMobileUpload() {
   }, []);
 
   const inputRef = useRef(null);
+  const reselectRef = useRef(null);
+  const reselectTargetRef = useRef(null);
   const [sessionInfo, setSessionInfo] = useState(null);
   const [sessionError, setSessionError] = useState(null);
   const [fileStates, setFileStates] = useState({});
@@ -145,16 +148,47 @@ export default function MediaMobileUpload() {
   }, [busy]);
 
   useEffect(() => {
-    const token = linkToken || mintedSessionRef.current?.token;
-    if (!token && !sessionInfo) return undefined;
     let cancelled = false;
     (async () => {
       try {
-        await restoreUploadQueue({
-          token: linkToken || mintedSessionRef.current?.token || null,
+        // Always restore queue rows after refresh — do not wait for a session token.
+        let items = await restoreUploadQueue({
+          token: null,
           onFileUpdate,
-          autoResume: Boolean(linkToken || mintedSessionRef.current?.token),
+          autoResume: false,
         });
+        if (cancelled) return;
+
+        let token = linkToken || mintedSessionRef.current?.token || null;
+        const resumable = (items || []).some(
+          (i) =>
+            i.blob instanceof Blob &&
+            [
+              'interrupted',
+              'queued',
+              'uploading',
+              'retrying',
+              'finalizing',
+              'awaiting_authorization',
+              'preparing',
+            ].includes(i.phase),
+        );
+
+        if (!token && resumable && mode === 'authenticated' && caps?.isOwnerAdmin) {
+          const created = await createUploadSession({ label: 'Mobile browser upload (resume)' });
+          if (cancelled) return;
+          mintedSessionRef.current = { token: created.token, batchId: created.batchId };
+          setSessionInfo(created);
+          token = created.token;
+        }
+
+        if (token) {
+          items = await restoreUploadQueue({
+            token,
+            onFileUpdate,
+            autoResume: true,
+          });
+        }
       } catch {
         if (!cancelled) {
           // best-effort restore
@@ -164,7 +198,7 @@ export default function MediaMobileUpload() {
     return () => {
       cancelled = true;
     };
-  }, [linkToken, sessionInfo, onFileUpdate]);
+  }, [linkToken, onFileUpdate, mode, caps?.isOwnerAdmin]);
 
   /**
    * Both modes end up on the same server contract: mint a grant, resumable TUS
@@ -182,6 +216,18 @@ export default function MediaMobileUpload() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const ensureMobileToken = async () => {
+    const existing = linkToken || mintedSessionRef.current?.token;
+    if (existing) return existing;
+    if (mode !== 'authenticated' || !caps?.isOwnerAdmin) {
+      throw new Error('Open a phone upload link, or sign in as owner/admin to resume.');
+    }
+    const created = await createUploadSession({ label: 'Mobile browser upload (resume)' });
+    mintedSessionRef.current = { token: created.token, batchId: created.batchId };
+    setSessionInfo(created);
+    return created.token;
   };
 
   const startUpload = async (fileList) => {
@@ -220,6 +266,26 @@ export default function MediaMobileUpload() {
     });
     return acc;
   }, [fileStates]);
+
+  const entries = useMemo(() => {
+    return Object.values(fileStates).sort((a, b) => {
+      const rank = (f) => {
+        const s = f.status || f.phase || '';
+        if (['uploading', 'retrying', 'hashing', 'finalizing', 'queued', 'interrupted', 'needs_reselect'].includes(s)) {
+          return 0;
+        }
+        if (['analysis_complete', 'uploaded', 'analyzing'].includes(s)) return 1;
+        return 2;
+      };
+      return rank(a) - rank(b);
+    });
+  }, [fileStates]);
+
+  const inFlightCount = entries.filter((f) =>
+    ['queued', 'uploading', 'hashing', 'finalizing', 'interrupted', 'retrying', 'needs_reselect'].includes(
+      f.status || f.phase,
+    ),
+  ).length;
 
   const canPickFiles = mode === 'session' ? Boolean(sessionInfo) : Boolean(caps?.isOwnerAdmin);
 
@@ -293,9 +359,14 @@ export default function MediaMobileUpload() {
         </div>
       )}
 
-      {Object.keys(fileStates).length > 0 && (
+      {entries.length > 0 && (
         <div className="rounded-xl border bg-white p-3 space-y-2 text-sm">
           <div className="flex flex-wrap gap-3">
+            {inFlightCount > 0 && (
+              <span className="rounded-md bg-amber-100 px-2 py-0.5 text-amber-950 font-medium">
+                {inFlightCount} still transferring — listed first
+              </span>
+            )}
             <span className="text-emerald-700">In library: {totals[UPLOAD_FILE_STATUS.UPLOADED] || 0}</span>
             <span className="text-amber-800">Duplicates: {totals[UPLOAD_FILE_STATUS.DUPLICATE] || 0}</span>
             <span className="text-amber-800">
@@ -310,8 +381,8 @@ export default function MediaMobileUpload() {
               below shows them as uploaded.
             </div>
           )}
-          <ul className="divide-y max-h-80 overflow-y-auto">
-            {Object.values(fileStates).map((f) => (
+          <ul className="divide-y">
+            {entries.map((f) => (
               <li key={f.clientKey || f.clientUploadId} className="py-2 space-y-1">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -322,31 +393,47 @@ export default function MediaMobileUpload() {
                       {f.message ? ` · ${f.message}` : ''}
                     </div>
                   </div>
-                  {(f.status === 'interrupted' || f.phase === 'interrupted') && (
-                    <button
-                      type="button"
-                      className="text-xs text-blue-700 underline shrink-0"
-                      disabled={busy}
-                      onClick={async () => {
-                        const token = linkToken || mintedSessionRef.current?.token;
-                        if (!token) return;
-                        try {
-                          setBusy(true);
-                          await retryQueueItem({
-                            token,
-                            clientUploadId: f.clientUploadId || f.clientKey,
-                            onFileUpdate,
-                          });
-                        } catch (err) {
-                          setSessionError(err.message || 'Retry failed');
-                        } finally {
-                          setBusy(false);
-                        }
-                      }}
-                    >
-                      Retry
-                    </button>
-                  )}
+                  <div className="flex flex-col gap-1 shrink-0">
+                    {['interrupted', 'uploading', 'retrying', 'queued', 'finalizing'].includes(
+                      f.status || f.phase,
+                    ) && (
+                      <button
+                        type="button"
+                        className="text-xs text-blue-700 underline"
+                        disabled={busy}
+                        onClick={async () => {
+                          try {
+                            setBusy(true);
+                            const token = await ensureMobileToken();
+                            await retryQueueItem({
+                              token,
+                              clientUploadId: f.clientUploadId || f.clientKey,
+                              onFileUpdate,
+                            });
+                          } catch (err) {
+                            setSessionError(err.message || 'Retry failed');
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                      >
+                        Retry
+                      </button>
+                    )}
+                    {(f.status === 'needs_reselect' || f.phase === 'needs_reselect') && (
+                      <button
+                        type="button"
+                        className="text-xs text-blue-700 underline"
+                        disabled={busy}
+                        onClick={() => {
+                          reselectTargetRef.current = f.clientUploadId || f.clientKey;
+                          reselectRef.current?.click();
+                        }}
+                      >
+                        Reselect
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {f.analysisOutcome ? (
                   <AnalysisOutcomeCard
@@ -369,6 +456,33 @@ export default function MediaMobileUpload() {
               </li>
             ))}
           </ul>
+          <input
+            ref={reselectRef}
+            type="file"
+            accept="image/*,video/*,.heic,.heif,.mov,.mp4"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              const target = reselectTargetRef.current;
+              e.target.value = '';
+              if (!file || !target) return;
+              try {
+                setBusy(true);
+                const token = await ensureMobileToken();
+                await attachReselectedFile({
+                  clientUploadId: target,
+                  file,
+                  token,
+                  onFileUpdate,
+                  autoStart: true,
+                });
+              } catch (err) {
+                setSessionError(err.message || 'Reselect failed');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
         </div>
       )}
 

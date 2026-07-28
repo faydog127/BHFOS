@@ -788,7 +788,26 @@ export async function uploadFilesToSession({ token, batchId, files, onFileUpdate
 /** Restore durable queue UI state and optionally resume interrupted items. */
 export async function restoreUploadQueue({ token, onFileUpdate, autoResume = true } = {}) {
   await markMissingBlobsForReselect();
-  const items = await listQueueItems();
+  let items = await listQueueItems();
+
+  // After a refresh, mid-flight "uploading" is no longer actively transferring —
+  // demote so the UI offers Retry instead of a stuck percent.
+  for (const item of items) {
+    if (
+      [UPLOAD_PHASE.UPLOADING, UPLOAD_PHASE.RETRYING, UPLOAD_PHASE.FINALIZING].includes(item.phase) &&
+      item.blob instanceof Blob
+    ) {
+      await putQueueItem({
+        ...item,
+        phase: UPLOAD_PHASE.INTERRUPTED,
+        errorLayer: item.errorLayer || ERROR_LAYER.UPLOAD_INTERRUPTED,
+        errorMessage:
+          item.errorMessage || 'Transfer paused after the page reloaded. Tap Retry to continue.',
+      });
+    }
+  }
+  items = await listQueueItems();
+
   for (const item of items) {
     onFileUpdate?.({
       clientKey: item.clientUploadId,

@@ -59,10 +59,38 @@ export function sanitizeQueueItemForPersist(item) {
 }
 
 export async function putQueueItem(item) {
+  const sanitized = sanitizeQueueItemForPersist(item);
+  let blob = null;
+  if (sanitized.blob instanceof Blob) {
+    try {
+      // Clone so Safari is less likely to refuse structured-clone of live File handles.
+      blob = sanitized.blob.slice(0, sanitized.blob.size, sanitized.blob.type || undefined);
+    } catch {
+      blob = null;
+    }
+  }
+
+  // Always persist metadata first. Blob attach is best-effort — iOS Safari often
+  // cannot keep picker Files across refresh, but the queue row must still restore.
+  const meta = { ...sanitized, blob: null };
   const db = await openDb();
-  const tx = db.transaction(ITEMS, 'readwrite');
-  tx.objectStore(ITEMS).put(sanitizeQueueItemForPersist(item));
-  await txDone(tx);
+  {
+    const tx = db.transaction(ITEMS, 'readwrite');
+    tx.objectStore(ITEMS).put(meta);
+    await txDone(tx);
+  }
+
+  if (!blob) return { ...sanitized, blob: null };
+
+  try {
+    const withBlob = { ...sanitized, blob };
+    const tx = db.transaction(ITEMS, 'readwrite');
+    tx.objectStore(ITEMS).put(withBlob);
+    await txDone(tx);
+    return withBlob;
+  } catch {
+    return { ...sanitized, blob: null };
+  }
 }
 
 export async function getQueueItem(clientUploadId) {
@@ -184,7 +212,7 @@ export async function markMissingBlobsForReselect() {
         ...item,
         phase: UPLOAD_PHASE.NEEDS_RESELECT,
         errorLayer: 'upload_interrupted',
-        errorMessage: 'This browser no longer has the local file. Reselect it to continue.',
+        errorMessage: 'This browser no longer has the local file after refresh. Reselect it to continue.',
         blob: null,
       });
     }
