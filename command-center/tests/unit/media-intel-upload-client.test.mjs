@@ -118,6 +118,16 @@ describe('MIL upload client — interpretCompletion honesty', () => {
       assert.match(out.message, new RegExp(`boom-${status}`));
     }
   });
+
+  it('HTTP 0 / network code → interrupted (retryable), not permanent failed', () => {
+    const out = interpretCompletion({
+      status: 0,
+      payload: { error: 'Failed to fetch', code: 'network' },
+    });
+    assert.equal(out.status, UPLOAD_FILE_STATUS.INTERRUPTED);
+    assert.equal(out.retryable, true);
+    assert.equal(out.errorLayer, 'network');
+  });
 });
 
 describe('MIL upload client — 503 / network retry honesty', () => {

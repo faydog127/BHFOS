@@ -182,6 +182,16 @@ export function interpretCompletion({ status, payload }) {
       errorLayer: 'upload_authorization_failed',
     };
   }
+  if (status === 0 || payload?.code === 'network') {
+    return {
+      status: UPLOAD_FILE_STATUS.INTERRUPTED,
+      message: payload.error || 'Network interrupted during finalization',
+      code: payload.code || 'network',
+      phase: 'interrupted',
+      errorLayer: 'network',
+      retryable: true,
+    };
+  }
   return {
     status: UPLOAD_FILE_STATUS.FAILED,
     message: payload.error || `Upload could not be completed (${status})`,
@@ -532,6 +542,19 @@ async function processQueueItem({ token, item, onFileUpdate, signal }) {
           phase: UPLOAD_PHASE.FINALIZING,
           errorMessage: outcome.message,
           legacyStatus: outcome.status,
+        },
+        onFileUpdate,
+      );
+    }
+
+    if (outcome.status === UPLOAD_FILE_STATUS.INTERRUPTED || outcome.retryable) {
+      return persistAndEmit(
+        current,
+        {
+          phase: UPLOAD_PHASE.INTERRUPTED,
+          errorLayer: ERROR_LAYER.NETWORK,
+          errorMessage: outcome.message || 'Network interrupted during finalization',
+          legacyStatus: UPLOAD_FILE_STATUS.INTERRUPTED,
         },
         onFileUpdate,
       );
