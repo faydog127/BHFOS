@@ -14,7 +14,7 @@
 | Staging apply | Migration `20260728010000_media_intel_client_upload_id.sql` on `sdzhdupekcnekesbtxsl`; Edge `media-intel-upload-session` + `media-intel-analyze` redeployed |
 | Login | MIL `next` destinations preserved through Login (no forced `/tvg/crm`) |
 | Artifact isolation | Brand/storage URLs derive from `VITE_SUPABASE_URL` (no hardcoded production project ref in `src/` or hosted `dist`) |
-| Hosted deploy | `https://mil.bhfos.com` `environment=mil-staging` (refresh-restore fix pending redeploy after this status edit) |
+| Hosted deploy | `https://mil.bhfos.com` `environment=mil-staging` tip `126eb54091f9a3e0957ce66b7cf2a9bcf0f2620c` (Safari refresh-restore fix) |
 | Desktop acceptance | Mixed batch 5/5 → analysis complete (auto UI); review card fields visible; 35s offline → 5/5 recovered; refresh during upload queue restored |
 | Real-phone findings | Refresh cleared in-progress rows (mobile restore gated on session token; Safari may drop File blobs). Fix: always hydrate queue from IDB; metadata-first persist; demote mid-flight → interrupted + Retry/Reselect; remove nested scroll trap |
 | Real-phone screen-lock | **Pending** after refresh-restore fix redeploy (required for PASS) |
