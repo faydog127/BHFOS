@@ -14,7 +14,7 @@
 | Staging apply | Migration `20260728010000_media_intel_client_upload_id.sql` on `sdzhdupekcnekesbtxsl`; Edge `media-intel-upload-session` + `media-intel-analyze` redeployed |
 | Login | MIL `next` destinations preserved through Login (no forced `/tvg/crm`) |
 | Artifact isolation | Brand/storage URLs derive from `VITE_SUPABASE_URL` (no hardcoded production project ref in `src/` or hosted `dist`) |
-| Hosted deploy | `https://mil.bhfos.com` `environment=mil-staging` tip `126eb54091f9a3e0957ce66b7cf2a9bcf0f2620c` (Safari refresh-restore fix) |
+| Hosted deploy | `https://mil.bhfos.com` `environment=mil-staging` tip `4c7f74bf99f80c7c43aebfc1b2ffdafa23559823` (Retry/Reselect honesty + Uploads→Review handoff) |
 | Desktop acceptance | Mixed batch 5/5 → analysis complete (auto UI); review card fields visible; 35s offline → 5/5 recovered; refresh during upload queue restored |
 | Real-phone findings | Refresh cleared in-progress rows; Retry after refresh was a no-op when Safari dropped the local File (needed Reselect). Fix: readable-blob probe → Reselect; Retry shows immediate “Retrying…”; analysis_complete leaves Uploads for Review Queue |
 | Real-phone screen-lock | **Pending** after retry/reselect + review-handoff redeploy (required for PASS) |
