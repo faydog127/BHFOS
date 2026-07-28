@@ -285,10 +285,11 @@ export default function MediaUploads() {
     acc[f.status] = (acc[f.status] || 0) + 1;
     return acc;
   }, {});
-  const inFlightCount = entries.filter((f) =>
-    ['queued', 'uploading', 'hashing', 'finalizing', 'interrupted', 'retrying', 'needs_reselect', 'preparing'].includes(
-      f.status || f.phase,
-    ),
+  const transferringCount = entries.filter((f) =>
+    ['queued', 'uploading', 'hashing', 'finalizing', 'retrying', 'preparing'].includes(f.status || f.phase),
+  ).length;
+  const needsAttentionCount = entries.filter((f) =>
+    ['interrupted', 'needs_reselect', 'failed'].includes(f.status || f.phase),
   ).length;
 
   const ensureUploadToken = async () => {
@@ -477,9 +478,14 @@ export default function MediaUploads() {
                 <Loader2 className="h-4 w-4 animate-spin" /> Uploading…
               </span>
             )}
-            {inFlightCount > 0 && (
+            {transferringCount > 0 && (
               <span className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-amber-950 font-medium">
-                {inFlightCount} still transferring — listed first below
+                {transferringCount} still transferring
+              </span>
+            )}
+            {needsAttentionCount > 0 && (
+              <span className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-amber-950 font-medium">
+                {needsAttentionCount} need attention (retry/reselect) — settled copies leave this list
               </span>
             )}
             <span className="text-emerald-700">In library: {totals[UPLOAD_FILE_STATUS.UPLOADED] || 0}</span>

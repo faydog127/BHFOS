@@ -325,10 +325,11 @@ export default function MediaMobileUpload() {
       });
   }, [fileStates]);
 
-  const inFlightCount = entries.filter((f) =>
-    ['queued', 'uploading', 'hashing', 'finalizing', 'interrupted', 'retrying', 'needs_reselect', 'preparing'].includes(
-      f.status || f.phase,
-    ),
+  const transferringCount = entries.filter((f) =>
+    ['queued', 'uploading', 'hashing', 'finalizing', 'retrying', 'preparing'].includes(f.status || f.phase),
+  ).length;
+  const needsAttentionCount = entries.filter((f) =>
+    ['interrupted', 'needs_reselect', 'failed'].includes(f.status || f.phase),
   ).length;
 
   const canPickFiles = mode === 'session' ? Boolean(sessionInfo) : Boolean(caps?.isOwnerAdmin);
@@ -419,9 +420,14 @@ export default function MediaMobileUpload() {
       {entries.length > 0 && (
         <div className="rounded-xl border bg-white p-3 space-y-2 text-sm">
           <div className="flex flex-wrap gap-3">
-            {inFlightCount > 0 && (
+            {transferringCount > 0 && (
               <span className="rounded-md bg-amber-100 px-2 py-0.5 text-amber-950 font-medium">
-                {inFlightCount} still transferring — listed first
+                {transferringCount} still transferring
+              </span>
+            )}
+            {needsAttentionCount > 0 && (
+              <span className="rounded-md bg-amber-100 px-2 py-0.5 text-amber-950 font-medium">
+                {needsAttentionCount} need attention — settled copies leave this list
               </span>
             )}
             <span className="text-emerald-700">In library: {totals[UPLOAD_FILE_STATUS.UPLOADED] || 0}</span>

@@ -107,10 +107,14 @@ describe('MIL resilient upload + analysis', () => {
   it('Uploads pages reconcile stale rows against Review/library success', () => {
     const uploads = read('src/pages/crm/media/MediaUploads.jsx');
     const mobile = read('src/pages/crm/media/MediaMobileUpload.jsx');
+    const upload = read('src/lib/mediaIntel/uploadManager.js');
     assert.match(uploads, /reconcileStaleUploadQueue/);
     assert.match(mobile, /reconcileStaleUploadQueue/);
     assert.match(uploads, /dismissFromUploads/);
     assert.match(mobile, /dismissFromUploads/);
+    // mil_assets has no upload_status — selecting it broke stale dismiss.
+    assert.doesNotMatch(upload, /select\([^)]*upload_status/);
+    assert.match(upload, /human_review_status, archived_at/);
   });
 
   it('login preserves MIL next destinations', () => {

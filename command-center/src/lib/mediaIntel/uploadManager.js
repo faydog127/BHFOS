@@ -800,10 +800,9 @@ function assetIsPastUploadSuccess(asset) {
   if (!asset || asset.archived_at) return false;
   const review = String(asset.human_review_status || '');
   const processing = String(asset.processing_status || '');
-  const upload = String(asset.upload_status || '');
+  // mil_assets has no upload_status column — review/processing are authoritative.
   if (['pending', 'in_review', 'verified', 'rejected'].includes(review)) return true;
-  if (['analyzed', 'queued', 'analyzing', 'processing_failed'].includes(processing)) return true;
-  if (['uploaded', 'duplicate'].includes(upload)) return true;
+  if (['analyzed', 'queued', 'analyzing', 'uploaded', 'processing_failed'].includes(processing)) return true;
   return false;
 }
 
@@ -813,11 +812,12 @@ function grantIsUploadSuccess(grant) {
 
 async function fetchAssetById(assetId) {
   if (!assetId) return null;
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('mil_assets')
-    .select('id, original_filename, byte_size, processing_status, human_review_status, upload_status, archived_at')
+    .select('id, original_filename, byte_size, processing_status, human_review_status, archived_at')
     .eq('id', assetId)
     .maybeSingle();
+  if (error) return null;
   return data || null;
 }
 
@@ -841,9 +841,8 @@ async function findSuccessfulServerMatch(item) {
       .maybeSingle();
     if (grantIsUploadSuccess(grant)) {
       const asset = await fetchAssetById(grant.asset_id);
-      if (assetIsPastUploadSuccess(asset) || grantIsUploadSuccess(grant)) {
-        return { asset, grant, reason: 'grant_id' };
-      }
+      // Committed/duplicate grant alone is enough — asset fetch must not block dismiss.
+      return { asset, grant, reason: 'grant_id' };
     }
   }
 
@@ -857,14 +856,13 @@ async function findSuccessfulServerMatch(item) {
       .limit(3);
     for (const grant of grants || []) {
       const asset = await fetchAssetById(grant.asset_id);
-      if (assetIsPastUploadSuccess(asset) || grantIsUploadSuccess(grant)) {
-        return { asset, grant, reason: 'client_upload_id' };
-      }
+      return { asset, grant, reason: 'client_upload_id' };
     }
   }
 
-  // Later successful re-upload of the same phone file — match name + size.
-  if (item.filename && item.byteSize) {
+  // Later successful re-upload of the same phone file — match name (+ size when known).
+  // Stale local rows often keep an older minted client_upload_id after a newer attempt committed.
+  if (item.filename) {
     const { data: grants } = await supabase
       .from('mil_upload_grants')
       .select('id, asset_id, finalize_state, client_upload_id, original_filename, verified_bytes, max_bytes, created_at')
@@ -874,9 +872,10 @@ async function findSuccessfulServerMatch(item) {
       .limit(8);
     for (const grant of grants || []) {
       const size = grant.verified_bytes || grant.max_bytes;
-      if (size && Number(size) !== Number(item.byteSize)) continue;
+      if (item.byteSize && size && Number(size) !== Number(item.byteSize)) continue;
       const asset = await fetchAssetById(grant.asset_id);
-      if (assetIsPastUploadSuccess(asset)) {
+      // Prefer asset success; otherwise a committed grant for this filename is enough.
+      if (assetIsPastUploadSuccess(asset) || grantIsUploadSuccess(grant)) {
         return { asset, grant, reason: 'filename_size' };
       }
     }
