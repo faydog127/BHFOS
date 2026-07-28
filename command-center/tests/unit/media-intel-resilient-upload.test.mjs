@@ -61,7 +61,7 @@ describe('MIL resilient upload + analysis', () => {
     // Import from edge is TS — duplicate contract check against source text.
     const src = read('supabase/functions/media-intel-analyze/index.ts');
     assert.match(src, /function validateSuggested/);
-    assert.match(src, /PROMPT_VERSION = 'mil-v2'/);
+    assert.match(src, /PROMPT_VERSION = 'mil-v2-lifecycle'/);
     assert.match(src, /isServiceRoleRequest/);
     assert.match(src, /x-mil-internal-analyze/);
   });

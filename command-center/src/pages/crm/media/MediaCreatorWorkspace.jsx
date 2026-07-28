@@ -64,7 +64,7 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
 
   const load = async () => {
     try {
-      const assets = await listAssets({ archived: false, limit: 100 });
+      const assets = await listAssets({ archived: false, trashed: false, limit: 100 });
       setAvailable(assets);
       const { data: auth } = await supabase.auth.getUser();
       let q = supabase

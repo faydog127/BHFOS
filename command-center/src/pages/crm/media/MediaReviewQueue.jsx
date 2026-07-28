@@ -3,16 +3,18 @@ import { useOutletContext } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import {
   acceptAiSuggestions,
-  archiveAsset,
   assetPreviewUrl,
   fetchReviewBundle,
+  keepAsset,
   listAssets,
   queueAiAnalysis,
   restrictAsset,
+  setAssetLifecycle,
   setPermittedUse,
   verifyAssetMetadata,
 } from '@/lib/mediaIntel/api';
 import AnalysisOutcomeCard from '@/components/media/AnalysisOutcomeCard';
+import { buildAnalysisOutcome } from '@/lib/mediaIntel/analysisDisplay';
 
 export default function MediaReviewQueue() {
   const { caps } = useOutletContext();
@@ -29,7 +31,12 @@ export default function MediaReviewQueue() {
   const loadQueue = async () => {
     setLoading(true);
     try {
-      const rows = await listAssets({ humanReviewStatus: 'pending', archived: false, limit: 100 });
+      const rows = await listAssets({
+        humanReviewStatus: 'pending',
+        archived: false,
+        trashed: false,
+        limit: 100,
+      });
       setAssets(rows);
       if (selectedId && !rows.some((r) => r.id === selectedId)) {
         setSelectedId(rows[0]?.id || null);
@@ -142,22 +149,52 @@ export default function MediaReviewQueue() {
     }
   };
 
-  const runArchiveAction = async (action) => {
+  const runLifecycle = async (action) => {
+    if (!caps.canLifecycleCleanup || !selectedId) return;
+    const outcome = buildAnalysisOutcome(bundle?.asset, latestAnalysis);
+    const reason =
+      outcome?.qualityIssues?.[0] ||
+      outcome?.recommendedAction ||
+      (action === 'keep' ? 'review_keep' : action);
+    if (action === 'trash' && !window.confirm('Move this photo to Trash? Recoverable for 30 days.')) {
+      return;
+    }
+    if (
+      action === 'archive' &&
+      !window.confirm('Archive this photo? It leaves normal library, marketing, and creator views.')
+    ) {
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      if (action === 'keep') {
+        await keepAsset(selectedId, reason);
+        setMessage('Kept in active library (left Quality Cleanup).');
+      } else {
+        await setAssetLifecycle(selectedId, action, reason);
+        setMessage(action === 'archive' ? 'Asset archived.' : 'Asset moved to Trash.');
+      }
+      await loadQueue();
+    } catch (err) {
+      setError(err.message || `${action} failed`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runRestrict = async () => {
     if (!caps.canVerify || !selectedId) return;
     setSaving(true);
     setError(null);
     setMessage(null);
     try {
-      if (action === 'archive') {
-        await archiveAsset(selectedId);
-        setMessage('Asset archived.');
-      } else {
-        await restrictAsset(selectedId);
-        setMessage('Asset restricted for privacy review.');
-      }
+      await restrictAsset(selectedId);
+      setMessage('Asset restricted for privacy review.');
       await loadQueue();
     } catch (err) {
-      setError(err.message || `${action} failed`);
+      setError(err.message || 'Restrict failed');
     } finally {
       setSaving(false);
     }
@@ -331,64 +368,86 @@ export default function MediaReviewQueue() {
               </div>
             </div>
 
-            <div className="sticky bottom-0 -mx-4 sm:-mx-5 px-4 sm:px-5 py-3 border-t bg-white/95 backdrop-blur flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={saving}
-                onClick={saveVerify}
-                className="rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white min-h-[44px]"
-              >
-                {saving ? 'Saving…' : 'Save & verify'}
-              </button>
-              <button
-                type="button"
-                className="rounded-md border px-4 py-2.5 text-sm min-h-[44px]"
-                onClick={async () => {
-                  try {
-                    await setPermittedUse(selectedId, 'reel_creation', true);
-                    setMessage('Marked approved for reel creation (gates still enforce privacy/rights).');
-                  } catch (err) {
-                    setError(err.message);
-                  }
-                }}
-              >
-                Approve for reel creation
-              </button>
-              <button
-                type="button"
-                className="rounded-md border px-4 py-2.5 text-sm min-h-[44px]"
-                onClick={async () => {
-                  try {
-                    setError(null);
-                    setMessage(null);
-                    await queueAiAnalysis(selectedId);
-                    setMessage('Reanalysis finished. Verified human fields will not be overwritten automatically.');
-                    await loadQueue();
-                  } catch (err) {
-                    setError(err.message || 'Reanalysis failed');
-                  }
-                }}
-              >
-                Reanalyze (keep verified)
-              </button>
-              <button
-                type="button"
-                disabled={saving || !selectedId}
-                onClick={() => runArchiveAction('archive')}
-                className="rounded-md border px-4 py-2.5 text-sm min-h-[44px]"
-                data-testid="media-review-archive"
-              >
-                Archive
-              </button>
-              <button
-                type="button"
-                disabled={saving || !selectedId}
-                onClick={() => runArchiveAction('restrict')}
-                className="rounded-md border border-amber-300 text-amber-900 px-4 py-2.5 text-sm min-h-[44px]"
-                data-testid="media-review-restrict"
-              >
-                Restrict
-              </button>
+            <div className="sticky bottom-0 -mx-4 sm:-mx-5 px-4 sm:px-5 py-3 border-t bg-white/95 backdrop-blur space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={saving || !selectedId}
+                  onClick={() => runLifecycle('keep')}
+                  className="rounded-md bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white min-h-[44px]"
+                  data-testid="media-review-keep"
+                >
+                  Keep
+                </button>
+                <button
+                  type="button"
+                  disabled={saving || !selectedId}
+                  onClick={() => runLifecycle('archive')}
+                  className="rounded-md border px-4 py-2.5 text-sm min-h-[44px]"
+                  data-testid="media-review-archive"
+                >
+                  Archive
+                </button>
+                <button
+                  type="button"
+                  disabled={saving || !selectedId}
+                  onClick={() => runLifecycle('trash')}
+                  className="rounded-md border border-amber-300 text-amber-950 px-4 py-2.5 text-sm min-h-[44px]"
+                  data-testid="media-review-trash"
+                >
+                  Move to Trash
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={saveVerify}
+                  className="rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white min-h-[44px]"
+                >
+                  {saving ? 'Saving…' : 'Save & verify'}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border px-4 py-2.5 text-sm min-h-[44px]"
+                  onClick={async () => {
+                    try {
+                      await setPermittedUse(selectedId, 'reel_creation', true);
+                      setMessage('Marked approved for reel creation (gates still enforce privacy/rights).');
+                    } catch (err) {
+                      setError(err.message);
+                    }
+                  }}
+                >
+                  Approve for reel creation
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border px-4 py-2.5 text-sm min-h-[44px]"
+                  onClick={async () => {
+                    try {
+                      setError(null);
+                      setMessage(null);
+                      await queueAiAnalysis(selectedId);
+                      setMessage('Reanalysis finished. Verified human fields will not be overwritten automatically.');
+                      await loadQueue();
+                    } catch (err) {
+                      setError(err.message || 'Reanalysis failed');
+                    }
+                  }}
+                >
+                  Reanalyze (keep verified)
+                </button>
+                <button
+                  type="button"
+                  disabled={saving || !selectedId}
+                  onClick={runRestrict}
+                  className="rounded-md border border-amber-300 text-amber-900 px-4 py-2.5 text-sm min-h-[44px]"
+                  data-testid="media-review-restrict"
+                >
+                  Restrict
+                </button>
+              </div>
             </div>
           </>
         )}

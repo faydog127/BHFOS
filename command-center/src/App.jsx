@@ -65,6 +65,7 @@ const MediaBeforeAfter = React.lazy(() => import('@/pages/crm/media/MediaBeforeA
 const MediaReelReview = React.lazy(() => import('@/pages/crm/media/MediaReelReview'));
 const MediaApprovedToPost = React.lazy(() => import('@/pages/crm/media/MediaApprovedToPost'));
 const MediaArchive = React.lazy(() => import('@/pages/crm/media/MediaArchive'));
+const MediaQualityCleanup = React.lazy(() => import('@/pages/crm/media/MediaQualityCleanup'));
 const MediaSettings = React.lazy(() => import('@/pages/crm/media/MediaSettings'));
 const CreatorRoutesPage = React.lazy(() => import('@/pages/creator/CreatorRoutes'));
 const TechRoutesPage = React.lazy(() => import('@/pages/tech/TechRoutes'));
@@ -411,6 +412,7 @@ const MediaLibraryRoutes = () => (
       <Route path="dashboard" element={<MediaDashboard />} />
       <Route path="uploads" element={<MediaUploads />} />
       <Route path="review" element={<MediaReviewQueue />} />
+      <Route path="quality-cleanup" element={<MediaQualityCleanup />} />
       <Route path="all" element={<MediaAllMedia />} />
       <Route path="collections" element={<MediaCollections />} />
       <Route path="before-after" element={<MediaBeforeAfter />} />

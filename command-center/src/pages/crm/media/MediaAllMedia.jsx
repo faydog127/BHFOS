@@ -50,6 +50,7 @@ export default function MediaAllMedia() {
       search: params.get('q') || undefined,
       duplicatesOnly: params.get('dup') === '1' || undefined,
       archived: false,
+      trashed: false,
       limit: 120,
     }),
     [params],

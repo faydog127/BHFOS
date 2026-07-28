@@ -73,6 +73,9 @@ async function loadEligibleAsset(assetId: string) {
     .maybeSingle()
   if (assetErr) throw assetErr
   if (!asset) return { error: 'Asset not found', status: 404 }
+  if (asset.archived_at || asset.trashed_at) {
+    return { error: 'Archived or trashed assets cannot be promoted to the website', status: 400 }
+  }
   if (asset.human_review_status !== 'verified') {
     return { error: 'Asset must be human-verified before website promotion', status: 400 }
   }

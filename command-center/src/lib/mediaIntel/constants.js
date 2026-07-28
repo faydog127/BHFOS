@@ -27,12 +27,13 @@ export const MIL_NAV = [
   { id: 'uploads', name: 'Uploads', path: 'uploads' },
   { id: 'upload', name: 'Phone upload', path: 'upload' },
   { id: 'review', name: 'Review Queue', path: 'review' },
+  { id: 'quality-cleanup', name: 'Quality Cleanup', path: 'quality-cleanup' },
   { id: 'all', name: 'All Media', path: 'all' },
   { id: 'collections', name: 'Collections', path: 'collections' },
   { id: 'before-after', name: 'Before & After', path: 'before-after' },
   { id: 'reel-review', name: 'Reel Review', path: 'reel-review' },
   { id: 'approved', name: 'Approved to Post', path: 'approved-to-post' },
-  { id: 'archive', name: 'Archive / Restricted', path: 'archive' },
+  { id: 'archive', name: 'Archive / Trash', path: 'archive' },
   { id: 'settings', name: 'Settings', path: 'settings' },
 ];
 

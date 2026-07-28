@@ -113,6 +113,13 @@ export default function MediaDashboard() {
           tone={stats.awaitingAi ? 'warn' : 'default'}
         />
         <Stat label="Awaiting human review" value={stats.awaitingHumanReview} to="/media/review" tone={stats.awaitingHumanReview ? 'warn' : 'default'} />
+        <Stat
+          label="Quality cleanup"
+          value={stats.qualityCleanup || 0}
+          to="/media/quality-cleanup"
+          tone={stats.qualityCleanup ? 'warn' : 'default'}
+        />
+        <Stat label="In trash" value={stats.trashed || 0} to="/media/archive" />
         <Stat label="Possible duplicates" value={stats.possibleDuplicates} to="/media/all?dup=1" />
         <Stat label="Possible before & after" value={stats.possibleBeforeAfter} to="/media/before-after" />
         <Stat label="Privacy warnings" value={stats.privacyWarnings} to="/media/review" tone={stats.privacyWarnings ? 'danger' : 'default'} />
@@ -137,6 +144,12 @@ export default function MediaDashboard() {
               Review AI suggestions
             </Link>
             {' '}— nothing is verified until a person confirms it. AI runs only when explicitly invoked.
+          </li>
+          <li>
+            <Link className="text-blue-700 underline-offset-2 hover:underline" to="/media/quality-cleanup">
+              Quality Cleanup
+            </Link>
+            {' '}— Keep, Archive, or Trash poor-quality media. AI recommends; humans decide. No auto-delete.
           </li>
           <li>
             <Link className="text-blue-700 underline-offset-2 hover:underline" to="/media/reel-review">

@@ -25,28 +25,33 @@ export function audit() {
 export async function fetchDashboardStats() {
   const base = () => supabase.from('mil_assets').select('id', { count: 'exact', head: true });
 
+  const active = () => base().is('archived_at', null).is('trashed_at', null);
   const results = await Promise.all([
-    base().eq('media_kind', 'photo').is('archived_at', null),
-    base().eq('media_kind', 'video').is('archived_at', null),
-    base().is('archived_at', null).gte('created_at', new Date(Date.now() - 7 * 864e5).toISOString()),
-    base().in('processing_status', ['queued', 'analyzing']).is('archived_at', null),
-    base().eq('human_review_status', 'pending').is('archived_at', null),
-    base().not('duplicate_of_asset_id', 'is', null).is('archived_at', null),
-    base().in('privacy_status', ['needs_review', 'needs_redaction']).is('archived_at', null),
+    active().eq('media_kind', 'photo'),
+    active().eq('media_kind', 'video'),
+    active().gte('created_at', new Date(Date.now() - 7 * 864e5).toISOString()),
+    active().in('processing_status', ['queued', 'analyzing']),
+    active().eq('human_review_status', 'pending'),
+    active().not('duplicate_of_asset_id', 'is', null),
+    active().in('privacy_status', ['needs_review', 'needs_redaction']),
+    active()
+      .is('lifecycle_kept_at', null)
+      .or('ai_lifecycle_recommendation.in.(archive,trash),ai_usability.in.(poor,unusable)'),
     supabase.from('mil_permitted_uses').select('asset_id', { count: 'exact', head: true }).eq('use_key', 'reel_creation').eq('approved', true),
     supabase.from('mil_creator_assignments').select('id', { count: 'exact', head: true }).eq('status', 'active'),
     supabase.from('mil_processing_jobs').select('id', { count: 'exact', head: true }).eq('status', 'failed'),
     supabase.from('mil_asset_relationships').select('id', { count: 'exact', head: true }).eq('relationship_type', 'possible_before_after').eq('verification_status', 'unverified'),
     supabase.from('mil_reel_versions').select('id', { count: 'exact', head: true }).eq('status', 'submitted_for_review'),
     supabase.from('mil_reel_versions').select('id', { count: 'exact', head: true }).eq('status', 'approved_to_post'),
+    base().not('trashed_at', 'is', null),
   ]);
 
   const firstError = results.find((r) => r?.error)?.error;
   if (firstError) throw firstError;
 
   const [
-    photos, videos, recent, awaitingAi, awaitingReview, duplicates, privacy,
-    marketing, assigned, failedJobs, baUnverified, reelsAwaiting, reelsApproved,
+    photos, videos, recent, awaitingAi, awaitingReview, duplicates, privacy, qualityCleanup,
+    marketing, assigned, failedJobs, baUnverified, reelsAwaiting, reelsApproved, trashed,
   ] = results;
 
   return {
@@ -58,6 +63,8 @@ export async function fetchDashboardStats() {
     possibleDuplicates: duplicates.count || 0,
     possibleBeforeAfter: baUnverified.count || 0,
     privacyWarnings: privacy.count || 0,
+    qualityCleanup: qualityCleanup.count || 0,
+    trashed: trashed.count || 0,
     approvedForMarketing: marketing.count || 0,
     assignedToCreator: assigned.count || 0,
     reelsAwaitingReview: reelsAwaiting.count || 0,
@@ -82,6 +89,19 @@ export async function listAssets(filters = {}) {
   if (filters.processingStatus) q = q.eq('processing_status', filters.processingStatus);
   if (filters.archived === true) q = q.not('archived_at', 'is', null);
   else if (filters.archived === false) q = q.is('archived_at', null);
+  if (filters.trashed === true) q = q.not('trashed_at', 'is', null);
+  else if (filters.trashed === false) q = q.is('trashed_at', null);
+  else if (filters.archived !== true && filters.qualityCleanup !== true) {
+    // Default library views exclude trash unless explicitly requested.
+    q = q.is('trashed_at', null);
+  }
+  if (filters.qualityCleanup) {
+    q = q
+      .is('archived_at', null)
+      .is('trashed_at', null)
+      .is('lifecycle_kept_at', null)
+      .or('ai_lifecycle_recommendation.in.(archive,trash),ai_usability.in.(poor,unusable)');
+  }
   if (filters.duplicatesOnly) q = q.not('duplicate_of_asset_id', 'is', null);
 
   if (plan.kind === 'uuid') {
@@ -241,8 +261,34 @@ export async function submitReelVersion(versionId) {
 }
 
 /**
- * Archive / restore / privacy-restrict state changes are all a single SECURITY
- * DEFINER RPC (mil_set_asset_archive_state) — it audits server-side.
+ * Lifecycle disposition (keep / archive / trash / restore / permanent_delete).
+ * SECURITY DEFINER RPC — audits server-side. AI never calls this.
+ */
+export async function setAssetLifecycle(assetId, action, reason = null) {
+  const { data, error } = await supabase.rpc('mil_set_asset_lifecycle', {
+    p_asset_id: assetId,
+    p_action: action,
+    p_reason: reason?.trim() ? reason.trim() : null,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function setAssetsLifecycle(assetIds, action, reason = null) {
+  const ids = (assetIds || []).filter(Boolean);
+  if (!ids.length) throw new Error('No assets selected');
+  const { data, error } = await supabase.rpc('mil_set_assets_lifecycle', {
+    p_asset_ids: ids,
+    p_action: action,
+    p_reason: reason?.trim() ? reason.trim() : null,
+  });
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Privacy-restrict state changes via mil_set_asset_archive_state.
+ * Archive/restore prefer mil_set_asset_lifecycle (reviewer-capable).
  */
 async function setAssetArchiveState(assetId, action) {
   const { error } = await supabase.rpc('mil_set_asset_archive_state', {
@@ -252,8 +298,12 @@ async function setAssetArchiveState(assetId, action) {
   if (error) throw error;
 }
 
-export const archiveAsset = (assetId) => setAssetArchiveState(assetId, 'archive');
-export const restoreAsset = (assetId) => setAssetArchiveState(assetId, 'restore');
+export const archiveAsset = (assetId, reason) => setAssetLifecycle(assetId, 'archive', reason);
+export const trashAsset = (assetId, reason) => setAssetLifecycle(assetId, 'trash', reason);
+export const keepAsset = (assetId, reason) => setAssetLifecycle(assetId, 'keep', reason);
+export const restoreAsset = (assetId, reason) => setAssetLifecycle(assetId, 'restore', reason);
+export const permanentlyDeleteAsset = (assetId, reason) =>
+  setAssetLifecycle(assetId, 'permanent_delete', reason);
 export const restrictAsset = (assetId) => setAssetArchiveState(assetId, 'restrict');
 export const unrestrictAsset = (assetId) => setAssetArchiveState(assetId, 'unrestrict');
 

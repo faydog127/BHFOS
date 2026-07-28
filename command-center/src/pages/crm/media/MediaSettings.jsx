@@ -85,7 +85,7 @@ export default function MediaSettings() {
   useEffect(() => {
     getAiConfigState().then(setAi);
     if (caps.canPromoteWebsite) {
-      listAssets({ humanReviewStatus: 'verified', privacyStatus: 'clear', archived: false, limit: 50 })
+      listAssets({ humanReviewStatus: 'verified', privacyStatus: 'clear', archived: false, trashed: false, limit: 50 })
         .then(setCandidates)
         .catch((err) => setError(err.message));
       refreshPromotions().catch((err) => setError(err.message));

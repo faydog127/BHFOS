@@ -64,6 +64,26 @@ export default function AnalysisOutcomeCard({ asset, analysis, compact = false }
           <p className="mt-0.5">{answers.recommendedUse}</p>
         </div>
       </div>
+      <div className="rounded-md border border-slate-200 bg-white/70 px-2 py-2 space-y-1">
+        <div className="text-xs uppercase tracking-wide text-slate-500">Suggested cleanup action (advisory)</div>
+        <p className="font-medium text-slate-900">{answers.recommendedAction}</p>
+        {outcome.qualityIssueLabels?.length ? (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {outcome.qualityIssueLabels.map((label) => (
+              <span
+                key={label}
+                className="inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-950"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {outcome.lifecycleRationale ? (
+          <p className="text-xs text-slate-600">{outcome.lifecycleRationale}</p>
+        ) : null}
+        <p className="text-[11px] text-slate-500">AI never archives, trashes, or deletes originals automatically.</p>
+      </div>
       {!compact && outcome.observations ? (
         <div>
           <div className="text-xs uppercase tracking-wide text-slate-500">Observations</div>

@@ -2,6 +2,13 @@
  * Normalize mil_ai_analyses.suggested into a technician-facing outcome card.
  * Never treats missing fields as success; never renders HTML.
  */
+import {
+  deriveLifecycleRecommendation,
+  LIFECYCLE_RECOMMENDATION_LABELS,
+  normalizeLifecycleRecommendation,
+  normalizeQualityIssues,
+  QUALITY_ISSUE_LABELS,
+} from './lifecycleHelpers.js';
 
 const USE_LABELS = {
   inspection_report: 'Inspection report',
@@ -130,9 +137,22 @@ export function buildAnalysisOutcome(asset, analysis) {
     .filter(Boolean);
 
   let usability = 'unknown';
-  if (quality?.suitable === true) usability = quality.score != null && quality.score < 0.45 ? 'limited' : 'usable';
-  if (quality?.suitable === false) usability = 'poor';
+  if (suggested.usability) usability = String(suggested.usability).toLowerCase();
+  else if (quality?.suitable === true) usability = quality.score != null && quality.score < 0.45 ? 'limited' : 'usable';
+  if (quality?.suitable === false && usability === 'unknown') usability = 'poor';
   if (uses.unsuitable.includes('Do not use')) usability = 'unusable';
+
+  const qualityIssues = normalizeQualityIssues(
+    suggested.quality_issues?.length ? suggested.quality_issues : asset?.ai_quality_issues,
+  );
+  const recommendedAction =
+    normalizeLifecycleRecommendation(suggested.lifecycle_recommendation) ||
+    normalizeLifecycleRecommendation(asset?.ai_lifecycle_recommendation) ||
+    deriveLifecycleRecommendation({
+      usability: asset?.ai_usability || usability,
+      qualityIssues,
+      needsHumanReview: needsReview,
+    });
 
   return {
     uiStatus,
@@ -149,6 +169,11 @@ export function buildAnalysisOutcome(asset, analysis) {
         : null,
     needsHumanReview: needsReview,
     privacyWarnings: privacy,
+    recommendedAction,
+    recommendedActionLabel: LIFECYCLE_RECOMMENDATION_LABELS[recommendedAction] || recommendedAction,
+    qualityIssues,
+    qualityIssueLabels: qualityIssues.map((i) => QUALITY_ISSUE_LABELS[i] || i),
+    lifecycleRationale: String(suggested.lifecycle_rationale || '').trim() || null,
     analysisStatus: analysis?.status || null,
     processingStatus: asset?.processing_status || null,
     model: analysis?.model || null,
@@ -167,6 +192,8 @@ export function buildAnalysisOutcome(asset, analysis) {
 export function analysisOutcomeAnswers(outcome) {
   if (!outcome) return null;
   return {
+    recommendedAction: outcome.recommendedActionLabel || outcome.recommendedAction || '—',
+    qualityIssues: (outcome.qualityIssueLabels || []).join(', ') || '—',
     whatItShows: outcome.description || outcome.classification.join(' · ') || 'Not enough AI detail yet.',
     usable: outcome.usability,
     tags: outcome.tags,

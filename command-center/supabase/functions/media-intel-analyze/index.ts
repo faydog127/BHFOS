@@ -17,7 +17,7 @@ import { milCorsHeaders, milCorsPreflight } from '../_shared/milCors.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
 import { isMilStaff } from '../_shared/milRoles.ts'
 
-const PROMPT_VERSION = 'mil-v2'
+const PROMPT_VERSION = 'mil-v2-lifecycle'
 const PROVIDER = 'openai'
 
 // No sharp/imagemagick (or any resize pipeline) is available in this Deno edge
@@ -69,7 +69,49 @@ type Suggested = {
   explanation?: string
   usability?: string
   needs_human_review?: boolean
+  lifecycle_recommendation?: string
+  quality_issues?: string[]
+  lifecycle_rationale?: string
   quality?: Record<string, { suitable?: boolean; score?: number; explanation?: string }>
+}
+
+const LIFECYCLE_RECS = new Set(['keep', 'keep_internal', 'archive', 'trash', 'human_review'])
+const QUALITY_ISSUES = new Set([
+  'blurry', 'too_dark', 'duplicate', 'badly_framed', 'obstructed_view',
+  'accidental', 'unrelated', 'overexposed', 'low_resolution',
+])
+
+function normalizeLifecycleRecommendation(raw: unknown): string | undefined {
+  const v = String(raw ?? '').toLowerCase().trim().replace(/[\s-]+/g, '_')
+  if (LIFECYCLE_RECS.has(v)) return v
+  if (v === 'keep_for_internal' || v === 'internal' || v === 'report_use') return 'keep_internal'
+  if (v === 'review' || v === 'needs_review') return 'human_review'
+  return undefined
+}
+
+function normalizeQualityIssues(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const out: string[] = []
+  for (const item of raw) {
+    const v = String(item ?? '').toLowerCase().trim().replace(/[\s-]+/g, '_')
+    if (QUALITY_ISSUES.has(v) && !out.includes(v)) out.push(v)
+  }
+  return out.slice(0, 12)
+}
+
+function deriveLifecycleRecommendation(usability?: string, issues: string[] = [], needsReview?: boolean): string {
+  const u = String(usability || '').toLowerCase()
+  if (needsReview || u === 'unknown') return 'human_review'
+  if (u === 'unusable' || issues.includes('unrelated') || issues.includes('accidental')) return 'trash'
+  if (
+    u === 'poor' ||
+    issues.some((i) => ['blurry', 'too_dark', 'badly_framed', 'duplicate', 'obstructed_view'].includes(i))
+  ) {
+    return 'archive'
+  }
+  if (u === 'limited') return 'keep_internal'
+  if (u === 'good' || u === 'usable') return 'keep'
+  return 'human_review'
 }
 
 function asStringArray(value: unknown) {
@@ -116,8 +158,14 @@ export function validateSuggested(raw: unknown): { ok: true; suggested: Suggeste
     explanation: s.explanation != null ? String(s.explanation).slice(0, 2000) : undefined,
     usability: s.usability != null ? String(s.usability).slice(0, 40) : undefined,
     needs_human_review: typeof s.needs_human_review === 'boolean' ? s.needs_human_review : undefined,
+    quality_issues: normalizeQualityIssues(s.quality_issues),
+    lifecycle_rationale: s.lifecycle_rationale != null ? String(s.lifecycle_rationale).slice(0, 500) : undefined,
     quality,
   }
+  const issues = suggested.quality_issues || []
+  suggested.lifecycle_recommendation =
+    normalizeLifecycleRecommendation(s.lifecycle_recommendation) ||
+    deriveLifecycleRecommendation(suggested.usability, issues, suggested.needs_human_review)
   const confidenceRaw = (s as { confidence?: unknown }).confidence
   const confidence = typeof confidenceRaw === 'number' && Number.isFinite(confidenceRaw)
     ? Math.max(0, Math.min(1, confidenceRaw))
@@ -141,10 +189,14 @@ condition_notes (visible observations only), location_component,
 tags (short normalized strings), narrative (plain-language description of what the media shows),
 public_caption, alt_text, privacy_risks, recommended_uses, unsuitable_uses,
 usability (good|usable|limited|poor|unusable), needs_human_review (boolean),
+lifecycle_recommendation (keep|keep_internal|archive|trash|human_review) — advisory only; never delete,
+quality_issues (subset of: blurry, too_dark, duplicate, badly_framed, obstructed_view, accidental, unrelated, overexposed, low_resolution),
+lifecycle_rationale (short plain-language reason for the recommendation),
 explanation, confidence (0-1),
 quality (object keyed by homepage_hero, website_service_proof, social_photo, reel_short_video, inspection_report, training, internal_docs;
 each value: suitable boolean, score 0-1, explanation).
-Recommended/unsuitable uses should answer whether media fits inspection report, customer proof, marketing, social, training, or do not use.`
+Recommended/unsuitable uses should answer whether media fits inspection report, customer proof, marketing, social, training, or do not use.
+Never instruct permanent deletion of originals; poor photos may still be unique evidence.`
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -281,6 +333,11 @@ Deno.serve(async (req) => {
     if (!asset) return respond({ error: 'Asset not found' }, 404)
 
     const job = await ensureAndClaimJob(assetId)
+
+    if (asset.archived_at || asset.trashed_at) {
+      await settleJob(job?.id || null, 'cancelled', 'skipped_lifecycle: archived_or_trashed')
+      return respond({ skipped: true, reason: 'archived_or_trashed' })
+    }
 
     if (asset.exclude_from_ai) {
       await supabaseAdmin.from('mil_ai_analyses').insert({
@@ -435,9 +492,17 @@ Deno.serve(async (req) => {
         })
       }
 
+      // Advisory disposition only — never set archived_at / trashed_at from AI.
+      const usability = String(result.suggested.usability || '').toLowerCase()
+      const aiUsability = ['good', 'usable', 'limited', 'poor', 'unusable'].includes(usability)
+        ? usability
+        : 'unknown'
       await supabaseAdmin.from('mil_assets').update({
         processing_status: 'analyzed',
         privacy_status: 'needs_review',
+        ai_lifecycle_recommendation: result.suggested.lifecycle_recommendation || null,
+        ai_quality_issues: result.suggested.quality_issues || [],
+        ai_usability: aiUsability,
       }).eq('id', assetId)
 
       await supabaseAdmin.from('mil_audit_events').insert({

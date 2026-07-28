@@ -53,6 +53,8 @@ export function milCapabilities(role) {
     // token (mil_upload_sessions) minted by an owner/admin, never by this role.
     canUpload: isLibraryStaff,
     canVerify: REVIEWERS.has(r),
+    canLifecycleCleanup: REVIEWERS.has(r),
+    canPermanentDelete: OWNERS.has(r),
     canApproveReels: OWNERS.has(r),
     canManageCreatorAccess: OWNERS.has(r),
     canPromoteWebsite: OWNERS.has(r),

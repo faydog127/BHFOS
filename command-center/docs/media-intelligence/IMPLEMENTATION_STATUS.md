@@ -1,8 +1,19 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** see git log after resilient-upload commit  
+**Verified HEAD at this status edit:** see git log after quality-cleanup commit  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
+
+## Quality Cleanup workflow (2026-07-28) — IMPLEMENTED (staging apply pending this tip)
+
+| Field | Value |
+|---|---|
+| Plan | [`QUALITY_CLEANUP_PLAN.md`](./QUALITY_CLEANUP_PLAN.md) |
+| Schema | `trashed_at`, `purge_eligible_at`, `lifecycle_*`, `ai_lifecycle_recommendation` / `ai_quality_issues` / `ai_usability`; RPCs `mil_set_asset_lifecycle` + bulk |
+| AI | `mil-v2-lifecycle` advisory disposition only — never auto archive/trash/delete |
+| UI | Review Keep·Archive·Trash; `/media/quality-cleanup` bulk; Archive/Trash tabs + owner permanent delete after 30d |
+| Hard rule | AI never permanently deletes originals |
+| Follow-ups | Duplicate identification; large-video cellular Safari |
 
 ## Resilient mobile upload + visible AI analysis (2026-07-28) — PASS (desktop + real-phone USABLE)
 
