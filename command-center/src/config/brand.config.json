@@ -1,7 +1,7 @@
 {
   "tvg": {
     "name": "The Vent Guys",
-    "logo_url": "https://wwyxohjnyqnegzbxtuxs.supabase.co/storage/v1/object/public/vent-guys-images/TVG_Logo.jpg",
+    "logo_url": "storage://vent-guys-images/TVG_Logo.jpg",
     "primary_color": "#0a56a6",
     "secondary_color": "#1e88e5",
     "contact_email": "admin@vent-guys.com",
@@ -31,7 +31,7 @@
   },
   "installworxs": {
     "name": "InstallWorxs",
-    "logo_url": "https://wwyxohjnyqnegzbxtuxs.supabase.co/storage/v1/object/public/vent-guys-images/installworxs-logo.png",
+    "logo_url": "storage://vent-guys-images/installworxs-logo.png",
     "primary_color": "#6200EE",
     "secondary_color": "#03DAC6",
     "contact_email": "support@installworxs.com",
@@ -61,7 +61,7 @@
   },
   "demo": {
     "name": "Demo Company",
-    "logo_url": "https://wwyxohjnyqnegzbxtuxs.supabase.co/storage/v1/object/public/vent-guys-images/demo-logo.png",
+    "logo_url": "storage://vent-guys-images/demo-logo.png",
     "primary_color": "#FF5733",
     "secondary_color": "#33FF57",
     "contact_email": "demo@example.com",

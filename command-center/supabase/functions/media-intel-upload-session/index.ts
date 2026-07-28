@@ -248,6 +248,62 @@ async function requestReconcile(grantId: string) {
   }
 }
 
+/**
+ * After a successful finalize commit, drain the queued ai_analyze job via the
+ * analyze edge (service-role). Fire-and-forget — upload success must not wait
+ * on OpenAI. Failures leave the job queued for staff retry.
+ */
+function triggerAnalyzeAfterCommit(assetId: string | null | undefined) {
+  if (!assetId) return
+  const url = Deno.env.get('SUPABASE_URL')
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
+  if (!url || !serviceKey) return
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 8000)
+  void fetch(`${url}/functions/v1/media-intel-analyze`, {
+    method: 'POST',
+    signal: controller.signal,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${serviceKey}`,
+      apikey: anonKey || serviceKey,
+      'x-mil-internal-analyze': '1',
+    },
+    body: JSON.stringify({ action: 'analyze', assetId }),
+  })
+    .catch((err) => {
+      console.error(
+        'media-intel-upload-session analyze trigger failed',
+        err instanceof Error ? err.message : err,
+      )
+    })
+    .finally(() => clearTimeout(timer))
+}
+
+async function mintSignedUpload(objectPath: string) {
+  // Prefer upsert so interrupted TUS/PUT retries can continue on the same path.
+  // Fall back if the linked storage SDK build does not accept options.
+  let signed: { signedUrl?: string; token?: string; path?: string } | null = null
+  let signErr: { message?: string } | null = null
+  try {
+    const first = await supabaseAdmin.storage
+      .from('media-intel-originals')
+      // deno-lint-ignore no-explicit-any
+      .createSignedUploadUrl(objectPath, { upsert: true } as any)
+    signed = first.data
+    signErr = first.error
+  } catch {
+    const second = await supabaseAdmin.storage
+      .from('media-intel-originals')
+      .createSignedUploadUrl(objectPath)
+    signed = second.data
+    signErr = second.error
+  }
+  if (signErr) throw signErr
+  return signed
+}
+
 Deno.serve(async (req) => {
   const cors = milCorsHeaders(req)
   if (req.method === 'OPTIONS') return milCorsPreflight(req)
@@ -368,11 +424,66 @@ Deno.serve(async (req) => {
       })
     }
 
+    if (action === 'refresh_upload_grant') {
+      const token = String(body.token || '').trim()
+      const grantId = String(body.grantId || '').trim()
+      const clientUploadId = String(body.clientUploadId || '').trim() || null
+      if (!token) return json({ error: 'Missing session token' }, 400)
+      if (!grantId && !clientUploadId) {
+        return json({ error: 'grantId or clientUploadId is required' }, 400)
+      }
+      const loaded = await loadActiveSession(token)
+      if (!loaded?.active) {
+        return json(
+          { error: 'Upload session is not active', code: loaded?.reason || 'invalid' },
+          loaded?.reason === 'expired' ? 410 : 403,
+        )
+      }
+      let grantQuery = supabaseAdmin
+        .from('mil_upload_grants')
+        .select('*')
+        .eq('session_id', loaded.session.id)
+        .in('finalize_state', ['minted', 'placing', 'placed'])
+      if (grantId) grantQuery = grantQuery.eq('id', grantId)
+      else grantQuery = grantQuery.eq('client_upload_id', clientUploadId)
+      const { data: grant, error: grantErr } = await grantQuery.maybeSingle()
+      if (grantErr) throw grantErr
+      if (!grant) return json({ error: 'Upload grant not found for refresh', code: 'not_found' }, 404)
+      if (new Date(grant.expires_at).getTime() <= Date.now()) {
+        return json({ error: 'This upload grant expired.', code: 'expired' }, 410)
+      }
+      const signed = await mintSignedUpload(grant.object_path)
+      const tokenExpiresAt = jwtExpiryIso(signed?.token)
+      if (tokenExpiresAt) {
+        await supabaseAdmin
+          .from('mil_upload_grants')
+          .update({ upload_token_expires_at: tokenExpiresAt })
+          .eq('id', grant.id)
+      }
+      return json({
+        grantId: grant.id,
+        assetId: grant.asset_id,
+        objectPath: grant.object_path,
+        bucket: grant.bucket || 'media-intel-originals',
+        token: signed?.token,
+        path: signed?.path || grant.object_path,
+        signedUrl: signed?.signedUrl,
+        batchId: grant.batch_id,
+        expiresAt: grant.expires_at,
+        uploadTokenExpiresAt: tokenExpiresAt,
+        maxBytes: grant.max_bytes,
+        clientUploadId: grant.client_upload_id || clientUploadId,
+        refreshed: true,
+        resumable: true,
+      })
+    }
+
     if (action === 'mint_upload') {
       const token = String(body.token || '').trim()
       const filename = safeFilename(body.filename || 'file')
       const contentType = String(body.contentType || 'application/octet-stream').toLowerCase()
       const declaredBytes = Number(body.byteSize || 0)
+      const clientUploadId = String(body.clientUploadId || '').trim() || null
       if (!token) return json({ error: 'Missing session token' }, 400)
       if (!ALLOWED_MIME.has(contentType)) {
         return json({ error: `Unsupported content type: ${contentType}` }, 400)
@@ -387,6 +498,47 @@ Deno.serve(async (req) => {
           { error: 'Upload session is not active', code: loaded?.reason || 'invalid' },
           loaded?.reason === 'expired' ? 410 : 403,
         )
+      }
+
+      // Idempotent remint: reuse an open grant for the same client upload id.
+      if (clientUploadId) {
+        const { data: existing, error: existingErr } = await supabaseAdmin
+          .from('mil_upload_grants')
+          .select('*')
+          .eq('session_id', loaded.session.id)
+          .eq('client_upload_id', clientUploadId)
+          .in('finalize_state', ['minted', 'placing', 'placed'])
+          .maybeSingle()
+        if (existingErr && !/client_upload_id/.test(existingErr.message || '')) throw existingErr
+        if (existing) {
+          if (new Date(existing.expires_at).getTime() <= Date.now()) {
+            return json({ error: 'This upload grant expired.', code: 'expired' }, 410)
+          }
+          const signed = await mintSignedUpload(existing.object_path)
+          const tokenExpiresAt = jwtExpiryIso(signed?.token)
+          if (tokenExpiresAt) {
+            await supabaseAdmin
+              .from('mil_upload_grants')
+              .update({ upload_token_expires_at: tokenExpiresAt })
+              .eq('id', existing.id)
+          }
+          return json({
+            grantId: existing.id,
+            assetId: existing.asset_id,
+            objectPath: existing.object_path,
+            bucket: existing.bucket || 'media-intel-originals',
+            token: signed?.token,
+            path: signed?.path || existing.object_path,
+            signedUrl: signed?.signedUrl,
+            batchId: existing.batch_id,
+            expiresAt: existing.expires_at,
+            uploadTokenExpiresAt: tokenExpiresAt,
+            maxBytes: existing.max_bytes,
+            clientUploadId,
+            replay: true,
+            resumable: true,
+          })
+        }
       }
 
       // Session quotas — enforced server-side, not just documented client-side.
@@ -425,28 +577,28 @@ Deno.serve(async (req) => {
       const objectPath = canonicalQuarantinePath(loaded.session.batch_id, assetId, filename)
       const grantExpires = new Date(Date.now() + GRANT_TTL_MS).toISOString()
 
+      const insertRow: Record<string, unknown> = {
+        session_id: loaded.session.id,
+        batch_id: loaded.session.batch_id,
+        asset_id: assetId,
+        object_path: objectPath,
+        bucket: 'media-intel-originals',
+        content_type: contentType,
+        max_bytes: requestedMax,
+        original_filename: filename,
+        expires_at: grantExpires,
+        finalize_state: 'minted',
+      }
+      if (clientUploadId) insertRow.client_upload_id = clientUploadId
+
       const { data: grant, error: grantErr } = await supabaseAdmin
         .from('mil_upload_grants')
-        .insert({
-          session_id: loaded.session.id,
-          batch_id: loaded.session.batch_id,
-          asset_id: assetId,
-          object_path: objectPath,
-          bucket: 'media-intel-originals',
-          content_type: contentType,
-          max_bytes: requestedMax,
-          original_filename: filename,
-          expires_at: grantExpires,
-          finalize_state: 'minted',
-        })
+        .insert(insertRow)
         .select('*')
         .single()
       if (grantErr) throw grantErr
 
-      const { data: signed, error: signErr } = await supabaseAdmin.storage
-        .from('media-intel-originals')
-        .createSignedUploadUrl(objectPath)
-      if (signErr) throw signErr
+      const signed = await mintSignedUpload(objectPath)
 
       // Record when the upload credential itself dies. Quarantine cleanup is
       // never scheduled before that instant plus a margin.
@@ -463,7 +615,7 @@ Deno.serve(async (req) => {
         action: 'upload_session_mint',
         target_type: 'mil_upload_grants',
         target_id: grant.id,
-        details: { sessionId: loaded.session.id, assetId, objectPath, contentType, tokenExpiresAt },
+        details: { sessionId: loaded.session.id, assetId, objectPath, contentType, tokenExpiresAt, clientUploadId },
       })
 
       return json({
@@ -478,6 +630,8 @@ Deno.serve(async (req) => {
         expiresAt: grantExpires,
         uploadTokenExpiresAt: tokenExpiresAt,
         maxBytes: grant.max_bytes,
+        clientUploadId,
+        resumable: true,
       })
     }
 
@@ -566,6 +720,7 @@ Deno.serve(async (req) => {
       }
 
       if (begun.status === 'already_committed') {
+        triggerAnalyzeAfterCommit(begun.asset_id)
         return json({ status: 'uploaded', assetId: begun.asset_id, replay: true })
       }
       if (begun.status === 'already_duplicate') {
@@ -798,6 +953,7 @@ Deno.serve(async (req) => {
         if (committed.status === 'already_duplicate') {
           return json({ status: 'duplicate', existingAssetId: committed.existing_asset_id, replay: true })
         }
+        triggerAnalyzeAfterCommit(committed.asset_id)
         return json({
           status: 'uploaded',
           assetId: committed.asset_id,

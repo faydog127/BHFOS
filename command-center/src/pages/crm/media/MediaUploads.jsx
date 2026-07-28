@@ -1,21 +1,34 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Loader2, RotateCcw, Upload } from 'lucide-react';
 import { UPLOAD_PHONE_NOTICE } from '@/lib/mediaIntel/constants';
 import {
   UPLOAD_FILE_STATUS,
+  UPLOAD_PHASE_LABELS,
+  attachReselectedFile,
+  bindUploadExitWarning,
   createUploadSession,
   fetchBatchManifest,
+  isOnline,
+  restoreUploadQueue,
+  retryQueueItem,
   uploadFilesToSession,
 } from '@/lib/mediaIntel/uploadManager';
 import { listUploadSessions } from '@/lib/mediaIntel/uploadSessionStore';
+import AnalysisOutcomeCard from '@/components/media/AnalysisOutcomeCard';
 
 const STATUS_STYLES = {
   pending: 'text-slate-600',
+  queued: 'text-slate-600',
   hashing: 'text-slate-700',
   uploading: 'text-blue-700',
+  interrupted: 'text-amber-800',
   finalizing: 'text-blue-700',
   uploaded: 'text-emerald-700',
+  analyzing: 'text-blue-700',
+  analysis_complete: 'text-emerald-800',
+  analysis_failed: 'text-amber-900',
+  needs_reselect: 'text-amber-900',
   duplicate: 'text-amber-800',
   pending_reconcile: 'text-amber-800',
   in_progress: 'text-amber-800',
@@ -26,9 +39,10 @@ const STATUS_STYLES = {
 };
 
 const STATUS_LABELS = {
+  ...UPLOAD_PHASE_LABELS,
   hashing: 'Reading file',
   uploading: 'Uploading',
-  finalizing: 'Confirming with the server',
+  finalizing: 'Finalizing',
   uploaded: 'In the library',
   duplicate: 'Duplicate — existing copy kept',
   pending_reconcile: 'Not confirmed yet — reconciling',
@@ -37,6 +51,12 @@ const STATUS_LABELS = {
   failed: 'Failed',
   expired: 'Upload link expired',
   revoked: 'Upload link revoked',
+  queued: 'Queued',
+  interrupted: 'Interrupted — retry available',
+  analyzing: 'Analyzing',
+  analysis_complete: 'Ready for review',
+  analysis_failed: 'Analysis failed',
+  needs_reselect: 'Reselect this file',
 };
 
 export default function MediaUploads() {
@@ -57,13 +77,54 @@ export default function MediaUploads() {
   const [error, setError] = useState(null);
   const [manifest, setManifest] = useState(null);
   const [dragOver, setDragOver] = useState(false);
+  const [offline, setOffline] = useState(!isOnline());
+  const reselectRef = useRef(null);
+  const reselectTargetRef = useRef(null);
 
   const onFileUpdate = useCallback((update) => {
+    const key = update.clientKey || update.clientUploadId;
     setFileStates((prev) => ({
       ...prev,
-      [update.clientKey]: { ...prev[update.clientKey], ...update },
+      [key]: { ...prev[key], ...update },
     }));
   }, []);
+
+  useEffect(() => {
+    const onOff = () => setOffline(!isOnline());
+    window.addEventListener('online', onOff);
+    window.addEventListener('offline', onOff);
+    return () => {
+      window.removeEventListener('online', onOff);
+      window.removeEventListener('offline', onOff);
+    };
+  }, []);
+
+  useEffect(() => {
+    return bindUploadExitWarning(() => busy || Object.values(fileStates).some((f) =>
+      ['queued', 'uploading', 'hashing', 'finalizing', 'interrupted', 'retrying'].includes(f.status || f.phase),
+    ));
+  }, [busy, fileStates]);
+
+  useEffect(() => {
+    if (!caps.isOwnerAdmin) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        await restoreUploadQueue({
+          token: tokenRef.current,
+          onFileUpdate,
+          autoResume: Boolean(tokenRef.current),
+        });
+      } catch {
+        if (!cancelled) {
+          // restore is best-effort
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [caps.isOwnerAdmin, onFileUpdate]);
 
   const startUpload = async (fileList) => {
     if (!caps.isOwnerAdmin) {
@@ -151,10 +212,22 @@ export default function MediaUploads() {
         {UPLOAD_PHONE_NOTICE}
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700" role="note">
-        Uploads are not resumable in this release: each file is sent in a single request, so a dropped
-        connection means re-sending that file. Practical per-file limit is 250 MB.
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 space-y-1" role="note">
+        <p>
+          Uploads use resumable transfer when the browser supports it. Keep this page open during large
+          transfers when you can — if the screen locks or the network drops, MIL keeps a durable queue and
+          will resume or ask you to reselect the file. Practical per-file limit is 250 MB.
+        </p>
+        <p className="text-xs text-slate-500">
+          Screen wake lock is requested when available; it is a helper, not a guarantee on phones.
+        </p>
       </div>
+
+      {offline && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          You appear offline. Queued uploads will retry when connectivity returns.
+        </div>
+      )}
 
       {caps.isOwnerAdmin && (
         <div
@@ -310,22 +383,120 @@ export default function MediaUploads() {
             </div>
           )}
 
-          <ul className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
+          <ul className="divide-y divide-slate-100 max-h-[28rem] overflow-y-auto">
             {entries.map((f) => (
-              <li key={f.clientKey} className="py-2 flex items-center gap-3 text-sm">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium text-slate-800">{f.filename}</div>
-                  <div className={STATUS_STYLES[f.status] || 'text-slate-600'}>
-                    {STATUS_LABELS[f.status] || f.status}
-                    {typeof f.percent === 'number' && f.status === UPLOAD_FILE_STATUS.UPLOADING
-                      ? ` · ${f.percent}%`
-                      : ''}
-                    {f.message ? ` · ${f.message}` : ''}
+              <li key={f.clientKey || f.clientUploadId} className="py-2 text-sm space-y-2">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium text-slate-800">{f.filename}</div>
+                    <div className={STATUS_STYLES[f.status] || 'text-slate-600'}>
+                      {STATUS_LABELS[f.status] || STATUS_LABELS[f.phase] || f.status}
+                      {typeof f.percent === 'number' &&
+                      (f.status === UPLOAD_FILE_STATUS.UPLOADING || f.phase === 'uploading' || f.phase === 'retrying')
+                        ? ` · ${f.percent}%`
+                        : ''}
+                      {f.message ? ` · ${f.message}` : ''}
+                      {f.errorLayer ? ` · (${f.errorLayer})` : ''}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1 shrink-0">
+                    {(f.status === 'interrupted' || f.phase === 'interrupted') && tokenRef.current && (
+                      <button
+                        type="button"
+                        className="text-xs text-blue-700 underline"
+                        disabled={busy}
+                        onClick={async () => {
+                          try {
+                            setBusy(true);
+                            await retryQueueItem({
+                              token: tokenRef.current,
+                              clientUploadId: f.clientUploadId || f.clientKey,
+                              onFileUpdate,
+                            });
+                          } catch (err) {
+                            setError(err.message || 'Retry failed');
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                      >
+                        Retry
+                      </button>
+                    )}
+                    {(f.status === 'needs_reselect' || f.phase === 'needs_reselect') && (
+                      <button
+                        type="button"
+                        className="text-xs text-blue-700 underline"
+                        disabled={busy}
+                        onClick={() => {
+                          reselectTargetRef.current = f.clientUploadId || f.clientKey;
+                          reselectRef.current?.click();
+                        }}
+                      >
+                        Reselect
+                      </button>
+                    )}
                   </div>
                 </div>
+                {f.analysisOutcome ? (
+                  <AnalysisOutcomeCard
+                    asset={{ processing_status: f.phase === 'analysis_complete' ? 'analyzed' : 'queued', media_kind: 'photo' }}
+                    analysis={{
+                      status: f.phase === 'analysis_failed' ? 'failed' : f.phase === 'analysis_complete' ? 'succeeded' : 'queued',
+                      suggested: {
+                        narrative: f.analysisOutcome.description,
+                        tags: f.analysisOutcome.tags,
+                        condition_notes: f.analysisOutcome.observations,
+                        recommended_uses: f.analysisOutcome.recommendedUses,
+                        unsuitable_uses: f.analysisOutcome.unsuitableUses,
+                        privacy_risks: f.analysisOutcome.privacyWarnings,
+                        work_phase: f.analysisOutcome.classification?.[0],
+                        service_category: f.analysisOutcome.classification?.[1],
+                      },
+                      overall_confidence: f.analysisOutcome.confidence,
+                      explanation: f.analysisOutcome.errorMessage,
+                    }}
+                    compact
+                  />
+                ) : null}
               </li>
             ))}
           </ul>
+          <input
+            ref={reselectRef}
+            type="file"
+            accept="image/*,video/*,.heic,.heif,.mov,.mp4"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              const target = reselectTargetRef.current;
+              e.target.value = '';
+              if (!file || !target) return;
+              try {
+                setBusy(true);
+                if (!tokenRef.current) {
+                  const active = await createUploadSession({
+                    label: sourceLabel || 'Desktop transfer',
+                    sourcePhone,
+                    sourcePerson,
+                  });
+                  tokenRef.current = active.token;
+                  setSession(active);
+                }
+                await attachReselectedFile({
+                  clientUploadId: target,
+                  file,
+                  token: tokenRef.current,
+                  onFileUpdate,
+                  autoStart: true,
+                });
+              } catch (err) {
+                setError(err.message || 'Reselect failed');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
         </div>
       )}
 

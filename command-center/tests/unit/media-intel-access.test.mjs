@@ -96,7 +96,7 @@ describe('MIL dashboard navigation contracts', () => {
     assert.doesNotMatch(dash, /to="\/media\/creator"/);
     assert.match(dash, /to="\/media\/settings"/);
     assert.match(dash, /to="\/media\/all\?dup=1"/);
-    assert.doesNotMatch(dash, /resumable batches/i);
+    assert.match(dash, /resumable/i);
   });
 
   it('dashboard empty/error honesty: no silent zeros on query failure; AI is on-demand', () => {

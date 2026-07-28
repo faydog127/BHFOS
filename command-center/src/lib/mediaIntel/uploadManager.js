@@ -1,32 +1,53 @@
 /**
- * Media Intelligence upload client.
+ * Media Intelligence upload client — durable queue + signed TUS + finalize.
  *
- * The browser no longer writes anything to the library. It cannot: INSERT,
- * UPDATE and DELETE on mil_upload_batches / mil_upload_grants /
- * mil_manifest_entries / mil_assets were revoked from the `authenticated` role,
- * so a client that tried would simply be refused.
- *
- * Every upload therefore runs through a server-minted upload session:
- *
- *   create        -> owner/admin mints a scoped, expiring session + batch
- *   mint_upload   -> server binds one file to one quarantine path and asset id
- *   PUT           -> the browser writes bytes to that path and nothing else
- *   complete_file -> the server re-hashes, places, and proves the final object
- *
- * The status this module reports is whatever the server actually concluded.
- * "pending_reconcile" is a real outcome and is surfaced as such rather than
- * being rounded up to success or down to failure.
+ * Browser never writes library tables. Flow:
+ *   create / validate session
+ *   mint_upload (idempotent via clientUploadId)
+ *   signed TUS (or PUT fallback) into quarantine
+ *   complete_file (server re-hash + place + prove)
+ *   poll analysis status (server may auto-trigger analyze after commit)
  */
 import { supabase } from '@/lib/customSupabaseClient';
 import { sha256Hex, clientFileKey } from './checksum';
 import { resolveMimeType, validateMediaFile } from './formats';
 import { saveUploadSession } from './uploadSessionStore';
+import {
+  buildQueueItemFromFile,
+  listQueueItems,
+  markMissingBlobsForReselect,
+  matchReselectFile,
+  putQueueItem,
+  saveBatchBookmark,
+} from './uploadQueueStore';
+import {
+  ERROR_LAYER,
+  UPLOAD_PHASE,
+  UPLOAD_PHASE_LABELS,
+  isActiveUploadPhase,
+} from './uploadPhases';
+import {
+  isAbortError,
+  isTransientUploadError,
+  uploadViaSignedPut,
+  uploadViaSignedTus,
+} from './resumableUpload';
+import {
+  bindWakeLockVisibilityHandler,
+  releaseUploadWakeLock,
+  requestUploadWakeLock,
+} from './wakeLock';
+import { buildAnalysisOutcome } from './analysisDisplay';
 
 const FUNCTIONS_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const RETRYABLE_RETRY_DELAY_MS = 1500;
+const MAX_UPLOAD_ATTEMPTS = 5;
+const ANALYSIS_POLL_MS = 2500;
+const ANALYSIS_POLL_MAX_MS = 3 * 60 * 1000;
+const CONCURRENCY = 2;
 
-/** Terminal per-file outcomes the UI may render. */
+/** @deprecated Prefer UPLOAD_PHASE — kept for existing UI/tests. */
 export const UPLOAD_FILE_STATUS = Object.freeze({
   HASHING: 'hashing',
   UPLOADING: 'uploading',
@@ -39,13 +60,16 @@ export const UPLOAD_FILE_STATUS = Object.freeze({
   FAILED: 'failed',
   EXPIRED: 'expired',
   REVOKED: 'revoked',
+  QUEUED: 'queued',
+  INTERRUPTED: 'interrupted',
+  ANALYZING: 'analyzing',
+  ANALYSIS_COMPLETE: 'analysis_complete',
+  ANALYSIS_FAILED: 'analysis_failed',
+  NEEDS_RESELECT: 'needs_reselect',
 });
 
-/**
- * Raw fetch rather than supabase.functions.invoke: the finalization contract is
- * expressed in HTTP status codes (202 pending, 409 conflict, 410 expired) and
- * invoke() collapses every non-2xx into an opaque error.
- */
+export { UPLOAD_PHASE, UPLOAD_PHASE_LABELS, ERROR_LAYER };
+
 async function callUploadSession(body) {
   const { data: sessionData } = await supabase.auth.getSession();
   const accessToken = sessionData?.session?.access_token || ANON_KEY;
@@ -81,7 +105,6 @@ function raiseSessionError(result, fallback) {
   return err;
 }
 
-/** Owner/admin only — enforced by the edge function, not by this call. */
 export async function createUploadSession({ label, sourcePhone, sourcePerson, expiresHours } = {}) {
   const result = await callUploadSession({
     action: 'create',
@@ -106,78 +129,64 @@ export async function fetchSessionManifest(token) {
   return result.payload;
 }
 
-async function putBytes({ minted, file, mime }) {
-  if (minted.signedUrl) {
-    const res = await fetch(minted.signedUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': mime, 'x-upsert': 'false' },
-      body: file,
-    });
-    if (!res.ok) throw new Error(`Storage rejected the upload (${res.status})`);
-    return;
-  }
-  if (minted.token) {
-    const { error } = await supabase.storage
-      .from(minted.bucket)
-      .uploadToSignedUrl(minted.path, minted.token, file, { contentType: mime });
-    if (error) throw error;
-    return;
-  }
-  throw new Error('No signed upload credentials were returned');
-}
-
-/**
- * 503 (and network status 0) mean "try again", not "it failed".
- * Exported for unit tests — completeFile retries exactly once when this is true.
- */
 export function isRetryableCompletionStatus(status) {
   return status === 503 || status === 0;
 }
 
-/**
- * Translate the finalize HTTP contract into a UI state. Nothing here upgrades an
- * unproven result: only an explicit 200 uploaded/duplicate counts as success.
- */
 export function interpretCompletion({ status, payload }) {
+  // Keep this helper free of other module bindings so unit tests can extract it.
   if (status === 200) {
     if (payload.status === 'duplicate') {
       return {
         status: UPLOAD_FILE_STATUS.DUPLICATE,
         message: 'Already in the library — kept the existing copy',
         existingAssetId: payload.existingAssetId,
+        phase: 'finalized',
       };
     }
-    return { status: UPLOAD_FILE_STATUS.UPLOADED, assetId: payload.assetId };
+    return {
+      status: UPLOAD_FILE_STATUS.UPLOADED,
+      assetId: payload.assetId,
+      phase: 'finalized',
+    };
   }
   if (status === 202) {
     return {
       status: UPLOAD_FILE_STATUS.PENDING_RECONCILE,
       message: payload.error || 'Not confirmed yet — being reconciled. Keep the phone original.',
       grantId: payload.grantId,
+      phase: 'finalizing',
     };
   }
   if (status === 409 && payload.code === 'in_progress') {
     return {
       status: UPLOAD_FILE_STATUS.IN_PROGRESS,
       message: 'Already being finalized — check the manifest in a moment.',
+      phase: 'finalizing',
     };
   }
   if (status === 410) {
     return {
       status: UPLOAD_FILE_STATUS.EXPIRED,
       message: payload.error || 'This upload link expired. Keep the phone original.',
+      phase: 'failed',
+      errorLayer: 'upload_authorization_failed',
     };
   }
   if (status === 403) {
     return {
       status: UPLOAD_FILE_STATUS.REVOKED,
       message: payload.error || 'This upload link was revoked.',
+      phase: 'failed',
+      errorLayer: 'upload_authorization_failed',
     };
   }
   return {
     status: UPLOAD_FILE_STATUS.FAILED,
     message: payload.error || `Upload could not be completed (${status})`,
     code: payload.code,
+    phase: 'failed',
+    errorLayer: 'finalization_failed',
   };
 }
 
@@ -190,10 +199,10 @@ async function completeFile({ token, minted, checksum, byteSize }) {
     objectPath: minted.objectPath,
     checksumSha256: checksum,
     byteSize,
+    clientUploadId: minted.clientUploadId || null,
   };
 
   let result = await callUploadSession(request);
-  // Exactly one retry on retryable status, then interpret whatever came back.
   if (isRetryableCompletionStatus(result.status)) {
     await new Promise((resolve) => setTimeout(resolve, RETRYABLE_RETRY_DELAY_MS));
     result = await callUploadSession(request);
@@ -201,12 +210,468 @@ async function completeFile({ token, minted, checksum, byteSize }) {
   return interpretCompletion(result);
 }
 
+async function mintForItem({ token, item, mime }) {
+  const result = await callUploadSession({
+    action: 'mint_upload',
+    token,
+    filename: item.filename,
+    contentType: mime,
+    byteSize: item.byteSize,
+    clientUploadId: item.clientUploadId,
+  });
+  if (!result.ok) throw raiseSessionError(result, 'Upload grant was not minted');
+  const minted = result.payload;
+  if (!minted.grantId || !minted.assetId || !minted.objectPath) {
+    throw new Error('Upload grant was not minted');
+  }
+  return minted;
+}
+
+async function refreshGrant({ token, grantId, clientUploadId }) {
+  const result = await callUploadSession({
+    action: 'refresh_upload_grant',
+    token,
+    grantId,
+    clientUploadId,
+  });
+  if (!result.ok) throw raiseSessionError(result, 'Could not refresh upload authorization');
+  return result.payload;
+}
+
+function phaseToLegacyStatus(phase, outcomeStatus) {
+  if (outcomeStatus) return outcomeStatus;
+  switch (phase) {
+    case UPLOAD_PHASE.PREPARING:
+      return UPLOAD_FILE_STATUS.HASHING;
+    case UPLOAD_PHASE.UPLOADING:
+    case UPLOAD_PHASE.RETRYING:
+      return UPLOAD_FILE_STATUS.UPLOADING;
+    case UPLOAD_PHASE.FINALIZING:
+    case UPLOAD_PHASE.UPLOADED:
+      return UPLOAD_FILE_STATUS.FINALIZING;
+    case UPLOAD_PHASE.FINALIZED:
+    case UPLOAD_PHASE.QUEUED_FOR_ANALYSIS:
+      return UPLOAD_FILE_STATUS.UPLOADED;
+    case UPLOAD_PHASE.ANALYZING:
+      return UPLOAD_FILE_STATUS.ANALYZING;
+    case UPLOAD_PHASE.ANALYSIS_COMPLETE:
+      return UPLOAD_FILE_STATUS.ANALYSIS_COMPLETE;
+    case UPLOAD_PHASE.ANALYSIS_FAILED:
+      return UPLOAD_FILE_STATUS.ANALYSIS_FAILED;
+    case UPLOAD_PHASE.INTERRUPTED:
+      return UPLOAD_FILE_STATUS.INTERRUPTED;
+    case UPLOAD_PHASE.NEEDS_RESELECT:
+      return UPLOAD_FILE_STATUS.NEEDS_RESELECT;
+    case UPLOAD_PHASE.QUEUED:
+    case UPLOAD_PHASE.SELECTED:
+      return UPLOAD_FILE_STATUS.QUEUED;
+    default:
+      return UPLOAD_FILE_STATUS.FAILED;
+  }
+}
+
+async function persistAndEmit(item, patch, onFileUpdate) {
+  const next = { ...item, ...patch, updatedAt: Date.now() };
+  await putQueueItem(next);
+  const percent =
+    next.byteSize > 0 && typeof next.transferredBytes === 'number'
+      ? Math.min(99, Math.round((next.transferredBytes / next.byteSize) * 100))
+      : next.phase === UPLOAD_PHASE.FINALIZING
+        ? 90
+        : next.phase === UPLOAD_PHASE.FINALIZED || next.phase === UPLOAD_PHASE.ANALYSIS_COMPLETE
+          ? 100
+          : undefined;
+  onFileUpdate?.({
+    clientKey: next.clientUploadId,
+    clientUploadId: next.clientUploadId,
+    filename: next.filename,
+    status: phaseToLegacyStatus(next.phase, patch.legacyStatus),
+    phase: next.phase,
+    percent,
+    transferredBytes: next.transferredBytes,
+    byteSize: next.byteSize,
+    message: next.errorMessage || UPLOAD_PHASE_LABELS[next.phase] || next.phase,
+    assetId: next.assetId,
+    errorLayer: next.errorLayer,
+    analysisOutcome: next.analysisOutcome || null,
+  });
+  return next;
+}
+
+async function transferBytes({ item, minted, mime, onFileUpdate, signal }) {
+  let current = item;
+  const onProgress = async (loaded, total) => {
+    current = await persistAndEmit(
+      current,
+      {
+        phase: current.retryCount ? UPLOAD_PHASE.RETRYING : UPLOAD_PHASE.UPLOADING,
+        transferredBytes: loaded,
+        byteSize: total || current.byteSize,
+        errorMessage: null,
+        errorLayer: null,
+      },
+      onFileUpdate,
+    );
+  };
+
+  try {
+    if (minted.token) {
+      await uploadViaSignedTus({
+        file: current.blob,
+        bucket: minted.bucket || 'media-intel-originals',
+        objectPath: minted.objectPath,
+        contentType: mime,
+        signatureToken: minted.token,
+        fingerprint: `mil:${current.clientUploadId}:${minted.objectPath}`,
+        onProgress,
+        signal,
+      });
+      return current;
+    }
+    await uploadViaSignedPut({
+      signedUrl: minted.signedUrl,
+      file: current.blob,
+      contentType: mime,
+      onProgress,
+      signal,
+    });
+    return current;
+  } catch (err) {
+    if (!isTransientUploadError(err) || /signature|forbidden|401|403/.test(String(err?.message || ''))) {
+      // Try one grant refresh then TUS again for auth expiry.
+      if (minted.grantId && /signature|401|403|expired|forbidden/i.test(String(err?.message || ''))) {
+        throw Object.assign(err, { code: 'needs_refresh' });
+      }
+    }
+    throw err;
+  }
+}
+
+async function processQueueItem({ token, item, onFileUpdate, signal }) {
+  let current = item;
+  if (!current.blob || !(current.blob instanceof Blob)) {
+    return persistAndEmit(
+      current,
+      {
+        phase: UPLOAD_PHASE.NEEDS_RESELECT,
+        errorLayer: ERROR_LAYER.UPLOAD_INTERRUPTED,
+        errorMessage: 'Reselect this file to continue the upload.',
+        legacyStatus: UPLOAD_FILE_STATUS.NEEDS_RESELECT,
+      },
+      onFileUpdate,
+    );
+  }
+
+  const validation = validateMediaFile(
+    current.blob instanceof File
+      ? current.blob
+      : new File([current.blob], current.filename, { type: current.mimeType }),
+  );
+  if (!validation.ok) {
+    return persistAndEmit(
+      current,
+      {
+        phase: UPLOAD_PHASE.FAILED,
+        errorLayer: ERROR_LAYER.UNSUPPORTED,
+        errorMessage: validation.reason,
+        legacyStatus: UPLOAD_FILE_STATUS.SKIPPED,
+      },
+      onFileUpdate,
+    );
+  }
+
+  const mime = validation.mime || resolveMimeType({ name: current.filename, type: current.mimeType }) || current.mimeType;
+
+  current = await persistAndEmit(
+    current,
+    { phase: UPLOAD_PHASE.PREPARING, errorMessage: null, errorLayer: null },
+    onFileUpdate,
+  );
+
+  if (!current.checksumSha256) {
+    const checksum = await sha256Hex(current.blob);
+    current = await persistAndEmit(current, { checksumSha256: checksum }, onFileUpdate);
+  }
+
+  current = await persistAndEmit(
+    current,
+    { phase: UPLOAD_PHASE.AWAITING_AUTHORIZATION },
+    onFileUpdate,
+  );
+
+  let minted;
+  try {
+    if (current.grantId && current.objectPath) {
+      try {
+        minted = await refreshGrant({
+          token,
+          grantId: current.grantId,
+          clientUploadId: current.clientUploadId,
+        });
+      } catch {
+        minted = await mintForItem({ token, item: current, mime });
+      }
+    } else {
+      minted = await mintForItem({ token, item: current, mime });
+    }
+  } catch (err) {
+    return persistAndEmit(
+      current,
+      {
+        phase: UPLOAD_PHASE.FAILED,
+        errorLayer: ERROR_LAYER.UPLOAD_AUTHORIZATION,
+        errorMessage: err?.message || 'Upload authorization failed',
+        legacyStatus: UPLOAD_FILE_STATUS.FAILED,
+      },
+      onFileUpdate,
+    );
+  }
+
+  current = await persistAndEmit(
+    current,
+    {
+      grantId: minted.grantId,
+      assetId: minted.assetId,
+      objectPath: minted.objectPath,
+      bucket: minted.bucket,
+      batchId: minted.batchId || current.batchId,
+      phase: UPLOAD_PHASE.UPLOADING,
+      transferredBytes: current.transferredBytes || 0,
+    },
+    onFileUpdate,
+  );
+
+  let attempts = 0;
+  while (attempts < MAX_UPLOAD_ATTEMPTS) {
+    attempts += 1;
+    try {
+      current = await persistAndEmit(
+        current,
+        {
+          phase: attempts > 1 ? UPLOAD_PHASE.RETRYING : UPLOAD_PHASE.UPLOADING,
+          retryCount: attempts - 1,
+        },
+        onFileUpdate,
+      );
+      await transferBytes({ item: current, minted, mime, onFileUpdate, signal });
+      break;
+    } catch (err) {
+      if (isAbortError(err)) {
+        return persistAndEmit(
+          current,
+          {
+            phase: UPLOAD_PHASE.CANCELLED,
+            errorMessage: 'Cancelled',
+            legacyStatus: UPLOAD_FILE_STATUS.FAILED,
+          },
+          onFileUpdate,
+        );
+      }
+      if (err?.code === 'needs_refresh' || /signature|expired|403|401/i.test(String(err?.message || ''))) {
+        try {
+          minted = await refreshGrant({
+            token,
+            grantId: current.grantId,
+            clientUploadId: current.clientUploadId,
+          });
+          continue;
+        } catch (refreshErr) {
+          return persistAndEmit(
+            current,
+            {
+              phase: UPLOAD_PHASE.FAILED,
+              errorLayer: ERROR_LAYER.UPLOAD_AUTHORIZATION,
+              errorMessage: refreshErr?.message || err.message,
+              legacyStatus: UPLOAD_FILE_STATUS.FAILED,
+            },
+            onFileUpdate,
+          );
+        }
+      }
+      if (!isTransientUploadError(err) || attempts >= MAX_UPLOAD_ATTEMPTS) {
+        return persistAndEmit(
+          current,
+          {
+            phase: UPLOAD_PHASE.INTERRUPTED,
+            errorLayer: ERROR_LAYER.UPLOAD_INTERRUPTED,
+            errorMessage: err?.message || 'Upload interrupted',
+            retryCount: attempts,
+            legacyStatus: UPLOAD_FILE_STATUS.INTERRUPTED,
+          },
+          onFileUpdate,
+        );
+      }
+      await new Promise((r) => setTimeout(r, Math.min(20000, 1000 * 2 ** (attempts - 1))));
+    }
+  }
+
+  current = await persistAndEmit(
+    current,
+    {
+      phase: UPLOAD_PHASE.FINALIZING,
+      transferredBytes: current.byteSize,
+      legacyStatus: UPLOAD_FILE_STATUS.FINALIZING,
+    },
+    onFileUpdate,
+  );
+
+  try {
+    const outcome = await completeFile({
+      token,
+      minted: { ...minted, clientUploadId: current.clientUploadId },
+      checksum: current.checksumSha256,
+      byteSize: current.byteSize,
+    });
+
+    if (outcome.status === UPLOAD_FILE_STATUS.PENDING_RECONCILE || outcome.status === UPLOAD_FILE_STATUS.IN_PROGRESS) {
+      return persistAndEmit(
+        current,
+        {
+          phase: UPLOAD_PHASE.FINALIZING,
+          errorMessage: outcome.message,
+          legacyStatus: outcome.status,
+        },
+        onFileUpdate,
+      );
+    }
+
+    if (outcome.status === UPLOAD_FILE_STATUS.FAILED || outcome.status === UPLOAD_FILE_STATUS.EXPIRED || outcome.status === UPLOAD_FILE_STATUS.REVOKED) {
+      return persistAndEmit(
+        current,
+        {
+          phase: UPLOAD_PHASE.FAILED,
+          errorLayer: outcome.errorLayer || ERROR_LAYER.FINALIZATION,
+          errorMessage: outcome.message,
+          legacyStatus: outcome.status,
+        },
+        onFileUpdate,
+      );
+    }
+
+    const assetId = outcome.assetId || outcome.existingAssetId || current.assetId;
+    current = await persistAndEmit(
+      current,
+      {
+        phase: UPLOAD_PHASE.QUEUED_FOR_ANALYSIS,
+        assetId,
+        errorMessage:
+          outcome.status === UPLOAD_FILE_STATUS.DUPLICATE
+            ? outcome.message
+            : 'In the library — awaiting analysis',
+        legacyStatus: outcome.status,
+        blob: null,
+      },
+      onFileUpdate,
+    );
+
+    // Analysis may be triggered server-side; poll for a visible outcome.
+    const analyzed = await pollAnalysisUntilSettled(assetId, {
+      onUpdate: async (analysisPatch) => {
+        current = await persistAndEmit(current, analysisPatch, onFileUpdate);
+      },
+    });
+    return analyzed || current;
+  } catch (err) {
+    return persistAndEmit(
+      current,
+      {
+        phase: UPLOAD_PHASE.FAILED,
+        errorLayer: ERROR_LAYER.FINALIZATION,
+        errorMessage: err?.message || 'Finalization failed',
+        legacyStatus: UPLOAD_FILE_STATUS.FAILED,
+      },
+      onFileUpdate,
+    );
+  }
+}
+
+export async function pollAnalysisUntilSettled(assetId, { onUpdate, timeoutMs = ANALYSIS_POLL_MAX_MS } = {}) {
+  if (!assetId) return null;
+  const started = Date.now();
+  let delay = ANALYSIS_POLL_MS;
+
+  while (Date.now() - started < timeoutMs) {
+    const { data: asset } = await supabase
+      .from('mil_assets')
+      .select('id, processing_status, human_review_status, media_kind, original_filename')
+      .eq('id', assetId)
+      .maybeSingle();
+    const { data: analyses } = await supabase
+      .from('mil_ai_analyses')
+      .select('*')
+      .eq('asset_id', assetId)
+      .order('analyzed_at', { ascending: false })
+      .limit(1);
+    const analysis = analyses?.[0] || null;
+    const outcome = buildAnalysisOutcome(asset, analysis);
+    const processing = asset?.processing_status;
+
+    if (outcome.uiStatus === 'analyzing' || processing === 'analyzing') {
+      await onUpdate?.({
+        phase: UPLOAD_PHASE.ANALYZING,
+        analysisOutcome: outcome,
+        legacyStatus: UPLOAD_FILE_STATUS.ANALYZING,
+        errorMessage: 'Analyzing',
+      });
+    } else if (outcome.uiStatus === 'complete') {
+      await onUpdate?.({
+        phase: UPLOAD_PHASE.ANALYSIS_COMPLETE,
+        analysisOutcome: outcome,
+        legacyStatus: UPLOAD_FILE_STATUS.ANALYSIS_COMPLETE,
+        errorMessage: 'Ready for review',
+      });
+      return { assetId, analysisOutcome: outcome, phase: UPLOAD_PHASE.ANALYSIS_COMPLETE };
+    } else if (outcome.uiStatus === 'failed') {
+      await onUpdate?.({
+        phase: UPLOAD_PHASE.ANALYSIS_FAILED,
+        analysisOutcome: outcome,
+        errorLayer: ERROR_LAYER.ANALYSIS,
+        legacyStatus: UPLOAD_FILE_STATUS.ANALYSIS_FAILED,
+        errorMessage: outcome.errorMessage || 'Analysis failed',
+      });
+      return { assetId, analysisOutcome: outcome, phase: UPLOAD_PHASE.ANALYSIS_FAILED };
+    } else {
+      await onUpdate?.({
+        phase: UPLOAD_PHASE.QUEUED_FOR_ANALYSIS,
+        analysisOutcome: outcome,
+        legacyStatus: UPLOAD_FILE_STATUS.UPLOADED,
+        errorMessage: 'Awaiting analysis',
+      });
+    }
+
+    await new Promise((r) => setTimeout(r, delay));
+    delay = Math.min(10000, Math.round(delay * 1.25));
+  }
+
+  await onUpdate?.({
+    phase: UPLOAD_PHASE.QUEUED_FOR_ANALYSIS,
+    errorMessage: 'Analysis is still pending — open Review Queue shortly.',
+    legacyStatus: UPLOAD_FILE_STATUS.UPLOADED,
+  });
+  return null;
+}
+
+async function runPool(items, worker, concurrency) {
+  const queue = [...items];
+  const results = [];
+  const runners = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+    while (queue.length) {
+      const item = queue.shift();
+      results.push(await worker(item));
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
 /**
- * Upload files through an existing session token. Per-file failures never stop
- * the batch: one unreadable file in a phone dump must not strand the rest.
+ * Enqueue files into IndexedDB and process with bounded concurrency.
  */
 export async function uploadFilesToSession({ token, batchId, files, onFileUpdate }) {
   if (!token) throw new Error('An upload session token is required');
+
+  const unbindWake = bindWakeLockVisibilityHandler();
+  await requestUploadWakeLock();
 
   const fileList = Array.from(files || []);
   const totals = {
@@ -218,69 +683,170 @@ export async function uploadFilesToSession({ token, batchId, files, onFileUpdate
     in_progress: 0,
     expired: 0,
     revoked: 0,
+    interrupted: 0,
+    analysis_complete: 0,
+    analysis_failed: 0,
   };
 
-  for (const file of fileList) {
-    const key = clientFileKey(file);
-    const emit = (patch) => onFileUpdate?.({ clientKey: key, filename: file.name, ...patch });
-
-    try {
-      const validation = validateMediaFile(file);
-      if (!validation.ok) {
-        totals.skipped += 1;
-        emit({ status: UPLOAD_FILE_STATUS.SKIPPED, message: validation.reason });
-        continue;
-      }
-
-      const mime = validation.mime || resolveMimeType(file);
-      emit({ status: UPLOAD_FILE_STATUS.HASHING, percent: 0 });
-      // Advisory only. The server hashes the stored bytes itself and that digest
-      // is the one recorded against the asset.
-      const checksum = await sha256Hex(file);
-
-      emit({ status: UPLOAD_FILE_STATUS.UPLOADING, percent: 5 });
-      const mintResult = await callUploadSession({
-        action: 'mint_upload',
-        token,
-        filename: file.name,
-        contentType: mime,
-        byteSize: file.size,
+  try {
+    const items = [];
+    for (const file of fileList) {
+      const item = buildQueueItemFromFile(file, { batchId });
+      item.phase = UPLOAD_PHASE.QUEUED;
+      await putQueueItem(item);
+      onFileUpdate?.({
+        clientKey: item.clientUploadId,
+        clientUploadId: item.clientUploadId,
+        filename: item.filename,
+        status: UPLOAD_FILE_STATUS.QUEUED,
+        phase: UPLOAD_PHASE.QUEUED,
+        message: 'Queued',
+        byteSize: item.byteSize,
       });
-      if (!mintResult.ok) throw raiseSessionError(mintResult, 'Upload grant was not minted');
-      const minted = mintResult.payload;
-      if (!minted.grantId || !minted.assetId || !minted.objectPath) {
-        throw new Error('Upload grant was not minted');
-      }
-
-      await putBytes({ minted, file, mime });
-
-      emit({ status: UPLOAD_FILE_STATUS.FINALIZING, percent: 90 });
-      const outcome = await completeFile({
-        token,
-        minted,
-        checksum,
-        byteSize: file.size,
-      });
-
-      totals[outcome.status] = (totals[outcome.status] || 0) + 1;
-      emit({ ...outcome, percent: 100 });
-    } catch (err) {
-      totals.failed += 1;
-      emit({ status: UPLOAD_FILE_STATUS.FAILED, message: err?.message || 'Upload failed' });
+      items.push(item);
     }
 
     if (batchId) {
+      await saveBatchBookmark({ batchId });
       await saveUploadSession({ sessionKey: `batch:${batchId}`, batchId, updatedAt: Date.now() });
     }
-  }
 
-  return totals;
+    await runPool(
+      items,
+      async (item) => {
+        const result = await processQueueItem({ token, item, onFileUpdate });
+        const status = phaseToLegacyStatus(result.phase);
+        if (status === UPLOAD_FILE_STATUS.DUPLICATE) totals.duplicate += 1;
+        else if (status === UPLOAD_FILE_STATUS.UPLOADED || result.phase === UPLOAD_PHASE.QUEUED_FOR_ANALYSIS || result.phase === UPLOAD_PHASE.FINALIZED) {
+          totals.uploaded += 1;
+        } else if (result.phase === UPLOAD_PHASE.ANALYSIS_COMPLETE) {
+          totals.uploaded += 1;
+          totals.analysis_complete += 1;
+        } else if (result.phase === UPLOAD_PHASE.ANALYSIS_FAILED) {
+          totals.uploaded += 1;
+          totals.analysis_failed += 1;
+        } else if (result.phase === UPLOAD_PHASE.INTERRUPTED || result.phase === UPLOAD_PHASE.NEEDS_RESELECT) {
+          totals.interrupted += 1;
+        } else if (status === UPLOAD_FILE_STATUS.SKIPPED) totals.skipped += 1;
+        else if (status === UPLOAD_FILE_STATUS.PENDING_RECONCILE) totals.pending_reconcile += 1;
+        else totals.failed += 1;
+        return result;
+      },
+      CONCURRENCY,
+    );
+
+    return totals;
+  } finally {
+    await releaseUploadWakeLock();
+    unbindWake();
+  }
 }
 
-/**
- * Batch + manifest read for signed-in library staff. Read-only: counters are
- * derived server-side from grant states and cannot be written from here.
- */
+/** Restore durable queue UI state and optionally resume interrupted items. */
+export async function restoreUploadQueue({ token, onFileUpdate, autoResume = true } = {}) {
+  await markMissingBlobsForReselect();
+  const items = await listQueueItems();
+  for (const item of items) {
+    onFileUpdate?.({
+      clientKey: item.clientUploadId,
+      clientUploadId: item.clientUploadId,
+      filename: item.filename,
+      status: phaseToLegacyStatus(item.phase),
+      phase: item.phase,
+      percent:
+        item.byteSize > 0 ? Math.min(99, Math.round(((item.transferredBytes || 0) / item.byteSize) * 100)) : undefined,
+      transferredBytes: item.transferredBytes,
+      byteSize: item.byteSize,
+      message: item.errorMessage || UPLOAD_PHASE_LABELS[item.phase],
+      assetId: item.assetId,
+      errorLayer: item.errorLayer,
+      analysisOutcome: item.analysisOutcome || null,
+    });
+  }
+
+  if (!autoResume || !token) return items;
+
+  const resumable = items.filter(
+    (i) =>
+      i.blob instanceof Blob &&
+      [UPLOAD_PHASE.INTERRUPTED, UPLOAD_PHASE.QUEUED, UPLOAD_PHASE.UPLOADING, UPLOAD_PHASE.RETRYING, UPLOAD_PHASE.FINALIZING].includes(
+        i.phase,
+      ),
+  );
+  if (!resumable.length) return items;
+
+  await requestUploadWakeLock();
+  try {
+    await runPool(
+      resumable,
+      (item) => processQueueItem({ token, item, onFileUpdate }),
+      CONCURRENCY,
+    );
+  } finally {
+    await releaseUploadWakeLock();
+  }
+  return listQueueItems();
+}
+
+export async function retryQueueItem({ token, clientUploadId, onFileUpdate }) {
+  const items = await listQueueItems();
+  const item = items.find((i) => i.clientUploadId === clientUploadId);
+  if (!item) throw new Error('Queue item not found');
+  if (!item.blob) throw new Error('Reselect this file before retrying');
+  return processQueueItem({ token, item: { ...item, phase: UPLOAD_PHASE.QUEUED, retryCount: (item.retryCount || 0) + 1 }, onFileUpdate });
+}
+
+export async function attachReselectedFile({ clientUploadId, file, token, onFileUpdate, autoStart = true }) {
+  const items = await listQueueItems();
+  const item = items.find((i) => i.clientUploadId === clientUploadId);
+  if (!item) throw new Error('Queue item not found');
+  if (!matchReselectFile(item, file) && item.checksumSha256) {
+    // Allow size+name match failure only when user explicitly picks — still accept if name/size match loosely
+  }
+  if (item.byteSize && file.size !== item.byteSize) {
+    throw new Error('Selected file size does not match the interrupted upload. Pick the original file.');
+  }
+  const next = {
+    ...item,
+    blob: file,
+    filename: file.name || item.filename,
+    mimeType: file.type || item.mimeType,
+    lastModified: file.lastModified || item.lastModified,
+    phase: UPLOAD_PHASE.QUEUED,
+    errorMessage: null,
+    errorLayer: null,
+  };
+  await putQueueItem(next);
+  onFileUpdate?.({
+    clientKey: next.clientUploadId,
+    clientUploadId: next.clientUploadId,
+    filename: next.filename,
+    status: UPLOAD_FILE_STATUS.QUEUED,
+    phase: UPLOAD_PHASE.QUEUED,
+    message: 'Queued after reselection',
+    byteSize: next.byteSize,
+  });
+  if (autoStart && token) {
+    return processQueueItem({ token, item: next, onFileUpdate });
+  }
+  return next;
+}
+
+export function bindUploadExitWarning(isDirtyFn) {
+  if (typeof window === 'undefined') return () => {};
+  const handler = (e) => {
+    if (!isDirtyFn?.()) return;
+    e.preventDefault();
+    e.returnValue = '';
+  };
+  window.addEventListener('beforeunload', handler);
+  return () => window.removeEventListener('beforeunload', handler);
+}
+
+export function isOnline() {
+  return typeof navigator === 'undefined' ? true : navigator.onLine !== false;
+}
+
 export async function fetchBatchManifest(batchId) {
   const [{ data: batch }, { data: entries }] = await Promise.all([
     supabase.from('mil_upload_batches').select('*').eq('id', batchId).maybeSingle(),
@@ -292,3 +858,5 @@ export async function fetchBatchManifest(batchId) {
   ]);
   return { batch, entries: entries || [] };
 }
+
+export { clientFileKey, isActiveUploadPhase };

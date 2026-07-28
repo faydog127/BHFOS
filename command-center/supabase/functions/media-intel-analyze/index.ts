@@ -17,7 +17,7 @@ import { milCorsHeaders, milCorsPreflight } from '../_shared/milCors.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
 import { isMilStaff } from '../_shared/milRoles.ts'
 
-const PROMPT_VERSION = 'mil-v1'
+const PROMPT_VERSION = 'mil-v2'
 const PROVIDER = 'openai'
 
 // No sharp/imagemagick (or any resize pipeline) is available in this Deno edge
@@ -31,7 +31,16 @@ function envInt(name: string, fallback: number) {
   const n = Number(raw)
   return Number.isFinite(n) && n > 0 ? n : fallback
 }
-const MAX_AI_SAFE_IMAGE_BYTES = envInt('MIL_MAX_AI_IMAGE_BYTES', 2 * 1024 * 1024)
+// Field HEIC/JPEG often exceeds 2 MB; default raised for staging usefulness.
+const MAX_AI_SAFE_IMAGE_BYTES = envInt('MIL_MAX_AI_IMAGE_BYTES', 8 * 1024 * 1024)
+
+function isServiceRoleRequest(req: Request) {
+  const auth = req.headers.get('Authorization') || ''
+  const token = auth.replace(/^Bearer\s+/i, '').trim()
+  const serviceKey = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '').trim()
+  const internal = req.headers.get('x-mil-internal-analyze') === '1'
+  return Boolean(internal && token && serviceKey && token === serviceKey)
+}
 
 const json = (headers: Record<string, string>, body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...headers, 'Content-Type': 'application/json' } })
@@ -58,20 +67,84 @@ type Suggested = {
   recommended_uses?: string[]
   unsuitable_uses?: string[]
   explanation?: string
+  usability?: string
+  needs_human_review?: boolean
   quality?: Record<string, { suitable?: boolean; score?: number; explanation?: string }>
+}
+
+function asStringArray(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.map((v) => String(v ?? '').trim()).filter(Boolean).slice(0, 24)
+}
+
+/** Normalize / reject malformed model JSON before persistence. */
+export function validateSuggested(raw: unknown): { ok: true; suggested: Suggested; confidence: number } | { ok: false; error: string } {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ok: false, error: 'AI response was not a JSON object' }
+  }
+  const s = raw as Record<string, unknown>
+  const narrative = String(s.narrative || s.explanation || '').trim()
+  if (!narrative && !String(s.service_category || '').trim() && !asStringArray(s.tags).length) {
+    return { ok: false, error: 'AI response missing usable description/classification' }
+  }
+  const qualityIn = s.quality && typeof s.quality === 'object' && !Array.isArray(s.quality)
+    ? s.quality as Record<string, unknown>
+    : {}
+  const quality: Suggested['quality'] = {}
+  for (const [key, row] of Object.entries(qualityIn).slice(0, 16)) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) continue
+    const q = row as Record<string, unknown>
+    quality[key] = {
+      suitable: typeof q.suitable === 'boolean' ? q.suitable : undefined,
+      score: typeof q.score === 'number' && Number.isFinite(q.score) ? q.score : undefined,
+      explanation: q.explanation != null ? String(q.explanation).slice(0, 500) : undefined,
+    }
+  }
+  const suggested: Suggested = {
+    media_type: s.media_type != null ? String(s.media_type).slice(0, 80) : undefined,
+    service_category: s.service_category != null ? String(s.service_category).slice(0, 120) : undefined,
+    work_phase: s.work_phase != null ? String(s.work_phase).slice(0, 80) : undefined,
+    condition_notes: s.condition_notes != null ? String(s.condition_notes).slice(0, 2000) : undefined,
+    location_component: s.location_component != null ? String(s.location_component).slice(0, 120) : undefined,
+    tags: asStringArray(s.tags).map((t) => t.slice(0, 80)),
+    narrative: narrative.slice(0, 4000) || undefined,
+    public_caption: s.public_caption != null ? String(s.public_caption).slice(0, 500) : undefined,
+    alt_text: s.alt_text != null ? String(s.alt_text).slice(0, 500) : undefined,
+    privacy_risks: asStringArray(s.privacy_risks).map((t) => t.slice(0, 120)),
+    recommended_uses: asStringArray(s.recommended_uses).map((t) => t.slice(0, 80)),
+    unsuitable_uses: asStringArray(s.unsuitable_uses).map((t) => t.slice(0, 80)),
+    explanation: s.explanation != null ? String(s.explanation).slice(0, 2000) : undefined,
+    usability: s.usability != null ? String(s.usability).slice(0, 40) : undefined,
+    needs_human_review: typeof s.needs_human_review === 'boolean' ? s.needs_human_review : undefined,
+    quality,
+  }
+  const confidenceRaw = (s as { confidence?: unknown }).confidence
+  const confidence = typeof confidenceRaw === 'number' && Number.isFinite(confidenceRaw)
+    ? Math.max(0, Math.min(1, confidenceRaw))
+    : 0.6
+  return { ok: true, suggested, confidence }
 }
 
 async function analyzeWithOpenAI(imageUrl: string, filename: string) {
   const key = Deno.env.get('OPENAI_API_KEY')
   if (!key) throw new Error('NO_AI_KEY')
   const model = Deno.env.get('MIL_OPENAI_MODEL') || 'gpt-4o-mini'
-  const system = `You analyze HVAC dryer-vent and air-duct field media for The Vent Guys.
+  const system = `You analyze HVAC dryer-vent and air-duct field media for The Vent Guys (TVG).
 Return JSON only. Suggestions are advisory; humans verify.
-Never invent customer names or addresses. Flag privacy risks.`
+Never invent customer names, street addresses, or invoice numbers.
+Distinguish directly visible observations from uncertain inference.
+Flag privacy risks (faces, children, documents, plates, house numbers).`
   const user = `Filename: ${filename}
-Produce JSON with keys: media_type, service_category, work_phase, condition_notes, location_component,
-tags, narrative, public_caption, alt_text, privacy_risks, recommended_uses, unsuitable_uses, explanation,
-quality (object keyed by homepage_hero, website_service_proof, social_photo, reel_short_video, inspection_report, training, internal_docs).`
+Produce JSON with keys:
+media_type, service_category, work_phase (before|during|after|equipment|unknown),
+condition_notes (visible observations only), location_component,
+tags (short normalized strings), narrative (plain-language description of what the media shows),
+public_caption, alt_text, privacy_risks, recommended_uses, unsuitable_uses,
+usability (good|usable|limited|poor|unusable), needs_human_review (boolean),
+explanation, confidence (0-1),
+quality (object keyed by homepage_hero, website_service_proof, social_photo, reel_short_video, inspection_report, training, internal_docs;
+each value: suitable boolean, score 0-1, explanation).
+Recommended/unsuitable uses should answer whether media fits inspection report, customer proof, marketing, social, training, or do not use.`
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -86,8 +159,15 @@ quality (object keyed by homepage_hero, website_service_proof, social_photo, ree
   })
   if (!res.ok) throw new Error(`OpenAI error ${res.status}`)
   const payload = await res.json()
-  const suggested = JSON.parse(payload?.choices?.[0]?.message?.content || '{}') as Suggested
-  return { model, suggested, confidence: 0.6 }
+  let parsed: unknown = {}
+  try {
+    parsed = JSON.parse(payload?.choices?.[0]?.message?.content || '{}')
+  } catch {
+    throw new Error('AI response was not valid JSON')
+  }
+  const validated = validateSuggested(parsed)
+  if (!validated.ok) throw new Error(validated.error)
+  return { model, suggested: validated.suggested, confidence: validated.confidence }
 }
 
 /** Find the newest queued ai_analyze job for this asset and claim it as running. */
@@ -157,16 +237,22 @@ Deno.serve(async (req) => {
 
   try {
     const authHeader = req.headers.get('Authorization') || ''
-    const authClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
-      global: { headers: { Authorization: authHeader } },
-    })
-    const { data: { user }, error: authError } = await authClient.auth.getUser()
-    if (authError || !user) return respond({ error: 'Unauthorized' }, 401)
+    const internalService = isServiceRoleRequest(req)
+    let user: { id: string } | null = null
+    if (!internalService) {
+      const authClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+        global: { headers: { Authorization: authHeader } },
+      })
+      const { data: { user: authUser }, error: authError } = await authClient.auth.getUser()
+      if (authError || !authUser) return respond({ error: 'Unauthorized' }, 401)
+      user = authUser
+    }
 
     const body = await req.json().catch(() => ({}))
     const action = String(body.action || 'analyze')
 
     if (action === 'config_status') {
+      if (!internalService && !user) return respond({ error: 'Unauthorized' }, 401)
       const configured = Boolean(Deno.env.get('OPENAI_API_KEY'))
       return respond({
         configured,
@@ -178,7 +264,10 @@ Deno.serve(async (req) => {
       })
     }
 
-    if (!(await isMilStaff(user.id))) return respond({ error: 'Forbidden' }, 403)
+    if (!internalService) {
+      if (!user || !(await isMilStaff(user.id))) return respond({ error: 'Forbidden' }, 403)
+    }
+    const actorUserId = user?.id || null
 
     const assetId = String(body.assetId || '').trim()
     if (!assetId) return respond({ error: 'Missing asset' }, 400)
@@ -219,7 +308,7 @@ Deno.serve(async (req) => {
       })
       await supabaseAdmin.from('mil_assets').update({ processing_status: 'uploaded' }).eq('id', assetId)
       await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: user.id,
+        actor_user_id: actorUserId,
         action: 'ai_analysis_skipped_no_key',
         target_type: 'mil_assets',
         target_id: assetId,
@@ -242,7 +331,7 @@ Deno.serve(async (req) => {
       })
       await supabaseAdmin.from('mil_assets').update({ processing_status: 'uploaded' }).eq('id', assetId)
       await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: user.id,
+        actor_user_id: actorUserId,
         action: 'ai_analysis_skipped_unsupported',
         target_type: 'mil_assets',
         target_id: assetId,
@@ -268,7 +357,7 @@ Deno.serve(async (req) => {
       })
       await supabaseAdmin.from('mil_assets').update({ processing_status: 'uploaded' }).eq('id', assetId)
       await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: user.id,
+        actor_user_id: actorUserId,
         action: 'ai_analysis_skipped_needs_derivative',
         target_type: 'mil_assets',
         target_id: assetId,
@@ -352,7 +441,7 @@ Deno.serve(async (req) => {
       }).eq('id', assetId)
 
       await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: user.id,
+        actor_user_id: actorUserId,
         action: 'ai_analysis',
         target_type: 'mil_assets',
         target_id: assetId,
@@ -373,7 +462,7 @@ Deno.serve(async (req) => {
       })
       await supabaseAdmin.from('mil_assets').update({ processing_status: 'processing_failed' }).eq('id', assetId)
       await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: user.id,
+        actor_user_id: actorUserId,
         action: 'ai_analysis_failure',
         target_type: 'mil_assets',
         target_id: assetId,

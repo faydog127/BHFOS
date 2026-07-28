@@ -37,16 +37,38 @@ const Login = () => {
   // Redirect if already logged in
   useEffect(() => {
     if (user) {
-      // 1. Check for 'next' query param
+      // 1. Check for 'next' query param (may be URI-encoded by MediaSessionGuard)
       const searchParams = new URLSearchParams(location.search);
-      const next = searchParams.get('next');
+      let next = searchParams.get('next');
+      if (next) {
+        try {
+          next = decodeURIComponent(next);
+        } catch {
+          // keep raw
+        }
+      }
 
-      // 2. Validate 'next' param: must start with /${urlTenant}/ to be safe and same-tenant
-      if (next && next.startsWith(`/${urlTenant}/`)) {
-         navigate(next, { replace: true });
+      // 2. Safe internal destinations only:
+      //    - same-tenant CRM paths /:tenant/...
+      //    - MIL product paths (/media/*, /creator/*, short aliases)
+      const isSafeMilNext =
+        typeof next === 'string' &&
+        (next.startsWith('/media') ||
+          next.startsWith('/creator') ||
+          next === '/uploads' ||
+          next === '/all' ||
+          next === '/review' ||
+          next.startsWith('/uploads?') ||
+          next.startsWith('/all?') ||
+          next.startsWith('/review?'));
+      const isSafeTenantNext =
+        typeof next === 'string' && next.startsWith(`/${urlTenant}/`);
+
+      if (isSafeTenantNext || isSafeMilNext) {
+        navigate(next, { replace: true });
       } else {
-         // 3. Default redirect
-         navigate(tenantPath('/crm', urlTenant), { replace: true });
+        // 3. Default redirect
+        navigate(tenantPath('/crm', urlTenant), { replace: true });
       }
     }
   }, [user, navigate, urlTenant, location]);

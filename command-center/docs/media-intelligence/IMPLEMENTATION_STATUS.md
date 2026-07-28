@@ -1,8 +1,22 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** parent tip before hosting tooling commit; see git log after push  
+**Verified HEAD at this status edit:** see git log after resilient-upload commit  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
+
+## Resilient mobile upload + visible AI analysis (2026-07-28) — IN PROGRESS
+
+| Field | Value |
+|---|---|
+| Plan | [`RESILIENT_UPLOAD_ANALYSIS_PLAN.md`](./RESILIENT_UPLOAD_ANALYSIS_PLAN.md) |
+| Client | IndexedDB durable queue (`mil-upload-queue`), signed TUS + PUT fallback, Wake Lock secondary, analysis poll |
+| Server | `client_upload_id` migration; `media-intel-upload-session` refresh/idempotent mint + post-finalize analyze; `media-intel-analyze` mil-v2 structured outcome |
+| Staging apply | Migration `20260728010000_media_intel_client_upload_id.sql` on `sdzhdupekcnekesbtxsl`; Edge `media-intel-upload-session` + `media-intel-analyze` redeployed |
+| Login | MIL `next` destinations preserved through Login (no forced `/tvg/crm`) |
+| Artifact isolation | Brand/storage URLs derive from `VITE_SUPABASE_URL` (no hardcoded production project ref in `src/`) |
+| Hosted acceptance | Pending deploy + desktop interruption + real-phone screen-lock |
+
+---
 
 ## Hosted frontend correction (2026-07-27) — PASS
 

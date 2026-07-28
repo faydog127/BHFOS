@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
-import { assetPreviewUrl, listAssets } from '@/lib/mediaIntel/api';
+import { assetPreviewUrl, fetchReviewBundle, listAssets } from '@/lib/mediaIntel/api';
 import { HUMAN_REVIEW_LABELS, PRIVACY_LABELS } from '@/lib/mediaIntel/constants';
+import AnalysisOutcomeCard from '@/components/media/AnalysisOutcomeCard';
 
 function Thumb({ asset }) {
   const [url, setUrl] = useState(null);
@@ -37,6 +38,8 @@ export default function MediaAllMedia() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState(params.get('q') || '');
+  const [selectedId, setSelectedId] = useState(null);
+  const [selectedBundle, setSelectedBundle] = useState(null);
   const duplicatesOnly = params.get('dup') === '1';
 
   const filters = useMemo(
@@ -72,6 +75,43 @@ export default function MediaAllMedia() {
       cancelled = true;
     };
   }, [filters]);
+
+  useEffect(() => {
+    if (!selectedId || !caps.isStaff) {
+      setSelectedBundle(null);
+      return undefined;
+    }
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const b = await fetchReviewBundle(selectedId);
+        if (!cancelled) setSelectedBundle(b);
+        return b;
+      } catch {
+        if (!cancelled) setSelectedBundle(null);
+        return null;
+      }
+    };
+    void load();
+    const timer = setInterval(async () => {
+      const b = await load();
+      const status = b?.analyses?.[0]?.status;
+      const processing = b?.asset?.processing_status;
+      if (
+        status === 'succeeded' ||
+        status === 'failed' ||
+        String(status || '').startsWith('skipped_') ||
+        processing === 'analyzed' ||
+        processing === 'processing_failed'
+      ) {
+        clearInterval(timer);
+      }
+    }, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [selectedId, caps.isStaff]);
 
   if (!caps.isStaff && !caps.isCreator) {
     return <div className="text-sm text-slate-600">Sign in with an authorized media role.</div>;
@@ -156,22 +196,49 @@ export default function MediaAllMedia() {
             Showing {assets.length}
             {duplicatesOnly ? ' · duplicate candidates (linked via duplicate_of_asset_id)' : ''}
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3">
-            {assets.map((asset) => (
-              <div key={asset.id} className="rounded-lg border bg-white p-2">
-                <div className="mb-2 text-[11px] text-slate-500 truncate">
-                  {HUMAN_REVIEW_LABELS[asset.human_review_status]}
-                </div>
-                <Thumb asset={asset} />
-                <div className="mt-2 text-xs font-medium text-slate-800 truncate">{asset.original_filename}</div>
-                <div className="text-[11px] text-slate-500">{PRIVACY_LABELS[asset.privacy_status]}</div>
-                {asset.duplicate_of_asset_id && (
-                  <div className="text-[10px] text-amber-800 mt-1 truncate" title={asset.duplicate_of_asset_id}>
-                    Duplicate of {String(asset.duplicate_of_asset_id).slice(0, 8)}…
+          <div className="grid lg:grid-cols-[1fr_320px] gap-4 items-start">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3">
+              {assets.map((asset) => (
+                <button
+                  type="button"
+                  key={asset.id}
+                  className={`rounded-lg border bg-white p-2 text-left ${
+                    selectedId === asset.id ? 'ring-2 ring-blue-500' : ''
+                  }`}
+                  onClick={() => setSelectedId(asset.id)}
+                >
+                  <div className="mb-2 text-[11px] text-slate-500 truncate">
+                    {HUMAN_REVIEW_LABELS[asset.human_review_status]}
                   </div>
+                  <Thumb asset={asset} />
+                  <div className="mt-2 text-xs font-medium text-slate-800 truncate">{asset.original_filename}</div>
+                  <div className="text-[11px] text-slate-500">{PRIVACY_LABELS[asset.privacy_status]}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">AI: {asset.processing_status || '—'}</div>
+                  {asset.duplicate_of_asset_id && (
+                    <div className="text-[10px] text-amber-800 mt-1 truncate" title={asset.duplicate_of_asset_id}>
+                      Duplicate of {String(asset.duplicate_of_asset_id).slice(0, 8)}…
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+            {caps.isStaff && (
+              <aside className="rounded-xl border bg-white p-3 space-y-2 sticky top-4" data-testid="media-all-analysis">
+                <h3 className="text-sm font-medium text-slate-900">Selected media analysis</h3>
+                {!selectedId && <p className="text-xs text-slate-500">Select an item to see AI outcome.</p>}
+                {selectedId && !selectedBundle && (
+                  <p className="text-xs text-slate-500 inline-flex items-center gap-1">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
+                  </p>
                 )}
-              </div>
-            ))}
+                {selectedBundle && (
+                  <AnalysisOutcomeCard
+                    asset={selectedBundle.asset}
+                    analysis={selectedBundle.analyses?.[0]}
+                  />
+                )}
+              </aside>
+            )}
           </div>
         </>
       )}

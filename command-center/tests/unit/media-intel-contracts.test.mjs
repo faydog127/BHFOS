@@ -328,7 +328,7 @@ describe('MIL client security contracts', () => {
     const upload = read('src/lib/mediaIntel/uploadManager.js');
     assert.doesNotMatch(upload, /['"`]mil\/quarantine\//);
     assert.doesNotMatch(upload, /['"`]mil\/originals\//);
-    assert.match(upload, /minted\.path/);
+    assert.match(upload, /minted\.objectPath/);
   });
 
   it('uploadManager only calls success states on an explicit 200', () => {

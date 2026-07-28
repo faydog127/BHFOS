@@ -1,7 +1,24 @@
 import { supabase } from '@/lib/customSupabaseClient';
 import brandConfig from '@/config/brand.config.json';
 import { DEFAULT_TENANT_ID } from '@/config/tenantDefaults';
+import { SUPABASE_PROJECT_ID } from '@/lib/constants';
 import { jwtDecode } from "jwt-decode";
+
+function resolveBrandAssetUrl(url) {
+  if (!url || typeof url !== 'string') return url;
+  if (!url.startsWith('storage://')) return url;
+  if (!SUPABASE_PROJECT_ID) return '';
+  const path = url.slice('storage://'.length);
+  return `https://${SUPABASE_PROJECT_ID}.supabase.co/storage/v1/object/public/${path}`;
+}
+
+function resolveTenantBrand(raw) {
+  if (!raw || typeof raw !== 'object') return raw;
+  return {
+    ...raw,
+    logo_url: resolveBrandAssetUrl(raw.logo_url),
+  };
+}
 
 // --- Token & Session Management ---
 
@@ -67,7 +84,8 @@ export const resolveTenantIdFromSession = async () => {
  * @returns {object} The tenant's brand configuration.
  */
 export const getTenantConfig = (tenantId = DEFAULT_TENANT_ID) => {
-  return brandConfig[tenantId] || brandConfig[DEFAULT_TENANT_ID] || brandConfig.tvg;
+  const raw = brandConfig[tenantId] || brandConfig[DEFAULT_TENANT_ID] || brandConfig.tvg;
+  return resolveTenantBrand(raw);
 };
 
 // --- URL & Path Helpers ---

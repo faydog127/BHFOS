@@ -6,17 +6,23 @@ import { DEFAULT_TENANT_ID } from '@/config/tenantDefaults';
 import { UPLOAD_PHONE_NOTICE } from '@/lib/mediaIntel/constants';
 import {
   UPLOAD_FILE_STATUS,
+  UPLOAD_PHASE_LABELS,
+  bindUploadExitWarning,
   createUploadSession,
   fetchSessionManifest,
+  restoreUploadQueue,
+  retryQueueItem,
   uploadFilesToSession,
   validateUploadSession,
 } from '@/lib/mediaIntel/uploadManager';
 import { fetchMilRole, milCapabilities } from '@/lib/mediaIntel/roles';
+import AnalysisOutcomeCard from '@/components/media/AnalysisOutcomeCard';
 
 const STATUS_LABELS = {
+  ...UPLOAD_PHASE_LABELS,
   hashing: 'Reading file',
   uploading: 'Uploading',
-  finalizing: 'Confirming with the server',
+  finalizing: 'Finalizing',
   uploaded: 'In the library',
   duplicate: 'Duplicate — existing copy kept',
   pending_reconcile: 'Not confirmed yet — reconciling',
@@ -25,6 +31,12 @@ const STATUS_LABELS = {
   failed: 'Failed',
   expired: 'Upload link expired',
   revoked: 'Upload link revoked',
+  interrupted: 'Interrupted — tap Retry',
+  analyzing: 'Analyzing',
+  analysis_complete: 'Ready for review',
+  analysis_failed: 'Analysis failed',
+  needs_reselect: 'Reselect this file',
+  queued: 'Queued',
 };
 
 /**
@@ -121,16 +133,43 @@ export default function MediaMobileUpload() {
   }, [linkToken, outlet.caps]);
 
   const onFileUpdate = useCallback((update) => {
+    const key = update.clientKey || update.clientUploadId;
     setFileStates((prev) => ({
       ...prev,
-      [update.clientKey]: { ...prev[update.clientKey], ...update },
+      [key]: { ...prev[key], ...update },
     }));
   }, []);
 
+  useEffect(() => {
+    return bindUploadExitWarning(() => busy);
+  }, [busy]);
+
+  useEffect(() => {
+    const token = linkToken || mintedSessionRef.current?.token;
+    if (!token && !sessionInfo) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        await restoreUploadQueue({
+          token: linkToken || mintedSessionRef.current?.token || null,
+          onFileUpdate,
+          autoResume: Boolean(linkToken || mintedSessionRef.current?.token),
+        });
+      } catch {
+        if (!cancelled) {
+          // best-effort restore
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [linkToken, sessionInfo, onFileUpdate]);
+
   /**
-   * Both modes end up on the same server contract: mint a grant, PUT the bytes,
-   * ask the server to finalize. The only difference is where the session token
-   * came from.
+   * Both modes end up on the same server contract: mint a grant, resumable TUS
+   * (signed), ask the server to finalize. The only difference is where the
+   * session token came from.
    */
   const runUpload = async (files, token, batchId) => {
     setBusy(true);
@@ -220,7 +259,7 @@ export default function MediaMobileUpload() {
           Open a phone upload link from the owner, or sign in with an owner/admin account.
           <div className="mt-3">
             {/* Legacy V1 login path until company-wide auth cleanup */}
-            <Link className="text-blue-700 underline" to={`/${DEFAULT_TENANT_ID}/login?next=/media/upload`}>
+            <Link className="text-blue-700 underline" to={`/${DEFAULT_TENANT_ID}/login?next=/media/uploads`}>
               Sign in
             </Link>
           </div>
@@ -232,7 +271,7 @@ export default function MediaMobileUpload() {
           <Upload className="mx-auto h-8 w-8 text-slate-400" aria-hidden />
           <p className="mt-3 text-sm font-medium text-slate-800">Select photos and videos from this phone</p>
           <p className="mt-1 text-xs text-slate-500">
-            Each file is sent in one request and is not resumable. Up to 250 MB per file.
+            Resumable when the browser allows it. Keep MIL open during large transfers. Up to 250 MB per file.
           </p>
           <button
             type="button"
@@ -271,14 +310,62 @@ export default function MediaMobileUpload() {
               below shows them as uploaded.
             </div>
           )}
-          <ul className="divide-y max-h-64 overflow-y-auto">
+          <ul className="divide-y max-h-80 overflow-y-auto">
             {Object.values(fileStates).map((f) => (
-              <li key={f.clientKey} className="py-2">
-                <div className="truncate font-medium">{f.filename}</div>
-                <div className="text-xs text-slate-500">
-                  {STATUS_LABELS[f.status] || f.status}
-                  {f.message ? ` · ${f.message}` : ''}
+              <li key={f.clientKey || f.clientUploadId} className="py-2 space-y-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{f.filename}</div>
+                    <div className="text-xs text-slate-500">
+                      {STATUS_LABELS[f.status] || STATUS_LABELS[f.phase] || f.status}
+                      {typeof f.percent === 'number' ? ` · ${f.percent}%` : ''}
+                      {f.message ? ` · ${f.message}` : ''}
+                    </div>
+                  </div>
+                  {(f.status === 'interrupted' || f.phase === 'interrupted') && (
+                    <button
+                      type="button"
+                      className="text-xs text-blue-700 underline shrink-0"
+                      disabled={busy}
+                      onClick={async () => {
+                        const token = linkToken || mintedSessionRef.current?.token;
+                        if (!token) return;
+                        try {
+                          setBusy(true);
+                          await retryQueueItem({
+                            token,
+                            clientUploadId: f.clientUploadId || f.clientKey,
+                            onFileUpdate,
+                          });
+                        } catch (err) {
+                          setSessionError(err.message || 'Retry failed');
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      Retry
+                    </button>
+                  )}
                 </div>
+                {f.analysisOutcome ? (
+                  <AnalysisOutcomeCard
+                    asset={{ processing_status: f.phase === 'analysis_complete' ? 'analyzed' : 'queued' }}
+                    analysis={{
+                      status: f.phase === 'analysis_complete' ? 'succeeded' : f.phase === 'analysis_failed' ? 'failed' : 'queued',
+                      suggested: {
+                        narrative: f.analysisOutcome.description,
+                        tags: f.analysisOutcome.tags,
+                        condition_notes: f.analysisOutcome.observations,
+                        recommended_uses: f.analysisOutcome.recommendedUses,
+                        privacy_risks: f.analysisOutcome.privacyWarnings,
+                      },
+                      overall_confidence: f.analysisOutcome.confidence,
+                      explanation: f.analysisOutcome.errorMessage,
+                    }}
+                    compact
+                  />
+                ) : null}
               </li>
             ))}
           </ul>

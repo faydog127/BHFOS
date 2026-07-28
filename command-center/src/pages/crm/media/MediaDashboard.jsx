@@ -130,7 +130,7 @@ export default function MediaDashboard() {
             <Link className="text-blue-700 underline-offset-2 hover:underline" to="/media/uploads">
               Upload from phones
             </Link>
-            {' '}— phone or desktop transfer with honest pending/failed states (not resumable yet).
+            {' '}— phone or desktop transfer with durable queue, resumable chunks, and honest per-file states.
           </li>
           <li>
             <Link className="text-blue-700 underline-offset-2 hover:underline" to="/media/review">

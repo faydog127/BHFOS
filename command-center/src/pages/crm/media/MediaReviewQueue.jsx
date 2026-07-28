@@ -12,6 +12,7 @@ import {
   setPermittedUse,
   verifyAssetMetadata,
 } from '@/lib/mediaIntel/api';
+import AnalysisOutcomeCard from '@/components/media/AnalysisOutcomeCard';
 
 export default function MediaReviewQueue() {
   const { caps } = useOutletContext();
@@ -54,7 +55,7 @@ export default function MediaReviewQueue() {
   useEffect(() => {
     if (!selectedId) return undefined;
     let cancelled = false;
-    (async () => {
+    const loadBundle = async () => {
       try {
         const b = await fetchReviewBundle(selectedId);
         if (cancelled) return;
@@ -72,13 +73,37 @@ export default function MediaReviewQueue() {
         });
         const url = await assetPreviewUrl(b.asset);
         if (!cancelled) setPreviewUrl(url);
+        return b;
       } catch (err) {
         if (!cancelled) setError(err.message);
+        return null;
       }
-    })();
+    };
+
+    void loadBundle();
+
+    // Bounded poll while analysis is in flight so the owner does not need a manual refresh.
+    const timer = setInterval(async () => {
+      const b = await loadBundle();
+      const processing = b?.asset?.processing_status;
+      const analysisStatus = b?.analyses?.[0]?.status;
+      const terminal =
+        analysisStatus === 'succeeded' ||
+        analysisStatus === 'failed' ||
+        String(analysisStatus || '').startsWith('skipped_') ||
+        processing === 'analyzed' ||
+        processing === 'processing_failed';
+      if (terminal) {
+        clearInterval(timer);
+        void loadQueue();
+      }
+    }, 3000);
+
     return () => {
       cancelled = true;
+      clearInterval(timer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   useEffect(() => {
@@ -208,12 +233,16 @@ export default function MediaReviewQueue() {
               </div>
 
               <div className="xl:w-1/2 space-y-3">
+                <AnalysisOutcomeCard asset={bundle.asset} analysis={latestAnalysis} />
+
                 <div className="rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-sm">
                   <div className="font-medium text-violet-950">AI suggestions — not verified</div>
                   {latestAnalysis ? (
                     <ul className="mt-2 space-y-1 text-violet-900 text-xs">
+                      <li>Status: {latestAnalysis.status}</li>
                       <li>Confidence: {latestAnalysis.overall_confidence ?? '—'}</li>
                       <li>Provider/model: {latestAnalysis.provider}/{latestAnalysis.model || '—'}</li>
+                      <li>Prompt: {latestAnalysis.prompt_version || '—'}</li>
                       <li>Tags: {(suggested.tags || []).join(', ') || '—'}</li>
                       <li>{latestAnalysis.explanation || suggested.explanation || 'No explanation stored.'}</li>
                     </ul>
@@ -228,8 +257,7 @@ export default function MediaReviewQueue() {
                             setError(null);
                             setMessage(null);
                             await queueAiAnalysis(selectedId);
-                            setMessage('Analysis started.');
-                            await loadQueue();
+                            setMessage('Analysis running — this panel updates automatically.');
                           } catch (err) {
                             setError(err.message || 'Analysis failed to start');
                           }
@@ -240,17 +268,34 @@ export default function MediaReviewQueue() {
                     </p>
                   )}
                   {latestAnalysis && (
-                    <button
-                      type="button"
-                      className="mt-2 text-xs font-medium text-violet-900 underline"
-                      onClick={async () => {
-                        await acceptAiSuggestions(selectedId, latestAnalysis.id);
-                        setMessage('Accepted AI suggestions and marked verified.');
-                        await loadQueue();
-                      }}
-                    >
-                      Accept all suggestions and verify
-                    </button>
+                    <div className="mt-2 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-violet-900 underline"
+                        onClick={async () => {
+                          await acceptAiSuggestions(selectedId, latestAnalysis.id);
+                          setMessage('Accepted AI suggestions and marked verified.');
+                          await loadQueue();
+                        }}
+                      >
+                        Accept all suggestions and verify
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-violet-900 underline"
+                        onClick={async () => {
+                          try {
+                            setError(null);
+                            await queueAiAnalysis(selectedId);
+                            setMessage('Reanalysis running — updating automatically.');
+                          } catch (err) {
+                            setError(err.message || 'Reanalysis failed');
+                          }
+                        }}
+                      >
+                        Retry analysis
+                      </button>
+                    </div>
                   )}
                 </div>
 

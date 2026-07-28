@@ -133,10 +133,10 @@ describe('MIL upload client — 503 / network retry honesty', () => {
     // Source contract: one delayed retry gated by isRetryableCompletionStatus, then interpretCompletion.
     assert.match(uploadSrc, /if \(isRetryableCompletionStatus\(result\.status\)\)/);
     assert.match(uploadSrc, /RETRYABLE_RETRY_DELAY_MS/);
-    const completeBlock = uploadSrc.slice(
-      uploadSrc.indexOf('async function completeFile'),
-      uploadSrc.indexOf('export async function uploadFilesToSession'),
-    );
+    const start = uploadSrc.indexOf('async function completeFile');
+    const end = uploadSrc.indexOf('\nasync function mintForItem', start);
+    assert.ok(start >= 0 && end > start, 'completeFile / mintForItem boundaries');
+    const completeBlock = uploadSrc.slice(start, end);
     const retryCalls = [...completeBlock.matchAll(/callUploadSession\(request\)/g)];
     assert.equal(retryCalls.length, 2, 'initial call + exactly one retry');
     assert.match(completeBlock, /return interpretCompletion\(result\)/);
