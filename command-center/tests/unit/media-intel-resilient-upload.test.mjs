@@ -76,6 +76,8 @@ describe('MIL resilient upload + analysis', () => {
     assert.match(tus, /upload\/resumable\/sign/);
     assert.match(tus, /x-signature/);
     assert.match(tus, /tus-js-client/);
+    // tus-js-client requires fingerprint to be a function (string crashes uploads)
+    assert.match(tus, /fingerprint:\s*\(\)\s*=>/);
     assert.match(queue, /mil-upload-queue/);
     assert.match(queue, /blob/);
     assert.match(upload, /uploadViaSignedTus/);
