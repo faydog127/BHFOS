@@ -139,6 +139,10 @@ Deno.serve(async (req) => {
       const assetId = body.assetId ? String(body.assetId).trim() : null
       const collectionId = body.collectionId ? String(body.collectionId).trim() : null
       const notes = body.notes ? String(body.notes) : null
+      const instructions = body.instructions ? String(body.instructions) : notes
+      const dueAt = body.dueAt ? String(body.dueAt) : null
+      const requestedOutput = body.requestedOutput ? String(body.requestedOutput) : null
+      const platformFormat = body.platformFormat ? String(body.platformFormat) : null
       if (!creatorUserId) return json({ error: 'Missing creatorUserId' }, 400)
       if ((assetId === null) === (collectionId === null)) {
         return json({ error: 'Provide exactly one of assetId or collectionId' }, 400)
@@ -152,6 +156,10 @@ Deno.serve(async (req) => {
         p_asset_id: assetId,
         p_collection_id: collectionId,
         p_notes: notes,
+        p_due_at: dueAt,
+        p_requested_output: requestedOutput,
+        p_platform_format: platformFormat,
+        p_instructions: instructions,
       })
       if (error) return json({ error: error.message }, 400)
       return json({ ok: true, assignmentId: data })

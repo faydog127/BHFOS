@@ -28,10 +28,17 @@ const VALID_DERIVATIVE_KINDS = new Set([
 async function creatorCanView(userId: string, assetId: string) {
   const { data: asset } = await supabaseAdmin
     .from('mil_assets')
-    .select('id, privacy_status, human_review_status, archived_at')
+    .select('id, privacy_status, human_review_status, archived_at, trashed_at')
     .eq('id', assetId)
     .maybeSingle()
-  if (!asset || asset.archived_at || asset.privacy_status !== 'clear' || asset.human_review_status !== 'verified') {
+  // Mirror SQL mil_creator_can_view_asset: archived or trashed never authorize new URLs.
+  if (
+    !asset ||
+    asset.archived_at ||
+    asset.trashed_at ||
+    asset.privacy_status !== 'clear' ||
+    asset.human_review_status !== 'verified'
+  ) {
     return false
   }
 

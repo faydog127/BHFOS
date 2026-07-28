@@ -532,6 +532,9 @@ function App() {
             </MediaSessionGuard>
           }
         />
+        {/* Product alias: Contributor Workspace uses the Creator architecture under /creator. */}
+        <Route path="/contributor/*" element={<Navigate to="/creator" replace />} />
+        <Route path="/contributor" element={<Navigate to="/creator" replace />} />
         <Route
           path="/:tenantId/tech/*"
           element={

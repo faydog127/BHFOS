@@ -50,11 +50,12 @@ const Login = () => {
 
       // 2. Safe internal destinations only:
       //    - same-tenant CRM paths /:tenant/...
-      //    - MIL product paths (/media/*, /creator/*, short aliases)
+      //    - MIL product paths (/media/*, /creator/*, /contributor/*, short aliases)
       const isSafeMilNext =
         typeof next === 'string' &&
         (next.startsWith('/media') ||
           next.startsWith('/creator') ||
+          next.startsWith('/contributor') ||
           next === '/uploads' ||
           next === '/all' ||
           next === '/review' ||
@@ -66,10 +67,29 @@ const Login = () => {
 
       if (isSafeTenantNext || isSafeMilNext) {
         navigate(next, { replace: true });
-      } else {
-        // 3. Default redirect
-        navigate(tenantPath('/crm', urlTenant), { replace: true });
+        return;
       }
+
+      // Contributors (reel_creator) land in Contributor Workspace — never CRM by default.
+      let cancelled = false;
+      (async () => {
+        try {
+          const { fetchMilRole, milCapabilities } = await import('@/lib/mediaIntel/roles');
+          const role = await fetchMilRole();
+          if (cancelled) return;
+          const caps = milCapabilities(role);
+          if (caps.isCreator && !caps.isStaff) {
+            navigate('/creator', { replace: true });
+            return;
+          }
+        } catch {
+          // Fall through to CRM default if role lookup fails.
+        }
+        if (!cancelled) navigate(tenantPath('/crm', urlTenant), { replace: true });
+      })();
+      return () => {
+        cancelled = true;
+      };
     }
   }, [user, navigate, urlTenant, location]);
 

@@ -6,8 +6,8 @@ import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { fetchMilRole, milCapabilities } from '@/lib/mediaIntel/roles';
 
 /**
- * Focused reel-creator portal — intentionally not the CRM shell.
- * Single workspace surface (no fake section tabs).
+ * Focused Contributor Workspace (internal: reel_creator /creator routes).
+ * Intentionally not the CRM shell. Single workspace surface.
  */
 export default function CreatorPortalLayout() {
   const { signOut, user } = useSupabaseAuth();
@@ -38,7 +38,7 @@ export default function CreatorPortalLayout() {
   if (allowed === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500 text-sm">
-        Opening creator workspace…
+        Opening Contributor Workspace…
       </div>
     );
   }
@@ -47,9 +47,9 @@ export default function CreatorPortalLayout() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
         <div className="max-w-md rounded-xl border bg-white p-6 text-center">
-          <h1 className="text-lg font-semibold text-slate-900">Creator access required</h1>
+          <h1 className="text-lg font-semibold text-slate-900">Contributor access required</h1>
           <p className="mt-2 text-sm text-slate-600">
-            This workspace is only for invited reel creators. Contact the owner if you need access.
+            This workspace is only for invited contributors. Contact the owner if you need access.
           </p>
           <button
             type="button"
@@ -68,8 +68,8 @@ export default function CreatorPortalLayout() {
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-slate-900 truncate">Creator workspace</div>
-            <div className="text-xs text-slate-500 truncate">Approved media &amp; reel submissions only</div>
+            <div className="text-sm font-semibold text-slate-900 truncate">Contributor Workspace</div>
+            <div className="text-xs text-slate-500 truncate">Assignments, submissions, and profile</div>
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden sm:inline text-xs text-slate-500 truncate max-w-[160px]">{user?.email}</span>
@@ -78,7 +78,6 @@ export default function CreatorPortalLayout() {
               className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-xs font-medium min-h-[40px]"
               onClick={async () => {
                 await signOut();
-                // Legacy V1 login path until company-wide auth cleanup
                 navigate(`/${DEFAULT_TENANT_ID}/login`, { replace: true });
               }}
             >

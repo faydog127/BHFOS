@@ -1,10 +1,22 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** see git log after quality-cleanup commit  
+**Verified HEAD at this status edit:** see git log after contributor-workspace commit  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
 
-## Quality Cleanup workflow (2026-07-28) — IMPLEMENTED (staging apply pending this tip)
+## Contributor Workspace (2026-07-28) — IN PROGRESS (Creator architecture reused)
+
+| Field | Value |
+|---|---|
+| Product name | **Contributor** / **Contributor Workspace** (UI) |
+| Internal role | `reel_creator` retained (aliases: `creator`, `contributor`) |
+| Routes | `/creator` workspace; `/contributor` → `/creator` alias |
+| Schema | `20260728140000_media_intel_contributor_workspace.sql` — assignment pause + brief fields; assign denies archived/trashed |
+| Edge | `media-intel-sign` trash denial; `media-intel-creator-admin` passes brief fields |
+| Staging identities | `mil-staging-admin@672803569.test`, `mil-staging-creator@1949824099.test` (no real-recipient invite) |
+| Note | Quality Cleanup migration `20260728120000` verified applied; lifecycle helpers wired into `test:media-intel-helpers` |
+
+## Quality Cleanup workflow (2026-07-28) — staging-applied + API verified
 
 | Field | Value |
 |---|---|
@@ -13,7 +25,8 @@
 | AI | `mil-v2-lifecycle` advisory disposition only — never auto archive/trash/delete |
 | UI | Review Keep·Archive·Trash; `/media/quality-cleanup` bulk; Archive/Trash tabs + owner permanent delete after 30d |
 | Hard rule | AI never permanently deletes originals |
-| Follow-ups | Duplicate identification; large-video cellular Safari |
+| Staging | Migration `20260728120000` **applied** on `sdzhdupekcnekesbtxsl` (SQL-verified). Keep/Archive/Trash/Restore API PASS on synthetic fixture. Assign-while-trashed **denied** after contributor hardening. |
+| Follow-ups | Duplicate identification; large-video cellular Safari; `creator_download` derivative generation pipeline |
 
 ## Resilient mobile upload + visible AI analysis (2026-07-28) — PASS (desktop + real-phone USABLE)
 

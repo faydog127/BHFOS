@@ -2,15 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
 import { listAssets, submitReelVersion } from '@/lib/mediaIntel/api';
-import { requestSignedReelUrl } from '@/lib/mediaIntel/signedAccess';
+import { requestSignedMediaUrl, requestSignedReelUrl } from '@/lib/mediaIntel/signedAccess';
 
 const REEL_UPLOAD_UNAVAILABLE_MESSAGE =
-  'Reel upload requires deployed media-intel-reel-upload — not available until staging deploy. ' +
-  'Direct client writes to mil/reels/% are disabled (creators/staff have no storage or table ' +
+  'Submission upload requires deployed media-intel-reel-upload — not available until staging deploy. ' +
+  'Direct client writes to mil/reels/% are disabled (contributors/staff have no storage or table ' +
   'insert access there under pre-staging hardening).';
 
 /**
- * Mint a server-authorized reel upload target. Creators/staff must never write
+ * Mint a server-authorized reel upload target. Contributors/staff must never write
  * mil/reels/% storage or insert mil_reel_versions rows directly — RLS only allows
  * SELECT and owner-approve UPDATEs on that table now.
  */
@@ -55,18 +55,35 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
   const caps = capsProp || outlet.caps;
   const fileRef = useRef(null);
   const [available, setAvailable] = useState([]);
+  const [assignments, setAssignments] = useState([]);
   const [projects, setProjects] = useState([]);
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [mediaBusyId, setMediaBusyId] = useState(null);
 
   const load = async () => {
     try {
       const assets = await listAssets({ archived: false, trashed: false, limit: 100 });
       setAvailable(assets);
       const { data: auth } = await supabase.auth.getUser();
+      let assignQ = supabase
+        .from('mil_creator_assignments')
+        .select(
+          'id, asset_id, collection_id, status, notes, instructions, due_at, requested_output, platform_format, created_at',
+        )
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(40);
+      if (caps.isCreator && !caps.isStaff) {
+        assignQ = assignQ.eq('creator_user_id', auth.user.id);
+      }
+      const { data: assignRows, error: aErr } = await assignQ;
+      if (aErr) throw aErr;
+      setAssignments(assignRows || []);
+
       let q = supabase
         .from('mil_reel_projects')
         .select('*, mil_reel_versions(*)')
@@ -86,10 +103,37 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
     load();
   }, [caps.isCreator, caps.isStaff]);
 
+  const openAssignedMedia = async (assetId, purpose) => {
+    setMediaBusyId(assetId);
+    setError(null);
+    try {
+      // Never allowOriginal — missing safe derivative must fail closed (no original fallback).
+      const signed = await requestSignedMediaUrl({
+        assetId,
+        purpose,
+        derivativeKind: purpose === 'download' ? 'creator_download' : 'detail_preview',
+        allowOriginal: false,
+      });
+      if (!signed?.url) throw new Error('Working media is unavailable or still preparing.');
+      window.open(signed.url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      const msg = String(err.message || '');
+      if (/no approved|unavailable|not available|403|preparing/i.test(msg)) {
+        setError(
+          'Contributor-safe media is unavailable or still preparing — protected originals are never provided as a fallback.',
+        );
+      } else {
+        setError(msg || 'Media access denied');
+      }
+    } finally {
+      setMediaBusyId(null);
+    }
+  };
+
   const uploadReel = async (file) => {
     if (!file) return;
     if (!caps.isCreator && !caps.isStaff) {
-      setError('Only reel creators can upload reel drafts.');
+      setError('Only contributors can upload deliverable drafts.');
       return;
     }
     setBusy(true);
@@ -125,18 +169,14 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
         byteSize: file.size,
       });
 
-      setMessage('Draft reel uploaded. Submit when ready for owner review.');
+      setMessage('Draft uploaded. Submit when ready for owner review.');
       setTitle('');
       setNotes('');
       await load();
     } catch (err) {
-      // Edge mint/complete is the only authorized path — never fall back to a
-      // direct storage/table write. Surface deploy/unavailable honestly and keep
-      // the control enabled so the creator can retry after deploy or transient fail.
       setError(REEL_UPLOAD_UNAVAILABLE_MESSAGE);
       if (fileRef.current) fileRef.current.value = '';
       if (project?.id) {
-        // Roll back the orphaned draft project — it has no version and never will.
         await supabase.from('mil_reel_projects').delete().eq('id', project.id).eq('status', 'creator_draft');
       }
     } finally {
@@ -179,24 +219,34 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
   return (
     <div className="space-y-6" data-testid="media-creator-workspace">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Creator workspace</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Contributor Workspace</h2>
         <p className="text-sm text-slate-600">
-          Only marketing-approved or assigned media is visible. Raw private intake and restricted assets are never shown here.
+          Assignments, submissions, and profile. Only assigned contributor-safe media is visible — protected
+          originals never appear here.
         </p>
       </div>
       {error && <div className="text-sm text-red-700">{error}</div>}
       {message && <div className="text-sm text-emerald-700">{message}</div>}
 
       <section className="rounded-xl border bg-white p-4 space-y-3">
-        <h3 className="font-medium text-slate-900">Available media</h3>
-        {available.length === 0 ? (
-          <p className="text-sm text-slate-600">No approved source media assigned yet.</p>
+        <h3 className="font-medium text-slate-900">Assignments</h3>
+        {assignments.length === 0 ? (
+          <p className="text-sm text-slate-600">No active assignments yet.</p>
         ) : (
-          <ul className="grid sm:grid-cols-2 gap-2">
-            {available.map((a) => (
-              <li key={a.id} className="rounded-md border px-3 py-2 text-sm">
-                <div className="font-medium truncate">{a.original_filename}</div>
-                <div className="text-xs text-slate-500">{a.media_kind}</div>
+          <ul className="space-y-2">
+            {assignments.map((a) => (
+              <li key={a.id} className="rounded-md border px-3 py-2 text-sm space-y-1">
+                <div className="font-medium">
+                  {a.asset_id ? `Asset ${a.asset_id.slice(0, 8)}…` : `Collection ${a.collection_id?.slice(0, 8)}…`}
+                </div>
+                {(a.instructions || a.notes) && (
+                  <p className="text-slate-600 whitespace-pre-wrap">{a.instructions || a.notes}</p>
+                )}
+                <div className="text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-1">
+                  {a.due_at && <span>Due {new Date(a.due_at).toLocaleDateString()}</span>}
+                  {a.requested_output && <span>Output: {a.requested_output}</span>}
+                  {a.platform_format && <span>Format: {a.platform_format}</span>}
+                </div>
               </li>
             ))}
           </ul>
@@ -204,44 +254,104 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
       </section>
 
       <section className="rounded-xl border bg-white p-4 space-y-3">
-        <h3 className="font-medium text-slate-900">Upload draft or completed reel</h3>
+        <h3 className="font-medium text-slate-900">Assigned media</h3>
+        {available.length === 0 ? (
+          <p className="text-sm text-slate-600">No contributor-safe source media assigned yet.</p>
+        ) : (
+          <ul className="grid sm:grid-cols-2 gap-2">
+            {available.map((a) => (
+              <li key={a.id} className="rounded-md border px-3 py-2 text-sm space-y-2">
+                <div className="font-medium truncate">{a.original_filename}</div>
+                <div className="text-xs text-slate-500">{a.media_kind}</div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={mediaBusyId === a.id}
+                    className="rounded-md border px-3 py-1.5 text-xs min-h-[40px]"
+                    onClick={() => openAssignedMedia(a.id, 'preview')}
+                  >
+                    Preview
+                  </button>
+                  <button
+                    type="button"
+                    disabled={mediaBusyId === a.id}
+                    className="rounded-md border px-3 py-1.5 text-xs min-h-[40px]"
+                    onClick={() => openAssignedMedia(a.id, 'download')}
+                  >
+                    Download working copy
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="rounded-xl border bg-white p-4 space-y-3">
+        <h3 className="font-medium text-slate-900">Submissions</h3>
         <p className="text-xs text-slate-500">
-          Submitting a draft requests owner review only — approval is not publishing.
+          Upload a draft, submit for review, and revise as a new version. Submitting a draft requests owner review
+          only — approval is not publishing.
         </p>
         <label className="block text-sm">
           <span className="font-medium">Title</span>
-          <input className="mt-1 w-full rounded-md border px-3 py-2 min-h-[44px]" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input
+            className="mt-1 w-full rounded-md border px-3 py-2 min-h-[44px]"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
         </label>
         <label className="block text-sm">
-          <span className="font-medium">Notes / questions for owner</span>
-          <textarea className="mt-1 w-full rounded-md border px-3 py-2" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <span className="font-medium">Notes for owner</span>
+          <textarea
+            className="mt-1 w-full rounded-md border px-3 py-2"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
         </label>
-        <input ref={fileRef} type="file" accept="video/*,.mp4,.mov" className="hidden" onChange={(e) => uploadReel(e.target.files?.[0])} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="video/*,.mp4,.mov"
+          className="hidden"
+          onChange={(e) => uploadReel(e.target.files?.[0])}
+        />
         <button
           type="button"
           disabled={busy}
           className="rounded-md bg-blue-600 text-white px-4 py-2.5 text-sm min-h-[44px]"
           onClick={() => fileRef.current?.click()}
         >
-          {busy ? 'Uploading…' : 'Choose reel file'}
+          {busy ? 'Uploading…' : 'Upload draft deliverable'}
         </button>
       </section>
 
       <section className="space-y-3">
-        <h3 className="font-medium text-slate-900">Your reel projects</h3>
+        <h3 className="font-medium text-slate-900">Your submissions</h3>
+        {projects.length === 0 && <p className="text-sm text-slate-600">No submissions yet.</p>}
         {projects.map((p) => {
           const versions = (p.mil_reel_versions || []).sort((a, b) => b.version_number - a.version_number);
           const latest = versions[0];
           return (
             <div key={p.id} className="rounded-xl border bg-white p-4 space-y-2">
               <div className="font-medium">{p.title}</div>
-              <div className="text-sm text-slate-600">Project status: {p.status}</div>
+              <div className="text-sm text-slate-600">Status: {p.status}</div>
               {latest && (
                 <div className="text-sm text-slate-700">
-                  Latest v{latest.version_number}: {latest.status}
-                  {latest.review_notes ? ` · Owner notes: ${latest.review_notes}` : ''}
-                  {latest.review_decision === 'denied' && !latest.review_notes ? ' · Denied (no notes provided)' : ''}
+                  Current version v{latest.version_number}: {latest.status}
+                  {latest.review_notes ? ` · Feedback: ${latest.review_notes}` : ''}
+                  {latest.review_decision === 'denied' && !latest.review_notes ? ' · Rejected' : ''}
                 </div>
+              )}
+              {versions.length > 1 && (
+                <ul className="text-xs text-slate-500 space-y-0.5">
+                  {versions.map((v) => (
+                    <li key={v.id}>
+                      v{v.version_number}: {v.status}
+                      {v.id === latest?.id ? ' (current)' : ''}
+                    </li>
+                  ))}
+                </ul>
               )}
               <div className="flex flex-wrap gap-2">
                 {latest?.status === 'creator_draft' && (
@@ -259,7 +369,7 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
                 )}
                 {['denied', 'revision_requested', 'approved_to_post'].includes(latest?.status) && (
                   <label className="rounded-md border px-3 py-2 text-sm min-h-[44px] inline-flex items-center cursor-pointer">
-                    Upload new version
+                    Upload revision (new version)
                     <input
                       type="file"
                       accept="video/*,.mp4,.mov"
@@ -289,6 +399,14 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
             </div>
           );
         })}
+      </section>
+
+      <section className="rounded-xl border bg-white p-4 space-y-1">
+        <h3 className="font-medium text-slate-900">Profile</h3>
+        <p className="text-sm text-slate-600">
+          Signed in as a contributor. You cannot approve your own work, access CRM, delete owner media, or publish
+          externally.
+        </p>
       </section>
     </div>
   );

@@ -6,7 +6,7 @@ import { getAiConfigState, listAssets, unpublishWebsiteMedia } from '@/lib/media
 import { UPLOAD_PHONE_NOTICE } from '@/lib/mediaIntel/constants';
 
 const CREATOR_ADMIN_UNAVAILABLE_MESSAGE =
-  'Creator invite/roster requires deployed media-intel-creator-admin — not available until staging deploy.';
+  'Contributor invite/roster requires deployed media-intel-creator-admin — not available until staging deploy.';
 
 const PROMOTE_DISABLED_COPY =
   'Website promotion is paused pending a proven, end-to-end-validated public-safe transform pipeline (EXIF/metadata strip + derivative verification). Promotion must never copy a private original — see mil_website_promotions table comment for the current gate.';
@@ -39,6 +39,10 @@ export default function MediaSettings() {
   const [rosterUnavailable, setRosterUnavailable] = useState(false);
   const [assignCreatorId, setAssignCreatorId] = useState('');
   const [assignAssetId, setAssignAssetId] = useState('');
+  const [assignInstructions, setAssignInstructions] = useState('');
+  const [assignDueAt, setAssignDueAt] = useState('');
+  const [assignRequestedOutput, setAssignRequestedOutput] = useState('reel');
+  const [assignPlatformFormat, setAssignPlatformFormat] = useState('');
   const [sessions, setSessions] = useState([]);
   const [sessionLabel, setSessionLabel] = useState('Phone dump');
   const [createdSession, setCreatedSession] = useState(null);
@@ -58,7 +62,9 @@ export default function MediaSettings() {
     if (caps.canManageCreatorAccess) {
       const { data } = await supabase
         .from('mil_creator_assignments')
-        .select('id, creator_user_id, asset_id, collection_id, status, created_at, notes')
+        .select(
+          'id, creator_user_id, asset_id, collection_id, status, created_at, notes, instructions, due_at, requested_output, platform_format',
+        )
         .order('created_at', { ascending: false })
         .limit(40);
       setAssignments(data || []);
@@ -125,7 +131,7 @@ export default function MediaSettings() {
     setMessage(null);
     const email = creatorEmail.trim();
     if (!email) {
-      setError('Enter a creator email first.');
+      setError('Enter a contributor email first.');
       return;
     }
     try {
@@ -133,7 +139,7 @@ export default function MediaSettings() {
       setMessage(
         data?.invited
           ? `Invite sent to ${email} (new account). Confirm actual delivery in Supabase Auth — this app does not track email delivery.`
-          : `${email} already had an account — granted the reel_creator role directly (no new invite email).`,
+          : `${email} already had an account — granted the reel_creator (Contributor) role directly (no new invite email).`,
       );
       setCreatorEmail('');
       await refreshRoster();
@@ -148,38 +154,75 @@ export default function MediaSettings() {
     const creatorUserId = assignCreatorId.trim();
     const assetId = assignAssetId.trim();
     if (!creatorUserId || !assetId) {
-      setError('Creator user ID and asset ID are both required to assign.');
+      setError('Contributor user ID and asset ID are both required to assign.');
       return;
     }
+    const instructions = assignInstructions.trim() || null;
+    const dueAt = assignDueAt ? new Date(assignDueAt).toISOString() : null;
+    const requestedOutput = assignRequestedOutput.trim() || null;
+    const platformFormat = assignPlatformFormat.trim() || null;
+    const payload = {
+      action: 'assign',
+      creatorUserId,
+      assetId,
+      collectionId: null,
+      notes: instructions,
+      instructions,
+      dueAt,
+      requestedOutput,
+      platformFormat,
+    };
     try {
-      await invokeCreatorAdmin({ action: 'assign', creatorUserId, assetId, collectionId: null, notes: null });
-      setMessage('Creator assignment created.');
+      await invokeCreatorAdmin(payload);
+      setMessage('Contributor assignment created.');
       setAssignCreatorId('');
       setAssignAssetId('');
+      setAssignInstructions('');
+      setAssignDueAt('');
+      setAssignPlatformFormat('');
       await refreshAccess();
     } catch (err) {
       if (!err.edgeUnavailable) {
         setError(err.message);
         return;
       }
-      // Edge not deployed yet — mil_assign_creator RPC already exists server-side
-      // and enforces the same owner/admin-only check, so use it directly rather
-      // than blocking a working capability on an undeployed edge function.
       const { error: rpcErr } = await supabase.rpc('mil_assign_creator', {
         p_creator_user_id: creatorUserId,
         p_asset_id: assetId,
         p_collection_id: null,
-        p_notes: null,
+        p_notes: instructions,
+        p_due_at: dueAt,
+        p_requested_output: requestedOutput,
+        p_platform_format: platformFormat,
+        p_instructions: instructions,
       });
       if (rpcErr) {
         setError(rpcErr.message);
         return;
       }
-      setMessage('Creator assignment created via mil_assign_creator (media-intel-creator-admin not yet deployed).');
+      setMessage('Contributor assignment created via mil_assign_creator.');
       setAssignCreatorId('');
       setAssignAssetId('');
+      setAssignInstructions('');
+      setAssignDueAt('');
+      setAssignPlatformFormat('');
       await refreshAccess();
     }
+  };
+
+  const setAssignmentStatus = async (assignmentId, status) => {
+    setError(null);
+    setMessage(null);
+    const { error: rpcErr } = await supabase.rpc('mil_set_creator_assignment_status', {
+      p_assignment_id: assignmentId,
+      p_status: status,
+    });
+    if (rpcErr) {
+      setError(rpcErr.message);
+      return;
+    }
+    setMessage(`Assignment ${status}.`);
+    await refreshAccess();
   };
 
   const revokeAssignment = async (assignmentId) => {
@@ -187,7 +230,7 @@ export default function MediaSettings() {
     setMessage(null);
     try {
       await invokeCreatorAdmin({ action: 'revoke_assignment', assignmentId });
-      setMessage('Creator assignment revoked. New signed links will fail.');
+      setMessage('Contributor assignment revoked. New signed links will fail.');
       await refreshAccess();
     } catch (err) {
       if (!err.edgeUnavailable) {
@@ -201,7 +244,7 @@ export default function MediaSettings() {
         setError(rpcErr.message);
         return;
       }
-      setMessage('Creator assignment revoked via mil_revoke_creator_assignment (media-intel-creator-admin not yet deployed).');
+      setMessage('Contributor assignment revoked.');
       await refreshAccess();
     }
   };
@@ -341,19 +384,21 @@ export default function MediaSettings() {
 
       {caps.canManageCreatorAccess && (
         <section className="rounded-xl border bg-white p-4 space-y-3">
-          <h3 className="font-medium">Creator access</h3>
+          <h3 className="font-medium">Contributor access</h3>
           <p className="text-sm text-slate-600">
-            Individual Supabase accounts only — no shared passwords. Role <code>reel_creator</code> enters <code>/creator</code> (focused portal, not CRM).
+            Individual Supabase accounts only — no shared passwords. Product role is Contributor; internal role remains{' '}
+            <code>reel_creator</code> and lands at <code>/creator</code> (also aliased from <code>/contributor</code>).
+            Not CRM.
           </p>
 
           <label className="block text-sm">
-            <span className="font-medium">Invite creator by email</span>
+            <span className="font-medium">Invite contributor by email</span>
             <div className="mt-1 flex gap-2">
               <input
                 className="flex-1 rounded-md border px-3 py-2 min-h-[44px]"
                 value={creatorEmail}
                 onChange={(e) => setCreatorEmail(e.target.value)}
-                placeholder="creator@example.com"
+                placeholder="contributor@example.com"
               />
               <button type="button" className="rounded-md border px-4 py-2 text-sm min-h-[44px]" onClick={inviteCreator}>
                 Send invite
@@ -362,7 +407,7 @@ export default function MediaSettings() {
           </label>
           {rosterUnavailable && (
             <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-              {CREATOR_ADMIN_UNAVAILABLE_MESSAGE} Grant <code>app_user_roles.role = 'reel_creator'</code> manually via
+              {CREATOR_ADMIN_UNAVAILABLE_MESSAGE} Grant <code>app_user_roles.role = &apos;reel_creator&apos;</code> manually via
               Supabase Studio in the meantime — this UI will not fabricate a delivery confirmation it cannot verify.
             </p>
           )}
@@ -378,16 +423,17 @@ export default function MediaSettings() {
           )}
 
           <div className="pt-2 border-t space-y-2">
-            <h4 className="text-sm font-medium">Assign creator to an asset</h4>
+            <h4 className="text-sm font-medium">Create assignment</h4>
             <p className="text-xs text-slate-500">
-              Global reel-creation approval alone never grants visibility — assignment is per-asset (or per-collection) and required.
+              Global reel-creation approval alone never grants visibility — assignment is per-asset (or per-collection)
+              and required. Archived/trashed media cannot be assigned.
             </p>
             <div className="grid sm:grid-cols-2 gap-2">
               <input
                 className="rounded-md border px-3 py-2 min-h-[44px] text-sm"
                 value={assignCreatorId}
                 onChange={(e) => setAssignCreatorId(e.target.value)}
-                placeholder="Creator user ID (uuid)"
+                placeholder="Contributor user ID (uuid)"
               />
               <input
                 className="rounded-md border px-3 py-2 min-h-[44px] text-sm"
@@ -396,30 +442,90 @@ export default function MediaSettings() {
                 placeholder="Asset ID (uuid)"
               />
             </div>
+            <textarea
+              className="w-full rounded-md border px-3 py-2 text-sm min-h-[72px]"
+              value={assignInstructions}
+              onChange={(e) => setAssignInstructions(e.target.value)}
+              placeholder="Instructions for the contributor"
+            />
+            <div className="grid sm:grid-cols-3 gap-2">
+              <input
+                type="date"
+                className="rounded-md border px-3 py-2 min-h-[44px] text-sm"
+                value={assignDueAt}
+                onChange={(e) => setAssignDueAt(e.target.value)}
+                title="Optional due date"
+              />
+              <input
+                className="rounded-md border px-3 py-2 min-h-[44px] text-sm"
+                value={assignRequestedOutput}
+                onChange={(e) => setAssignRequestedOutput(e.target.value)}
+                placeholder="Requested output (e.g. reel)"
+              />
+              <input
+                className="rounded-md border px-3 py-2 min-h-[44px] text-sm"
+                value={assignPlatformFormat}
+                onChange={(e) => setAssignPlatformFormat(e.target.value)}
+                placeholder="Platform/format (optional)"
+              />
+            </div>
             <button type="button" className="rounded-md border px-4 py-2 text-sm min-h-[44px]" onClick={assignCreator}>
               Assign
             </button>
           </div>
 
-          <h4 className="text-sm font-medium pt-2">Active assignments</h4>
+          <h4 className="text-sm font-medium pt-2">Assignments</h4>
           <ul className="space-y-2 text-sm">
-            {assignments.filter((a) => a.status === 'active').length === 0 && (
-              <li className="text-slate-500">No active assignments.</li>
+            {assignments.filter((a) => a.status === 'active' || a.status === 'paused').length === 0 && (
+              <li className="text-slate-500">No active or paused assignments.</li>
             )}
-            {assignments.filter((a) => a.status === 'active').map((a) => (
-              <li key={a.id} className="flex justify-between gap-2 border rounded-md px-3 py-2">
-                <span className="truncate text-xs">
-                  {a.asset_id ? `Asset ${a.asset_id.slice(0, 8)}…` : `Collection ${a.collection_id?.slice(0, 8)}…`}
-                </span>
-                <button
-                  type="button"
-                  className="text-red-700 text-xs underline"
-                  onClick={() => revokeAssignment(a.id)}
-                >
-                  Revoke
-                </button>
-              </li>
-            ))}
+            {assignments
+              .filter((a) => a.status === 'active' || a.status === 'paused')
+              .map((a) => (
+                <li key={a.id} className="flex flex-col gap-2 border rounded-md px-3 py-2">
+                  <div className="flex justify-between gap-2">
+                    <span className="truncate text-xs">
+                      {a.asset_id ? `Asset ${a.asset_id.slice(0, 8)}…` : `Collection ${a.collection_id?.slice(0, 8)}…`} ·{' '}
+                      {a.status}
+                    </span>
+                    <div className="flex gap-2 shrink-0">
+                      {a.status === 'active' && (
+                        <button
+                          type="button"
+                          className="text-amber-800 text-xs underline"
+                          onClick={() => setAssignmentStatus(a.id, 'paused')}
+                        >
+                          Pause
+                        </button>
+                      )}
+                      {a.status === 'paused' && (
+                        <button
+                          type="button"
+                          className="text-emerald-800 text-xs underline"
+                          onClick={() => setAssignmentStatus(a.id, 'active')}
+                        >
+                          Resume
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="text-red-700 text-xs underline"
+                        onClick={() => revokeAssignment(a.id)}
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  </div>
+                  {(a.instructions || a.notes) && (
+                    <p className="text-xs text-slate-600 whitespace-pre-wrap">{a.instructions || a.notes}</p>
+                  )}
+                  <div className="text-[11px] text-slate-500 flex flex-wrap gap-x-3">
+                    {a.due_at && <span>Due {new Date(a.due_at).toLocaleDateString()}</span>}
+                    {a.requested_output && <span>{a.requested_output}</span>}
+                    {a.platform_format && <span>{a.platform_format}</span>}
+                  </div>
+                </li>
+              ))}
           </ul>
         </section>
       )}
