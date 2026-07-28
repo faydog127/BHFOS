@@ -166,7 +166,7 @@ const upsertInvoice = async (
   patch: Record<string, unknown>,
   checkoutGeneration: number | null,
 ) => {
-  let nextPatch = { ...patch };
+  const nextPatch = { ...patch };
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
     let query = invoiceId
@@ -198,18 +198,18 @@ const upsertInvoice = async (
   throw new Error('Invoice save failed after removing incompatible columns.');
 };
 
-const getErrorMessage = (error: unknown) => {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === 'object') {
-    const maybeMessage = (error as { message?: unknown }).message;
-    if (typeof maybeMessage === 'string' && maybeMessage.trim()) return maybeMessage.trim();
-    const maybeError = (error as { error?: unknown }).error;
-    if (typeof maybeError === 'string' && maybeError.trim()) return maybeError.trim();
-  }
-  return 'Unknown error';
+type InvoiceSaveDependencies = {
+  verifyClaims: typeof getVerifiedClaims;
 };
 
-Deno.serve(async (req) => {
+const defaultDependencies: InvoiceSaveDependencies = {
+  verifyClaims: getVerifiedClaims,
+};
+
+export const handleInvoiceSaveRequest = async (
+  req: Request,
+  dependencies: InvoiceSaveDependencies = defaultDependencies,
+) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -218,8 +218,15 @@ Deno.serve(async (req) => {
     return json({ error: 'Method not allowed' }, 405);
   }
 
+  let claims: Awaited<ReturnType<typeof getVerifiedClaims>>['claims'];
   try {
-    const { claims } = await getVerifiedClaims(req);
+    ({ claims } = await dependencies.verifyClaims(req));
+  } catch {
+    console.warn('invoice-save authentication failed');
+    return json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
     const jwtTenantId = getTenantIdFromClaims(claims);
     if (!jwtTenantId) {
       return json({ error: 'Unauthorized: missing tenant claim' }, 403);
@@ -354,8 +361,9 @@ Deno.serve(async (req) => {
       }
     }
   } catch (error) {
-    const message = getErrorMessage(error);
     console.error('invoice-save failed:', error);
-    return json({ error: message }, 500);
+    return json({ error: 'Invoice could not be saved.' }, 500);
   }
-});
+};
+
+Deno.serve((req) => handleInvoiceSaveRequest(req));

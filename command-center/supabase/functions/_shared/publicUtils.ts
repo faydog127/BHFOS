@@ -19,7 +19,7 @@ type LogEventInput = {
 
 const formatError = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-const allowedOrigins = [
+const allowedOrigins = new Set([
   'http://localhost:3000',
   'http://localhost:3003',
   'http://127.0.0.1:3000',
@@ -33,14 +33,27 @@ const allowedOrigins = [
   'https://installworxs.com',
   'https://www.installworxs.com',
   'https://demo.example.com',
-];
+  'https://command-center-staging-woad.vercel.app',
+]);
 
 const rateLimitState = new Map<string, { count: number; bucket: number }>();
 
+const normalizeOrigin = (origin: string): string | null => {
+  try {
+    const parsed = new URL(origin);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+    if (parsed.username || parsed.password || parsed.search || parsed.hash) return null;
+    if (parsed.pathname !== '/') return null;
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+};
+
 const resolveCorsOrigin = (origin: string | null): string | null => {
   if (!origin) return null;
-  if (allowedOrigins.includes(origin)) return origin;
-  return null;
+  const normalized = normalizeOrigin(origin);
+  return normalized && allowedOrigins.has(normalized) ? normalized : null;
 };
 
 const buildCorsHeaders = (origin: string | null) => {
