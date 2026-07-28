@@ -416,13 +416,14 @@ async function processQueueItem({ token, item, onFileUpdate, signal }) {
       minted = await mintForItem({ token, item: current, mime });
     }
   } catch (err) {
+    const transient = isTransientUploadError(err);
     return persistAndEmit(
       current,
       {
-        phase: UPLOAD_PHASE.FAILED,
-        errorLayer: ERROR_LAYER.UPLOAD_AUTHORIZATION,
-        errorMessage: err?.message || 'Upload authorization failed',
-        legacyStatus: UPLOAD_FILE_STATUS.FAILED,
+        phase: transient ? UPLOAD_PHASE.INTERRUPTED : UPLOAD_PHASE.FAILED,
+        errorLayer: transient ? ERROR_LAYER.NETWORK : ERROR_LAYER.UPLOAD_AUTHORIZATION,
+        errorMessage: err?.message || (transient ? 'Network interrupted during authorization' : 'Upload authorization failed'),
+        legacyStatus: transient ? UPLOAD_FILE_STATUS.INTERRUPTED : UPLOAD_FILE_STATUS.FAILED,
       },
       onFileUpdate,
     );
@@ -590,13 +591,14 @@ async function processQueueItem({ token, item, onFileUpdate, signal }) {
     });
     return analyzed || current;
   } catch (err) {
+    const transient = isTransientUploadError(err);
     return persistAndEmit(
       current,
       {
-        phase: UPLOAD_PHASE.FAILED,
-        errorLayer: ERROR_LAYER.FINALIZATION,
-        errorMessage: err?.message || 'Finalization failed',
-        legacyStatus: UPLOAD_FILE_STATUS.FAILED,
+        phase: transient ? UPLOAD_PHASE.INTERRUPTED : UPLOAD_PHASE.FAILED,
+        errorLayer: transient ? ERROR_LAYER.NETWORK : ERROR_LAYER.FINALIZATION,
+        errorMessage: err?.message || (transient ? 'Network interrupted during finalization' : 'Finalization failed'),
+        legacyStatus: transient ? UPLOAD_FILE_STATUS.INTERRUPTED : UPLOAD_FILE_STATUS.FAILED,
       },
       onFileUpdate,
     );
@@ -784,13 +786,23 @@ export async function restoreUploadQueue({ token, onFileUpdate, autoResume = tru
 
   if (!autoResume || !token) return items;
 
-  const resumable = items.filter(
-    (i) =>
-      i.blob instanceof Blob &&
-      [UPLOAD_PHASE.INTERRUPTED, UPLOAD_PHASE.QUEUED, UPLOAD_PHASE.UPLOADING, UPLOAD_PHASE.RETRYING, UPLOAD_PHASE.FINALIZING].includes(
-        i.phase,
-      ),
-  );
+  const resumable = items.filter((i) => {
+    if (!(i.blob instanceof Blob)) return false;
+    if (
+      [
+        UPLOAD_PHASE.INTERRUPTED,
+        UPLOAD_PHASE.QUEUED,
+        UPLOAD_PHASE.UPLOADING,
+        UPLOAD_PHASE.RETRYING,
+        UPLOAD_PHASE.FINALIZING,
+        UPLOAD_PHASE.AWAITING_AUTHORIZATION,
+        UPLOAD_PHASE.PREPARING,
+      ].includes(i.phase)
+    ) {
+      return true;
+    }
+    return i.phase === UPLOAD_PHASE.FAILED && i.errorLayer === ERROR_LAYER.NETWORK;
+  });
   if (!resumable.length) return items;
 
   await requestUploadWakeLock();
@@ -859,6 +871,29 @@ export function bindUploadExitWarning(isDirtyFn) {
   };
   window.addEventListener('beforeunload', handler);
   return () => window.removeEventListener('beforeunload', handler);
+}
+
+/**
+ * When the browser comes back online, resume interrupted (and network-failed) queue items.
+ */
+export function bindOnlineUploadResume({ getToken, onFileUpdate }) {
+  if (typeof window === 'undefined') return () => {};
+  let running = false;
+  const onOnline = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const token = typeof getToken === 'function' ? await getToken() : getToken;
+      if (!token) return;
+      await restoreUploadQueue({ token, onFileUpdate, autoResume: true });
+    } catch {
+      /* leave items interrupted for manual retry */
+    } finally {
+      running = false;
+    }
+  };
+  window.addEventListener('online', onOnline);
+  return () => window.removeEventListener('online', onOnline);
 }
 
 export function isOnline() {

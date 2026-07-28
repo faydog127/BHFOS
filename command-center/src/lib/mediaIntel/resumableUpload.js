@@ -158,7 +158,11 @@ export function isAbortError(err) {
 export function isTransientUploadError(err) {
   if (isAbortError(err)) return false;
   const msg = String(err?.message || err || '').toLowerCase();
-  if (/forbidden|not allowed|unauthorized|unsupported|invalid signature|revoked|expired/.test(msg)) {
+  // Explicit network / offline failures are always retryable.
+  if (/failed to fetch|networkerror|network error|offline|load failed|timed out|timeout|econnreset|enotfound/.test(msg)) {
+    return true;
+  }
+  if (/forbidden|not allowed|unauthorized|unsupported|invalid signature|revoked|expired|policy/.test(msg)) {
     return false;
   }
   return true;

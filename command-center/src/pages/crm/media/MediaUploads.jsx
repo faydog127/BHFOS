@@ -6,6 +6,7 @@ import {
   UPLOAD_FILE_STATUS,
   UPLOAD_PHASE_LABELS,
   attachReselectedFile,
+  bindOnlineUploadResume,
   bindUploadExitWarning,
   createUploadSession,
   fetchBatchManifest,
@@ -98,6 +99,14 @@ export default function MediaUploads() {
       window.removeEventListener('offline', onOff);
     };
   }, []);
+
+  useEffect(() => {
+    if (!caps.isOwnerAdmin) return undefined;
+    return bindOnlineUploadResume({
+      getToken: () => tokenRef.current,
+      onFileUpdate,
+    });
+  }, [caps.isOwnerAdmin, onFileUpdate]);
 
   useEffect(() => {
     return bindUploadExitWarning(() => busy || Object.values(fileStates).some((f) =>
