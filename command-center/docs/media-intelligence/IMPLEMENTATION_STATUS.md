@@ -4,7 +4,7 @@
 **Verified HEAD at this status edit:** see git log after resilient-upload commit  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
 
-## Resilient mobile upload + visible AI analysis (2026-07-28) — DESKTOP PASS / PHONE PENDING
+## Resilient mobile upload + visible AI analysis (2026-07-28) — PASS (desktop + real-phone USABLE)
 
 | Field | Value |
 |---|---|
@@ -14,10 +14,10 @@
 | Staging apply | Migration `20260728010000_media_intel_client_upload_id.sql` on `sdzhdupekcnekesbtxsl`; Edge `media-intel-upload-session` + `media-intel-analyze` redeployed |
 | Login | MIL `next` destinations preserved through Login (no forced `/tvg/crm`) |
 | Artifact isolation | Brand/storage URLs derive from `VITE_SUPABASE_URL` (no hardcoded production project ref in `src/` or hosted `dist`) |
-| Hosted deploy | `https://mil.bhfos.com` `environment=mil-staging` tip `238d632fb99b0bc3d62415c46caa38aa8d97d011` (stale Uploads reconcile vs Review success) |
+| Hosted deploy | `https://mil.bhfos.com` `environment=mil-staging` tip `4b0949f2014905800e21e94aa767b48da345ae07` |
 | Desktop acceptance | Mixed batch 5/5 → analysis complete (auto UI); review card fields visible; 35s offline → 5/5 recovered; refresh during upload queue restored |
-| Real-phone findings | Refresh/Retry/Reselect fixes live. Stale Uploads rows now reconcile against server success (committed grant / asset awaiting review) and leave Uploads even if a frozen local copy remained |
-| Real-phone screen-lock | **Pending** after retry/reselect + review-handoff redeploy (required for PASS) |
+| Real-phone (USABLE, owner) | Photo upload → analysis → Review Queue; refresh mid-upload → Reselect/recover; stale Uploads rows clear once Review has the asset; screen-lock mid-upload recovered |
+| Residual risk | Large cellular video (~40MB) earlier stuck at minted/0 bytes — not re-proven in this PASS; treat large-video Safari/cellular as follow-up if needed |
 | Rollback archive | `command-center/tmp/mil-staging-*-*.zip` (prior `a7c52ce…` + current tip archives) |
 
 ---
