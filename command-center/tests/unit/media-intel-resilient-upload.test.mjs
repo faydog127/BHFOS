@@ -67,6 +67,14 @@ describe('MIL resilient upload + analysis', () => {
     assert.match(src, /triggerAnalyzeAfterCommit/);
     assert.match(src, /upload\/resumable|resumable: true/);
     assert.match(src, /createSignedUploadUrl/);
+    // Must not abort the fire-and-forget analyze call after a few seconds
+    assert.doesNotMatch(src, /AbortController[\s\S]{0,200}8000/);
+  });
+
+  it('client invokes analyze after finalize then polls', () => {
+    const upload = read('src/lib/mediaIntel/uploadManager.js');
+    assert.match(upload, /queueAiAnalysis\(assetId\)/);
+    assert.match(upload, /pollAnalysisUntilSettled/);
   });
 
   it('client uses signed TUS and durable queue', () => {

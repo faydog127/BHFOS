@@ -259,11 +259,10 @@ function triggerAnalyzeAfterCommit(assetId: string | null | undefined) {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
   if (!url || !serviceKey) return
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 8000)
+  // Do not abort early — OpenAI analyze commonly exceeds a few seconds.
+  // Fire-and-forget must leave the analyze edge running to completion.
   void fetch(`${url}/functions/v1/media-intel-analyze`, {
     method: 'POST',
-    signal: controller.signal,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${serviceKey}`,
@@ -271,14 +270,12 @@ function triggerAnalyzeAfterCommit(assetId: string | null | undefined) {
       'x-mil-internal-analyze': '1',
     },
     body: JSON.stringify({ action: 'analyze', assetId }),
+  }).catch((err) => {
+    console.error(
+      'media-intel-upload-session analyze trigger failed',
+      err instanceof Error ? err.message : err,
+    )
   })
-    .catch((err) => {
-      console.error(
-        'media-intel-upload-session analyze trigger failed',
-        err instanceof Error ? err.message : err,
-      )
-    })
-    .finally(() => clearTimeout(timer))
 }
 
 async function mintSignedUpload(objectPath: string) {

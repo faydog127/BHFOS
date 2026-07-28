@@ -12,6 +12,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { sha256Hex, clientFileKey } from './checksum';
 import { resolveMimeType, validateMediaFile } from './formats';
 import { saveUploadSession } from './uploadSessionStore';
+import { queueAiAnalysis } from './api';
 import {
   buildQueueItemFromFile,
   listQueueItems,
@@ -564,7 +565,24 @@ async function processQueueItem({ token, item, onFileUpdate, signal }) {
       onFileUpdate,
     );
 
-    // Analysis may be triggered server-side; poll for a visible outcome.
+    // Server may auto-trigger analyze after commit; also invoke from the
+    // authenticated client so a short-lived server trigger cannot leave jobs queued.
+    try {
+      await queueAiAnalysis(assetId);
+    } catch (analyzeErr) {
+      // Upload already finalized — keep queue honest and let poll/retry surface AI failure.
+      current = await persistAndEmit(
+        current,
+        {
+          phase: UPLOAD_PHASE.QUEUED_FOR_ANALYSIS,
+          errorLayer: ERROR_LAYER.ANALYSIS,
+          errorMessage: analyzeErr?.message || 'Analysis request failed — retry from Review',
+          legacyStatus: UPLOAD_FILE_STATUS.UPLOADED,
+        },
+        onFileUpdate,
+      );
+    }
+
     const analyzed = await pollAnalysisUntilSettled(assetId, {
       onUpdate: async (analysisPatch) => {
         current = await persistAndEmit(current, analysisPatch, onFileUpdate);
