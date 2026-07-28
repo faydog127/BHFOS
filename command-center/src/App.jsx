@@ -9,6 +9,8 @@ import TenantGuard from '@/components/TenantGuard';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 
 import Login from '@/pages/Login';
+import ForgotPassword from '@/pages/ForgotPassword';
+import ResetPassword from '@/pages/ResetPassword';
 import Contact from '@/pages/Contact';
 import ThankYou from '@/pages/ThankYou';
 import QuoteView from '@/pages/public/QuoteView';
@@ -314,6 +316,8 @@ function App() {
         <Route path="/bhf/crm/*" element={<CrmAliasRedirect fromPrefix="/bhf/crm" />} />
         <Route path="/app/:tenantId/*" element={<AppAliasRedirect />} />
         <Route path="/:tenantId/login" element={<Login />} />
+        <Route path="/:tenantId/forgot-password" element={<ForgotPassword />} />
+        <Route path="/:tenantId/reset-password" element={<ResetPassword />} />
         <Route
           path="/:tenantId/crm/*"
           element={

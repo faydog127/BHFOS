@@ -161,7 +161,17 @@ const Login = () => {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between gap-4">
+                <Label htmlFor="password">Password</Label>
+                {!isLocalAuth && !hasHostedLocalSupabaseMismatch ? (
+                  <Link
+                    to={tenantPath('/forgot-password', urlTenant)}
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                ) : null}
+              </div>
               <Input
                 id="password"
                 type="password"
