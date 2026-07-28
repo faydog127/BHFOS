@@ -4,17 +4,20 @@
 **Verified HEAD at this status edit:** see git log after resilient-upload commit  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
 
-## Resilient mobile upload + visible AI analysis (2026-07-28) — IN PROGRESS
+## Resilient mobile upload + visible AI analysis (2026-07-28) — DESKTOP PASS / PHONE PENDING
 
 | Field | Value |
 |---|---|
 | Plan | [`RESILIENT_UPLOAD_ANALYSIS_PLAN.md`](./RESILIENT_UPLOAD_ANALYSIS_PLAN.md) |
-| Client | IndexedDB durable queue (`mil-upload-queue`), signed TUS + PUT fallback, Wake Lock secondary, analysis poll |
-| Server | `client_upload_id` migration; `media-intel-upload-session` refresh/idempotent mint + post-finalize analyze; `media-intel-analyze` mil-v2 structured outcome |
+| Client | IndexedDB durable queue (`mil-upload-queue`), signed TUS + PUT fallback, Wake Lock secondary, analysis poll + client analyze invoke |
+| Server | `client_upload_id` migration; `media-intel-upload-session` refresh/idempotent mint + non-aborted post-finalize analyze; `media-intel-analyze` mil-v2 structured outcome |
 | Staging apply | Migration `20260728010000_media_intel_client_upload_id.sql` on `sdzhdupekcnekesbtxsl`; Edge `media-intel-upload-session` + `media-intel-analyze` redeployed |
 | Login | MIL `next` destinations preserved through Login (no forced `/tvg/crm`) |
-| Artifact isolation | Brand/storage URLs derive from `VITE_SUPABASE_URL` (no hardcoded production project ref in `src/`) |
-| Hosted acceptance | Pending deploy + desktop interruption + real-phone screen-lock |
+| Artifact isolation | Brand/storage URLs derive from `VITE_SUPABASE_URL` (no hardcoded production project ref in `src/` or hosted `dist`) |
+| Hosted deploy | `https://mil.bhfos.com` `environment=mil-staging` tip includes network-interrupt finalize fix (`3f435a3…`+) |
+| Desktop acceptance | Mixed batch 5/5 → analysis complete (auto UI); review card fields visible; 35s offline → 5/5 recovered; refresh during upload queue restored |
+| Real-phone screen-lock | **Pending owner participation** (required for PASS) |
+| Rollback archive | `command-center/tmp/mil-staging-*-*.zip` (prior `a7c52ce…` + current tip archives) |
 
 ---
 
