@@ -65,9 +65,11 @@ export function uploadViaSignedTus(opts) {
         'x-signature': signatureToken,
         'x-upsert': 'true',
       },
-      fingerprint:
-        fingerprint ||
-        (() => Promise.resolve(`mil:${bucket}:${objectPath}:${file.size}:${file.name || 'blob'}`)),
+      // tus-js-client requires a function; never pass a raw string here.
+      fingerprint: () =>
+        Promise.resolve(
+          fingerprint || `mil:${bucket}:${objectPath}:${file.size}:${file.name || 'blob'}`,
+        ),
       onError(error) {
         finish(error instanceof Error ? error : new Error(String(error)));
       },
