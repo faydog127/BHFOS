@@ -1,10 +1,10 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** see git log after contributor-workspace commit  
+**Verified HEAD at this status edit:** contributor workbench polish commit (see git log)  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
 
-## Contributor Workspace (2026-07-28) — IN PROGRESS (Creator architecture reused)
+## Contributor Workspace (2026-07-28) — FRONTEND DEPLOYED; acceptance pending (Creator architecture reused)
 
 | Field | Value |
 |---|---|
@@ -12,9 +12,53 @@
 | Internal role | `reel_creator` retained (aliases: `creator`, `contributor`) |
 | Routes | `/creator` workspace; `/contributor` → `/creator` alias |
 | Schema | `20260728140000_media_intel_contributor_workspace.sql` — assignment pause + brief fields; assign denies archived/trashed |
-| Edge | `media-intel-sign` trash denial; `media-intel-creator-admin` passes brief fields |
+| Edge | `media-intel-sign` trash denial; `media-intel-creator-admin` passes brief fields; `media-intel-analyze` prefers `ai_safe`/`heic_preview` JPEG derivatives (HEIC originals no longer sent to OpenAI) |
 | Staging identities | `mil-staging-admin@672803569.test`, `mil-staging-creator@1949824099.test` (no real-recipient invite) |
-| Note | Quality Cleanup migration `20260728120000` verified applied; lifecycle helpers wired into `test:media-intel-helpers` |
+| Hosted frontend | `https://mil.bhfos.com` `build-info` **7532e65313ae** / `mil-staging` / only `sdzhdupekcnekesbtxsl` — **DEPLOYED** (not owner/contributor USABLE PASS yet) |
+| HEIC AI path | Staging generated `heic_preview`+`ai_safe` for **26/26** HEIC; re-analyze **26/26 OK**; social-suitable still sparse (AI classification) |
+| Rollback archive | `command-center/tmp/mil-staging-7532e65313ae-20260728T115135Z.zip` (+ preserved copy under `tmp/mil-hosting-backup-20260728/`) |
+| Note | Quality Cleanup migration `20260728120000` verified applied; lifecycle helpers wired into `test:media-intel-helpers`. No PASS until distinct-identity owner→contributor acceptance. |
+
+## Contributor workbench A→B (2026-07-28) — FRONTEND DEPLOYED; browser USABLE pending
+
+| Field | Value |
+|---|---|
+| Scope | Assignment workbench UX only — no AI analyze, no full-library search |
+| A | Honest **Working copy (JPEG)** labels (HEIC source called out); in-page thumbs via signed `grid_thumb`/`detail_preview`; **Download all working copies** (blob save, never originals) |
+| B | Filename search **within assigned set**; read-only **approved-use chips** from `mil_permitted_uses` |
+| Code | `src/lib/mediaIntel/contributorWorkspace.js`; `MediaCreatorWorkspace.jsx`; `listAssets` select includes `mil_permitted_uses` |
+| Tests | `tests/unit/media-intel-contributor.test.mjs` helper + UI contract coverage |
+| Hosted frontend | `https://mil.bhfos.com` `frontendAssetVersion=361ea9ce209d35fb` / `environment=mil-staging` / `commitSha=7532e65313ae…` / Supabase **only** `sdzhdupekcnekesbtxsl`; hosted `CreatorRoutes-8166e7cd.js` contains Working copies / Download all / contributor-media-search |
+| Deploy archive | `command-center/tmp/mil-staging-7532e65313ae-20260728T215415Z.zip` (auth `MIL-CONTRIBUTOR-WORKBENCH-AB-FRONTEND-2026-07-28`) |
+| Honesty note | Artifact includes **uncommitted** A/B UX; `build-info.commitSha` still reports `7532e653…` until A/B is committed |
+| Evidence tier | **DEPLOYED** (not contributor browser USABLE PASS yet) |
+| Neighbors | `bhfos.com` / `app.bhfos.com` HTTP 200 after deploy |
+| Non-goals kept | No contributor AI console; no tag/library browse (RLS staff-only for tags); no originals |
+
+## Contributor workbench tight UI (2026-07-28) — FRONTEND DEPLOYED; browser USABLE pending
+
+| Field | Value |
+|---|---|
+| Scope | Presentation cleanup only — no new contributor capabilities |
+| Top block | Single **Your brief** (creative instructions only; pack/AI-score inventory notes filtered); output/format/due + asset count; **standing rules** once |
+| Media cards | Thumb + approved-use chips + Preview/Download — **no filename title**, no per-card honesty prose |
+| Search | Filename search shown only when assigned set `> 12` |
+| Code | `summarizeContributorBrief` / `looksLikeInventoryNote` / `CONTRIBUTOR_STANDING_RULES` in `contributorWorkspace.js`; `MediaCreatorWorkspace.jsx` |
+| Hosted frontend | `https://mil.bhfos.com` `frontendAssetVersion=4c0a3d212a6698ca` / `mil-staging` / SHA label `7532e653…` / Supabase only `sdzhdupekcnekesbtxsl`; hosted `CreatorRoutes-4b4d237c.js` has Your brief / standing rules / Download all |
+| Deploy archive | `command-center/tmp/mil-staging-7532e65313ae-20260728T223040Z.zip` (auth `MIL-CONTRIBUTOR-TIGHT-UI-FRONTEND-2026-07-28`) |
+| Honesty note | Artifact includes **uncommitted** tight UI; `build-info.commitSha` still reports `7532e653…` |
+| Evidence tier | **DEPLOYED** (not contributor browser USABLE PASS yet) |
+| Neighbors | `bhfos.com` / `app.bhfos.com` HTTP 200 after deploy |
+
+## Contributor polish pass (2026-07-28) — COMMITTED; deploy next
+
+| Field | Value |
+|---|---|
+| Owner | Assign form requires creative **Brief** (`isValidContributorBrief`); rejects empty / inventory notes |
+| Contributor | Primary **Download all** CTA; denser 2/3-col square grid; pack summary + due prominence; quieter standing rules; “Next: submit” hint |
+| Staging fixture brief | Active pack assignments get a shared creative `instructions` brief (inventory notes cleared from brief fields) |
+| Ship checklist | Commit → polish deploy → fixture brief → distinct-identity USABLE (owner) → prove reel submit → authorized merge/prod |
+| Evidence tier | **SOURCE-ONLY** until mil-staging frontend redeploy of this commit |
 
 ## Quality Cleanup workflow (2026-07-28) — staging-applied + API verified
 

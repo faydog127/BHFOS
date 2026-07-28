@@ -79,7 +79,9 @@ export async function listAssets(filters = {}) {
 
   let q = supabase
     .from('mil_assets')
-    .select('*, mil_derivatives(id, kind, object_path, bucket), mil_verified_metadata(*)')
+    .select(
+      '*, mil_derivatives(id, kind, object_path, bucket), mil_verified_metadata(*), mil_permitted_uses(use_key, approved)',
+    )
     .order('created_at', { ascending: false })
     .limit(filters.limit || 60);
 

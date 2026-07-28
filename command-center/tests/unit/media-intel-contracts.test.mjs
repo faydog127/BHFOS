@@ -475,6 +475,10 @@ describe('MIL on-demand AI analysis queue contract', () => {
     assert.match(analyze, /skipped_no_key/);
     assert.match(analyze, /skipped_unsupported/);
     assert.match(analyze, /skipped_needs_ai_safe_derivative/);
+    assert.match(analyze, /resolveAiImageBytes/);
+    assert.match(analyze, /heic_preview/);
+    assert.match(analyze, /AI_IMAGE_DERIVATIVE_KINDS/);
+    assert.match(analyze, /HEIC\/HEIF original cannot be sent/);
     assert.match(analyze, /Do NOT write into mil_verified_metadata/);
   });
 });

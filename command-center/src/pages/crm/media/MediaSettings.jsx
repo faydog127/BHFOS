@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { supabase } from '@/lib/customSupabaseClient';
 import { getAiConfigState, listAssets, unpublishWebsiteMedia } from '@/lib/mediaIntel/api';
 import { UPLOAD_PHONE_NOTICE } from '@/lib/mediaIntel/constants';
+import { isValidContributorBrief } from '@/lib/mediaIntel/contributorWorkspace';
 
 const CREATOR_ADMIN_UNAVAILABLE_MESSAGE =
   'Contributor invite/roster requires deployed media-intel-creator-admin — not available until staging deploy.';
@@ -157,7 +158,14 @@ export default function MediaSettings() {
       setError('Contributor user ID and asset ID are both required to assign.');
       return;
     }
-    const instructions = assignInstructions.trim() || null;
+    const instructionsRaw = assignInstructions.trim();
+    if (!isValidContributorBrief(instructionsRaw)) {
+      setError(
+        'A short creative brief is required (at least a sentence). Do not paste pack/filename/AI-score inventory notes.',
+      );
+      return;
+    }
+    const instructions = instructionsRaw;
     const dueAt = assignDueAt ? new Date(assignDueAt).toISOString() : null;
     const requestedOutput = assignRequestedOutput.trim() || null;
     const platformFormat = assignPlatformFormat.trim() || null;
@@ -442,12 +450,22 @@ export default function MediaSettings() {
                 placeholder="Asset ID (uuid)"
               />
             </div>
-            <textarea
-              className="w-full rounded-md border px-3 py-2 text-sm min-h-[72px]"
-              value={assignInstructions}
-              onChange={(e) => setAssignInstructions(e.target.value)}
-              placeholder="Instructions for the contributor"
-            />
+            <label className="block text-sm space-y-1">
+              <span className="font-medium text-slate-800">
+                Brief for contributor <span className="text-red-600">*</span>
+              </span>
+              <textarea
+                className="w-full rounded-md border px-3 py-2 text-sm min-h-[72px]"
+                value={assignInstructions}
+                onChange={(e) => setAssignInstructions(e.target.value)}
+                placeholder="What should they make? e.g. Cut a 15s reel from these duct shots for Instagram."
+                required
+                data-testid="contributor-assign-brief"
+              />
+              <span className="text-xs text-slate-500">
+                Required. Creative ask only — not pack names, filenames, or AI scores.
+              </span>
+            </label>
             <div className="grid sm:grid-cols-3 gap-2">
               <input
                 type="date"

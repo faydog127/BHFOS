@@ -53,6 +53,100 @@ const toBase64 = (bytes: Uint8Array) => {
   return btoa(binary)
 }
 
+const AI_IMAGE_DERIVATIVE_KINDS = ['ai_safe', 'heic_preview', 'detail_preview'] as const
+
+function isHeicAsset(asset: { mime_type?: string | null; original_filename?: string | null }) {
+  const mime = String(asset.mime_type || '').toLowerCase()
+  const name = String(asset.original_filename || '').toLowerCase()
+  return mime.includes('heic') || mime.includes('heif') || name.endsWith('.heic') || name.endsWith('.heif')
+}
+
+function isJpegOrPngMime(mime: string | null | undefined, path: string | null | undefined) {
+  const m = String(mime || '').toLowerCase()
+  const p = String(path || '').toLowerCase()
+  if (m.includes('jpeg') || m.includes('jpg') || m.includes('png') || m.includes('webp')) return true
+  return /\.(jpe?g|png|webp)$/i.test(p)
+}
+
+type ResolvedAiImage =
+  | { bytes: Uint8Array; mimeType: string; source: string; skipStatus?: undefined; explanation?: undefined; details?: undefined }
+  | { bytes?: undefined; mimeType?: undefined; source?: undefined; skipStatus: string; explanation: string; details?: Record<string, unknown> }
+
+/**
+ * Resolve bytes for OpenAI vision. Prefer a JPEG/PNG derivative (ai_safe /
+ * heic_preview / detail_preview). Never send HEIC originals (provider 400).
+ * Never truncate oversized originals — skip honestly instead.
+ */
+async function resolveAiImageBytes(asset: Record<string, unknown>): Promise<ResolvedAiImage> {
+  const assetId = String(asset.id || '')
+  const { data: derivs, error: derivErr } = await supabaseAdmin
+    .from('mil_derivatives')
+    .select('id, kind, bucket, object_path, mime_type, byte_size')
+    .eq('asset_id', assetId)
+    .in('kind', [...AI_IMAGE_DERIVATIVE_KINDS])
+  if (derivErr) throw derivErr
+
+  for (const kind of AI_IMAGE_DERIVATIVE_KINDS) {
+    const row = (derivs || []).find((d) => d.kind === kind)
+    if (!row) continue
+    if (!isJpegOrPngMime(row.mime_type, row.object_path)) continue
+    const known = Number(row.byte_size || 0)
+    if (known > MAX_AI_SAFE_IMAGE_BYTES) continue
+    const { data: image, error: imageError } = await supabaseAdmin.storage
+      .from(row.bucket || 'media-intel-derivatives')
+      .download(row.object_path)
+    if (imageError || !image) continue
+    const bytes = new Uint8Array(await image.arrayBuffer())
+    if (bytes.byteLength <= 0 || bytes.byteLength > MAX_AI_SAFE_IMAGE_BYTES) continue
+    const mimeType = isJpegOrPngMime(row.mime_type, row.object_path)
+      ? (String(row.mime_type || '').toLowerCase().includes('png')
+        ? 'image/png'
+        : String(row.mime_type || '').toLowerCase().includes('webp')
+          ? 'image/webp'
+          : 'image/jpeg')
+      : 'image/jpeg'
+    return { bytes, mimeType, source: `derivative:${kind}` }
+  }
+
+  if (isHeicAsset(asset as { mime_type?: string; original_filename?: string })) {
+    return {
+      skipStatus: 'skipped_needs_ai_safe_derivative',
+      explanation:
+        'HEIC/HEIF original cannot be sent to the AI provider. Generate a JPEG heic_preview or ai_safe derivative first.',
+      details: { reason: 'heic_needs_jpeg_derivative', mime: asset.mime_type, filename: asset.original_filename },
+    }
+  }
+
+  const knownBytes = Number(asset.byte_size || 0)
+  if (knownBytes > MAX_AI_SAFE_IMAGE_BYTES) {
+    return {
+      skipStatus: 'skipped_needs_ai_safe_derivative',
+      explanation: `Original is ${knownBytes} bytes, over the ${MAX_AI_SAFE_IMAGE_BYTES}-byte AI-safe cap. No resize pipeline (sharp/imagemagick) is available in this Deno runtime, so the full original is never truncated and sent as-is. Generate a real ai_safe derivative first, or raise MIL_MAX_AI_IMAGE_BYTES only after verifying provider limits.`,
+      details: { byteSize: knownBytes, cap: MAX_AI_SAFE_IMAGE_BYTES },
+    }
+  }
+
+  const { data: image, error: imageError } = await supabaseAdmin.storage
+    .from(String(asset.original_bucket || 'media-intel-originals'))
+    .download(String(asset.original_path || ''))
+  if (imageError || !image) throw imageError || new Error('Could not download original')
+
+  const bytes = new Uint8Array(await image.arrayBuffer())
+  if (bytes.byteLength > MAX_AI_SAFE_IMAGE_BYTES) {
+    return {
+      skipStatus: 'skipped_needs_ai_safe_derivative',
+      explanation: `Downloaded object is ${bytes.byteLength} bytes, over the ${MAX_AI_SAFE_IMAGE_BYTES}-byte AI-safe cap (mil_assets.byte_size disagreed with stored object size).`,
+      details: { byteSize: bytes.byteLength, cap: MAX_AI_SAFE_IMAGE_BYTES, reason: 'size_mismatch' },
+    }
+  }
+
+  return {
+    bytes,
+    mimeType: String(asset.mime_type || 'image/jpeg'),
+    source: 'original',
+  }
+}
+
 type Suggested = {
   media_type?: string
   service_category?: string
@@ -398,19 +492,18 @@ Deno.serve(async (req) => {
       return respond({ ok: true, skipped: true, status: 'skipped_unsupported', reason: 'awaiting_video_support' })
     }
 
-    // Bounded download: only fetch bytes once we know (from the verified
-    // mil_assets.byte_size recorded at upload finalize) that the original is
-    // within the AI-safe cap. This avoids downloading large originals just to
-    // discover they must be skipped, and it never sends a truncated/corrupt image.
-    const knownBytes = Number(asset.byte_size || 0)
-    if (knownBytes > MAX_AI_SAFE_IMAGE_BYTES) {
+    // Prefer a JPEG/PNG AI-safe (or HEIC preview) derivative when present.
+    // OpenAI rejects HEIC originals; Deno has no HEIC/resize pipeline, so
+    // oversized or HEIC originals without a derivative are skipped honestly.
+    const resolved = await resolveAiImageBytes(asset)
+    if (resolved.skipStatus) {
       await supabaseAdmin.from('mil_ai_analyses').insert({
         asset_id: assetId,
         provider: PROVIDER,
         prompt_version: PROMPT_VERSION,
-        status: 'skipped_needs_ai_safe_derivative',
+        status: resolved.skipStatus,
         suggested: {},
-        explanation: `Original is ${knownBytes} bytes, over the ${MAX_AI_SAFE_IMAGE_BYTES}-byte AI-safe cap. No resize pipeline (sharp/imagemagick) is available in this Deno runtime, so the full original is never truncated and sent as-is. Generate a real ai_safe derivative first, or raise MIL_MAX_AI_IMAGE_BYTES only after verifying provider limits.`,
+        explanation: resolved.explanation,
       })
       await supabaseAdmin.from('mil_assets').update({ processing_status: 'uploaded' }).eq('id', assetId)
       await supabaseAdmin.from('mil_audit_events').insert({
@@ -418,37 +511,16 @@ Deno.serve(async (req) => {
         action: 'ai_analysis_skipped_needs_derivative',
         target_type: 'mil_assets',
         target_id: assetId,
-        details: { byteSize: knownBytes, cap: MAX_AI_SAFE_IMAGE_BYTES },
+        details: resolved.details || {},
       })
-      await settleJob(job?.id || null, 'cancelled', 'skipped_needs_ai_safe_derivative')
-      return respond({ ok: true, skipped: true, status: 'skipped_needs_ai_safe_derivative' })
+      await settleJob(job?.id || null, 'cancelled', resolved.skipStatus)
+      return respond({ ok: true, skipped: true, status: resolved.skipStatus })
     }
 
-    const { data: image, error: imageError } = await supabaseAdmin.storage
-      .from(asset.original_bucket || 'media-intel-originals')
-      .download(asset.original_path)
-    if (imageError || !image) throw imageError || new Error('Could not download original')
-
-    const bytes = new Uint8Array(await image.arrayBuffer())
-    if (bytes.byteLength > MAX_AI_SAFE_IMAGE_BYTES) {
-      // Defensive re-check: stored bytes disagree with mil_assets.byte_size. Skip
-      // honestly rather than sending a possibly-oversized payload to the provider.
-      await supabaseAdmin.from('mil_ai_analyses').insert({
-        asset_id: assetId,
-        provider: PROVIDER,
-        prompt_version: PROMPT_VERSION,
-        status: 'skipped_needs_ai_safe_derivative',
-        suggested: {},
-        explanation: `Downloaded object is ${bytes.byteLength} bytes, over the ${MAX_AI_SAFE_IMAGE_BYTES}-byte AI-safe cap (mil_assets.byte_size disagreed with stored object size).`,
-      })
-      await supabaseAdmin.from('mil_assets').update({ processing_status: 'uploaded' }).eq('id', assetId)
-      await settleJob(job?.id || null, 'cancelled', 'skipped_needs_ai_safe_derivative: size mismatch')
-      return respond({ ok: true, skipped: true, status: 'skipped_needs_ai_safe_derivative' })
-    }
     // Private media is sent to a third-party AI provider (OpenAI) for suggestion
     // generation only — humans verify before anything is published. This is a
     // full, untruncated, valid image (never a byte-sliced fragment).
-    const imageUrl = `data:${asset.mime_type || 'image/jpeg'};base64,${toBase64(bytes)}`
+    const imageUrl = `data:${resolved.mimeType};base64,${toBase64(resolved.bytes!)}`
 
     try {
       const result = await analyzeWithOpenAI(imageUrl, asset.original_filename)

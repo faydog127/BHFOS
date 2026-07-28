@@ -1,8 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
 import { listAssets, submitReelVersion } from '@/lib/mediaIntel/api';
 import { requestSignedMediaUrl, requestSignedReelUrl } from '@/lib/mediaIntel/signedAccess';
+import {
+  approvedUseChips,
+  CONTRIBUTOR_SEARCH_MIN_COUNT,
+  CONTRIBUTOR_STANDING_RULES,
+  filterAssignedMedia,
+  pickContributorThumbKind,
+  summarizeContributorBrief,
+} from '@/lib/mediaIntel/contributorWorkspace';
 
 const REEL_UPLOAD_UNAVAILABLE_MESSAGE =
   'Submission upload requires deployed media-intel-reel-upload — not available until staging deploy. ' +
@@ -50,6 +58,30 @@ async function putToMintedTarget(minted, file, mime) {
   throw new Error('No signed upload credentials returned');
 }
 
+async function downloadWorkingCopyFile(assetId, filenameHint) {
+  const signed = await requestSignedMediaUrl({
+    assetId,
+    purpose: 'download',
+    derivativeKind: 'creator_download',
+    allowOriginal: false,
+  });
+  if (!signed?.url) throw new Error('Working media is unavailable or still preparing.');
+  const res = await fetch(signed.url);
+  if (!res.ok) throw new Error(`Download failed (${res.status})`);
+  const blob = await res.blob();
+  const base = String(filenameHint || assetId).replace(/\.(heic|heif)$/i, '') || assetId;
+  const downloadName = /\.(jpe?g|png|webp)$/i.test(base) ? base : `${base}.jpg`;
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = downloadName;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
 export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
   const outlet = useOutletContext() || {};
   const caps = capsProp || outlet.caps;
@@ -63,11 +95,44 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
   const [message, setMessage] = useState(null);
   const [busy, setBusy] = useState(false);
   const [mediaBusyId, setMediaBusyId] = useState(null);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [mediaSearch, setMediaSearch] = useState('');
+  const [thumbUrls, setThumbUrls] = useState({});
+
+  const filteredMedia = useMemo(
+    () => filterAssignedMedia(available, mediaSearch),
+    [available, mediaSearch],
+  );
+  const jobBrief = useMemo(() => summarizeContributorBrief(assignments), [assignments]);
+  const showMediaSearch = available.length > CONTRIBUTOR_SEARCH_MIN_COUNT;
+
+  const loadThumbs = async (assets) => {
+    const next = {};
+    await Promise.all(
+      (assets || []).map(async (asset) => {
+        const kind = pickContributorThumbKind(asset.mil_derivatives);
+        if (!kind) return;
+        try {
+          const signed = await requestSignedMediaUrl({
+            assetId: asset.id,
+            purpose: 'preview',
+            derivativeKind: kind,
+            allowOriginal: false,
+          });
+          if (signed?.url) next[asset.id] = signed.url;
+        } catch {
+          /* thumb is best-effort; Preview/Download remain authoritative */
+        }
+      }),
+    );
+    setThumbUrls(next);
+  };
 
   const load = async () => {
     try {
       const assets = await listAssets({ archived: false, trashed: false, limit: 100 });
       setAvailable(assets);
+      void loadThumbs(assets);
       const { data: auth } = await supabase.auth.getUser();
       let assignQ = supabase
         .from('mil_creator_assignments')
@@ -127,6 +192,53 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
       }
     } finally {
       setMediaBusyId(null);
+    }
+  };
+
+  const downloadOne = async (asset) => {
+    setMediaBusyId(asset.id);
+    setError(null);
+    try {
+      await downloadWorkingCopyFile(asset.id, asset.original_filename);
+      setMessage('Working copy download started.');
+    } catch (err) {
+      const msg = String(err.message || '');
+      if (/no approved|unavailable|not available|403|preparing/i.test(msg)) {
+        setError(
+          'Contributor-safe media is unavailable or still preparing — protected originals are never provided as a fallback.',
+        );
+      } else {
+        setError(msg || 'Download failed');
+      }
+    } finally {
+      setMediaBusyId(null);
+    }
+  };
+
+  const downloadAllVisible = async () => {
+    if (filteredMedia.length === 0) return;
+    setBatchBusy(true);
+    setError(null);
+    let ok = 0;
+    let failed = 0;
+    try {
+      for (const asset of filteredMedia) {
+        try {
+          await downloadWorkingCopyFile(asset.id, asset.original_filename);
+          ok += 1;
+          // Small gap helps browsers accept sequential save prompts.
+          await new Promise((r) => setTimeout(r, 350));
+        } catch {
+          failed += 1;
+        }
+      }
+      if (failed === 0) {
+        setMessage(`Downloaded ${ok} working cop${ok === 1 ? 'y' : 'ies'} (JPEG).`);
+      } else {
+        setMessage(`Downloaded ${ok}; ${failed} unavailable or still preparing.`);
+      }
+    } finally {
+      setBatchBusy(false);
     }
   };
 
@@ -219,79 +331,151 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
   return (
     <div className="space-y-6" data-testid="media-creator-workspace">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Contributor Workspace</h2>
-        <p className="text-sm text-slate-600">
-          Assignments, submissions, and profile. Only assigned contributor-safe media is visible — protected
-          originals never appear here.
-        </p>
+        <h2 className="text-xl font-semibold tracking-tight text-slate-900">Contributor Workspace</h2>
+        <p className="text-sm text-slate-500 mt-0.5">Brief → download working copies → submit draft.</p>
       </div>
       {error && <div className="text-sm text-red-700">{error}</div>}
       {message && <div className="text-sm text-emerald-700">{message}</div>}
 
-      <section className="rounded-xl border bg-white p-4 space-y-3">
-        <h3 className="font-medium text-slate-900">Assignments</h3>
+      <section className="rounded-xl border bg-white p-4 space-y-3" data-testid="contributor-job-brief">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-base font-semibold text-slate-900">Your brief</h3>
+          {jobBrief.primaryDueAt && (
+            <span className="text-sm font-medium text-slate-800" data-testid="contributor-due-date">
+              Due {new Date(jobBrief.primaryDueAt).toLocaleDateString()}
+            </span>
+          )}
+        </div>
         {assignments.length === 0 ? (
           <p className="text-sm text-slate-600">No active assignments yet.</p>
         ) : (
-          <ul className="space-y-2">
-            {assignments.map((a) => (
-              <li key={a.id} className="rounded-md border px-3 py-2 text-sm space-y-1">
-                <div className="font-medium">
-                  {a.asset_id ? `Asset ${a.asset_id.slice(0, 8)}…` : `Collection ${a.collection_id?.slice(0, 8)}…`}
-                </div>
-                {(a.instructions || a.notes) && (
-                  <p className="text-slate-600 whitespace-pre-wrap">{a.instructions || a.notes}</p>
-                )}
-                <div className="text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-1">
-                  {a.due_at && <span>Due {new Date(a.due_at).toLocaleDateString()}</span>}
-                  {a.requested_output && <span>Output: {a.requested_output}</span>}
-                  {a.platform_format && <span>Format: {a.platform_format}</span>}
-                </div>
-              </li>
-            ))}
-          </ul>
+          <>
+            {jobBrief.hasCreativeBrief ? (
+              <div className="space-y-2">
+                {jobBrief.briefs.map((text, i) => (
+                  <p key={`brief-${i}`} className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">
+                    {text}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-600">
+                No written brief yet — use the output type below and the approved-use chips on each asset.
+              </p>
+            )}
+            {jobBrief.packSummary && (
+              <p className="text-xs text-slate-500" data-testid="contributor-pack-summary">
+                {jobBrief.packSummary}
+              </p>
+            )}
+            <p className="text-[11px] text-slate-400 leading-relaxed border-t pt-3" data-testid="contributor-standing-rules">
+              {CONTRIBUTOR_STANDING_RULES}
+            </p>
+          </>
         )}
       </section>
 
       <section className="rounded-xl border bg-white p-4 space-y-3">
-        <h3 className="font-medium text-slate-900">Assigned media</h3>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-base font-semibold text-slate-900">Assigned media</h3>
+          <button
+            type="button"
+            disabled={batchBusy || filteredMedia.length === 0}
+            className="rounded-md bg-slate-900 text-white px-4 py-2.5 text-sm font-medium min-h-[44px] disabled:opacity-50"
+            onClick={downloadAllVisible}
+            data-testid="contributor-download-all"
+          >
+            {batchBusy ? 'Downloading…' : `Download all (${filteredMedia.length})`}
+          </button>
+        </div>
+
+        {showMediaSearch && (
+          <label className="block text-sm">
+            <span className="sr-only">Search assigned media</span>
+            <input
+              type="search"
+              value={mediaSearch}
+              onChange={(e) => setMediaSearch(e.target.value)}
+              placeholder="Search assigned media by filename…"
+              className="w-full rounded-md border px-3 py-2 min-h-[44px] text-sm"
+              data-testid="contributor-media-search"
+            />
+          </label>
+        )}
+
         {available.length === 0 ? (
           <p className="text-sm text-slate-600">No contributor-safe source media assigned yet.</p>
+        ) : filteredMedia.length === 0 ? (
+          <p className="text-sm text-slate-600">No assigned media matches that search.</p>
         ) : (
-          <ul className="grid sm:grid-cols-2 gap-2">
-            {available.map((a) => (
-              <li key={a.id} className="rounded-md border px-3 py-2 text-sm space-y-2">
-                <div className="font-medium truncate">{a.original_filename}</div>
-                <div className="text-xs text-slate-500">{a.media_kind}</div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={mediaBusyId === a.id}
-                    className="rounded-md border px-3 py-1.5 text-xs min-h-[40px]"
-                    onClick={() => openAssignedMedia(a.id, 'preview')}
-                  >
-                    Preview
-                  </button>
-                  <button
-                    type="button"
-                    disabled={mediaBusyId === a.id}
-                    className="rounded-md border px-3 py-1.5 text-xs min-h-[40px]"
-                    onClick={() => openAssignedMedia(a.id, 'download')}
-                  >
-                    Download working copy
-                  </button>
-                </div>
-              </li>
-            ))}
+          <ul className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+            {filteredMedia.map((a) => {
+              const chips = approvedUseChips(a.mil_permitted_uses);
+              const thumb = thumbUrls[a.id];
+              const thumbReady = Boolean(pickContributorThumbKind(a.mil_derivatives));
+              return (
+                <li key={a.id} className="rounded-md border overflow-hidden text-sm flex flex-col">
+                  <div className="aspect-square bg-slate-100 relative">
+                    {thumb ? (
+                      <img
+                        src={thumb}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 px-2 text-center">
+                        {thumbReady ? 'Loading preview…' : 'Still preparing'}
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-2 space-y-1.5 flex-1 flex flex-col">
+                    {chips.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {chips.map((c) => (
+                          <span
+                            key={c.key}
+                            className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700"
+                          >
+                            {c.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-1.5 mt-auto">
+                      <button
+                        type="button"
+                        disabled={mediaBusyId === a.id || batchBusy}
+                        className="rounded-md border px-2.5 py-1.5 text-xs min-h-[36px] text-slate-700"
+                        onClick={() => openAssignedMedia(a.id, 'preview')}
+                      >
+                        Preview
+                      </button>
+                      <button
+                        type="button"
+                        disabled={mediaBusyId === a.id || batchBusy}
+                        className="rounded-md border px-2.5 py-1.5 text-xs min-h-[36px] text-slate-700"
+                        onClick={() => downloadOne(a)}
+                      >
+                        Download
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
+        )}
+        {available.length > 0 && (
+          <p className="text-xs text-slate-500" data-testid="contributor-next-submit">
+            Next: edit offline, then upload your draft under Submissions.
+          </p>
         )}
       </section>
 
       <section className="rounded-xl border bg-white p-4 space-y-3">
-        <h3 className="font-medium text-slate-900">Submissions</h3>
+        <h3 className="text-base font-semibold text-slate-900">Submissions</h3>
         <p className="text-xs text-slate-500">
-          Upload a draft, submit for review, and revise as a new version. Submitting a draft requests owner review
-          only — approval is not publishing.
+          Upload a draft for owner review. Approval is not publishing.
         </p>
         <label className="block text-sm">
           <span className="font-medium">Title</span>
