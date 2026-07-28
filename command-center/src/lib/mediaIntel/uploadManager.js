@@ -15,6 +15,8 @@ import { saveUploadSession } from './uploadSessionStore';
 import { queueAiAnalysis } from './api';
 import {
   buildQueueItemFromFile,
+  deleteQueueItem,
+  isReadableBlob,
   listQueueItems,
   markMissingBlobsForReselect,
   matchReselectFile,
@@ -284,6 +286,14 @@ function phaseToLegacyStatus(phase, outcomeStatus) {
 async function persistAndEmit(item, patch, onFileUpdate) {
   const next = { ...item, ...patch, updatedAt: Date.now() };
   await putQueueItem(next);
+  if (next.phase === UPLOAD_PHASE.ANALYSIS_COMPLETE) {
+    // Transfer work is done — drop from durable queue so Uploads stays a worklist.
+    try {
+      await deleteQueueItem(next.clientUploadId);
+    } catch {
+      // best-effort
+    }
+  }
   const percent =
     next.byteSize > 0 && typeof next.transferredBytes === 'number'
       ? Math.min(99, Math.round((next.transferredBytes / next.byteSize) * 100))
@@ -305,6 +315,7 @@ async function persistAndEmit(item, patch, onFileUpdate) {
     assetId: next.assetId,
     errorLayer: next.errorLayer,
     analysisOutcome: next.analysisOutcome || null,
+    hasLocalFile: next.blob instanceof Blob && next.blob.size > 0,
   });
   return next;
 }
@@ -790,13 +801,37 @@ export async function restoreUploadQueue({ token, onFileUpdate, autoResume = tru
   await markMissingBlobsForReselect();
   let items = await listQueueItems();
 
-  // After a refresh, mid-flight "uploading" is no longer actively transferring —
-  // demote so the UI offers Retry instead of a stuck percent.
+  // Analysis-complete items belong in Review, not the Uploads worklist.
   for (const item of items) {
-    if (
-      [UPLOAD_PHASE.UPLOADING, UPLOAD_PHASE.RETRYING, UPLOAD_PHASE.FINALIZING].includes(item.phase) &&
-      item.blob instanceof Blob
-    ) {
+    if (item.phase === UPLOAD_PHASE.ANALYSIS_COMPLETE) {
+      try {
+        await deleteQueueItem(item.clientUploadId);
+      } catch {
+        // best-effort
+      }
+      onFileUpdate?.({
+        clientKey: item.clientUploadId,
+        clientUploadId: item.clientUploadId,
+        filename: item.filename,
+        status: UPLOAD_FILE_STATUS.ANALYSIS_COMPLETE,
+        phase: UPLOAD_PHASE.ANALYSIS_COMPLETE,
+        message: 'Ready for review',
+        assetId: item.assetId,
+        dismissFromUploads: true,
+      });
+    }
+  }
+
+  items = await listQueueItems();
+
+  // After a refresh, mid-flight "uploading" is no longer actively transferring.
+  // Only offer Retry when the local file is still readable; otherwise Reselect.
+  for (const item of items) {
+    if (![UPLOAD_PHASE.UPLOADING, UPLOAD_PHASE.RETRYING, UPLOAD_PHASE.FINALIZING].includes(item.phase)) {
+      continue;
+    }
+    const readable = await isReadableBlob(item.blob);
+    if (readable) {
       await putQueueItem({
         ...item,
         phase: UPLOAD_PHASE.INTERRUPTED,
@@ -804,11 +839,21 @@ export async function restoreUploadQueue({ token, onFileUpdate, autoResume = tru
         errorMessage:
           item.errorMessage || 'Transfer paused after the page reloaded. Tap Retry to continue.',
       });
+    } else {
+      await putQueueItem({
+        ...item,
+        phase: UPLOAD_PHASE.NEEDS_RESELECT,
+        blob: null,
+        errorLayer: ERROR_LAYER.UPLOAD_INTERRUPTED,
+        errorMessage: 'This browser no longer has the local file after refresh. Reselect it to continue.',
+      });
     }
   }
   items = await listQueueItems();
 
   for (const item of items) {
+    if (item.phase === UPLOAD_PHASE.ANALYSIS_COMPLETE) continue;
+    const hasLocalFile = await isReadableBlob(item.blob);
     onFileUpdate?.({
       clientKey: item.clientUploadId,
       clientUploadId: item.clientUploadId,
@@ -823,6 +868,7 @@ export async function restoreUploadQueue({ token, onFileUpdate, autoResume = tru
       assetId: item.assetId,
       errorLayer: item.errorLayer,
       analysisOutcome: item.analysisOutcome || null,
+      hasLocalFile,
     });
   }
 
@@ -864,8 +910,36 @@ export async function retryQueueItem({ token, clientUploadId, onFileUpdate }) {
   const items = await listQueueItems();
   const item = items.find((i) => i.clientUploadId === clientUploadId);
   if (!item) throw new Error('Queue item not found');
-  if (!item.blob) throw new Error('Reselect this file before retrying');
-  return processQueueItem({ token, item: { ...item, phase: UPLOAD_PHASE.QUEUED, retryCount: (item.retryCount || 0) + 1 }, onFileUpdate });
+  const readable = await isReadableBlob(item.blob);
+  if (!readable) {
+    const next = await persistAndEmit(
+      { ...item, blob: null },
+      {
+        phase: UPLOAD_PHASE.NEEDS_RESELECT,
+        errorLayer: ERROR_LAYER.UPLOAD_INTERRUPTED,
+        errorMessage: 'Reselect this file — the phone no longer has a usable local copy to retry.',
+        legacyStatus: UPLOAD_FILE_STATUS.NEEDS_RESELECT,
+      },
+      onFileUpdate,
+    );
+    throw new Error(next.errorMessage || 'Reselect this file before retrying');
+  }
+  // Immediate UI feedback so Retry does not look dead while hashing/minting.
+  await persistAndEmit(
+    item,
+    {
+      phase: UPLOAD_PHASE.PREPARING,
+      errorMessage: 'Retrying…',
+      errorLayer: null,
+      legacyStatus: UPLOAD_FILE_STATUS.QUEUED,
+    },
+    onFileUpdate,
+  );
+  return processQueueItem({
+    token,
+    item: { ...item, phase: UPLOAD_PHASE.QUEUED, retryCount: (item.retryCount || 0) + 1 },
+    onFileUpdate,
+  });
 }
 
 export async function attachReselectedFile({ clientUploadId, file, token, onFileUpdate, autoStart = true }) {
@@ -876,7 +950,9 @@ export async function attachReselectedFile({ clientUploadId, file, token, onFile
     // Allow size+name match failure only when user explicitly picks — still accept if name/size match loosely
   }
   if (item.byteSize && file.size !== item.byteSize) {
-    throw new Error('Selected file size does not match the interrupted upload. Pick the original file.');
+    throw new Error(
+      `Selected file size (${file.size}) does not match the interrupted upload (${item.byteSize}). Pick the original file.`,
+    );
   }
   const next = {
     ...item,

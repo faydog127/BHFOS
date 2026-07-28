@@ -16,8 +16,8 @@
 | Artifact isolation | Brand/storage URLs derive from `VITE_SUPABASE_URL` (no hardcoded production project ref in `src/` or hosted `dist`) |
 | Hosted deploy | `https://mil.bhfos.com` `environment=mil-staging` tip `126eb54091f9a3e0957ce66b7cf2a9bcf0f2620c` (Safari refresh-restore fix) |
 | Desktop acceptance | Mixed batch 5/5 → analysis complete (auto UI); review card fields visible; 35s offline → 5/5 recovered; refresh during upload queue restored |
-| Real-phone findings | Refresh cleared in-progress rows (mobile restore gated on session token; Safari may drop File blobs). Fix: always hydrate queue from IDB; metadata-first persist; demote mid-flight → interrupted + Retry/Reselect; remove nested scroll trap |
-| Real-phone screen-lock | **Pending** after refresh-restore fix redeploy (required for PASS) |
+| Real-phone findings | Refresh cleared in-progress rows; Retry after refresh was a no-op when Safari dropped the local File (needed Reselect). Fix: readable-blob probe → Reselect; Retry shows immediate “Retrying…”; analysis_complete leaves Uploads for Review Queue |
+| Real-phone screen-lock | **Pending** after retry/reselect + review-handoff redeploy (required for PASS) |
 | Rollback archive | `command-center/tmp/mil-staging-*-*.zip` (prior `a7c52ce…` + current tip archives) |
 
 ---

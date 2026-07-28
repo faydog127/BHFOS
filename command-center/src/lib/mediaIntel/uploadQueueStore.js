@@ -189,9 +189,25 @@ export function buildQueueItemFromFile(file, { batchId = null } = {}) {
 export function matchReselectFile(item, file) {
   if (!item || !file) return false;
   if (item.byteSize !== file.size) return false;
-  if (item.filename && item.filename !== file.name) return false;
-  if (item.lastModified && file.lastModified && item.lastModified !== file.lastModified) return false;
+  // Filename match is preferred, but iOS Photos may alter the export name.
+  // lastModified is intentionally ignored — Safari often regenerates it on re-pick.
+  if (item.filename && file.name && item.filename !== file.name) {
+    const base = (n) => String(n).replace(/\.[^.]+$/, '').toLowerCase();
+    if (base(item.filename) !== base(file.name)) return false;
+  }
   return true;
+}
+
+/** True when a persisted Blob can still be read (Safari often leaves unreadable stubs). */
+export async function isReadableBlob(blob) {
+  if (!(blob instanceof Blob) || blob.size === 0) return false;
+  try {
+    const slice = blob.slice(0, Math.min(64, blob.size));
+    await slice.arrayBuffer();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Mark items that lost their blob after restart. */
@@ -207,7 +223,8 @@ export async function markMissingBlobsForReselect() {
     ].includes(i.phase),
   );
   for (const item of active) {
-    if (!item.blob || !(item.blob instanceof Blob) || item.blob.size === 0) {
+    const readable = await isReadableBlob(item.blob);
+    if (!readable) {
       await putQueueItem({
         ...item,
         phase: UPLOAD_PHASE.NEEDS_RESELECT,

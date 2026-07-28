@@ -100,6 +100,8 @@ export default function MediaMobileUpload() {
   const [sessionError, setSessionError] = useState(null);
   const [fileStates, setFileStates] = useState({});
   const [busy, setBusy] = useState(false);
+  const [actingId, setActingId] = useState(null);
+  const [sentToReview, setSentToReview] = useState(0);
   const [manifest, setManifest] = useState(null);
 
   const mode = linkToken ? 'session' : 'authenticated';
@@ -137,6 +139,17 @@ export default function MediaMobileUpload() {
 
   const onFileUpdate = useCallback((update) => {
     const key = update.clientKey || update.clientUploadId;
+    const phase = update.phase || update.status;
+    if (phase === 'analysis_complete' || update.dismissFromUploads) {
+      setFileStates((prev) => {
+        if (!prev[key]) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      setSentToReview((n) => n + 1);
+      return;
+    }
     setFileStates((prev) => ({
       ...prev,
       [key]: { ...prev[key], ...update },
@@ -268,21 +281,27 @@ export default function MediaMobileUpload() {
   }, [fileStates]);
 
   const entries = useMemo(() => {
-    return Object.values(fileStates).sort((a, b) => {
-      const rank = (f) => {
-        const s = f.status || f.phase || '';
-        if (['uploading', 'retrying', 'hashing', 'finalizing', 'queued', 'interrupted', 'needs_reselect'].includes(s)) {
-          return 0;
-        }
-        if (['analysis_complete', 'uploaded', 'analyzing'].includes(s)) return 1;
-        return 2;
-      };
-      return rank(a) - rank(b);
-    });
+    return Object.values(fileStates)
+      .filter((f) => (f.status || f.phase) !== 'analysis_complete')
+      .sort((a, b) => {
+        const rank = (f) => {
+          const s = f.status || f.phase || '';
+          if (
+            ['uploading', 'retrying', 'hashing', 'finalizing', 'queued', 'interrupted', 'needs_reselect', 'preparing'].includes(
+              s,
+            )
+          ) {
+            return 0;
+          }
+          if (['uploaded', 'analyzing', 'queued_for_analysis'].includes(s)) return 1;
+          return 2;
+        };
+        return rank(a) - rank(b);
+      });
   }, [fileStates]);
 
   const inFlightCount = entries.filter((f) =>
-    ['queued', 'uploading', 'hashing', 'finalizing', 'interrupted', 'retrying', 'needs_reselect'].includes(
+    ['queued', 'uploading', 'hashing', 'finalizing', 'interrupted', 'retrying', 'needs_reselect', 'preparing'].includes(
       f.status || f.phase,
     ),
   ).length;
@@ -312,6 +331,19 @@ export default function MediaMobileUpload() {
 
       {sessionError && (
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{sessionError}</div>
+      )}
+
+      {sentToReview > 0 && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+          {sentToReview} file{sentToReview === 1 ? '' : 's'} finished analysis and left this list.{' '}
+          {mode === 'authenticated' ? (
+            <Link className="underline font-medium" to="/media/review">
+              Open Review Queue
+            </Link>
+          ) : (
+            <span>Open Review Queue on a staff computer.</span>
+          )}
+        </div>
       )}
 
       {sessionInfo?.expiresAt && (
@@ -394,52 +426,65 @@ export default function MediaMobileUpload() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-1 shrink-0">
-                    {['interrupted', 'uploading', 'retrying', 'queued', 'finalizing'].includes(
-                      f.status || f.phase,
-                    ) && (
-                      <button
-                        type="button"
-                        className="text-xs text-blue-700 underline"
-                        disabled={busy}
-                        onClick={async () => {
-                          try {
-                            setBusy(true);
-                            const token = await ensureMobileToken();
-                            await retryQueueItem({
-                              token,
-                              clientUploadId: f.clientUploadId || f.clientKey,
-                              onFileUpdate,
-                            });
-                          } catch (err) {
-                            setSessionError(err.message || 'Retry failed');
-                          } finally {
-                            setBusy(false);
-                          }
-                        }}
-                      >
-                        Retry
-                      </button>
-                    )}
-                    {(f.status === 'needs_reselect' || f.phase === 'needs_reselect') && (
-                      <button
-                        type="button"
-                        className="text-xs text-blue-700 underline"
-                        disabled={busy}
-                        onClick={() => {
-                          reselectTargetRef.current = f.clientUploadId || f.clientKey;
-                          reselectRef.current?.click();
-                        }}
-                      >
-                        Reselect
-                      </button>
-                    )}
+                    {(() => {
+                      const id = f.clientUploadId || f.clientKey;
+                      const phase = f.status || f.phase;
+                      const canRetry =
+                        f.hasLocalFile !== false &&
+                        ['interrupted', 'uploading', 'retrying', 'queued', 'finalizing'].includes(phase);
+                      const needsReselect =
+                        phase === 'needs_reselect' ||
+                        (['interrupted', 'uploading', 'retrying'].includes(phase) && f.hasLocalFile === false);
+                      return (
+                        <>
+                          {canRetry && (
+                            <button
+                              type="button"
+                              className="text-xs text-blue-700 underline"
+                              disabled={actingId === id}
+                              onClick={async () => {
+                                try {
+                                  setActingId(id);
+                                  setSessionError(null);
+                                  const token = await ensureMobileToken();
+                                  await retryQueueItem({
+                                    token,
+                                    clientUploadId: id,
+                                    onFileUpdate,
+                                  });
+                                } catch (err) {
+                                  setSessionError(err.message || 'Retry failed');
+                                } finally {
+                                  setActingId(null);
+                                }
+                              }}
+                            >
+                              {actingId === id ? 'Retrying…' : 'Retry'}
+                            </button>
+                          )}
+                          {needsReselect && (
+                            <button
+                              type="button"
+                              className="text-xs text-blue-700 underline"
+                              disabled={actingId === id}
+                              onClick={() => {
+                                reselectTargetRef.current = id;
+                                reselectRef.current?.click();
+                              }}
+                            >
+                              Reselect
+                            </button>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
-                {f.analysisOutcome ? (
+                {f.analysisOutcome && (f.phase === 'analysis_failed' || f.status === 'analysis_failed') ? (
                   <AnalysisOutcomeCard
-                    asset={{ processing_status: f.phase === 'analysis_complete' ? 'analyzed' : 'queued' }}
+                    asset={{ processing_status: 'queued' }}
                     analysis={{
-                      status: f.phase === 'analysis_complete' ? 'succeeded' : f.phase === 'analysis_failed' ? 'failed' : 'queued',
+                      status: 'failed',
                       suggested: {
                         narrative: f.analysisOutcome.description,
                         tags: f.analysisOutcome.tags,
