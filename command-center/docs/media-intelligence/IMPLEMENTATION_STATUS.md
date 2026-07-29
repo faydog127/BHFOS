@@ -61,15 +61,21 @@
 | Evidence tier | **DEPLOYED**; owner-observed distinct-identity acceptance recorded 2026-07-29 |
 | Neighbors | `bhfos.com` / `app.bhfos.com` HTTP 200 after deploy |
 
-## Review Queue list thumbs (2026-07-29) — LOCALLY VERIFIED; deploy pending this session
+## Review Queue list thumbs (2026-07-29) — FRONTEND DEPLOYED
 
 | Field | Value |
 |---|---|
+| Commit | `39e4b941dc63022167750d2dbd5e8e4426bb8349` |
 | Scope | Awaiting-review sidebar shows signed preview thumb + filename; honest Photo/Video fallback when missing/failed |
 | Code | `MediaReviewQueue.jsx` `loadQueueThumbs` → `assetPreviewUrl` per row (`allowOriginal: false`; PREVIEW derivatives only; img `onError` clears broken thumbs; failure never breaks queue) |
 | Tests | `media-intel-lifecycle` asserts thumb markers, no `allowOriginal: true`, no `createSignedUrl`, API preview contract |
 | Keep/Archive/Trash/AI | Unchanged wiring retained |
-| Evidence tier | **locally verified** (helper suite + lint). Hosted redeploy authorized in this session after push. |
+| Hosted frontend | `https://mil.bhfos.com` `frontendAssetVersion=d03f26e8e92869b8` / `mil-staging` / SHA **39e4b941dc63** / Supabase only `sdzhdupekcnekesbtxsl`; hosted `MediaReviewQueue-598deb8c.js` has thumb + fallback markers; `CreatorRoutes-519a518e.js` polish markers retained |
+| Deploy archive | `command-center/tmp/mil-staging-39e4b941dc63-20260729T220648Z.zip` (auth `MIL-REVIEW-QUEUE-THUMBS-FRONTEND-2026-07-29`) |
+| Rollback archive | `command-center/tmp/mil-rollback-bd729820333f-before-39e4b941dc63-20260729.zip` SHA-256 `B5722D91A614C48F663FA45A9BE5D2BF90D585EB71DB717C959D45B753ACE18D` (prior polish tip) |
+| Artifact scan | Only project ref `sdzhdupekcnekesbtxsl`; no `SUPABASE_ACCESS_TOKEN`; no `sbp_*`; JWT-like hits = public anon key only; `service_role` is role-name literal |
+| Neighbors | `bhfos.com` / `app.bhfos.com` HTTP 200 after deploy |
+| Evidence tier | **DEPLOYED** (list-thumb browser USABLE not re-run this session; contract locally verified) |
 
 ## Contributor polish pass (2026-07-28) — FRONTEND DEPLOYED; owner-observed acceptance recorded
 
