@@ -22,11 +22,31 @@ export default function MediaReviewQueue() {
   const [selectedId, setSelectedId] = useState(null);
   const [bundle, setBundle] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [thumbUrls, setThumbUrls] = useState({});
+  const [thumbsReady, setThumbsReady] = useState(false);
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
+
+  /** Best-effort queue thumbs via authorized derivatives only (never originals). */
+  const loadQueueThumbs = async (rows) => {
+    setThumbsReady(false);
+    const next = {};
+    await Promise.all(
+      (rows || []).map(async (asset) => {
+        try {
+          const url = await assetPreviewUrl(asset);
+          if (url) next[asset.id] = url;
+        } catch {
+          /* thumbnail failure must not break the queue */
+        }
+      }),
+    );
+    setThumbUrls(next);
+    setThumbsReady(true);
+  };
 
   const loadQueue = async () => {
     setLoading(true);
@@ -38,11 +58,14 @@ export default function MediaReviewQueue() {
         limit: 100,
       });
       setAssets(rows);
+      void loadQueueThumbs(rows);
       if (selectedId && !rows.some((r) => r.id === selectedId)) {
         setSelectedId(rows[0]?.id || null);
         if (!rows[0]) {
           setBundle(null);
           setPreviewUrl(null);
+          setThumbUrls({});
+          setThumbsReady(true);
         }
       } else if (!selectedId && rows[0]) {
         setSelectedId(rows[0].id);
@@ -217,31 +240,62 @@ export default function MediaReviewQueue() {
   }
 
   return (
-    <div className="grid lg:grid-cols-[280px_1fr] gap-4" data-testid="media-review-queue">
+    <div className="grid lg:grid-cols-[300px_1fr] gap-4" data-testid="media-review-queue">
       <aside className="rounded-xl border border-slate-200 bg-white overflow-hidden">
         <div className="px-3 py-2 border-b text-sm font-medium text-slate-800">
           Awaiting review ({assets.length})
         </div>
-        <ul className="max-h-[70vh] overflow-y-auto divide-y">
+        <ul className="max-h-[70vh] overflow-y-auto divide-y" data-testid="media-review-queue-list">
           {assets.length === 0 && (
             <li className="p-4 text-sm text-slate-500">Queue is clear. New uploads appear here after intake.</li>
           )}
-          {assets.map((a) => (
-            <li key={a.id}>
-              <button
-                type="button"
-                onClick={() => setSelectedId(a.id)}
-                className={`w-full text-left px-3 py-3 text-sm min-h-[44px] ${
-                  selectedId === a.id ? 'bg-blue-50 text-blue-900' : 'hover:bg-slate-50'
-                }`}
-              >
-                <div className="truncate font-medium">{a.original_filename}</div>
-                <div className="text-xs text-slate-500 mt-0.5">
-                  {a.media_kind} · {a.processing_status}
-                </div>
-              </button>
-            </li>
-          ))}
+          {assets.map((a) => {
+            const thumb = thumbUrls[a.id];
+            const fallbackLabel = a.media_kind === 'video' ? 'Video' : a.media_kind === 'photo' ? 'Photo' : 'Media';
+            return (
+              <li key={a.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(a.id)}
+                  className={`w-full text-left px-2.5 py-2 text-sm min-h-[52px] flex items-center gap-2.5 ${
+                    selectedId === a.id ? 'bg-blue-50 text-blue-900' : 'hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded bg-slate-100">
+                    {thumb ? (
+                      <img
+                        src={thumb}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover"
+                        data-testid="media-review-queue-thumb"
+                        onError={() => {
+                          setThumbUrls((prev) => {
+                            if (!prev[a.id]) return prev;
+                            const copy = { ...prev };
+                            delete copy[a.id];
+                            return copy;
+                          });
+                        }}
+                      />
+                    ) : (
+                      <span
+                        className="absolute inset-0 flex items-center justify-center px-1 text-center text-[10px] leading-tight text-slate-400"
+                        data-testid="media-review-queue-thumb-fallback"
+                      >
+                        {thumbsReady ? fallbackLabel : '…'}
+                      </span>
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{a.original_filename}</span>
+                    <span className="block text-xs text-slate-500 mt-0.5">
+                      {a.media_kind} · {a.processing_status}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       </aside>
 

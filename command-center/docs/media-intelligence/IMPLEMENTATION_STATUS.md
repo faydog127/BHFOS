@@ -1,10 +1,21 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** contributor workbench polish commit (see git log)  
+**Verified HEAD at this status edit:** Review Queue thumbs + acceptance reconcile (see git log)  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
 
-## Contributor Workspace (2026-07-28) — FRONTEND DEPLOYED; acceptance pending (Creator architecture reused)
+## Owner-led acceptance (2026-07-29) — DISTINCT-IDENTITY WORKFLOW OBSERVED BY ERRON
+
+| Field | Value |
+|---|---|
+| Observer | Erron (owner-led hands-on) |
+| Observed | owner assignment → genuinely separate contributor login → contributor preview/download → contributor submission → owner review |
+| Not claimed here | changes-requested cycle, revised-version preservation, or final approval — not evidenced as performed in this acceptance |
+| Management API | Relisting **unavailable** this session (`SUPABASE_ACCESS_TOKEN` absent). Do not treat frontend work as blocked. Do not use anon/service-role/JWT as a management token. |
+| Credential scan (prior + this session) | No credential-exposure incident. Hosted/frontend artifact: no `SUPABASE_ACCESS_TOKEN`, no `sbp_*` management-token pattern; any `service_role` hit is a role-name literal, not an embedded key. |
+| Evidence tier | **USABLE** for the observed steps above (owner-confirmed). Remaining ship steps: Review Queue thumbs deploy (this session) → authorized PR/merge → production plan. |
+
+## Contributor Workspace (2026-07-28) — FRONTEND DEPLOYED; owner-observed acceptance recorded
 
 | Field | Value |
 |---|---|
@@ -14,12 +25,12 @@
 | Schema | `20260728140000_media_intel_contributor_workspace.sql` — assignment pause + brief fields; assign denies archived/trashed |
 | Edge | `media-intel-sign` trash denial; `media-intel-creator-admin` passes brief fields; `media-intel-analyze` prefers `ai_safe`/`heic_preview` JPEG derivatives (HEIC originals no longer sent to OpenAI) |
 | Staging identities | `mil-staging-admin@672803569.test`, `mil-staging-creator@1949824099.test` (no real-recipient invite) |
-| Hosted frontend | `https://mil.bhfos.com` `build-info` **7532e65313ae** / `mil-staging` / only `sdzhdupekcnekesbtxsl` — **DEPLOYED** (not owner/contributor USABLE PASS yet) |
+| Hosted frontend (contributor polish) | `https://mil.bhfos.com` SHA **bd729820333f** / `mil-staging` / only `sdzhdupekcnekesbtxsl` — **DEPLOYED** |
 | HEIC AI path | Staging generated `heic_preview`+`ai_safe` for **26/26** HEIC; re-analyze **26/26 OK**; social-suitable still sparse (AI classification) |
 | Rollback archive | `command-center/tmp/mil-staging-7532e65313ae-20260728T115135Z.zip` (+ preserved copy under `tmp/mil-hosting-backup-20260728/`) |
-| Note | Quality Cleanup migration `20260728120000` verified applied; lifecycle helpers wired into `test:media-intel-helpers`. No PASS until distinct-identity owner→contributor acceptance. |
+| Note | Quality Cleanup migration `20260728120000` verified applied; lifecycle helpers wired into `test:media-intel-helpers`. Distinct-identity acceptance observed by Erron (see section above). |
 
-## Contributor workbench A→B (2026-07-28) — FRONTEND DEPLOYED; browser USABLE pending
+## Contributor workbench A→B (2026-07-28) — FRONTEND DEPLOYED (included in bd72982 polish tip)
 
 | Field | Value |
 |---|---|
@@ -31,11 +42,11 @@
 | Hosted frontend | `https://mil.bhfos.com` `frontendAssetVersion=361ea9ce209d35fb` / `environment=mil-staging` / `commitSha=7532e65313ae…` / Supabase **only** `sdzhdupekcnekesbtxsl`; hosted `CreatorRoutes-8166e7cd.js` contains Working copies / Download all / contributor-media-search |
 | Deploy archive | `command-center/tmp/mil-staging-7532e65313ae-20260728T215415Z.zip` (auth `MIL-CONTRIBUTOR-WORKBENCH-AB-FRONTEND-2026-07-28`) |
 | Honesty note | Artifact includes **uncommitted** A/B UX; `build-info.commitSha` still reports `7532e653…` until A/B is committed |
-| Evidence tier | **DEPLOYED** (not contributor browser USABLE PASS yet) |
+| Evidence tier | **DEPLOYED**; owner-observed distinct-identity acceptance recorded 2026-07-29 |
 | Neighbors | `bhfos.com` / `app.bhfos.com` HTTP 200 after deploy |
 | Non-goals kept | No contributor AI console; no tag/library browse (RLS staff-only for tags); no originals |
 
-## Contributor workbench tight UI (2026-07-28) — FRONTEND DEPLOYED; browser USABLE pending
+## Contributor workbench tight UI (2026-07-28) — FRONTEND DEPLOYED (included in bd72982 polish tip)
 
 | Field | Value |
 |---|---|
@@ -47,10 +58,20 @@
 | Hosted frontend | `https://mil.bhfos.com` `frontendAssetVersion=4c0a3d212a6698ca` / `mil-staging` / SHA label `7532e653…` / Supabase only `sdzhdupekcnekesbtxsl`; hosted `CreatorRoutes-4b4d237c.js` has Your brief / standing rules / Download all |
 | Deploy archive | `command-center/tmp/mil-staging-7532e65313ae-20260728T223040Z.zip` (auth `MIL-CONTRIBUTOR-TIGHT-UI-FRONTEND-2026-07-28`) |
 | Honesty note | Artifact includes **uncommitted** tight UI; `build-info.commitSha` still reports `7532e653…` |
-| Evidence tier | **DEPLOYED** (not contributor browser USABLE PASS yet) |
+| Evidence tier | **DEPLOYED**; owner-observed distinct-identity acceptance recorded 2026-07-29 |
 | Neighbors | `bhfos.com` / `app.bhfos.com` HTTP 200 after deploy |
 
-## Contributor polish pass (2026-07-28) — FRONTEND DEPLOYED; owner USABLE pending
+## Review Queue list thumbs (2026-07-29) — LOCALLY VERIFIED; deploy pending this session
+
+| Field | Value |
+|---|---|
+| Scope | Awaiting-review sidebar shows signed preview thumb + filename; honest Photo/Video fallback when missing/failed |
+| Code | `MediaReviewQueue.jsx` `loadQueueThumbs` → `assetPreviewUrl` per row (`allowOriginal: false`; PREVIEW derivatives only; img `onError` clears broken thumbs; failure never breaks queue) |
+| Tests | `media-intel-lifecycle` asserts thumb markers, no `allowOriginal: true`, no `createSignedUrl`, API preview contract |
+| Keep/Archive/Trash/AI | Unchanged wiring retained |
+| Evidence tier | **locally verified** (helper suite + lint). Hosted redeploy authorized in this session after push. |
+
+## Contributor polish pass (2026-07-28) — FRONTEND DEPLOYED; owner-observed acceptance recorded
 
 | Field | Value |
 |---|---|
@@ -60,10 +81,10 @@
 | Staging fixture brief | **Done** — 10 active pack assignments share creative `instructions`; inventory `notes` cleared |
 | Hosted frontend | `https://mil.bhfos.com` `frontendAssetVersion=53a0c11ef74623ba` / `mil-staging` / SHA **bd729820333f** / Supabase only `sdzhdupekcnekesbtxsl`; `CreatorRoutes-605d0d43.js` + `MediaSettings-0697d218.js` polish markers verified |
 | Deploy archive | `command-center/tmp/mil-staging-bd729820333f-20260728T224523Z.zip` (auth `MIL-CONTRIBUTOR-POLISH-FRONTEND-2026-07-28`) |
-| Reel upload edge | Contributor JWT mint against `media-intel-reel-upload` returned HTTP 200 (edge reachable); full browser submit USABLE still owner-gated |
+| Reel upload edge | Contributor JWT mint against `media-intel-reel-upload` returned HTTP 200 (edge reachable) |
 | Neighbors | `bhfos.com` / `app.bhfos.com` HTTP 200 |
-| Ship checklist remaining | Distinct-identity browser USABLE (brief → download → submit → owner review) → authorized push/PR/merge → production plan |
-| Evidence tier | **DEPLOYED** (not owner/contributor USABLE PASS yet) |
+| Acceptance | Erron completed distinct-identity assign → contributor login → preview/download → submit → owner review (see top section) |
+| Evidence tier | **DEPLOYED** + observed acceptance steps **USABLE** (owner-confirmed). Management API not relisted this session. |
 
 ## Quality Cleanup workflow (2026-07-28) — staging-applied + API verified
 
