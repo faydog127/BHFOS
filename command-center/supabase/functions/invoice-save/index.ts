@@ -338,6 +338,15 @@ export const handleInvoiceSaveRequest = async (
         }
       }
 
+      const { error: settlementError } = await supabaseAdmin.rpc(
+        'recalculate_invoice_settlement',
+        { p_invoice_id: savedInvoice.id },
+      );
+      if (settlementError) {
+        console.error('invoice-save settlement projection failed:', settlementError.message);
+        return json({ error: 'Invoice settlement could not be initialized.' }, 500);
+      }
+
       const { data: hydratedInvoice, error: hydrateError } = await supabaseAdmin
         .from('invoices')
         .select(INVOICE_SELECT)

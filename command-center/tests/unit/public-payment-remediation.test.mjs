@@ -280,6 +280,12 @@ test('source contracts use explicit selection, checked persistence, validated se
   assert.doesNotMatch(invoiceSave, /patch\.amount_paid\s*=/);
   assert.doesNotMatch(invoiceSave, /patch\.balance_due\s*=/);
   assert.doesNotMatch(invoiceSave, /patch\.paid_at\s*=/);
+  assert.match(invoiceSave, /\.rpc\(\s*'recalculate_invoice_settlement'/);
+  assert.ok(
+    invoiceSave.indexOf("'recalculate_invoice_settlement'") <
+      invoiceSave.indexOf("const { data: hydratedInvoice"),
+    'invoice settlement must be projected before the saved invoice is returned',
+  );
   assert.match(invoiceSave, /observedCheckoutGeneration/);
   assert.match(invoiceSave, /\.eq\('checkout_generation', checkoutGeneration\)/);
   assert.match(invoiceSave, /replace_invoice_items_fenced/);
