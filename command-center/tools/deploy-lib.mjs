@@ -39,6 +39,22 @@ export const TARGETS = {
     routePath: '/',
     remoteRoot: 'public_html',
     identityText: 'The Vent Guys CRM',
+    // Production CRM only — never use for MIL staging.
+    allowedSupabaseProjectRefs: null,
+  },
+  /**
+   * Non-production internal MIL frontend.
+   * Hostinger document root (verified): /home/u986242606/domains/bhfos.com/public_html/mil
+   * Must never target bhfos.com public_html root or app.bhfos.com.
+   */
+  'mil-staging': {
+    id: 'mil-staging',
+    domain: 'mil.bhfos.com',
+    routePath: '/',
+    // Upload paths are relative to the mil.bhfos.com website root (already …/public_html/mil).
+    remoteRoot: '',
+    identityText: 'BHFOS MIL Staging (internal)',
+    allowedSupabaseProjectRefs: ['sdzhdupekcnekesbtxsl'],
   },
 };
 
@@ -115,6 +131,23 @@ export function loadCredentials(env = process.env) {
 export function resolveTarget(environment) {
   if (!environment) return null;
   return TARGETS[String(environment).trim()] || null;
+}
+
+/**
+ * Hard safety: mil-staging must never resolve to the bhfos.com testing-site
+ * document root or the CRM production root.
+ */
+export function assertMilTargetIsolation(target) {
+  if (!target || target.id !== 'mil-staging') return;
+  if (target.domain !== 'mil.bhfos.com') {
+    throw new Error(`mil-staging domain must be mil.bhfos.com (got ${target.domain})`);
+  }
+  const root = String(target.remoteRoot || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  // Empty remoteRoot is OK: upload is scoped to the mil.bhfos.com website root
+  // (…/public_html/mil). Bare public_html would target the bhfos.com testing site.
+  if (root === 'public_html') {
+    throw new Error('mil-staging refuses remoteRoot=public_html (that is the bhfos.com testing-site root)');
+  }
 }
 
 /* ------------------------------------------------------------------------- *
@@ -231,6 +264,17 @@ export function planDeployment({
   const secretFindings = resolvedSourceDir ? scanSourceForSecrets(resolvedSourceDir) : [];
   if (secretFindings.length > 0) {
     problems.push(`refusing to plan deploy: possible secrets in source (${secretFindings.map((f) => `${f.patternId}:${f.file}`).join(', ')})`);
+  }
+
+  if (target?.id === 'mil-staging') {
+    try {
+      assertMilTargetIsolation(target);
+    } catch (err) {
+      problems.push(err.message);
+    }
+    if (target.domain === 'bhfos.com' || target.domain === 'app.bhfos.com' || target.domain === 'vent-guys.com') {
+      problems.push(`mil-staging refuses forbidden domain ${target.domain}`);
+    }
   }
 
   const plan = {
@@ -354,8 +398,12 @@ export async function fetchUploadCredentials(gate, credentials, username) {
 export async function uploadArchive(gate, uploadCredentials, archivePath) {
   assertMutationAllowed(gate, 'uploadArchive');
   if (!fs.existsSync(archivePath)) throw new Error(`archive not found: ${archivePath}`);
+  assertMilTargetIsolation(gate.target);
   const size = fs.statSync(archivePath).size;
-  const remotePath = `${gate.target.remoteRoot}/${path.basename(archivePath)}`;
+  const remoteRoot = normalizeRemotePath(gate.target.remoteRoot || '');
+  const remotePath = remoteRoot
+    ? `${remoteRoot}/${path.basename(archivePath)}`
+    : path.basename(archivePath);
   const targetUrl = `${uploadCredentials.uploadUrl}/${normalizeRemotePath(remotePath)}?override=true`;
   const headers = {
     'X-Auth': uploadCredentials.authKey,
@@ -418,6 +466,10 @@ export async function executeDeploy(gate, credentials, { archivePath } = {}) {
   assertMutationAllowed(gate, 'executeDeploy');
   if (!credentials || !credentials.present) throw new Error('missing HOSTINGER_API_TOKEN');
   if (!archivePath) throw new Error('executeDeploy requires a pre-built archivePath');
+  assertMilTargetIsolation(gate.target);
+  if (gate.target?.id === 'mil-staging' && gate.target.domain !== 'mil.bhfos.com') {
+    throw new Error('executeDeploy mil-staging refused: domain is not mil.bhfos.com');
+  }
   const username = await resolveHostingerUsername(gate, credentials);
   const uploadCredentials = await fetchUploadCredentials(gate, credentials, username);
   const { remotePath } = await uploadArchive(gate, uploadCredentials, archivePath);

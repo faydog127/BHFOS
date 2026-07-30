@@ -20,29 +20,42 @@
 --   Restrictive policies are AND-combined with any permissive policies, so an
 --   existing permissive INSERT/ALL policy cannot override this DENY.
 --
+-- Local/dev note: public.estimates may be absent on fresh local resets that never
+-- created the legacy table. Skip cleanly so later migrations (including MIL) can apply.
+--
 -- Apply-to-production / deploy is NOT authorized by landing this file on main.
 
 BEGIN;
 
-ALTER TABLE public.estimates ENABLE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF to_regclass('public.estimates') IS NULL THEN
+    RAISE NOTICE 'public.estimates does not exist — skipping R-S1-01 deny-insert policies';
+    RETURN;
+  END IF;
 
-DROP POLICY IF EXISTS "ml_p1_rs101_deny_estimates_insert_authenticated"
-  ON public.estimates;
-DROP POLICY IF EXISTS "ml_p1_rs101_deny_estimates_insert_anon"
-  ON public.estimates;
+  EXECUTE 'ALTER TABLE public.estimates ENABLE ROW LEVEL SECURITY';
 
-CREATE POLICY "ml_p1_rs101_deny_estimates_insert_authenticated"
-  ON public.estimates
-  AS RESTRICTIVE
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (false);
+  EXECUTE 'DROP POLICY IF EXISTS "ml_p1_rs101_deny_estimates_insert_authenticated" ON public.estimates';
+  EXECUTE 'DROP POLICY IF EXISTS "ml_p1_rs101_deny_estimates_insert_anon" ON public.estimates';
 
-CREATE POLICY "ml_p1_rs101_deny_estimates_insert_anon"
-  ON public.estimates
-  AS RESTRICTIVE
-  FOR INSERT
-  TO anon
-  WITH CHECK (false);
+  EXECUTE $p$
+    CREATE POLICY "ml_p1_rs101_deny_estimates_insert_authenticated"
+      ON public.estimates
+      AS RESTRICTIVE
+      FOR INSERT
+      TO authenticated
+      WITH CHECK (false)
+  $p$;
+
+  EXECUTE $p$
+    CREATE POLICY "ml_p1_rs101_deny_estimates_insert_anon"
+      ON public.estimates
+      AS RESTRICTIVE
+      FOR INSERT
+      TO anon
+      WITH CHECK (false)
+  $p$;
+END $$;
 
 COMMIT;

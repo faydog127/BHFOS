@@ -126,7 +126,7 @@ const Home = () => {
              >
                 <div className="absolute inset-0 bg-blue-500/30 rounded-full blur-[80px] animate-pulse" />
                 <BrandImage 
-                  src="https://wwyxohjnyqnegzbxtuxs.supabase.co/storage/v1/object/public/vent-guys-images/logo_blackBG.png"
+                  src={brandAssets.logo.main || brandAssets.mascot.full}
                   alt="Vent Guys Mascot Waving" 
                   className="relative z-10 w-full h-full object-contain drop-shadow-2xl animate-mascot-float"
                   fallbackSrc={brandAssets.mascot.full}

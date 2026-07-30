@@ -149,7 +149,7 @@ const BHFSidebar = ({ onNavigate = null }) => {
               {CRM_PRIMARY_NAV.map((item) => (
                 <NavLink
                   key={item.path}
-                  to={tenantPath(item.path, tenantId)}
+                  to={item.absolute ? item.path : tenantPath(item.path, tenantId)}
                   end={item.end}
                   onClick={() => onNavigate?.()}
                   className={linkClass}
