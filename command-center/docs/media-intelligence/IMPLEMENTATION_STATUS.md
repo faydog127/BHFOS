@@ -1,23 +1,35 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** production apply packet + release kickoff (see git log)  
+**Verified HEAD at this status edit:** contributor accept/deny USABLE (see git log / this section)  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
 
-## Production release kickoff (2026-07-30) — PACKET + PR PATH; MUTATIONS BLOCKED ON CREDENTIALS
+## Owner-led acceptance (2026-07-30) — CONTRIBUTOR ACCEPT + DENY USABLE (ERRON)
 
 | Field | Value |
 |---|---|
-| Founder intent | Proceed with remaining production jobs (merge → prod migrate → edges → `app.bhfos.com` deploy → synthetic smoke) |
+| Observer | Erron (owner-led hands-on) |
+| Host | `https://mil.bhfos.com` staging (`build-info` tip **39e4b941dc63** / `mil-staging` at record time) |
+| Observed | Accept **and** denial tested from the contributor path — **worked** (owner-confirmed) |
+| Prior distinct-identity (2026-07-29) | owner assignment → separate contributor login → preview/download → submit → owner review |
+| Evidence tier | **USABLE** (owner-confirmed). Closes the prior gap that final accept/deny had not been evidenced. |
+| Still not claimed | changes-requested / revised-version preservation cycle (unless later separately confirmed) |
+| Production | Code merged via PR #127 (`9d70ef9` on `main`); production migrate/edge/CRM deploy still gated on credentials per packet below |
+
+## Production release kickoff (2026-07-30) — PACKET READY; PR MERGED; MUTATIONS BLOCKED ON CREDENTIALS
+
+| Field | Value |
+|---|---|
+| Founder intent | Proceed with remaining production jobs (prod migrate → edges → `app.bhfos.com` deploy → synthetic smoke) |
 | Packet | [`PRODUCTION_APPLY_PACKET.md`](./PRODUCTION_APPLY_PACKET.md) |
+| Git | PR [#127](https://github.com/faydog127/BHFOS/pull/127) **merged** to `main` (`9d70ef9`) after CI green |
 | Production home | CRM `https://app.bhfos.com` + Supabase **`wwyxohjnyqnegzbxtuxs`** (not `mil.bhfos.com`) |
 | Staging remains | `https://mil.bhfos.com` / `sdzhdupekcnekesbtxsl` / Hostinger target `mil-staging` |
-| Local helpers | `npm run test:media-intel-helpers` **180 pass / 0 fail** (this session) |
-| Hosted staging tip | `https://mil.bhfos.com` `build-info` SHA **39e4b941dc63** / `mil-staging` (unchanged by this kickoff) |
-| Blocking for mutate | Process/User `SUPABASE_ACCESS_TOKEN` **absent**; linked CLI project is staging only; production `VITE_*` for CRM build not confirmed in this worktree |
+| Hosted staging tip | `https://mil.bhfos.com` `build-info` SHA **39e4b941dc63** / `mil-staging` |
+| Blocking for mutate | Process/User `SUPABASE_ACCESS_TOKEN` **absent**; production `VITE_*` for CRM build not confirmed in this worktree |
 | Available (names) | Sibling operator env has `HOSTINGER_API_TOKEN` (for later `production` Hostinger deploy) — not used yet |
 | Explicit non-actions until unblocked | No prod migration apply, no prod edge deploy, no `app.bhfos.com` Hostinger mutate, no reconcile cron, no website promote |
-| Next mutate gate | Provide `SUPABASE_ACCESS_TOKEN` (management PAT) for project `wwyxohjnyqnegzbxtuxs` + confirm production frontend `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` for that project; then execute packet steps 3–8 after PR/CI/merge |
+| Next mutate gate | Provide `SUPABASE_ACCESS_TOKEN` for `wwyxohjnyqnegzbxtuxs` + production `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`; then execute packet steps 3–8 |
 
 ## Owner-led acceptance (2026-07-29) — DISTINCT-IDENTITY WORKFLOW OBSERVED BY ERRON
 
@@ -25,10 +37,10 @@
 |---|---|
 | Observer | Erron (owner-led hands-on) |
 | Observed | owner assignment → genuinely separate contributor login → contributor preview/download → contributor submission → owner review |
-| Not claimed here | changes-requested cycle, revised-version preservation, or final approval — not evidenced as performed in this acceptance |
-| Management API | Relisting **unavailable** this session (`SUPABASE_ACCESS_TOKEN` absent). Do not treat frontend work as blocked. Do not use anon/service-role/JWT as a management token. |
+| Follow-up (2026-07-30) | Accept **and** denial from contributor path confirmed **USABLE** — see section above |
+| Management API | Relisting **unavailable** when recorded (`SUPABASE_ACCESS_TOKEN` absent). Do not treat frontend work as blocked. Do not use anon/service-role/JWT as a management token. |
 | Credential scan (prior + this session) | No credential-exposure incident. Hosted/frontend artifact: no `SUPABASE_ACCESS_TOKEN`, no `sbp_*` management-token pattern; any `service_role` hit is a role-name literal, not an embedded key. |
-| Evidence tier | **USABLE** for the observed steps above (owner-confirmed). Staging ship checklist complete enough for production packet; remaining = PR/merge + production apply. |
+| Evidence tier | **USABLE** for the observed steps (owner-confirmed). |
 
 ## Contributor Workspace (2026-07-28) — FRONTEND DEPLOYED; owner-observed acceptance recorded
 
@@ -455,9 +467,9 @@ Accepted (SOURCE + unit/contract tests + local SQL where noted; staging-unproven
 
 Still open (production path — Founder authorized kickoff 2026-07-30):
 
-1. **Exact next action:** PR `feat/media-intelligence-library` → `main` → CI green → merge → execute [`PRODUCTION_APPLY_PACKET.md`](./PRODUCTION_APPLY_PACKET.md) on `wwyxohjnyqnegzbxtuxs` + Hostinger `production` (`app.bhfos.com`)
+1. **Exact next action:** Execute [`PRODUCTION_APPLY_PACKET.md`](./PRODUCTION_APPLY_PACKET.md) on `wwyxohjnyqnegzbxtuxs` + Hostinger `production` (`app.bhfos.com`) once credentials are available (PR #127 already merged)
 2. **Authorization boundary:** Founder authorized production release intent; mutating steps still require `SUPABASE_ACCESS_TOKEN` + production `VITE_*`. No reconcile cron. No website promote. Leave mil-staging untouched as staging.
-3. Staging acceptance (distinct-identity) already owner-observed **USABLE**; list-thumb browser USABLE optional spot-check only
+3. Staging acceptance: distinct-identity + contributor **accept/deny** owner-confirmed **USABLE** (2026-07-30)
 
 ### Active defects (honest)
 
