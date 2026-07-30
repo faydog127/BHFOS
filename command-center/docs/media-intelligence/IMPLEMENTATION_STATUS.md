@@ -4,18 +4,20 @@
 **Verified HEAD at this status edit:** contributor self-upload (Upload my shots) — see section below  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
 
-## Contributor self-upload — Upload my shots (2026-07-30) — SOURCE + local tests; staging apply pending
+## Contributor self-upload — Upload my shots (2026-07-30) — STAGING DEPLOYED; browser USABLE pending
 
 | Field | Value |
 |---|---|
+| Commit | `52527c59de2b0817ae770d1d2f648f1fbf9b7ed3` |
 | Product | Contributor JWT mints `create_contributor_session`; quarantine finalize; Review Queue; auto-assign to uploader; My shots list on `/creator` |
-| Schema | `20260730180000_media_intel_contributor_self_upload.sql` — own-upload visibility + trigger auto-assign + `contractor_supplied` |
-| Edge | `media-intel-upload-session` `create_contributor_session`; `media-intel-sign` allows own-upload preview/download (never originals) |
-| UI | `MediaCreatorWorkspace` Upload my shots + My shots; `canContributorSelfUpload` |
-| Tests | `media-intel-contributor` + access contracts |
-| Non-goals | No full library browse; no owner phone-QR bypass for staff without creator grant |
-| Evidence tier | **SOURCE-ONLY** until staging migrate + edge + frontend deploy + USABLE acceptance |
-| Staging next | Apply migration on `sdzhdupekcnekesbtxsl`; deploy upload-session + sign; mil-staging frontend; contributor uploads 1–2 JPEGs |
+| Schema | `20260730180000_media_intel_contributor_self_upload.sql` — **applied** on `sdzhdupekcnekesbtxsl` |
+| Edge | `media-intel-upload-session` + `media-intel-sign` redeployed (`--use-api`); creator mint smoke HTTP 200 + token |
+| UI | Hosted `CreatorRoutes-92513759.js` has Upload my shots / contributor-upload-my-shots |
+| Hosted frontend | `https://mil.bhfos.com` SHA **52527c59de2b** / `mil-staging` / `migrationVersion=20260730180000` / asset `2dbb7ce8b75daa50`; Supabase only `sdzhdupekcnekesbtxsl` |
+| Deploy archive | `command-center/tmp/mil-staging-52527c59de2b-20260730T211125Z.zip` (auth `MIL-CONTRIBUTOR-SELF-UPLOAD-FRONTEND-2026-07-30`) |
+| Tests | `npm run test:media-intel-helpers` **181 pass** |
+| Non-goals | No full library browse; no originals; no reconcile cron |
+| Evidence tier | **DEPLOYED** (API mint smoke). Browser USABLE (1–2 JPEG self-upload → Review → My shots) still owner/contributor hands-on |
 
 ## Owner-led acceptance (2026-07-30) — CONTRIBUTOR ACCEPT + DENY USABLE (ERRON)
 
