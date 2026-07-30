@@ -29,7 +29,18 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 import { milCorsHeaders, milCorsPreflight } from '../_shared/milCors.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
-import { isMilOwnerAdmin } from '../_shared/milRoles.ts'
+import { isMilOwnerAdmin, normalizeMilRole } from '../_shared/milRoles.ts'
+
+/** True if the user has a reel_creator (contributor) grant row — not only the resolved primary role. */
+async function hasMilCreatorGrant(userId: string): Promise<boolean> {
+  if (!userId) return false
+  const { data, error } = await supabaseAdmin
+    .from('app_user_roles')
+    .select('role')
+    .eq('user_id', userId)
+  if (error) throw error
+  return (data || []).some((row) => normalizeMilRole(row.role) === 'reel_creator')
+}
 
 function envInt(name: string, fallback: number) {
   const raw = Deno.env.get(name)
@@ -370,6 +381,69 @@ Deno.serve(async (req) => {
         token,
         notice:
           'Keep phone originals until transfer is reconciled and an independent backup is confirmed. This link is upload-only and expires.',
+      })
+    }
+
+    // Contributor self-shot intake: JWT reel_creator mints a self-scoped session.
+    // Owner/admin phone sessions stay on action=create. Staff without a creator
+    // grant cannot use this as a bypass.
+    if (action === 'create_contributor_session') {
+      const auth = await requireUser(req)
+      if ('error' in auth) return json({ error: auth.message }, auth.status)
+      if (!(await hasMilCreatorGrant(auth.user.id))) {
+        return json({ error: 'Only contributors may create a self-upload session' }, 403)
+      }
+
+      const hours = Math.min(Math.max(Number(body.expiresHours) || 12, 1), 72)
+      const token = randomToken()
+      const tokenHash = await sha256Hex(token)
+      const expiresAt = new Date(Date.now() + hours * 3600_000).toISOString()
+
+      const { data: batch, error: batchErr } = await supabaseAdmin
+        .from('mil_upload_batches')
+        .insert({
+          source_label: 'contributor_self',
+          source_phone: null,
+          source_person: body.sourcePerson || 'Contributor self-upload',
+          uploader_user_id: auth.user.id,
+          status: 'open',
+          client_session_key: `contributor-self:${auth.user.id}:${crypto.randomUUID()}`,
+        })
+        .select('*')
+        .single()
+      if (batchErr) throw batchErr
+
+      const { data: session, error: sessErr } = await supabaseAdmin
+        .from('mil_upload_sessions')
+        .insert({
+          batch_id: batch.id,
+          token_hash: tokenHash,
+          label: 'Contributor self-upload',
+          source_phone: null,
+          source_person: body.sourcePerson || 'Contributor self-upload',
+          created_by: auth.user.id,
+          expires_at: expiresAt,
+        })
+        .select('*')
+        .single()
+      if (sessErr) throw sessErr
+
+      await supabaseAdmin.from('mil_audit_events').insert({
+        actor_user_id: auth.user.id,
+        action: 'contributor_upload_session_created',
+        target_type: 'mil_upload_sessions',
+        target_id: session.id,
+        details: { batchId: batch.id, expiresAt, hours, source: 'contributor_self' },
+      })
+
+      return json({
+        sessionId: session.id,
+        batchId: batch.id,
+        expiresAt,
+        path: `/creator`,
+        token,
+        notice:
+          'Keep phone originals until transfer is verified and an independent backup is confirmed. Uploads go to owner Review first.',
       })
     }
 

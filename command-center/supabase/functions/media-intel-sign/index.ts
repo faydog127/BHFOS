@@ -14,7 +14,9 @@ const PREVIEW_TTL = 300
 const DOWNLOAD_TTL = 600
 const VALID_PURPOSES = new Set(['preview', 'download'])
 const STAFF_ROLES = new Set(['admin', 'manager', 'office', 'media_reviewer'])
-const CREATOR_DERIVATIVE_KINDS = new Set(['creator_download', 'detail_preview', 'grid_thumb', 'video_preview', 'video_thumb'])
+const CREATOR_DERIVATIVE_KINDS = new Set([
+  'creator_download', 'detail_preview', 'grid_thumb', 'video_preview', 'video_thumb', 'heic_preview',
+])
 const STAFF_PREVIEW_DERIVATIVE_KINDS = new Set([
   'detail_preview', 'grid_thumb', 'heic_preview', 'video_thumb', 'video_preview', 'public_safe',
 ])
@@ -24,21 +26,24 @@ const VALID_DERIVATIVE_KINDS = new Set([
   'public_safe', 'ai_safe',
 ])
 
-/** Assignment-bound creator access. Global reel_creation approval alone is never enough. */
+/** Mirrors SQL mil_creator_can_view_asset: own uploads OR assigned verified/clear reel_creation. */
 async function creatorCanView(userId: string, assetId: string) {
   const { data: asset } = await supabaseAdmin
     .from('mil_assets')
-    .select('id, privacy_status, human_review_status, archived_at, trashed_at')
+    .select('id, privacy_status, human_review_status, archived_at, trashed_at, created_by_user_id')
     .eq('id', assetId)
     .maybeSingle()
-  // Mirror SQL mil_creator_can_view_asset: archived or trashed never authorize new URLs.
-  if (
-    !asset ||
-    asset.archived_at ||
-    asset.trashed_at ||
-    asset.privacy_status !== 'clear' ||
-    asset.human_review_status !== 'verified'
-  ) {
+  // Archived or trashed never authorize new URLs.
+  if (!asset || asset.archived_at || asset.trashed_at) {
+    return false
+  }
+
+  // Contributor self-upload / own created assets — preview before owner verify.
+  if (asset.created_by_user_id === userId) {
+    return true
+  }
+
+  if (asset.privacy_status !== 'clear' || asset.human_review_status !== 'verified') {
     return false
   }
 

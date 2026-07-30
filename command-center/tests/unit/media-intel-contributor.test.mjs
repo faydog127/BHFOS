@@ -38,6 +38,43 @@ describe('Contributor Workspace source contracts', () => {
     assert.match(src, /asset\.trashed_at/);
   });
 
+  it('contributor self-upload: session mint, visibility migration, UI, no originals', () => {
+    const edge = read('supabase/functions/media-intel-upload-session/index.ts');
+    const sign = read('supabase/functions/media-intel-sign/index.ts');
+    const mig = read('supabase/migrations/20260730180000_media_intel_contributor_self_upload.sql');
+    const workspace = read('src/pages/crm/media/MediaCreatorWorkspace.jsx');
+    const roles = read('src/lib/mediaIntel/roles.js');
+    const uploadMgr = read('src/lib/mediaIntel/uploadManager.js');
+    const api = read('src/lib/mediaIntel/api.js');
+
+    assert.match(edge, /create_contributor_session/);
+    assert.match(edge, /Only contributors may create a self-upload session/);
+    assert.match(edge, /source_label:\s*'contributor_self'/);
+    assert.match(edge, /hasMilCreatorGrant/);
+    assert.match(edge, /action === 'create'/);
+    assert.match(edge, /Only owner\/admin may create upload sessions/);
+
+    assert.match(mig, /mil_creator_can_view_asset/);
+    assert.match(mig, /created_by_user_id = auth\.uid\(\)/);
+    assert.match(mig, /mil_auto_assign_contributor_self_upload/);
+    assert.match(mig, /contributor_self/);
+    assert.match(mig, /contractor_supplied/);
+
+    assert.match(sign, /created_by_user_id/);
+    assert.match(sign, /Creators may never access originals/);
+    assert.match(sign, /allowOriginal === true/);
+
+    assert.match(roles, /canContributorSelfUpload/);
+    assert.match(uploadMgr, /createContributorUploadSession/);
+    assert.match(uploadMgr, /create_contributor_session/);
+    assert.match(api, /createdByUserId/);
+    assert.match(workspace, /contributor-upload-my-shots/);
+    assert.match(workspace, /Upload my shots/);
+    assert.match(workspace, /createContributorUploadSession/);
+    assert.match(workspace, /contributor-my-shots-list/);
+    assert.doesNotMatch(workspace, /allowOriginal:\s*true/);
+  });
+
   it('UI uses Contributor Workspace labels and /contributor alias', () => {
     const app = read('src/App.jsx');
     const portal = read('src/pages/creator/CreatorPortalLayout.jsx');

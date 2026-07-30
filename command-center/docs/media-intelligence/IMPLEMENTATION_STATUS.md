@@ -1,8 +1,21 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** contributor accept/deny USABLE (see git log / this section)  
+**Verified HEAD at this status edit:** contributor self-upload (Upload my shots) — see section below  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
+
+## Contributor self-upload — Upload my shots (2026-07-30) — SOURCE + local tests; staging apply pending
+
+| Field | Value |
+|---|---|
+| Product | Contributor JWT mints `create_contributor_session`; quarantine finalize; Review Queue; auto-assign to uploader; My shots list on `/creator` |
+| Schema | `20260730180000_media_intel_contributor_self_upload.sql` — own-upload visibility + trigger auto-assign + `contractor_supplied` |
+| Edge | `media-intel-upload-session` `create_contributor_session`; `media-intel-sign` allows own-upload preview/download (never originals) |
+| UI | `MediaCreatorWorkspace` Upload my shots + My shots; `canContributorSelfUpload` |
+| Tests | `media-intel-contributor` + access contracts |
+| Non-goals | No full library browse; no owner phone-QR bypass for staff without creator grant |
+| Evidence tier | **SOURCE-ONLY** until staging migrate + edge + frontend deploy + USABLE acceptance |
+| Staging next | Apply migration on `sdzhdupekcnekesbtxsl`; deploy upload-session + sign; mil-staging frontend; contributor uploads 1–2 JPEGs |
 
 ## Owner-led acceptance (2026-07-30) — CONTRIBUTOR ACCEPT + DENY USABLE (ERRON)
 

@@ -2,7 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
 import { listAssets, submitReelVersion } from '@/lib/mediaIntel/api';
+import { PRIVACY_LABELS } from '@/lib/mediaIntel/constants';
 import { requestSignedMediaUrl, requestSignedReelUrl } from '@/lib/mediaIntel/signedAccess';
+import {
+  createContributorUploadSession,
+  uploadFilesToSession,
+} from '@/lib/mediaIntel/uploadManager';
 import {
   approvedUseChips,
   CONTRIBUTOR_SEARCH_MIN_COUNT,
@@ -86,7 +91,9 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
   const outlet = useOutletContext() || {};
   const caps = capsProp || outlet.caps;
   const fileRef = useRef(null);
+  const selfShotRef = useRef(null);
   const [available, setAvailable] = useState([]);
+  const [myShots, setMyShots] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [projects, setProjects] = useState([]);
   const [title, setTitle] = useState('');
@@ -94,6 +101,8 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [selfUploadBusy, setSelfUploadBusy] = useState(false);
+  const [selfUploadNote, setSelfUploadNote] = useState(null);
   const [mediaBusyId, setMediaBusyId] = useState(null);
   const [batchBusy, setBatchBusy] = useState(false);
   const [mediaSearch, setMediaSearch] = useState('');
@@ -130,10 +139,24 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
 
   const load = async () => {
     try {
+      const { data: auth } = await supabase.auth.getUser();
       const assets = await listAssets({ archived: false, trashed: false, limit: 100 });
       setAvailable(assets);
-      void loadThumbs(assets);
-      const { data: auth } = await supabase.auth.getUser();
+
+      let own = [];
+      if (caps?.canContributorSelfUpload && auth?.user?.id) {
+        own = await listAssets({
+          archived: false,
+          trashed: false,
+          createdByUserId: auth.user.id,
+          limit: 80,
+        });
+        setMyShots(own);
+      } else {
+        setMyShots([]);
+      }
+      void loadThumbs([...(assets || []), ...own]);
+
       let assignQ = supabase
         .from('mil_creator_assignments')
         .select(
@@ -161,6 +184,57 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
       setProjects(data || []);
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const uploadMyShots = async (fileList) => {
+    const files = Array.from(fileList || []).filter(Boolean);
+    if (!files.length) return;
+    if (!caps?.canContributorSelfUpload) {
+      setError('Only contributors can upload their own shots here.');
+      return;
+    }
+    setSelfUploadBusy(true);
+    setError(null);
+    setMessage(null);
+    setSelfUploadNote(`Starting transfer of ${files.length} file(s)…`);
+    try {
+      const session = await createContributorUploadSession({
+        sourcePerson: 'Contributor self-upload',
+        expiresHours: 12,
+      });
+      if (!session?.token) throw new Error('Contributor upload session was not created.');
+      const outcomes = new Map();
+      await uploadFilesToSession({
+        token: session.token,
+        batchId: session.batchId,
+        files,
+        onFileUpdate: (item) => {
+          if (item?.clientUploadId) outcomes.set(item.clientUploadId, item.status);
+          const vals = [...outcomes.values()];
+          const done = vals.filter((s) => s === 'uploaded' || s === 'duplicate').length;
+          const failed = vals.filter((s) => s === 'failed').length;
+          setSelfUploadNote(
+            `Transfer progress: ${done} uploaded${failed ? `, ${failed} failed` : ''} (of ${files.length}).`,
+          );
+        },
+      });
+      const vals = [...outcomes.values()];
+      const done = vals.filter((s) => s === 'uploaded' || s === 'duplicate').length;
+      const failed = vals.filter((s) => s === 'failed').length;
+      setMessage(
+        failed
+          ? `Uploaded ${done} shot(s); ${failed} failed. Keep phone originals until verified.`
+          : `Uploaded ${done || files.length} shot(s). They are in owner Review — keep phone originals until verified.`,
+      );
+      setSelfUploadNote(null);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Self-upload failed');
+      setSelfUploadNote(null);
+    } finally {
+      setSelfUploadBusy(false);
+      if (selfShotRef.current) selfShotRef.current.value = '';
     }
   };
 
@@ -332,7 +406,9 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
     <div className="space-y-6" data-testid="media-creator-workspace">
       <div>
         <h2 className="text-xl font-semibold tracking-tight text-slate-900">Contributor Workspace</h2>
-        <p className="text-sm text-slate-500 mt-0.5">Brief → download working copies → submit draft.</p>
+        <p className="text-sm text-slate-500 mt-0.5">
+          Brief → download working copies → upload your shots → submit draft.
+        </p>
       </div>
       {error && <div className="text-sm text-red-700">{error}</div>}
       {message && <div className="text-sm text-emerald-700">{message}</div>}
@@ -471,6 +547,93 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
           </p>
         )}
       </section>
+
+      {caps?.canContributorSelfUpload && (
+        <section className="rounded-xl border bg-white p-4 space-y-3" data-testid="contributor-upload-my-shots">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">Upload my shots</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Photos or video you took on your phone. They go to owner Review first (privacy/quality).
+                This is not the reel Submissions uploader. Keep originals on the phone until verified.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={selfUploadBusy}
+              className="rounded-md bg-slate-900 text-white px-4 py-2.5 text-sm font-medium min-h-[44px] disabled:opacity-50"
+              onClick={() => selfShotRef.current?.click()}
+              data-testid="contributor-upload-my-shots-btn"
+            >
+              {selfUploadBusy ? 'Uploading…' : 'Choose photos'}
+            </button>
+          </div>
+          <input
+            ref={selfShotRef}
+            type="file"
+            accept="image/*,video/*,.heic,.heif,.jpg,.jpeg,.png,.webp,.mp4,.mov"
+            multiple
+            className="hidden"
+            onChange={(e) => uploadMyShots(e.target.files)}
+          />
+          {selfUploadNote && <p className="text-xs text-slate-600">{selfUploadNote}</p>}
+
+          <h4 className="text-sm font-medium text-slate-800 pt-1">My shots</h4>
+          {myShots.length === 0 ? (
+            <p className="text-sm text-slate-600">No self-uploads yet.</p>
+          ) : (
+            <ul className="grid grid-cols-2 lg:grid-cols-3 gap-2" data-testid="contributor-my-shots-list">
+              {myShots.map((a) => {
+                const thumb = thumbUrls[a.id];
+                const privacy = PRIVACY_LABELS[a.privacy_status] || a.privacy_status;
+                const review =
+                  a.human_review_status === 'verified'
+                    ? 'Verified'
+                    : a.human_review_status === 'pending'
+                      ? 'Awaiting review'
+                      : a.human_review_status;
+                return (
+                  <li key={a.id} className="rounded-md border overflow-hidden text-sm flex flex-col">
+                    <div className="aspect-square bg-slate-100 relative">
+                      {thumb ? (
+                        <img src={thumb} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                      ) : (
+                        <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 px-2 text-center">
+                          Preview preparing
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-2 space-y-1.5 flex-1 flex flex-col">
+                      <p className="text-[11px] text-slate-600 leading-snug">
+                        {review} · {privacy}
+                      </p>
+                      <p className="truncate text-[11px] text-slate-500">{a.original_filename}</p>
+                      <div className="flex flex-wrap gap-1.5 mt-auto">
+                        <button
+                          type="button"
+                          disabled={mediaBusyId === a.id || selfUploadBusy}
+                          className="rounded-md border px-2.5 py-1.5 text-xs min-h-[36px] text-slate-700"
+                          onClick={() => openAssignedMedia(a.id, 'preview')}
+                        >
+                          Preview
+                        </button>
+                        <button
+                          type="button"
+                          disabled={mediaBusyId === a.id || selfUploadBusy}
+                          className="rounded-md border px-2.5 py-1.5 text-xs min-h-[36px] text-slate-700"
+                          onClick={() => downloadOne(a)}
+                        >
+                          Download
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
 
       <section className="rounded-xl border bg-white p-4 space-y-3">
         <h3 className="text-base font-semibold text-slate-900">Submissions</h3>

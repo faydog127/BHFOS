@@ -51,14 +51,15 @@ Legend: **Y** = allowed via RLS/RPC/edge when gates pass · **—** = denied · 
 
 | Capability | Admin / Manager | Reviewer (`media_reviewer`) | Office | Creator (`reel_creator`) | Session bearer |
 |---|---|---|---|---|---|
-| Browse library / derivatives | Y | Y | Y | Assigned only | — |
-| Browse private originals | Y | Y | Y | — (assigned previews via sign edge) | — |
+| Browse library / derivatives | Y | Y | Y | Assigned + **own uploads** only | — |
+| Browse private originals | Y | Y | Y | — (assigned/own previews via sign edge) | — |
 | Staff upload (desktop) | Y | Y | Y | — | — |
 | Phone / field upload | Y (mint session) | — | — | — | **S** (grant-bound TUS to quarantine) |
+| Contributor self-upload (`/creator` Upload my shots) | — | — | — | **Y** (JWT `create_contributor_session` → quarantine finalize; lands in Review; auto-assigned to self) | — |
 | Verify / review writes | Y | Y | **—** (`mil_is_reviewer` excludes office) | — | — |
 | Approve / deny reels | Y | — | — | — | — |
 | Invite / assign / revoke creators | Y (edge `media-intel-creator-admin`) | — | — | — | — |
-| Create / revoke upload sessions | Y | — | — | — | — |
+| Create / revoke upload sessions (owner phone QR) | Y | — | — | — | — |
 | Website promote | **Disabled (503)** — see below | — | — | — | — |
 | Website unpublish | Y | — | — | — | — |
 | Creator portal | Inspect only | — | — | Y | — |
@@ -79,7 +80,7 @@ Legend: **Y** = allowed via RLS/RPC/edge when gates pass · **—** = denied · 
 
 ### Creator isolation (role + resource — not tenancy)
 
-Creators must not access CRM, customers/jobs, raw intake, private originals, restricted/unreviewed assets, unassigned work, owner/reviewer actions, rights admin, other creators’ assignments, website promotion, or social publishing.
+Creators must not access CRM, customers/jobs, other people’s raw intake, private originals, restricted assets belonging to others, unassigned library work, owner/reviewer actions, rights admin, other creators’ assignments, website promotion, or social publishing. They **may** upload their own phone shots via Contributor Workspace (`create_contributor_session`); those assets land in owner Review and are visible to that creator only (plus staff) until verified.
 
 - `reel_creation` permitted use makes an asset **eligible for assignment**, not globally visible to every creator.
 - Access requires an **active** direct assignment or **active** assigned collection (revocation blocks new signed links).
