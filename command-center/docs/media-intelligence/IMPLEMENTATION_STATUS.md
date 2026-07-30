@@ -1,8 +1,23 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** Review Queue thumbs + acceptance reconcile (see git log)  
+**Verified HEAD at this status edit:** production apply packet + release kickoff (see git log)  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
+
+## Production release kickoff (2026-07-30) — PACKET + PR PATH; MUTATIONS BLOCKED ON CREDENTIALS
+
+| Field | Value |
+|---|---|
+| Founder intent | Proceed with remaining production jobs (merge → prod migrate → edges → `app.bhfos.com` deploy → synthetic smoke) |
+| Packet | [`PRODUCTION_APPLY_PACKET.md`](./PRODUCTION_APPLY_PACKET.md) |
+| Production home | CRM `https://app.bhfos.com` + Supabase **`wwyxohjnyqnegzbxtuxs`** (not `mil.bhfos.com`) |
+| Staging remains | `https://mil.bhfos.com` / `sdzhdupekcnekesbtxsl` / Hostinger target `mil-staging` |
+| Local helpers | `npm run test:media-intel-helpers` **180 pass / 0 fail** (this session) |
+| Hosted staging tip | `https://mil.bhfos.com` `build-info` SHA **39e4b941dc63** / `mil-staging` (unchanged by this kickoff) |
+| Blocking for mutate | Process/User `SUPABASE_ACCESS_TOKEN` **absent**; linked CLI project is staging only; production `VITE_*` for CRM build not confirmed in this worktree |
+| Available (names) | Sibling operator env has `HOSTINGER_API_TOKEN` (for later `production` Hostinger deploy) — not used yet |
+| Explicit non-actions until unblocked | No prod migration apply, no prod edge deploy, no `app.bhfos.com` Hostinger mutate, no reconcile cron, no website promote |
+| Next mutate gate | Provide `SUPABASE_ACCESS_TOKEN` (management PAT) for project `wwyxohjnyqnegzbxtuxs` + confirm production frontend `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` for that project; then execute packet steps 3–8 after PR/CI/merge |
 
 ## Owner-led acceptance (2026-07-29) — DISTINCT-IDENTITY WORKFLOW OBSERVED BY ERRON
 
@@ -13,7 +28,7 @@
 | Not claimed here | changes-requested cycle, revised-version preservation, or final approval — not evidenced as performed in this acceptance |
 | Management API | Relisting **unavailable** this session (`SUPABASE_ACCESS_TOKEN` absent). Do not treat frontend work as blocked. Do not use anon/service-role/JWT as a management token. |
 | Credential scan (prior + this session) | No credential-exposure incident. Hosted/frontend artifact: no `SUPABASE_ACCESS_TOKEN`, no `sbp_*` management-token pattern; any `service_role` hit is a role-name literal, not an embedded key. |
-| Evidence tier | **USABLE** for the observed steps above (owner-confirmed). Remaining ship steps: Review Queue thumbs deploy (this session) → authorized PR/merge → production plan. |
+| Evidence tier | **USABLE** for the observed steps above (owner-confirmed). Staging ship checklist complete enough for production packet; remaining = PR/merge + production apply. |
 
 ## Contributor Workspace (2026-07-28) — FRONTEND DEPLOYED; owner-observed acceptance recorded
 
@@ -438,11 +453,11 @@ Accepted (SOURCE + unit/contract tests + local SQL where noted; staging-unproven
 - Cursor Relay Protocol (docs only): root [`AGENTS.md`](../../../AGENTS.md) + [`docs/RELAY_PROTOCOL.md`](../RELAY_PROTOCOL.md)
 - Helper suite: `npm run test:media-intel-helpers` **129 pass / 0 fail**
 
-Still open (next executable after staging proof):
+Still open (production path — Founder authorized kickoff 2026-07-30):
 
-1. **Exact next action:** Review the uncommitted All Media search repair + staging retest evidence for controlled local commit / branch publication authorization
-2. **Authorization boundary:** no production Hostinger deploy (no staging Hostinger target), no merge/push unless authorized, no reconcile cron, no promotion enablement
-3. Local commits of ACL migration + status remain ahead of origin (not pushed); search repair is uncommitted until authorized
+1. **Exact next action:** PR `feat/media-intelligence-library` → `main` → CI green → merge → execute [`PRODUCTION_APPLY_PACKET.md`](./PRODUCTION_APPLY_PACKET.md) on `wwyxohjnyqnegzbxtuxs` + Hostinger `production` (`app.bhfos.com`)
+2. **Authorization boundary:** Founder authorized production release intent; mutating steps still require `SUPABASE_ACCESS_TOKEN` + production `VITE_*`. No reconcile cron. No website promote. Leave mil-staging untouched as staging.
+3. Staging acceptance (distinct-identity) already owner-observed **USABLE**; list-thumb browser USABLE optional spot-check only
 
 ### Active defects (honest)
 
@@ -473,4 +488,4 @@ Fresh chats use the standardized **RELAY HANDOFF** in [`docs/RELAY_PROTOCOL.md`]
 4. Browser/USABLE acceptance on CRM staging frontend pointed at staging — representative fixture gate **FAIL (search)** then search-repair retest **PASS** (2026-07-27)
 5. Accessibility + responsive screenshot suite
 6. Large synthetic library performance harness
-7. Owner authorization before merge / production
+7. Owner authorization before merge / production → **Founder authorized production kickoff 2026-07-30**; packet written; mutate blocked until `SUPABASE_ACCESS_TOKEN` + production `VITE_*` + PR/CI/merge
