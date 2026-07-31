@@ -1,20 +1,29 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** _(set at Fix C commit)_  
-**Upstream divergence at edit:** _(record after push)_  
+**Verified HEAD at this status edit:** `d485aaef1c32254291ed6a5591a29eaa58a88a34`  
+**Upstream divergence at edit:** `origin/feat/media-intelligence-library` **0 behind / 0 ahead**  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
 
-## Fix C — Review Queue filter semantics (2026-07-31) — STAGING ONLY
+## Fix C — Review Queue filter semantics (2026-07-31) — STAGING DEPLOYED
 
 | Field | Value |
 |---|---|
 | Mission | Contributor-submission filters only; exclude staff/legacy assets from Review Queue |
-| Root cause | Client merged `listAssets(human_review_status=pending)` staff rows into Needs review / Raw / All |
-| Fix | Stop loading/merging staff assets; `reviewQueueModel.js` builds submission-only rows; no schema migration |
+| Root cause | `MediaReviewQueue.loadQueue` also called `listAssets({ humanReviewStatus: 'pending' })` and merged non-`contributor_self` assets as fake PHOTO/RAW rows — ~99 pending staff assets flooded Needs review / Raw media |
+| Why no migration | `listSubmissions({ queueFilter })` already encoded correct submission predicates + draft exclusion; pollution was client view-model merge only |
+| Fix | Stop loading/merging staff assets; `reviewQueueModel.js` builds submission-only rows; guard throws if staff intake re-enabled |
+| Final filters | Needs review = `awaiting_owner_review` + `action_owner=owner`; Raw = `raw_video`; Social = `social_post`; Reels = `reel` (incl. changes-requested); Changes requested = `changes_requested`; drafts always excluded |
 | Preserved | Fix A preview states; Fix B in-queue reel select + Open in Reel Review; Reel Review nav |
-| Non-goals | No prod; no storage/object/history mutation; no V2; no Reel Review removal |
-| Evidence tier | **SOURCE** + unit; staging deploy evidence below after Hostinger |
+| Commit | `d485aaef1c32254291ed6a5591a29eaa58a88a34` |
+| Staging frontend | `https://mil.bhfos.com` SHA **d485aae…** / `mil-staging` / `migrationVersion=20260731130000` / asset `8232dab0d3f61a69` |
+| Archive | `tmp/mil-staging-d485aaef1c32-20260731T124405Z.zip` (auth `MIL-REVIEW-QUEUE-FIX-C-2026-07-31`) |
+| Tests | `npm run test:media-intel-helpers` **241 pass** (includes `media-intel-review-queue-filters.test.mjs`) |
+| Before/after counts (staging) | Before UI Needs review ~**93–99** (subs + pending staff assets); After DB/UI: Needs **4**, Raw **2**, Social **1**, Reels **3**, Changes **2**, drafts **0**. Pending assets remain **99** in library (incl. `IMG_4862`) but not in queue filters |
+| Click evidence | Needs review (4): no `IMG_4862`/`Desktop transfer`; actionable SUB-ADA4EF85 / SUB-1A7D4481 / SUB-22DEEDD3 / SUB-E8A0F3FF. Raw (2) only `raw_video`. Social (1). Reels (3) incl. changes-requested reel. Changes (2). Received (4) no staff pollution. Fix B: `IMG_4106` stays on `/media/review`, video + Open in Reel Review. Fix A: `MVI_4463` → File unavailable / source missing; Download disabled. All Media still shows `IMG_4862`. 390px: count (4), no overflowX |
+| Production | **Unchanged** — `app.bhfos.com` SHA `5d7389c…` / `production` |
+| Non-goals | No prod deploy; no storage/object/history mutation; no V2; no Reel Review removal |
+| Evidence tier | **STAGING DEPLOYED** + **STAGING USABLE** (browser click-through) |
 
 ## Fix B — In-queue reel select/preview (2026-07-31) — STAGING DEPLOYED
 
