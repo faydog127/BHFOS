@@ -288,7 +288,7 @@ export default function MediaSettings() {
         <h3 className="font-medium">AI analysis</h3>
         <p className="text-sm text-slate-700">{ai?.message || 'Checking…'}</p>
         <p className="text-xs text-slate-500">
-          Server env: <code>OPENAI_API_KEY</code> (edge). Never place keys in the browser, repo, or database.
+          Server: OpenAI key as an edge function secret only. Never place keys in the browser, repo, or database.
         </p>
       </section>
 
