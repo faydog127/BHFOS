@@ -1,28 +1,34 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** see tip after permission-hardening commit  
-**Upstream divergence at edit:** track `origin/feat/media-intelligence-library` after push  
+**Verified HEAD at this status edit:** `5d7389c1f50a1c4e804b1de1990492518077da8c`  
+**Upstream divergence at edit:** `origin/feat/media-intelligence-library` **0 behind / 0 ahead**  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
 
-## Unified submission + Review Queue — Release A (2026-07-31) — STAGING ACCEPTANCE PASSED
+## Unified submission + Review Queue — Release A (2026-07-31) — PRODUCTION PASS
 
 | Field | Value |
 |---|---|
 | Mission | Contributor Submit Content + explicit type + upload≠submit + unified owner Review Queue |
-| Release A commit | `86f6ae9de62b14713ff579337c406b7de9fc24f8` on `feat/media-intelligence-library` (pushed) |
-| Schema | Additive `20260731120000_media_intel_unified_submissions.sql` — **applied on staging only** (`sdzhdupekcnekesbtxsl` / BHFOS MIL Staging). Ledger row present. **Not** on production (`wwyxohjnyqnegzbxtuxs`; `mil_submissions` null; mig count 0). |
-| ACL hardening | Additive `20260731130000_media_intel_submission_rpc_execute_acl.sql` — revokes EXECUTE from `PUBLIC` + `anon` on submission/review RPCs; grants `authenticated` + `service_role` only. Does not edit `20260731120000` in place. |
-| Staging acceptance | **Passed** (distinct authenticated owner + contributor JWTs; no service-role for accept mutations). |
-| Contributor isolation | **Proven** — contributor cannot execute owner review RPC; creator cannot see other contributors’ submissions. |
-| Cross-company isolation | **Not independently testable** — current MIL is single-company by design (no second company entity / `company_id` ownership surface). |
-| Canary | Staging used a **synthetic same-filename** `MVI_4463.mp4` → one submission `SUB-1A7D4481`. The **actual production Treezy** `MVI_4463.mp4` record remains **untouched**. |
-| Frontend (staging) | `https://mil.bhfos.com` `build-info` SHA **86f6ae9…** / `environment=mil-staging` / `migrationVersion=20260731120000`; archive `tmp/mil-staging-86f6ae9de62b-20260731T034703Z.zip` |
-| Acceptance IDs | Reel `SUB-2F3E969E`; raw `SUB-BFC645B1`; social `SUB-ADA4EF85`; request-changes + idempotent retry + upload-only drafts outside owner queue + Reel `?versionId=` deep link |
-| Root-cause note (anon EXECUTE) | `20260731120000` revoked EXECUTE only `FROM PUBLIC`. Hosted create-time / default privileges left a **direct** `anon` EXECUTE grant; same class as `20260727140000` finalization ACL fix. Manual staging revoke was interim; `20260731130000` makes final grants reproducible from source. |
-| Production | **Unchanged** — no migration, no frontend deploy, no merge. |
-| Next authorization | Production migrate (`20260731120000` then `20260731130000`) + prod frontend deploy (Category C). |
-| Evidence tier | **STAGING DEPLOYED** + **STAGING USABLE**. Not production verified. |
+| Tip deployed | `5d7389c1f50a1c4e804b1de1990492518077da8c` (includes Release A `86f6ae9` + ACL hardening) |
+| Production Supabase | `wwyxohjnyqnegzbxtuxs` — migrations `20260731120000` + `20260731130000` applied in order; ledger rows exact once each. No post-apply manual grant edits. |
+| Staging | Remains `sdzhdupekcnekesbtxsl` / `https://mil.bhfos.com` (prior staging acceptance still valid) |
+| Prod canary (real Treezy) | Asset `dc8da95f-7d92-47c6-9c78-a44a539ab071` / `MVI_4463.mp4` / contributor `147bceeb-…` (`treezyincent@gmail.com`, `reel_creator`) → exactly one submission `SUB-212B66B3` (`raw_video`, backfilled `awaiting_owner_review`; smoke later set `changes_requested`). Asset-links=1; would-insert-again=0. |
+| Prod frontend | `https://app.bhfos.com` `build-info` SHA **5d7389c…** / `environment=production` / `migrationVersion=20260731130000`; archive `tmp/production-5d7389c1f50a-20260731T041042Z.zip`; auth `MIL-UNIFIED-SUBMISSION-PROD-2026-07-31`; rollback zip `tmp/production-rollback-before-5d7389c-from-18f4e5ac0339-20260731.zip` (prior tip `18f4e5ac0339`) |
+| Prod acceptance | Distinct identities: owner `erron.fayson@gmail.com` (admin) + contributor Treezy. User JWTs only (no service-role for accept mutations). Reel `SUB-7FE76CB6`; raw `SUB-4A34B77B`; social `SUB-4CAECF8D`; revision_requested + contributor sees feedback; upload-only draft not queued; anon EXECUTE denied; mobile 390px OK. |
+| Contributor / role isolation | **Proven** on production. |
+| Cross-company isolation | **Not independently testable** — single-company MIL design. |
+| Counts | Before migrate: assets=1, submissions=0. After migrate: submissions=2 (canary + existing reel). After acceptance: submissions=5, assets=3 (gate uploads). Canary still uniquely 1 submission. |
+| Evidence tier | **PRODUCTION DEPLOYED** + **PRODUCTION USABLE** (API + browser). |
+| Ops note | Temporary passwords were set on owner + Treezy Auth users for gate login automation — **rotate those credentials** after gate close. |
+
+## Unified submission + Review Queue — Release A staging (superseded by prod PASS above)
+
+| Field | Value |
+|---|---|
+| Staging acceptance | **Passed** earlier same day on `sdzhdupekcnekesbtxsl` / `mil.bhfos.com` |
+| Staging canary | Synthetic same-filename `MVI_4463.mp4` → `SUB-1A7D4481` (not the prod Treezy row) |
+| ACL hardening source | `20260731130000_media_intel_submission_rpc_execute_acl.sql` |
 
 ## Owner Received inbox (2026-07-31) — DEPLOYED on production
 
