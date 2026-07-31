@@ -108,9 +108,11 @@ describe('MIL dashboard navigation contracts', () => {
     assert.match(dash, /role="alert"/);
     assert.match(dash, /STAGING_APPLY_PACKET/);
     const start = api.indexOf('export async function fetchDashboardStats');
-    const body = api.slice(start, start + 1800);
+    const end = api.indexOf('export async function listAssets');
+    const body = api.slice(start, end > start ? end : start + 4000);
     assert.match(body, /firstError/);
     assert.match(body, /if \(firstError\) throw firstError/);
+    assert.match(body, /contributorReceivedPending/);
   });
 
   it('All Media honors dup=1 via listAssets duplicatesOnly', () => {

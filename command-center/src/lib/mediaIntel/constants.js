@@ -22,10 +22,14 @@ export const MIL_SUPPORTED_MIME = [
 // (see checksum.js). Do not advertise 2 GB in UI copy until chunked hashing exists.
 export const MIL_MAX_FILE_BYTES = MAX_PRACTICAL_HASH_BYTES;
 
+/** Upload batch label for contributor phone self-shots (Upload my shots). */
+export const CONTRIBUTOR_SELF_SOURCE_LABEL = 'contributor_self';
+
 export const MIL_NAV = [
   { id: 'dashboard', name: 'Dashboard', path: 'dashboard' },
   { id: 'uploads', name: 'Uploads', path: 'uploads' },
   { id: 'upload', name: 'Phone upload', path: 'upload' },
+  { id: 'received', name: 'Received', path: 'received' },
   { id: 'review', name: 'Review Queue', path: 'review' },
   { id: 'quality-cleanup', name: 'Quality Cleanup', path: 'quality-cleanup' },
   { id: 'all', name: 'All Media', path: 'all' },

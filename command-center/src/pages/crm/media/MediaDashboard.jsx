@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
-import { fetchDashboardStats } from '@/lib/mediaIntel/api';
+import { assetPreviewUrl, fetchDashboardStats, listAssets } from '@/lib/mediaIntel/api';
 
 function Stat({ label, value, to, tone = 'default' }) {
   const tones = {
@@ -27,6 +27,8 @@ function Stat({ label, value, to, tone = 'default' }) {
 export default function MediaDashboard() {
   const { caps } = useOutletContext();
   const [stats, setStats] = useState(null);
+  const [received, setReceived] = useState([]);
+  const [receivedThumbs, setReceivedThumbs] = useState({});
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -36,7 +38,32 @@ export default function MediaDashboard() {
       try {
         setLoading(true);
         const data = await fetchDashboardStats();
-        if (!cancelled) setStats(data);
+        if (cancelled) return;
+        setStats(data);
+        try {
+          const rows = await listAssets({
+            contributorSelf: true,
+            archived: false,
+            trashed: false,
+            limit: 8,
+          });
+          if (cancelled) return;
+          setReceived(rows);
+          const thumbs = {};
+          await Promise.all(
+            rows.map(async (asset) => {
+              try {
+                const url = await assetPreviewUrl(asset);
+                if (url) thumbs[asset.id] = url;
+              } catch {
+                /* best-effort */
+              }
+            }),
+          );
+          if (!cancelled) setReceivedThumbs(thumbs);
+        } catch {
+          if (!cancelled) setReceived([]);
+        }
       } catch (err) {
         if (!cancelled) setError(err.message || 'Unable to load dashboard');
       } finally {
@@ -102,10 +129,76 @@ export default function MediaDashboard() {
         </div>
       )}
 
+      <section
+        className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 space-y-3"
+        data-testid="media-dashboard-received"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+          <div>
+            <h3 className="font-medium text-slate-900">Received from contributors</h3>
+            <p className="text-sm text-slate-600 mt-0.5">
+              Shots sent via contributor Upload my shots — review before library use.
+            </p>
+          </div>
+          <Link
+            to="/media/received"
+            className="text-sm font-medium text-blue-700 underline-offset-2 hover:underline min-h-[40px] inline-flex items-center"
+          >
+            Open Received
+            {(stats.contributorReceivedPending || 0) > 0
+              ? ` (${stats.contributorReceivedPending} pending)`
+              : ''}
+          </Link>
+        </div>
+        {received.length === 0 ? (
+          <p className="text-sm text-slate-500">No contributor uploads yet.</p>
+        ) : (
+          <ul className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="media-dashboard-received-list">
+            {received.map((a) => {
+              const thumb = receivedThumbs[a.id];
+              return (
+                <li key={a.id}>
+                  <Link
+                    to="/media/received"
+                    className="block rounded-lg border border-slate-200 overflow-hidden hover:border-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  >
+                    <div className="aspect-video bg-slate-100 relative">
+                      {thumb ? (
+                        a.media_kind === 'video' ? (
+                          <video src={thumb} className="absolute inset-0 h-full w-full object-cover" muted playsInline />
+                        ) : (
+                          <img src={thumb} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                        )
+                      ) : (
+                        <span className="absolute inset-0 flex items-center justify-center text-xs text-slate-400">
+                          {a.media_kind === 'video' ? 'Video' : 'Photo'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="px-2 py-1.5">
+                      <div className="truncate text-xs font-medium text-slate-800">{a.original_filename}</div>
+                      <div className="text-[11px] text-slate-500">
+                        {a.human_review_status === 'pending' ? 'Awaiting review' : a.human_review_status}
+                      </div>
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
         <Stat label="Photos" value={stats.totalPhotos} to="/media/all?kind=photo" />
         <Stat label="Videos" value={stats.totalVideos} to="/media/all?kind=video" />
         <Stat label="Uploaded last 7 days" value={stats.recentlyUploaded} />
+        <Stat
+          label="From contributors (pending)"
+          value={stats.contributorReceivedPending || 0}
+          to="/media/received"
+          tone={stats.contributorReceivedPending ? 'warn' : 'default'}
+        />
         <Stat
           label="Awaiting on-demand AI"
           value={stats.awaitingAi}
@@ -138,6 +231,12 @@ export default function MediaDashboard() {
               Upload from phones
             </Link>
             {' '}— phone or desktop transfer with durable queue, resumable chunks, and honest per-file states.
+          </li>
+          <li>
+            <Link className="text-blue-700 underline-offset-2 hover:underline" to="/media/received">
+              Review contributor uploads
+            </Link>
+            {' '}— videos and photos from Upload my shots land here first.
           </li>
           <li>
             <Link className="text-blue-700 underline-offset-2 hover:underline" to="/media/review">

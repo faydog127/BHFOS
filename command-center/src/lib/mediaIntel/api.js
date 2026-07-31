@@ -1,6 +1,12 @@
 import { supabase } from '@/lib/customSupabaseClient';
+import { CONTRIBUTOR_SELF_SOURCE_LABEL } from './constants';
 import { PREVIEW_DERIVATIVE_KINDS } from './derivativeKinds';
 import { buildAssetSearchPlan, buildTextSearchOrFilter } from './assetSearch.js';
+
+const ASSET_LIST_SELECT =
+  '*, mil_derivatives(id, kind, object_path, bucket), mil_verified_metadata(*), mil_permitted_uses(use_key, approved), mil_upload_batches(source_label, source_person, uploader_user_id)';
+const ASSET_LIST_SELECT_CONTRIBUTOR_SELF =
+  '*, mil_derivatives(id, kind, object_path, bucket), mil_verified_metadata(*), mil_permitted_uses(use_key, approved), mil_upload_batches!inner(source_label, source_person, uploader_user_id)';
 
 async function actorId() {
   const { data } = await supabase.auth.getUser();
@@ -44,6 +50,14 @@ export async function fetchDashboardStats() {
     supabase.from('mil_reel_versions').select('id', { count: 'exact', head: true }).eq('status', 'submitted_for_review'),
     supabase.from('mil_reel_versions').select('id', { count: 'exact', head: true }).eq('status', 'approved_to_post'),
     base().not('trashed_at', 'is', null),
+    // Contributor Upload my shots — distinct from staff phone-dump intake.
+    supabase
+      .from('mil_assets')
+      .select('id, mil_upload_batches!inner(source_label)', { count: 'exact', head: true })
+      .is('archived_at', null)
+      .is('trashed_at', null)
+      .eq('human_review_status', 'pending')
+      .eq('mil_upload_batches.source_label', CONTRIBUTOR_SELF_SOURCE_LABEL),
   ]);
 
   const firstError = results.find((r) => r?.error)?.error;
@@ -52,6 +66,7 @@ export async function fetchDashboardStats() {
   const [
     photos, videos, recent, awaitingAi, awaitingReview, duplicates, privacy, qualityCleanup,
     marketing, assigned, failedJobs, baUnverified, reelsAwaiting, reelsApproved, trashed,
+    contributorReceivedPending,
   ] = results;
 
   return {
@@ -60,6 +75,7 @@ export async function fetchDashboardStats() {
     recentlyUploaded: recent.count || 0,
     awaitingAi: awaitingAi.count || 0,
     awaitingHumanReview: awaitingReview.count || 0,
+    contributorReceivedPending: contributorReceivedPending.count || 0,
     possibleDuplicates: duplicates.count || 0,
     possibleBeforeAfter: baUnverified.count || 0,
     privacyWarnings: privacy.count || 0,
@@ -77,14 +93,16 @@ export async function listAssets(filters = {}) {
   const plan = buildAssetSearchPlan(filters.search);
   if (plan.kind === 'no_match') return [];
 
+  const select = filters.contributorSelf ? ASSET_LIST_SELECT_CONTRIBUTOR_SELF : ASSET_LIST_SELECT;
   let q = supabase
     .from('mil_assets')
-    .select(
-      '*, mil_derivatives(id, kind, object_path, bucket), mil_verified_metadata(*), mil_permitted_uses(use_key, approved)',
-    )
+    .select(select)
     .order('created_at', { ascending: false })
     .limit(filters.limit || 60);
 
+  if (filters.contributorSelf) {
+    q = q.eq('mil_upload_batches.source_label', CONTRIBUTOR_SELF_SOURCE_LABEL);
+  }
   if (filters.mediaKind) q = q.eq('media_kind', filters.mediaKind);
   if (filters.humanReviewStatus) q = q.eq('human_review_status', filters.humanReviewStatus);
   if (filters.privacyStatus) q = q.eq('privacy_status', filters.privacyStatus);

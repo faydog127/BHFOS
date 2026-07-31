@@ -73,6 +73,20 @@ describe('Contributor Workspace source contracts', () => {
     assert.match(workspace, /createContributorUploadSession/);
     assert.match(workspace, /contributor-my-shots-list/);
     assert.doesNotMatch(workspace, /allowOriginal:\s*true/);
+
+    const constants = read('src/lib/mediaIntel/constants.js');
+    const dash = read('src/pages/crm/media/MediaDashboard.jsx');
+    const review = read('src/pages/crm/media/MediaReviewQueue.jsx');
+    const app = read('src/App.jsx');
+    assert.match(constants, /CONTRIBUTOR_SELF_SOURCE_LABEL/);
+    assert.match(constants, /id: 'received'/);
+    assert.match(api, /contributorSelf/);
+    assert.match(api, /contributorReceivedPending/);
+    assert.match(api, /mil_upload_batches!inner/);
+    assert.match(dash, /media-dashboard-received/);
+    assert.match(dash, /Received from contributors/);
+    assert.match(review, /media-received-from-contributors|From contributors/);
+    assert.match(app, /path="received"/);
   });
 
   it('UI uses Contributor Workspace labels and /contributor alias', () => {

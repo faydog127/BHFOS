@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import {
   acceptAiSuggestions,
@@ -16,8 +16,17 @@ import {
 import AnalysisOutcomeCard from '@/components/media/AnalysisOutcomeCard';
 import { buildAnalysisOutcome } from '@/lib/mediaIntel/analysisDisplay';
 
-export default function MediaReviewQueue() {
+function isContributorSelfAsset(asset) {
+  const batch = asset?.mil_upload_batches;
+  const row = Array.isArray(batch) ? batch[0] : batch;
+  return row?.source_label === 'contributor_self';
+}
+
+export default function MediaReviewQueue({ contributorOnly = false } = {}) {
   const { caps } = useOutletContext();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const fromContributors =
+    contributorOnly || searchParams.get('source') === 'contributor';
   const [assets, setAssets] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [bundle, setBundle] = useState(null);
@@ -56,6 +65,7 @@ export default function MediaReviewQueue() {
         archived: false,
         trashed: false,
         limit: 100,
+        contributorSelf: fromContributors || undefined,
       });
       setAssets(rows);
       void loadQueueThumbs(rows);
@@ -78,9 +88,12 @@ export default function MediaReviewQueue() {
   };
 
   useEffect(() => {
+    setSelectedId(null);
+    setBundle(null);
+    setPreviewUrl(null);
     loadQueue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fromContributors]);
 
   useEffect(() => {
     if (!selectedId) return undefined;
@@ -240,18 +253,75 @@ export default function MediaReviewQueue() {
   }
 
   return (
-    <div className="grid lg:grid-cols-[300px_1fr] gap-4" data-testid="media-review-queue">
+    <div
+      className="space-y-4"
+      data-testid={fromContributors ? 'media-received-from-contributors' : 'media-review-queue'}
+    >
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">
+            {fromContributors ? 'Received from contributors' : 'Review Queue'}
+          </h2>
+          <p className="text-sm text-slate-600">
+            {fromContributors
+              ? 'Phone shots and videos contributors sent via Upload my shots. Privacy/quality check before library use.'
+              : 'All pending intake — staff phone dumps and contributor uploads.'}
+          </p>
+        </div>
+        {!contributorOnly && (
+          <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 text-sm" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={!fromContributors}
+              className={`rounded px-3 py-2 min-h-[40px] ${
+                !fromContributors ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'
+              }`}
+              onClick={() => setSearchParams({})}
+            >
+              All pending
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={fromContributors}
+              data-testid="media-review-from-contributors-tab"
+              className={`rounded px-3 py-2 min-h-[40px] ${
+                fromContributors ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'
+              }`}
+              onClick={() => setSearchParams({ source: 'contributor' })}
+            >
+              From contributors
+            </button>
+          </div>
+        )}
+        {contributorOnly && (
+          <Link
+            to="/media/review"
+            className="text-sm text-blue-700 underline-offset-2 hover:underline min-h-[40px] inline-flex items-center"
+          >
+            Open full Review Queue
+          </Link>
+        )}
+      </div>
+
+      <div className="grid lg:grid-cols-[300px_1fr] gap-4">
       <aside className="rounded-xl border border-slate-200 bg-white overflow-hidden">
         <div className="px-3 py-2 border-b text-sm font-medium text-slate-800">
-          Awaiting review ({assets.length})
+          {fromContributors ? 'Contributor uploads' : 'Awaiting review'} ({assets.length})
         </div>
         <ul className="max-h-[70vh] overflow-y-auto divide-y" data-testid="media-review-queue-list">
           {assets.length === 0 && (
-            <li className="p-4 text-sm text-slate-500">Queue is clear. New uploads appear here after intake.</li>
+            <li className="p-4 text-sm text-slate-500">
+              {fromContributors
+                ? 'No contributor uploads waiting. When a creator uses Upload my shots, files appear here.'
+                : 'Queue is clear. New uploads appear here after intake.'}
+            </li>
           )}
           {assets.map((a) => {
             const thumb = thumbUrls[a.id];
             const fallbackLabel = a.media_kind === 'video' ? 'Video' : a.media_kind === 'photo' ? 'Photo' : 'Media';
+            const fromCreator = isContributorSelfAsset(a);
             return (
               <li key={a.id}>
                 <button
@@ -290,6 +360,7 @@ export default function MediaReviewQueue() {
                     <span className="block truncate font-medium">{a.original_filename}</span>
                     <span className="block text-xs text-slate-500 mt-0.5">
                       {a.media_kind} · {a.processing_status}
+                      {fromCreator ? ' · contributor' : ''}
                     </span>
                   </span>
                 </button>
@@ -506,6 +577,7 @@ export default function MediaReviewQueue() {
           </>
         )}
       </section>
+      </div>
     </div>
   );
 }

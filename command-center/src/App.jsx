@@ -411,6 +411,7 @@ const MediaLibraryRoutes = () => (
       <Route index element={<Navigate to="dashboard" replace />} />
       <Route path="dashboard" element={<MediaDashboard />} />
       <Route path="uploads" element={<MediaUploads />} />
+      <Route path="received" element={<MediaReviewQueue contributorOnly />} />
       <Route path="review" element={<MediaReviewQueue />} />
       <Route path="quality-cleanup" element={<MediaQualityCleanup />} />
       <Route path="all" element={<MediaAllMedia />} />
