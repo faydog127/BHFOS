@@ -297,8 +297,8 @@ Deno.serve(async (req) => {
 
 function isStorageObjectMissingMessage(message: string) {
   const m = String(message || '').toLowerCase()
+  // Narrow: do not treat API "Derivative not found" as a storage object miss.
   return m.includes('object not found')
     || m.includes('no such object')
-    || m.includes('not found')
     || m.includes('does not exist')
 }

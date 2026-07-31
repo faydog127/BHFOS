@@ -61,11 +61,13 @@ export function isStorageMissingCode(code) {
 
 export function isStorageMissingMessage(message) {
   const m = String(message || '').toLowerCase();
+  // Do not treat API "Derivative not found" / "Media not found" as storage 404 evidence.
   return (
     m.includes('object not found')
-    || m.includes('not found')
     || m.includes('no such object')
-    || m.includes('does not exist')
+    || m.includes('source object not found')
+    || m.includes('derivative object not found')
+    || (m.includes('does not exist') && m.includes('object'))
   );
 }
 
@@ -132,6 +134,28 @@ export function classifyPreviewAccess(evidence) {
   const needsDerivative = !isBrowserPreviewableOriginal(asset);
   const proc = processingBucket(asset.processing_status);
 
+  // A signed preview URL is usable when probe confirms it, or when the probe is
+  // inconclusive (CORS/network) — only an HTTP 404 probe is missing-object evidence.
+  const probeAllowsReady =
+    !probe
+    || probe.ok
+    || (probe.status == null && !probe.expired);
+  if (previewSign?.ok && previewSign.url && probeAllowsReady) {
+    const sourceMissing = isConfirmedSourceMissing({
+      previewSign: null,
+      probe: null,
+      sourceSign,
+      needsDerivative,
+      hasDerivative: Boolean(der),
+    });
+    return finalize(
+      PREVIEW_STATES.READY,
+      previewSign.url,
+      true,
+      sourceMissing ? false : sourceDownloadable(sourceSign, true),
+    );
+  }
+
   const sourceMissingConfirmed = isConfirmedSourceMissing({
     previewSign,
     probe,
@@ -163,10 +187,6 @@ export function classifyPreviewAccess(evidence) {
 
   if (probe?.expired || (probe && !probe.ok && Number(probe.status) === 400)) {
     return finalize(PREVIEW_STATES.TEMPORARILY_UNAVAILABLE, null, false, sourceDownloadable(sourceSign));
-  }
-
-  if (previewSign?.ok && previewSign.url && (!probe || probe.ok)) {
-    return finalize(PREVIEW_STATES.READY, previewSign.url, true, sourceDownloadable(sourceSign, true));
   }
 
   // No usable preview URL yet — classify without treating null URL as missing.
@@ -300,40 +320,46 @@ export async function resolveAssetPreviewAccess(asset, deps = {}) {
   let previewSign = null;
   let probeResult = null;
 
-  // HEIC / non-browser originals: never attempt original as a "preview" — that
-  // produced misleading HEIC copy for unrelated formats when sign failed.
-  if (needsDerivative && !der) {
-    previewSign = { ok: false, url: null, kind: null, code: null, error: 'No preview derivative', httpStatus: null };
-  } else {
-    try {
-      const signed = await requestSigned({
-        assetId: asset.id,
-        purpose: 'preview',
-        derivativeKind: der?.kind || null,
-        // Browser-native formats may preview from original when no derivative exists.
-        allowOriginal: !needsDerivative && !der,
-      });
-      previewSign = {
-        ok: Boolean(signed?.url),
-        url: signed?.url || null,
-        kind: signed?.kind || (der?.kind || 'original'),
-        code: null,
-        error: null,
-        httpStatus: 200,
-      };
-      if (previewSign.url) {
-        probeResult = await probe(previewSign.url);
+  // Staff review may fall through to a signed original when no preview derivative
+  // exists (preserves working HEIC originals in Safari). Browser-native formats
+  // also use originals. MP4/JPEG missing objects are classified via sign code + probe,
+  // never via HEIC-only copy.
+  try {
+    const signed = await requestSigned({
+      assetId: asset.id,
+      purpose: 'preview',
+      derivativeKind: der?.kind || null,
+      allowOriginal: !der,
+    });
+    previewSign = {
+      ok: Boolean(signed?.url),
+      url: signed?.url || null,
+      kind: signed?.kind || (der?.kind || 'original'),
+      code: null,
+      error: null,
+      httpStatus: 200,
+    };
+    if (previewSign.url) {
+      probeResult = await probe(previewSign.url);
+      // Storage may issue a signed URL even when the object is gone — probe decides.
+      if (probeResult && !probeResult.ok && !probeResult.expired && Number(probeResult.status) === 404) {
+        previewSign = {
+          ...previewSign,
+          ok: false,
+          code: previewSign.kind === 'original' || !der ? 'SOURCE_OBJECT_MISSING' : 'DERIVATIVE_OBJECT_MISSING',
+          error: 'Signed URL probe returned 404',
+        };
       }
-    } catch (err) {
-      previewSign = {
-        ok: false,
-        url: null,
-        kind: err?.kind || der?.kind || (!needsDerivative ? 'original' : null),
-        code: err?.code || null,
-        error: err?.message || String(err),
-        httpStatus: err?.status || null,
-      };
     }
+  } catch (err) {
+    previewSign = {
+      ok: false,
+      url: null,
+      kind: err?.kind || der?.kind || 'original',
+      code: err?.code || null,
+      error: err?.message || String(err),
+      httpStatus: err?.status || null,
+    };
   }
 
   // Separate source existence check for download affordance + missing-file confirmation.

@@ -248,29 +248,50 @@ describe('resolveAssetPreviewAccess integration (mocked sign/probe)', () => {
     assert.equal(access.canDownload, true);
   });
 
-  it('HEIC pending does not call original as preview', async () => {
+  it('HEIC without derivative may staff-preview from original when object exists', async () => {
     const asset = {
-      id: 'heic-pending',
-      original_filename: 'IMG_new.HEIC',
+      id: 'heic-original',
+      original_filename: 'IMG_4862.HEIC',
+      media_kind: 'photo',
+      processing_status: 'uploaded',
+      mil_derivatives: [],
+    };
+    const access = await resolveAssetPreviewAccess(asset, {
+      requestSignedMediaUrl: async ({ purpose, allowOriginal }) => {
+        if (purpose === 'preview' && allowOriginal) {
+          return { url: 'https://example.test/IMG_4862.HEIC', kind: 'original' };
+        }
+        if (purpose === 'download' && allowOriginal) {
+          return { url: 'https://example.test/IMG_4862.HEIC', kind: 'original' };
+        }
+        throw new Error('unexpected sign call');
+      },
+      probeSignedMediaUrl: async () => ({ ok: true, status: 206, expired: false }),
+    });
+    assert.equal(access.state, PREVIEW_STATES.READY);
+    assert.equal(access.canPreview, true);
+    assert.equal(access.canDownload, true);
+  });
+
+  it('HEIC without derivative and missing source → source_missing', async () => {
+    const asset = {
+      id: 'heic-missing',
+      original_filename: 'IMG_gone.HEIC',
       media_kind: 'photo',
       processing_status: 'queued',
       mil_derivatives: [],
     };
-    const calls = [];
+    const err = new Error('Source object not found in storage');
+    err.code = 'SOURCE_OBJECT_MISSING';
+    err.kind = 'original';
     const access = await resolveAssetPreviewAccess(asset, {
-      requestSignedMediaUrl: async (args) => {
-        calls.push(args);
-        if (args.purpose === 'download') {
-          return { url: 'https://example.test/original', kind: 'original' };
-        }
-        throw new Error('should not preview-sign without derivative');
+      requestSignedMediaUrl: async () => {
+        throw err;
       },
-      probeSignedMediaUrl: async () => ({ ok: true, status: 200, expired: false }),
+      probeSignedMediaUrl: async () => ({ ok: false, status: 404, expired: false }),
     });
-    assert.equal(access.state, PREVIEW_STATES.DERIVATIVE_PENDING);
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].purpose, 'download');
-    assert.equal(calls[0].allowOriginal, true);
+    assert.equal(access.state, PREVIEW_STATES.SOURCE_MISSING);
+    assert.equal(access.canDownload, false);
   });
 });
 
