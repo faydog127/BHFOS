@@ -194,6 +194,17 @@ export async function assetPreviewUrl(asset) {
   }
 }
 
+/**
+ * Evidence-based preview/download state for Review Queue / Received.
+ * Distinguishes source missing, derivative pending/failed, unsupported format,
+ * and temporary unavailability — never collapses them into HEIC-only copy.
+ */
+export async function resolveReviewPreviewAccess(asset) {
+  const { requestSignedMediaUrl } = await import('./signedAccess');
+  const { resolveAssetPreviewAccess } = await import('./previewAccess');
+  return resolveAssetPreviewAccess(asset, { requestSignedMediaUrl });
+}
+
 export async function fetchReviewBundle(assetId) {
   const [assetRes, aiRes, tagsRes, qualityRes, privacyRes, neighborsRes, relRes] = await Promise.all([
     supabase.from('mil_assets').select('*, mil_derivatives(*), mil_verified_metadata(*), mil_permitted_uses(*)').eq('id', assetId).single(),

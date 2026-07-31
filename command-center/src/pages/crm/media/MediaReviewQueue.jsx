@@ -9,12 +9,15 @@ import {
   listAssets,
   listSubmissions,
   queueAiAnalysis,
+  resolveReviewPreviewAccess,
   restrictAsset,
   reviewContentSubmission,
   setAssetLifecycle,
   setPermittedUse,
   verifyAssetMetadata,
 } from '@/lib/mediaIntel/api';
+import { requestSignedMediaUrl } from '@/lib/mediaIntel/signedAccess';
+import { PREVIEW_STATES } from '@/lib/mediaIntel/previewAccess';
 import AnalysisOutcomeCard from '@/components/media/AnalysisOutcomeCard';
 import { buildAnalysisOutcome } from '@/lib/mediaIntel/analysisDisplay';
 import { REVIEW_QUEUE_FILTERS, SUBMISSION_REVIEW_LABELS, SUBMISSION_TYPES } from '@/lib/mediaIntel/constants';
@@ -47,6 +50,7 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
   const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
   const [bundle, setBundle] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [previewAccess, setPreviewAccess] = useState(null);
   const [thumbUrls, setThumbUrls] = useState({});
   const [thumbsReady, setThumbsReady] = useState(false);
   const [form, setForm] = useState({});
@@ -178,6 +182,7 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
         if (!firstAssetId) {
           setBundle(null);
           setPreviewUrl(null);
+          setPreviewAccess(null);
           setThumbUrls({});
           setThumbsReady(true);
         }
@@ -198,6 +203,7 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
     setSelectedSubmissionId(null);
     setBundle(null);
     setPreviewUrl(null);
+    setPreviewAccess(null);
     loadQueue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromContributors, queueFilter]);
@@ -212,6 +218,8 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
     let cancelled = false;
     const loadBundle = async () => {
       try {
+        setPreviewUrl(null);
+        setPreviewAccess(null);
         const b = await fetchReviewBundle(selectedId);
         if (cancelled) return;
         setBundle(b);
@@ -226,8 +234,11 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
           condition_notes: verified.condition_notes || latestAi.condition_notes || '',
           location_component: verified.location_component || latestAi.location_component || '',
         });
-        const url = await assetPreviewUrl(b.asset);
-        if (!cancelled) setPreviewUrl(url);
+        const access = await resolveReviewPreviewAccess(b.asset);
+        if (!cancelled) {
+          setPreviewAccess(access);
+          setPreviewUrl(access?.canPreview ? access.url : null);
+        }
         return b;
       } catch (err) {
         if (!cancelled) setError(err.message);
@@ -519,20 +530,76 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
           <>
             <div className="flex flex-col xl:flex-row gap-4">
               <div className="xl:w-1/2">
-                <div className="aspect-[4/3] rounded-lg bg-slate-100 overflow-hidden flex items-center justify-center">
+                <div
+                  className="aspect-[4/3] rounded-lg bg-slate-100 overflow-hidden flex items-center justify-center"
+                  data-testid="media-review-preview-pane"
+                  data-preview-state={previewAccess?.state || 'loading'}
+                >
                   {previewUrl && bundle.asset.media_kind === 'video' ? (
                     <video src={previewUrl} controls className="max-h-full max-w-full" />
                   ) : previewUrl ? (
                     <img src={previewUrl} alt="" className="max-h-full max-w-full object-contain" />
                   ) : (
-                    <span className="text-sm text-slate-500 px-4 text-center">
-                      Preview unavailable (HEIC may need a derivative). Original remains stored privately.
-                    </span>
+                    <div
+                      className="px-4 text-center space-y-1 max-w-md"
+                      data-testid="media-review-preview-fallback"
+                    >
+                      <div
+                        className={`text-sm font-medium ${
+                          previewAccess?.state === PREVIEW_STATES.SOURCE_MISSING
+                            ? 'text-red-800'
+                            : 'text-slate-800'
+                        }`}
+                      >
+                        {previewAccess?.title || 'Loading preview…'}
+                      </div>
+                      <p className="text-sm text-slate-600">
+                        {previewAccess?.message
+                          || 'Checking storage and preview availability…'}
+                      </p>
+                    </div>
                   )}
                 </div>
-                <p className="mt-2 text-xs text-slate-500">
-                  Shortcuts: J/K or arrows to move queue. Each fact is verified separately.
-                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!previewAccess?.canDownload || saving}
+                    className="rounded-md border px-3 py-2 text-xs min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed"
+                    data-testid="media-review-download"
+                    title={
+                      previewAccess?.state === PREVIEW_STATES.SOURCE_MISSING
+                        ? 'Download unavailable — source file missing from storage'
+                        : previewAccess?.canDownload
+                          ? 'Download original via authorized short-lived URL'
+                          : 'Download unavailable'
+                    }
+                    onClick={async () => {
+                      if (!previewAccess?.canDownload || !selectedId) return;
+                      try {
+                        setError(null);
+                        const signed = await requestSignedMediaUrl({
+                          assetId: selectedId,
+                          purpose: 'download',
+                          allowOriginal: true,
+                        });
+                        if (!signed?.url) throw new Error('Download URL unavailable');
+                        const a = document.createElement('a');
+                        a.href = signed.url;
+                        a.download = bundle?.asset?.original_filename || 'media';
+                        a.rel = 'noopener';
+                        a.target = '_blank';
+                        a.click();
+                      } catch (err) {
+                        setError(err.message || 'Download failed');
+                      }
+                    }}
+                  >
+                    Download
+                  </button>
+                  <p className="text-xs text-slate-500">
+                    Shortcuts: J/K or arrows to move queue. Each fact is verified separately.
+                  </p>
+                </div>
               </div>
 
               <div className="xl:w-1/2 space-y-3">

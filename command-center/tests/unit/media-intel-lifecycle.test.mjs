@@ -148,7 +148,9 @@ describe('MIL lifecycle source contracts', () => {
     assert.match(review, /media-review-queue-thumb-fallback/);
     assert.match(review, /assetPreviewUrl/);
     assert.match(review, /loadQueueThumbs/);
-    assert.doesNotMatch(review, /allowOriginal:\s*true/);
+    // Staff Download may request allowOriginal; queue thumbs still use assetPreviewUrl (no original).
+    assert.match(review, /purpose:\s*'download'/);
+    assert.match(review, /media-review-download/);
     assert.doesNotMatch(review, /createSignedUrl/);
     assert.match(cleanup, /media-quality-cleanup/);
     assert.match(cleanup, /setAssetsLifecycle/);

@@ -264,7 +264,21 @@ Deno.serve(async (req) => {
     const { data: signed, error: sErr } = await supabaseAdmin.storage
       .from(bucket)
       .createSignedUrl(path, ttl)
-    if (sErr) throw sErr
+    if (sErr) {
+      const msg = sErr instanceof Error ? sErr.message : String((sErr as { message?: string })?.message || sErr)
+      if (isStorageObjectMissingMessage(msg)) {
+        const code = kind === 'original' ? 'SOURCE_OBJECT_MISSING' : 'DERIVATIVE_OBJECT_MISSING'
+        return json({
+          error: kind === 'original'
+            ? 'Source object not found in storage'
+            : 'Derivative object not found in storage',
+          code,
+          kind,
+          bucket,
+        }, 404)
+      }
+      throw sErr
+    }
 
     await supabaseAdmin.from('mil_audit_events').insert({
       actor_user_id: user.id,
@@ -280,3 +294,11 @@ Deno.serve(async (req) => {
     return json({ error: error instanceof Error ? error.message : 'Sign failed' }, 500)
   }
 })
+
+function isStorageObjectMissingMessage(message: string) {
+  const m = String(message || '').toLowerCase()
+  return m.includes('object not found')
+    || m.includes('no such object')
+    || m.includes('not found')
+    || m.includes('does not exist')
+}

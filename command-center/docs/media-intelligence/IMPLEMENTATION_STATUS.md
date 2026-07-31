@@ -1,9 +1,23 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** `5d7389c1f50a1c4e804b1de1990492518077da8c`  
-**Upstream divergence at edit:** `origin/feat/media-intelligence-library` **0 behind / 0 ahead**  
+**Verified HEAD at this status edit:** _(set at Fix A commit)_  
+**Upstream divergence at edit:** _(record after push)_  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
+
+## Fix A — Preview-state accuracy (2026-07-31) — STAGING ONLY
+
+| Field | Value |
+|---|---|
+| Mission | Evidence-based preview states on Review Queue + Received; never HEIC copy for MP4/JPEG |
+| Root cause | Staging canaries (`SUB-1A7D4481` / `MVI_4463.mp4`, `SUB-ADA4EF85`) have DB rows but **no storage object**; UI collapsed all null previews into HEIC guidance |
+| Detection | `previewAccess.js` classifies from sign `code` (`SOURCE_OBJECT_MISSING` / `DERIVATIVE_OBJECT_MISSING`), Range probe 404 vs expired, and `processing_status` — never from null URL alone |
+| Surfaces | `MediaReviewQueue.jsx` (Review Queue + Received); Download disabled when source missing |
+| Edge | `media-intel-sign` returns structured missing-object codes (staging deploy required) |
+| Tests | `tests/unit/media-intel-preview-access.test.mjs` + helpers suite |
+| Staging validate | `SUB-1A7D4481` → File unavailable; `SUB-ADA4EF85` → File unavailable; `IMG_4862.HEIC` → preview works |
+| Non-goals | No Fix B (reel nav); no Fix C (filters); no storage object manufacture; **no production deploy**; no Treezy prod `MVI_4463` mutation |
+| Evidence tier | **SOURCE** + **locally verified** (unit); staging deploy evidence recorded below after Hostinger + edge |
 
 ## Unified submission + Review Queue — Release A (2026-07-31) — PRODUCTION PASS
 
