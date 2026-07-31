@@ -1,11 +1,11 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** _(set at Fix B commit)_  
-**Upstream divergence at edit:** _(record after push)_  
+**Verified HEAD at this status edit:** `75bafc4dd3a57505592b9070d18a45f54c22273d`  
+**Upstream divergence at edit:** `origin/feat/media-intelligence-library` **0 behind / 0 ahead**  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
 
-## Fix B — In-queue reel select/preview (2026-07-31) — STAGING ONLY
+## Fix B — In-queue reel select/preview (2026-07-31) — STAGING DEPLOYED
 
 | Field | Value |
 |---|---|
@@ -13,8 +13,14 @@
 | Root cause | Row click auto-`navigate`d to `/media/reel-review?versionId=` before inspect-in-place |
 | Design | Click = `selectQueueRow` in place; reel preview via `resolveReelPreviewAccess` + Fix A states; `Open in Reel Review` = `buildReelReviewPath(versionId)` |
 | Surfaces | `MediaReviewQueue.jsx` (Review Queue + Received `contributorOnly`) |
-| Non-goals | No Fix C; no nav removal; no filter/review-state/storage changes; **no production** |
-| Evidence tier | **SOURCE** + unit; staging deploy evidence below after Hostinger |
+| Commit | `75bafc4dd3a57505592b9070d18a45f54c22273d` |
+| Staging frontend | `https://mil.bhfos.com` SHA **75bafc4…** / `mil-staging` / `migrationVersion=20260731130000` / asset `cf32fb92d0dc9ba2` |
+| Archive | `tmp/mil-staging-75bafc4dd3a5-20260731T122643Z.zip` (auth `MIL-REEL-QUEUE-FIX-B-2026-07-31`) |
+| Tests | `npm run test:media-intel-helpers` **229 pass** (includes `media-intel-reel-queue-select.test.mjs`) |
+| Click evidence | Reels filter: `IMG_4106` stays on `/media/review`, inline video ready, Open in Reel Review → `?versionId=81d820b9-…` focused. Received: same in-place select. Smoke Reel: stays in queue, `temporarily_unavailable` (invalid quarantine path — not forced nav). Fix A retained: MVI/social `source_missing`; `IMG_4862.HEIC` ready. 390px: no overflowX. |
+| Production | **Unchanged** — `app.bhfos.com` still prior production tip (not Fix B). |
+| Non-goals | No Fix C; Reel Review nav kept; no filter/review-state/storage changes |
+| Evidence tier | **STAGING DEPLOYED** + **STAGING USABLE** |
 
 ## Fix A — Preview-state accuracy (2026-07-31) — STAGING DEPLOYED
 
