@@ -1,23 +1,27 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** _(set at Fix A commit)_  
-**Upstream divergence at edit:** _(record after push)_  
+**Verified HEAD at this status edit:** `6863daf8bbf96455a5deaf356c01b9af504effef`  
+**Upstream divergence at edit:** `origin/feat/media-intelligence-library` **0 behind / 0 ahead**  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
 
-## Fix A — Preview-state accuracy (2026-07-31) — STAGING ONLY
+## Fix A — Preview-state accuracy (2026-07-31) — STAGING DEPLOYED
 
 | Field | Value |
 |---|---|
 | Mission | Evidence-based preview states on Review Queue + Received; never HEIC copy for MP4/JPEG |
-| Root cause | Staging canaries (`SUB-1A7D4481` / `MVI_4463.mp4`, `SUB-ADA4EF85`) have DB rows but **no storage object**; UI collapsed all null previews into HEIC guidance |
-| Detection | `previewAccess.js` classifies from sign `code` (`SOURCE_OBJECT_MISSING` / `DERIVATIVE_OBJECT_MISSING`), Range probe 404 vs expired, and `processing_status` — never from null URL alone |
+| Root cause | Staging canaries (`SUB-1A7D4481` / `MVI_4463.mp4`, `SUB-ADA4EF85`) have DB rows but **no storage object**; UI collapsed all null previews into HEIC-only guidance |
+| Detection | `previewAccess.js` + `media-intel-sign` codes (`SOURCE_OBJECT_MISSING` / `DERIVATIVE_OBJECT_MISSING`); Range probe **404** vs expired/inconclusive; processing_status for pending/failed — never from null URL alone |
 | Surfaces | `MediaReviewQueue.jsx` (Review Queue + Received); Download disabled when source missing |
-| Edge | `media-intel-sign` returns structured missing-object codes (staging deploy required) |
-| Tests | `tests/unit/media-intel-preview-access.test.mjs` + helpers suite |
-| Staging validate | `SUB-1A7D4481` → File unavailable; `SUB-ADA4EF85` → File unavailable; `IMG_4862.HEIC` → preview works |
-| Non-goals | No Fix B (reel nav); no Fix C (filters); no storage object manufacture; **no production deploy**; no Treezy prod `MVI_4463` mutation |
-| Evidence tier | **SOURCE** + **locally verified** (unit); staging deploy evidence recorded below after Hostinger + edge |
+| Commits | `2d66452` (initial) + `6863daf` (HEIC original preserve + narrow missing match) |
+| Staging frontend | `https://mil.bhfos.com` `build-info` SHA **6863daf…** / `mil-staging` / `migrationVersion=20260731130000` / asset `d86e7e96946904e1` |
+| Staging edge | `media-intel-sign` redeployed to `sdzhdupekcnekesbtxsl` |
+| Archive | `tmp/mil-staging-6863daf8bbf9-20260731T044104Z.zip` (auth `MIL-PREVIEW-STATE-FIX-A-2026-07-31`) |
+| Tests | `npm run test:media-intel-helpers` **219 pass** (includes `media-intel-preview-access.test.mjs`) |
+| Click evidence (staging) | Review Queue: `MVI_4463` → `source_missing` + Download disabled; `SUB-ADA4EF85` → `source_missing`; `IMG_4862.HEIC` → `ready` + media IMG + Download enabled. Received: `MVI_4463` → `source_missing`. No HEIC-only copy. |
+| Production | **Unchanged** — `app.bhfos.com` still SHA `5d7389c…` / `production`. No Treezy prod `MVI_4463` mutation. |
+| Non-goals | No Fix B (reel nav); no Fix C (filters); no storage object manufacture |
+| Evidence tier | **STAGING DEPLOYED** + **STAGING USABLE** (browser click-through) |
 
 ## Unified submission + Review Queue — Release A (2026-07-31) — PRODUCTION PASS
 
