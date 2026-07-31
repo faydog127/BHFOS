@@ -1,8 +1,25 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** contributor self-upload (Upload my shots) — see section below  
+**Verified HEAD at this status edit:** `28800eca7fd89bc58f7d6400c0353067a9a2076a`  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
+
+## Production — contributor self-upload + Treezy role (2026-07-30/31) — DEPLOYED
+
+| Field | Value |
+|---|---|
+| Production home | `https://app.bhfos.com` + Supabase **`wwyxohjnyqnegzbxtuxs`** |
+| Git tip deployed | `28800eca7fd8` (`feat/media-intelligence-library`; PR [#128](https://github.com/faydog127/BHFOS/pull/128) open for `main`) |
+| Migrations | Twelve MIL versions `20260725120000`…`20260730180000` applied on `wwyx` (no unrelated older CRM gaps forced via `db push --include-all`) |
+| Secrets | `MIL_RECONCILE_KEY` (new prod entropy) + `MIL_ALLOWED_ORIGINS` (includes `https://app.bhfos.com`); existing `OPENAI_API_KEY` retained |
+| Edges | All seven `media-intel-*` ACTIVE on `wwyx` (deployed `--use-api`) |
+| Frontend | Hostinger `production` / `app.bhfos.com` `build-info` SHA **28800eca7fd8** / `environment=production` / `migrationVersion=20260730180000`; bundle Supabase ref **only** `wwyxohjnyqnegzbxtuxs` |
+| Hosted UI marker | `CreatorRoutes-2351ca8d.js` contains Upload my shots / My shots / contributor-upload-my-shots |
+| Deploy archive | `command-center/tmp/production-28800eca7fd8-20260731T010029Z.zip` (auth `MIL-PROD-CONTRIBUTOR-SELF-UPLOAD-2026-07-30`) |
+| Treezy | `treezyincent@gmail.com` on prod Auth (confirmed) + `app_user_roles.role = reel_creator` (**no** `tenant_id` column on prod) |
+| Staging remains | `https://mil.bhfos.com` / `sdzhdupekcnekesbtxsl` untouched as staging |
+| Explicit non-actions | No reconcile cron; website promote stays 503 |
+| Evidence tier | **DEPLOYED** (prod schema + edges + CRM frontend + role). Browser **USABLE** for Treezy Upload my shots still owner/contributor hands-on |
 
 ## Contributor self-upload — Upload my shots (2026-07-30) — STAGING DEPLOYED; browser USABLE pending
 
@@ -31,20 +48,13 @@
 | Still not claimed | changes-requested / revised-version preservation cycle (unless later separately confirmed) |
 | Production | Code merged via PR #127 (`9d70ef9` on `main`); production migrate/edge/CRM deploy still gated on credentials per packet below |
 
-## Production release kickoff (2026-07-30) — PACKET READY; PR MERGED; MUTATIONS BLOCKED ON CREDENTIALS
+## Production release kickoff (2026-07-30) — SUPERSEDED BY PROD DEPLOY SECTION ABOVE
 
 | Field | Value |
 |---|---|
-| Founder intent | Proceed with remaining production jobs (prod migrate → edges → `app.bhfos.com` deploy → synthetic smoke) |
 | Packet | [`PRODUCTION_APPLY_PACKET.md`](./PRODUCTION_APPLY_PACKET.md) |
-| Git | PR [#127](https://github.com/faydog127/BHFOS/pull/127) **merged** to `main` (`9d70ef9`) after CI green |
-| Production home | CRM `https://app.bhfos.com` + Supabase **`wwyxohjnyqnegzbxtuxs`** (not `mil.bhfos.com`) |
-| Staging remains | `https://mil.bhfos.com` / `sdzhdupekcnekesbtxsl` / Hostinger target `mil-staging` |
-| Hosted staging tip | `https://mil.bhfos.com` `build-info` SHA **39e4b941dc63** / `mil-staging` |
-| Blocking for mutate | Process/User `SUPABASE_ACCESS_TOKEN` **absent**; production `VITE_*` for CRM build not confirmed in this worktree |
-| Available (names) | Sibling operator env has `HOSTINGER_API_TOKEN` (for later `production` Hostinger deploy) — not used yet |
-| Explicit non-actions until unblocked | No prod migration apply, no prod edge deploy, no `app.bhfos.com` Hostinger mutate, no reconcile cron, no website promote |
-| Next mutate gate | Provide `SUPABASE_ACCESS_TOKEN` for `wwyxohjnyqnegzbxtuxs` + production `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`; then execute packet steps 3–8 |
+| Git (earlier) | PR [#127](https://github.com/faydog127/BHFOS/pull/127) **merged** to `main` (`9d70ef9`); self-upload tip via PR [#128](https://github.com/faydog127/BHFOS/pull/128) |
+| Outcome | Prod migrate + edges + `app.bhfos.com` Hostinger deploy completed 2026-07-31 (see **Production — contributor self-upload** section) |
 
 ## Owner-led acceptance (2026-07-29) — DISTINCT-IDENTITY WORKFLOW OBSERVED BY ERRON
 
