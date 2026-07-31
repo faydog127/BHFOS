@@ -14,6 +14,11 @@ import {
   resolveOAuthCallbackNavigation,
   urlHasOAuthCallbackParams,
 } from '@/lib/oauthCallbackGate';
+import {
+  clearOAuthParamsFromLocation,
+  recoverOAuthSessionFromUrl,
+} from '@/lib/oauthSessionRecovery';
+import { supabase } from '@/lib/customSupabaseClient';
 
 import Login from '@/pages/Login';
 import Contact from '@/pages/Contact';
@@ -175,7 +180,7 @@ const RootGate = () => {
     return () => clearTimeout(timer);
   }, [loading]);
 
-  // Keep waiting while PKCE exchange can still complete — do not drop ?code=.
+  // Keep waiting while PKCE/hash exchange can still complete — do not drop tokens.
   useEffect(() => {
     if (!hasOAuthParams || session || oauthError) {
       setOauthWaitStartedAt(null);
@@ -184,11 +189,32 @@ const RootGate = () => {
     if (oauthWaitStartedAt == null) {
       setOauthWaitStartedAt(Date.now());
     }
+    // Second-chance recovery if AuthProvider init lost the race with detectSessionInUrl.
+    let cancelled = false;
+    (async () => {
+      try {
+        const recovered = await recoverOAuthSessionFromUrl(supabase.auth, {
+          search: location.search,
+          hash: location.hash,
+        });
+        if (cancelled) return;
+        if (recovered?.session) {
+          clearOAuthParamsFromLocation();
+        } else if (recovered?.error) {
+          console.warn('RootGate OAuth recovery:', recovered.error);
+        }
+      } catch (err) {
+        console.warn('RootGate OAuth recovery failed', err);
+      }
+    })();
     const timer = setInterval(() => {
       setOauthWaitTick((tick) => tick + 1);
     }, 500);
-    return () => clearInterval(timer);
-  }, [hasOAuthParams, session, oauthError, oauthWaitStartedAt]);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [hasOAuthParams, session, oauthError, oauthWaitStartedAt, location.search, location.hash]);
 
   useEffect(() => {
     if (loading) return;

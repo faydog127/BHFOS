@@ -114,6 +114,38 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
   );
   const jobBrief = useMemo(() => summarizeContributorBrief(assignments), [assignments]);
   const showMediaSearch = available.length > CONTRIBUTOR_SEARCH_MIN_COUNT;
+  const activityLog = useMemo(() => {
+    const rows = [];
+    for (const a of myShots) {
+      const review =
+        a.human_review_status === 'verified'
+          ? 'Verified by owner'
+          : a.human_review_status === 'pending'
+            ? 'Awaiting owner review'
+            : String(a.human_review_status || 'Uploaded');
+      rows.push({
+        id: `shot-${a.id}`,
+        at: a.created_at,
+        kind: a.media_kind === 'video' ? 'Video upload' : 'Photo upload',
+        title: a.original_filename || 'Untitled shot',
+        status: review,
+      });
+    }
+    for (const p of projects) {
+      for (const v of p.mil_reel_versions || []) {
+        rows.push({
+          id: `reel-${v.id}`,
+          at: v.created_at || v.updated_at || p.updated_at,
+          kind: 'Draft submission',
+          title: `${p.title || 'Untitled'} · v${v.version_number}`,
+          status: String(v.status || 'draft').replace(/_/g, ' '),
+        });
+      }
+    }
+    return rows
+      .sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0))
+      .slice(0, 40);
+  }, [myShots, projects]);
 
   const loadThumbs = async (assets) => {
     const next = {};
@@ -578,6 +610,36 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
           />
           {selfUploadNote && <p className="text-xs text-slate-600">{selfUploadNote}</p>}
 
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2" data-testid="contributor-activity-log">
+            <h4 className="text-sm font-medium text-slate-800">Your activity log</h4>
+            <p className="text-xs text-slate-500">
+              Track what you uploaded and where each item sits with the owner (review / verified).
+            </p>
+            {activityLog.length === 0 ? (
+              <p className="text-sm text-slate-600">No uploads yet. Choose photos or video above to start.</p>
+            ) : (
+              <ul className="divide-y divide-slate-200 rounded-md border border-slate-200 bg-white">
+                {activityLog.map((row) => (
+                  <li key={row.id} className="px-3 py-2.5 text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                    <div className="min-w-0">
+                      <div className="font-medium text-slate-900 truncate">{row.title}</div>
+                      <div className="text-xs text-slate-500">
+                        {row.kind}
+                        {row.at
+                          ? ` · ${new Date(row.at).toLocaleString(undefined, {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            })}`
+                          : ''}
+                      </div>
+                    </div>
+                    <div className="text-xs font-medium text-slate-700 shrink-0">{row.status}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <h4 className="text-sm font-medium text-slate-800 pt-1">My shots</h4>
           {myShots.length === 0 ? (
             <p className="text-sm text-slate-600">No self-uploads yet.</p>
@@ -596,7 +658,11 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
                   <li key={a.id} className="rounded-md border overflow-hidden text-sm flex flex-col">
                     <div className="aspect-square bg-slate-100 relative">
                       {thumb ? (
-                        <img src={thumb} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                        a.media_kind === 'video' ? (
+                          <video src={thumb} className="absolute inset-0 h-full w-full object-cover" muted playsInline />
+                        ) : (
+                          <img src={thumb} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                        )
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 px-2 text-center">
                           Preview preparing

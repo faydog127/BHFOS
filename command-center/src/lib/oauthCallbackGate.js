@@ -7,7 +7,7 @@
  * iOS Safari as a failed "Continue with Google" that lands on select-tenant.
  */
 
-export const OAUTH_CALLBACK_MAX_WAIT_MS = 12000;
+export const OAUTH_CALLBACK_MAX_WAIT_MS = 20000;
 
 /**
  * @param {object} input

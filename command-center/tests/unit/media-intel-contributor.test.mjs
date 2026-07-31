@@ -72,6 +72,8 @@ describe('Contributor Workspace source contracts', () => {
     assert.match(workspace, /Upload my shots/);
     assert.match(workspace, /createContributorUploadSession/);
     assert.match(workspace, /contributor-my-shots-list/);
+    assert.match(workspace, /contributor-activity-log/);
+    assert.match(workspace, /Your activity log/);
     assert.doesNotMatch(workspace, /allowOriginal:\s*true/);
 
     const constants = read('src/lib/mediaIntel/constants.js');

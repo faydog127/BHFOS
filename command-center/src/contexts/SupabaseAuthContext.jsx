@@ -6,6 +6,11 @@ import {
   hostedLocalSupabaseErrorMessage,
   isLocalSupabaseProject,
 } from '@/lib/supabaseEnv';
+import {
+  clearOAuthParamsFromLocation,
+  recoverOAuthSessionFromUrl,
+} from '@/lib/oauthSessionRecovery';
+import { urlHasOAuthCallbackParams } from '@/lib/oauthCallbackGate';
 import { resolveTenantIdFromSession, logTenantDebugInfo, getSelectedTenantId } from '@/lib/tenantUtils';
 import { jwtDecode } from "jwt-decode";
 
@@ -76,13 +81,41 @@ export const SupabaseAuthProvider = ({ children }) => {
 
     async function initializeAuth() {
       try {
-        // 1. Attempt to recover session
-        const { data: { session }, error } = await withTimeout(
-          supabase.auth.getSession(),
-          7000
-        );
+        // 0. If Google/magic-link returned tokens or a PKCE code, materialize the
+        // session before getSession — detectSessionInUrl can lose the race.
+        let session = null;
+        let error = null;
+        const loc =
+          typeof window !== 'undefined'
+            ? { search: window.location.search, hash: window.location.hash }
+            : { search: '', hash: '' };
+        if (urlHasOAuthCallbackParams(loc.search, loc.hash)) {
+          try {
+            const recovered = await withTimeout(
+              recoverOAuthSessionFromUrl(supabase.auth, loc),
+              10000,
+            );
+            if (recovered?.error) {
+              console.warn('OAuth URL recovery error:', recovered.error);
+              error = recovered.error;
+            }
+            if (recovered?.session) {
+              session = recovered.session;
+              clearOAuthParamsFromLocation();
+            }
+          } catch (recoverErr) {
+            console.warn('OAuth URL recovery timed out/failed.', recoverErr);
+          }
+        }
+
+        // 1. Attempt to recover persisted session when URL recovery did not.
+        if (!session) {
+          const result = await withTimeout(supabase.auth.getSession(), 7000);
+          session = result?.data?.session ?? null;
+          if (result?.error) error = result.error;
+        }
         
-        if (error) {
+        if (error && !session) {
           throw error;
         }
 
