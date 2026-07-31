@@ -8,6 +8,9 @@ const ASSET_LIST_SELECT =
 const ASSET_LIST_SELECT_CONTRIBUTOR_SELF =
   '*, mil_derivatives(id, kind, object_path, bucket), mil_verified_metadata(*), mil_permitted_uses(use_key, approved), mil_upload_batches!inner(source_label, source_person, uploader_user_id)';
 
+const SUBMISSION_LIST_SELECT =
+  '*, mil_submission_assets(id, asset_id, version_number, sort_order, mil_assets(id, original_filename, media_kind, processing_status, human_review_status, created_at, mil_derivatives(id, kind, object_path, bucket), mil_upload_batches(source_label)))';
+
 async function actorId() {
   const { data } = await supabase.auth.getUser();
   return data?.user?.id || null;
@@ -63,6 +66,19 @@ export async function fetchDashboardStats() {
   const firstError = results.find((r) => r?.error)?.error;
   if (firstError) throw firstError;
 
+  // Best-effort until unified-submissions migration is applied on the target DB.
+  let submissionsAwaitingOwner = 0;
+  try {
+    const subRes = await supabase
+      .from('mil_submissions')
+      .select('id', { count: 'exact', head: true })
+      .eq('review_status', 'awaiting_owner_review')
+      .eq('action_owner', 'owner');
+    if (!subRes.error) submissionsAwaitingOwner = subRes.count || 0;
+  } catch {
+    submissionsAwaitingOwner = 0;
+  }
+
   const [
     photos, videos, recent, awaitingAi, awaitingReview, duplicates, privacy, qualityCleanup,
     marketing, assigned, failedJobs, baUnverified, reelsAwaiting, reelsApproved, trashed,
@@ -76,6 +92,7 @@ export async function fetchDashboardStats() {
     awaitingAi: awaitingAi.count || 0,
     awaitingHumanReview: awaitingReview.count || 0,
     contributorReceivedPending: contributorReceivedPending.count || 0,
+    submissionsAwaitingOwner,
     possibleDuplicates: duplicates.count || 0,
     possibleBeforeAfter: baUnverified.count || 0,
     privacyWarnings: privacy.count || 0,
@@ -279,6 +296,112 @@ export async function submitReelVersion(versionId) {
     p_version_id: versionId,
   });
   if (error) throw error;
+}
+
+/**
+ * Deliberate raw-video / social-post submit (upload ≠ submit).
+ * SECURITY DEFINER — idempotent when idempotencyKey is stable across retries.
+ */
+export async function submitContentPackage({
+  submissionType,
+  assetIds,
+  title,
+  contributorNotes,
+  contextKind = 'general',
+  contextLabel,
+  caption,
+  cta,
+  hashtags,
+  platforms,
+  proposedPostAt,
+  idempotencyKey,
+} = {}) {
+  if (!['raw_video', 'social_post'].includes(submissionType)) {
+    throw new Error('submissionType must be raw_video or social_post');
+  }
+  const ids = (assetIds || []).filter(Boolean);
+  if (!ids.length) throw new Error('At least one asset is required');
+  const { data, error } = await supabase.rpc('mil_submit_content_package', {
+    p_submission_type: submissionType,
+    p_asset_ids: ids,
+    p_title: title || null,
+    p_contributor_notes: contributorNotes || null,
+    p_context_kind: contextKind || 'general',
+    p_context_label: contextLabel || null,
+    p_caption: caption || null,
+    p_cta: cta || null,
+    p_hashtags: hashtags || null,
+    p_platforms: platforms || null,
+    p_proposed_post_at: proposedPostAt || null,
+    p_idempotency_key: idempotencyKey || null,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function reviewContentSubmission({ submissionId, decision, notes } = {}) {
+  if (!submissionId) throw new Error('Missing submissionId');
+  const { error } = await supabase.rpc('mil_review_content_submission', {
+    p_submission_id: submissionId,
+    p_decision: decision,
+    p_notes: notes?.trim() ? notes.trim() : null,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Canonical owner/contributor submission list for the unified Review Queue.
+ * Optional context is left-joined — missing optional joins never hide a row.
+ */
+export async function listSubmissions(filters = {}) {
+  let q = supabase
+    .from('mil_submissions')
+    .select(SUBMISSION_LIST_SELECT)
+    .order('submitted_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
+    .limit(filters.limit || 100);
+
+  if (filters.contributorUserId) q = q.eq('contributor_user_id', filters.contributorUserId);
+  if (filters.submissionType) q = q.eq('submission_type', filters.submissionType);
+  if (filters.reviewStatus) {
+    if (Array.isArray(filters.reviewStatus)) q = q.in('review_status', filters.reviewStatus);
+    else q = q.eq('review_status', filters.reviewStatus);
+  }
+  if (filters.actionOwner) q = q.eq('action_owner', filters.actionOwner);
+  if (filters.excludeDrafts !== false) {
+    // Default: hide drafts from owner-action queues; contributors may pass excludeDrafts:false
+    if (!filters.includeDrafts) q = q.neq('review_status', 'draft');
+  }
+
+  // Named queue filters (Release A)
+  if (filters.queueFilter === 'needs_review') {
+    q = q.eq('review_status', 'awaiting_owner_review').eq('action_owner', 'owner');
+  } else if (filters.queueFilter === 'reel') {
+    q = q.eq('submission_type', 'reel');
+  } else if (filters.queueFilter === 'raw_video') {
+    q = q.eq('submission_type', 'raw_video');
+  } else if (filters.queueFilter === 'social_post') {
+    q = q.eq('submission_type', 'social_post');
+  } else if (filters.queueFilter === 'changes_requested') {
+    q = q.eq('review_status', 'changes_requested');
+  } else if (filters.queueFilter === 'approved') {
+    q = q.in('review_status', ['approved', 'ready_to_post']);
+  }
+
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+
+/** Owner-action badge count — excludes contributor-waiting rows. */
+export async function countOwnerActionSubmissions() {
+  const { count, error } = await supabase
+    .from('mil_submissions')
+    .select('id', { count: 'exact', head: true })
+    .eq('review_status', 'awaiting_owner_review')
+    .eq('action_owner', 'owner');
+  if (error) throw error;
+  return count || 0;
 }
 
 /**

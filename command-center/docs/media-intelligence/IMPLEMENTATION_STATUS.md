@@ -1,8 +1,26 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** `28800eca7fd89bc58f7d6400c0353067a9a2076a`  
+**Verified HEAD at this status edit:** local tip of `feat(mil): unify contributor submissions and owner review queue` (see `git log -1`)  
+**Upstream divergence at edit:** `origin/feat/media-intelligence-library` — local tip **ahead by 1** after this commit; **not pushed**  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
+
+## Unified submission + Review Queue — Release A (2026-07-31) — LOCALLY PASSING — HOSTED BLOCKED
+
+| Field | Value |
+|---|---|
+| Mission | Contributor Submit Content + explicit type + upload≠submit + unified owner Review Queue |
+| Root cause (missing path) | Two parallel products: self-upload finalized straight into `mil_assets` Review/Received; reels used `mil_reel_versions` + `/media/reel-review` only. No `submission_type`, no human-readable Submission ID, no single queue. Looking in the wrong queue (or pre-Received bundle) looked like a “missing submission.” |
+| Schema | Additive `20260731120000_media_intel_unified_submissions.sql` — `mil_submissions` + `mil_submission_assets`; RPCs `mil_submit_content_package`, `mil_review_content_submission`; dual-write on `mil_submit_reel_version` / `mil_review_reel_version`; RLS browse; idempotent backfill for submitted reels + pending `contributor_self` assets |
+| UI | `/creator` **Submit Content** (Reel default); Upload Activity + My Submissions; `/media/review` filters Needs review / Reels / Raw / Social / Changes requested / Approved / All; Reel Review kept + `?versionId=` deep link |
+| Local tests (pre-commit) | `npm run test:media-intel-helpers` — **200 pass** / 0 fail |
+| Local build (pre-commit) | `npm run build` — **PASS**; `migrationVersion=20260731120000`; secret-scan OK |
+| Migration apply | **`20260731120000` remains UNAPPLIED** on staging (`sdzhdupekcnekesbtxsl`) and production (`wwyxohjnyqnegzbxtuxs`) — source only |
+| Push / deploy | **Not done** (local commit only) |
+| Hosted | **Blocked** — migration not applied; frontend not deployed; distinct-identity hosted acceptance not run |
+| Known prod canary | `MVI_4463.mp4` (Treezy) — backfill will create a `mil_submissions` row on apply; until then Received/legacy pending path still applies |
+| Next authorization | (1) push (2) apply migration on staging then prod (3) deploy frontend (4) distinct-identity hosted acceptance |
+| Evidence tier | **SOURCE-ONLY** + **locally verified** (unit + production build). Not staging/deployed/USABLE |
 
 ## Owner Received inbox (2026-07-31) — DEPLOYED on production
 

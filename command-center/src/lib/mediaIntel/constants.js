@@ -22,8 +22,36 @@ export const MIL_SUPPORTED_MIME = [
 // (see checksum.js). Do not advertise 2 GB in UI copy until chunked hashing exists.
 export const MIL_MAX_FILE_BYTES = MAX_PRACTICAL_HASH_BYTES;
 
-/** Upload batch label for contributor phone self-shots (Upload my shots). */
+/** Upload batch label for contributor phone self-shots (Submit Content / legacy Upload my shots). */
 export const CONTRIBUTOR_SELF_SOURCE_LABEL = 'contributor_self';
+
+/** Contributor deliberate submission types (business type — not inferred from MIME). */
+export const SUBMISSION_TYPES = [
+  { id: 'reel', label: 'Reel', badge: 'REEL' },
+  { id: 'raw_video', label: 'Raw video', badge: 'RAW VIDEO' },
+  { id: 'social_post', label: 'Social media post', badge: 'SOCIAL POST' },
+];
+
+export const DEFAULT_SUBMISSION_TYPE = 'reel';
+
+export const SUBMISSION_REVIEW_LABELS = {
+  draft: 'Draft',
+  awaiting_owner_review: 'Awaiting owner review',
+  changes_requested: 'Changes requested',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  ready_to_post: 'Ready to post',
+};
+
+export const REVIEW_QUEUE_FILTERS = [
+  { id: 'needs_review', label: 'Needs review' },
+  { id: 'reel', label: 'Reels' },
+  { id: 'raw_video', label: 'Raw media' },
+  { id: 'social_post', label: 'Social posts' },
+  { id: 'changes_requested', label: 'Changes requested' },
+  { id: 'approved', label: 'Approved' },
+  { id: 'all', label: 'All' },
+];
 
 export const MIL_NAV = [
   { id: 'dashboard', name: 'Dashboard', path: 'dashboard' },

@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
 import { reviewReelVersion } from '@/lib/mediaIntel/api';
 import { requestSignedReelUrl } from '@/lib/mediaIntel/signedAccess';
 
 export default function MediaReelReview() {
   const { caps } = useOutletContext();
+  const [searchParams] = useSearchParams();
+  const focusVersionId = searchParams.get('versionId');
   const [rows, setRows] = useState([]);
   const [notes, setNotes] = useState({});
   const [preview, setPreview] = useState({});
@@ -31,6 +33,19 @@ export default function MediaReelReview() {
   useEffect(() => {
     load();
   }, []);
+
+  const orderedRows = useMemo(() => {
+    if (!focusVersionId || !rows.length) return rows;
+    const focused = rows.filter((r) => r.id === focusVersionId);
+    const rest = rows.filter((r) => r.id !== focusVersionId);
+    return [...focused, ...rest];
+  }, [rows, focusVersionId]);
+
+  useEffect(() => {
+    if (!focusVersionId) return;
+    const el = document.getElementById(`reel-version-${focusVersionId}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [focusVersionId, orderedRows]);
 
   const decide = async (versionId, decision) => {
     if (busyId) return;
@@ -76,8 +91,15 @@ export default function MediaReelReview() {
       <div>
         <h2 className="text-lg font-semibold text-slate-900">Reel review</h2>
         <p className="text-sm text-slate-600">
-          Approve marks the exact version as ready for manual posting later. Nothing is scheduled,
-          published, or sent to social from here. Denial notes are optional.
+          Specialized reel workspace — also reachable from the unified Review Queue. Approve marks the
+          exact version as ready for manual posting later. This screen does not schedule posts or send
+          them to any network. Denial notes are optional.
+        </p>
+        <p className="text-xs text-slate-500 mt-1">
+          <Link to="/media/review?filter=reel" className="text-blue-700 underline-offset-2 hover:underline">
+            Back to Review Queue · Reels
+          </Link>
+          {focusVersionId ? ` · Focusing version ${focusVersionId.slice(0, 8)}…` : ''}
         </p>
       </div>
       {error && (
@@ -86,11 +108,18 @@ export default function MediaReelReview() {
         </div>
       )}
       {message && <div className="text-sm text-emerald-700">{message}</div>}
-      {rows.length === 0 && (
+      {orderedRows.length === 0 && (
         <div className="rounded-xl border bg-white p-6 text-sm text-slate-600">No reels awaiting review.</div>
       )}
-      {rows.map((v) => (
-        <article key={v.id} className="rounded-xl border bg-white p-4 space-y-3" data-testid="media-reel-review-row">
+      {orderedRows.map((v) => (
+        <article
+          key={v.id}
+          id={`reel-version-${v.id}`}
+          className={`rounded-xl border bg-white p-4 space-y-3 ${
+            focusVersionId === v.id ? 'ring-2 ring-blue-500' : ''
+          }`}
+          data-testid="media-reel-review-row"
+        >
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
             <div>
               <h3 className="font-medium text-slate-900">{v.mil_reel_projects?.title || 'Reel'}</h3>

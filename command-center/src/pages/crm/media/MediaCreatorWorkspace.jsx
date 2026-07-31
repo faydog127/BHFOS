@@ -1,8 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
-import { listAssets, submitReelVersion } from '@/lib/mediaIntel/api';
-import { PRIVACY_LABELS } from '@/lib/mediaIntel/constants';
+import { listAssets, listSubmissions, submitContentPackage, submitReelVersion } from '@/lib/mediaIntel/api';
+import {
+  DEFAULT_SUBMISSION_TYPE,
+  PRIVACY_LABELS,
+  SUBMISSION_REVIEW_LABELS,
+  SUBMISSION_TYPES,
+} from '@/lib/mediaIntel/constants';
 import { requestSignedMediaUrl, requestSignedReelUrl } from '@/lib/mediaIntel/signedAccess';
 import {
   createContributorUploadSession,
@@ -107,6 +112,17 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
   const [batchBusy, setBatchBusy] = useState(false);
   const [mediaSearch, setMediaSearch] = useState('');
   const [thumbUrls, setThumbUrls] = useState({});
+  const [submissionType, setSubmissionType] = useState(DEFAULT_SUBMISSION_TYPE);
+  const [contextKind, setContextKind] = useState('general');
+  const [contextLabel, setContextLabel] = useState('');
+  const [caption, setCaption] = useState('');
+  const [cta, setCta] = useState('');
+  const [hashtags, setHashtags] = useState('');
+  const [platforms, setPlatforms] = useState('');
+  const [readyAssetIds, setReadyAssetIds] = useState([]);
+  const [submitConfirm, setSubmitConfirm] = useState(null);
+  const [mySubmissions, setMySubmissions] = useState([]);
+  const [submitBusy, setSubmitBusy] = useState(false);
 
   const filteredMedia = useMemo(
     () => filterAssignedMedia(available, mediaSearch),
@@ -214,6 +230,21 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
       const { data, error: err } = await q;
       if (err) throw err;
       setProjects(data || []);
+
+      if (auth?.user?.id) {
+        try {
+          const subs = await listSubmissions({
+            contributorUserId: auth.user.id,
+            includeDrafts: true,
+            limit: 40,
+          });
+          setMySubmissions(subs);
+        } catch {
+          setMySubmissions([]);
+        }
+      } else {
+        setMySubmissions([]);
+      }
     } catch (err) {
       setError(err.message);
     }
@@ -226,11 +257,24 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
       setError('Only contributors can upload their own shots here.');
       return;
     }
+    if (submissionType === 'reel') {
+      setError('Switch to Raw video or Social media post to upload media packages here. Reels use the draft uploader below.');
+      return;
+    }
+    if (submissionType === 'raw_video') {
+      const nonVideo = files.filter((f) => !String(f.type || '').startsWith('video/') && !/\.(mp4|mov|m4v|webm)$/i.test(f.name || ''));
+      if (nonVideo.length) {
+        setError('Raw video submissions accept video files only.');
+        return;
+      }
+    }
     setSelfUploadBusy(true);
     setError(null);
     setMessage(null);
+    setSubmitConfirm(null);
     setSelfUploadNote(`Starting transfer of ${files.length} file(s)…`);
     try {
+      const beforeIds = new Set(myShots.map((a) => a.id));
       const session = await createContributorUploadSession({
         sourcePerson: 'Contributor self-upload',
         expiresHours: 12,
@@ -254,19 +298,98 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
       const vals = [...outcomes.values()];
       const done = vals.filter((s) => s === 'uploaded' || s === 'duplicate').length;
       const failed = vals.filter((s) => s === 'failed').length;
+      await load();
+      const { data: auth } = await supabase.auth.getUser();
+      const refreshed = auth?.user?.id
+        ? await listAssets({
+            archived: false,
+            trashed: false,
+            createdByUserId: auth.user.id,
+            limit: 80,
+          })
+        : [];
+      const newIds = (refreshed || []).filter((a) => !beforeIds.has(a.id)).map((a) => a.id);
+      setReadyAssetIds((prev) => [...new Set([...prev, ...newIds])]);
       setMessage(
         failed
-          ? `Uploaded ${done} shot(s); ${failed} failed. Keep phone originals until verified.`
-          : `Uploaded ${done || files.length} shot(s). They are in owner Review — keep phone originals until verified.`,
+          ? `Uploaded ${done} file(s); ${failed} failed. Ready to submit when required fields are complete.`
+          : `Uploaded ${done || files.length} file(s). Review details below, then Submit for Review.`,
       );
       setSelfUploadNote(null);
-      await load();
     } catch (err) {
       setError(err.message || 'Self-upload failed');
       setSelfUploadNote(null);
     } finally {
       setSelfUploadBusy(false);
       if (selfShotRef.current) selfShotRef.current.value = '';
+    }
+  };
+
+  const submitPackageForReview = async () => {
+    if (submitBusy) return;
+    if (!['raw_video', 'social_post'].includes(submissionType)) {
+      setError('Choose Raw video or Social media post to submit a media package.');
+      return;
+    }
+    if (!readyAssetIds.length) {
+      setError('Upload media first, then Submit for Review.');
+      return;
+    }
+    if (submissionType === 'social_post' && !String(title || '').trim()) {
+      setError('Social media posts require a post title.');
+      return;
+    }
+    setSubmitBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const idempotencyKey =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `submit-${Date.now()}-${readyAssetIds.join('-')}`;
+      const platformList = String(platforms || '')
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean);
+      const result = await submitContentPackage({
+        submissionType,
+        assetIds: readyAssetIds,
+        title: title.trim() || undefined,
+        contributorNotes: notes.trim() || undefined,
+        contextKind,
+        contextLabel: contextLabel.trim() || undefined,
+        caption: caption.trim() || undefined,
+        cta: cta.trim() || undefined,
+        hashtags: hashtags.trim() || undefined,
+        platforms: platformList.length ? platformList : undefined,
+        idempotencyKey,
+      });
+      if (!result?.public_id) {
+        throw new Error('Submission failed — no confirmation from server.');
+      }
+      const typeLabel =
+        SUBMISSION_TYPES.find((t) => t.id === submissionType)?.label || 'Content';
+      setSubmitConfirm({
+        publicId: result.public_id,
+        submittedAt: result.submitted_at || new Date().toISOString(),
+        typeLabel,
+        already: Boolean(result.already_submitted),
+      });
+      setMessage(null);
+      setReadyAssetIds([]);
+      setTitle('');
+      setNotes('');
+      setCaption('');
+      setCta('');
+      setHashtags('');
+      setPlatforms('');
+      setContextLabel('');
+      await load();
+    } catch (err) {
+      setError(err.message || 'Submit for review failed');
+      setSubmitConfirm(null);
+    } finally {
+      setSubmitBusy(false);
     }
   };
 
@@ -580,43 +703,228 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
         )}
       </section>
 
-      {caps?.canContributorSelfUpload && (
-        <section className="rounded-xl border bg-white p-4 space-y-3" data-testid="contributor-upload-my-shots">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <h3 className="text-base font-semibold text-slate-900">Upload my shots</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Photos or video you took on your phone. They go to owner Review first (privacy/quality).
-                This is not the reel Submissions uploader. Keep originals on the phone until verified.
-              </p>
-            </div>
-            <button
-              type="button"
-              disabled={selfUploadBusy}
-              className="rounded-md bg-slate-900 text-white px-4 py-2.5 text-sm font-medium min-h-[44px] disabled:opacity-50"
-              onClick={() => selfShotRef.current?.click()}
-              data-testid="contributor-upload-my-shots-btn"
-            >
-              {selfUploadBusy ? 'Uploading…' : 'Choose photos'}
-            </button>
+      {(caps?.canContributorSelfUpload || caps?.isCreator) && (
+        <section className="rounded-xl border bg-white p-4 space-y-4" data-testid="contributor-upload-my-shots">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">Submit Content</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Upload first, then deliberately submit for owner review. Approval is not publishing.
+              Keep phone originals until the transfer is verified.
+            </p>
           </div>
-          <input
-            ref={selfShotRef}
-            type="file"
-            accept="image/*,video/*,.heic,.heif,.jpg,.jpeg,.png,.webp,.mp4,.mov"
-            multiple
-            className="hidden"
-            onChange={(e) => uploadMyShots(e.target.files)}
-          />
-          {selfUploadNote && <p className="text-xs text-slate-600">{selfUploadNote}</p>}
+
+          <fieldset data-testid="contributor-submission-type">
+            <legend className="text-sm font-medium text-slate-900 mb-2">What are you submitting?</legend>
+            <div className="inline-flex flex-wrap rounded-md border border-slate-200 bg-slate-50 p-0.5 gap-0.5" role="radiogroup" aria-label="Submission type">
+              {SUBMISSION_TYPES.map((t) => (
+                <label
+                  key={t.id}
+                  className={`rounded px-3 py-2 text-sm min-h-[40px] inline-flex items-center cursor-pointer ${
+                    submissionType === t.id ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-white'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="submission-type"
+                    value={t.id}
+                    checked={submissionType === t.id}
+                    onChange={() => {
+                      setSubmissionType(t.id);
+                      setSubmitConfirm(null);
+                    }}
+                    className="sr-only"
+                  />
+                  {t.label}
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500 mt-1.5" data-testid="contributor-submission-type-default">
+              Default: Reel
+            </p>
+          </fieldset>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            <label className="block text-sm sm:col-span-2">
+              <span className="font-medium">{submissionType === 'social_post' ? 'Post title' : 'Title'}</span>
+              <input
+                className="mt-1 w-full rounded-md border px-3 py-2 min-h-[44px]"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="font-medium">Context</span>
+              <select
+                className="mt-1 w-full rounded-md border px-3 py-2 min-h-[44px] bg-white"
+                value={contextKind}
+                onChange={(e) => setContextKind(e.target.value)}
+              >
+                <option value="general">General content</option>
+                <option value="assignment">Assignment</option>
+                <option value="campaign">Campaign</option>
+                <option value="job">Job / service visit</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="font-medium">Context detail (optional)</span>
+              <input
+                className="mt-1 w-full rounded-md border px-3 py-2 min-h-[44px]"
+                value={contextLabel}
+                onChange={(e) => setContextLabel(e.target.value)}
+                placeholder="Campaign or job label"
+              />
+            </label>
+            <label className="block text-sm sm:col-span-2">
+              <span className="font-medium">Notes for owner (optional)</span>
+              <textarea
+                className="mt-1 w-full rounded-md border px-3 py-2"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </label>
+            {submissionType === 'social_post' && (
+              <>
+                <label className="block text-sm sm:col-span-2">
+                  <span className="font-medium">Proposed caption</span>
+                  <textarea
+                    className="mt-1 w-full rounded-md border px-3 py-2"
+                    value={caption}
+                    onChange={(e) => setCaption(e.target.value)}
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="font-medium">CTA</span>
+                  <input
+                    className="mt-1 w-full rounded-md border px-3 py-2 min-h-[44px]"
+                    value={cta}
+                    onChange={(e) => setCta(e.target.value)}
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="font-medium">Platforms (comma-separated)</span>
+                  <input
+                    className="mt-1 w-full rounded-md border px-3 py-2 min-h-[44px]"
+                    value={platforms}
+                    onChange={(e) => setPlatforms(e.target.value)}
+                    placeholder="instagram, facebook"
+                  />
+                </label>
+                <label className="block text-sm sm:col-span-2">
+                  <span className="font-medium">Hashtags</span>
+                  <input
+                    className="mt-1 w-full rounded-md border px-3 py-2 min-h-[44px]"
+                    value={hashtags}
+                    onChange={(e) => setHashtags(e.target.value)}
+                  />
+                </label>
+              </>
+            )}
+          </div>
+
+          {submissionType === 'reel' ? (
+            <div className="space-y-3 border-t pt-3">
+              <p className="text-xs text-slate-500">
+                Upload one reel draft, then Submit for Review. Uploading alone does not notify the owner.
+              </p>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="video/*,.mp4,.mov"
+                className="hidden"
+                onChange={(e) => uploadReel(e.target.files?.[0])}
+              />
+              <button
+                type="button"
+                disabled={busy}
+                className="rounded-md bg-blue-600 text-white px-4 py-2.5 text-sm min-h-[44px]"
+                onClick={() => fileRef.current?.click()}
+              >
+                {busy ? 'Uploading…' : 'Upload reel draft'}
+              </button>
+            </div>
+          ) : caps?.canContributorSelfUpload ? (
+            <div className="space-y-3 border-t pt-3">
+              <p className="text-xs text-slate-500">
+                {submissionType === 'raw_video'
+                  ? 'Upload one or more videos, then Submit for Review. Uploads stay private until you submit.'
+                  : 'Upload one or more media assets for the post package, then Submit for Review.'}
+              </p>
+              <input
+                ref={selfShotRef}
+                type="file"
+                accept={
+                  submissionType === 'raw_video'
+                    ? 'video/*,.mp4,.mov,.m4v,.webm'
+                    : 'image/*,video/*,.heic,.heif,.jpg,.jpeg,.png,.webp,.mp4,.mov'
+                }
+                multiple
+                className="hidden"
+                onChange={(e) => uploadMyShots(e.target.files)}
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={selfUploadBusy}
+                  className="rounded-md bg-slate-900 text-white px-4 py-2.5 text-sm font-medium min-h-[44px] disabled:opacity-50"
+                  onClick={() => selfShotRef.current?.click()}
+                  data-testid="contributor-upload-my-shots-btn"
+                >
+                  {selfUploadBusy ? 'Uploading…' : submissionType === 'raw_video' ? 'Upload videos' : 'Upload media'}
+                </button>
+                <button
+                  type="button"
+                  disabled={submitBusy || selfUploadBusy || !readyAssetIds.length}
+                  className="rounded-md bg-blue-600 text-white px-4 py-2.5 text-sm font-medium min-h-[44px] disabled:opacity-50"
+                  onClick={submitPackageForReview}
+                  data-testid="contributor-submit-for-review"
+                >
+                  {submitBusy ? 'Submitting…' : 'Submit for Review'}
+                </button>
+              </div>
+              {readyAssetIds.length > 0 && (
+                <p className="text-xs text-slate-600" data-testid="contributor-ready-to-submit">
+                  {readyAssetIds.length} file(s) ready to submit.
+                </p>
+              )}
+              {selfUploadNote && <p className="text-xs text-slate-600">{selfUploadNote}</p>}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-600 border-t pt-3">
+              Media package upload requires contributor self-upload access.
+            </p>
+          )}
+
+          {submitConfirm && (
+            <div
+              className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-1"
+              data-testid="contributor-submit-confirmation"
+              role="status"
+            >
+              <p className="text-sm font-medium text-emerald-900">
+                {submitConfirm.typeLabel} submitted successfully.
+              </p>
+              <p className="text-xs text-emerald-800">
+                {new Date(submitConfirm.submittedAt).toLocaleString(undefined, {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                })}
+                {' · '}Awaiting owner review
+              </p>
+              <p className="text-sm text-emerald-900">
+                Submission ID: <span className="font-mono font-semibold">{submitConfirm.publicId}</span>
+              </p>
+              {submitConfirm.already && (
+                <p className="text-xs text-emerald-700">Already submitted (idempotent retry).</p>
+              )}
+            </div>
+          )}
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2" data-testid="contributor-activity-log">
-            <h4 className="text-sm font-medium text-slate-800">Your activity log</h4>
-            <p className="text-xs text-slate-500">
-              Track what you uploaded and where each item sits with the owner (review / verified).
-            </p>
+            <h4 className="text-sm font-medium text-slate-800">Upload Activity</h4>
+            <p className="text-xs text-slate-500">Technical transfer history — not the same as owner Review.</p>
             {activityLog.length === 0 ? (
-              <p className="text-sm text-slate-600">No uploads yet. Choose photos or video above to start.</p>
+              <p className="text-sm text-slate-600">No uploads yet.</p>
             ) : (
               <ul className="divide-y divide-slate-200 rounded-md border border-slate-200 bg-white">
                 {activityLog.map((row) => (
@@ -640,111 +948,114 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
             )}
           </div>
 
-          <h4 className="text-sm font-medium text-slate-800 pt-1">My shots</h4>
-          {myShots.length === 0 ? (
-            <p className="text-sm text-slate-600">No self-uploads yet.</p>
-          ) : (
-            <ul className="grid grid-cols-2 lg:grid-cols-3 gap-2" data-testid="contributor-my-shots-list">
-              {myShots.map((a) => {
-                const thumb = thumbUrls[a.id];
-                const privacy = PRIVACY_LABELS[a.privacy_status] || a.privacy_status;
-                const review =
-                  a.human_review_status === 'verified'
-                    ? 'Verified'
-                    : a.human_review_status === 'pending'
-                      ? 'Awaiting review'
-                      : a.human_review_status;
-                return (
-                  <li key={a.id} className="rounded-md border overflow-hidden text-sm flex flex-col">
-                    <div className="aspect-square bg-slate-100 relative">
-                      {thumb ? (
-                        a.media_kind === 'video' ? (
-                          <video src={thumb} className="absolute inset-0 h-full w-full object-cover" muted playsInline />
+          <div data-testid="contributor-my-shots-list" className="space-y-2">
+            <h4 className="text-sm font-medium text-slate-800">Uploaded files</h4>
+            {myShots.length === 0 ? (
+              <p className="text-sm text-slate-600">No self-uploads yet.</p>
+            ) : (
+              <ul className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                {myShots.map((a) => {
+                  const thumb = thumbUrls[a.id];
+                  const privacy = PRIVACY_LABELS[a.privacy_status] || a.privacy_status;
+                  const ready = readyAssetIds.includes(a.id);
+                  return (
+                    <li key={a.id} className="rounded-md border overflow-hidden text-sm flex flex-col">
+                      <div className="aspect-square bg-slate-100 relative">
+                        {thumb ? (
+                          a.media_kind === 'video' ? (
+                            <video src={thumb} className="absolute inset-0 h-full w-full object-cover" muted playsInline />
+                          ) : (
+                            <img src={thumb} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                          )
                         ) : (
-                          <img src={thumb} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                        )
-                      ) : (
-                        <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 px-2 text-center">
-                          Preview preparing
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-2 space-y-1.5 flex-1 flex flex-col">
-                      <p className="text-[11px] text-slate-600 leading-snug">
-                        {review} · {privacy}
-                      </p>
-                      <p className="truncate text-[11px] text-slate-500">{a.original_filename}</p>
-                      <div className="flex flex-wrap gap-1.5 mt-auto">
-                        <button
-                          type="button"
-                          disabled={mediaBusyId === a.id || selfUploadBusy}
-                          className="rounded-md border px-2.5 py-1.5 text-xs min-h-[36px] text-slate-700"
-                          onClick={() => openAssignedMedia(a.id, 'preview')}
-                        >
-                          Preview
-                        </button>
-                        <button
-                          type="button"
-                          disabled={mediaBusyId === a.id || selfUploadBusy}
-                          className="rounded-md border px-2.5 py-1.5 text-xs min-h-[36px] text-slate-700"
-                          onClick={() => downloadOne(a)}
-                        >
-                          Download
-                        </button>
+                          <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 px-2 text-center">
+                            Preview preparing
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+                      <div className="p-2 space-y-1">
+                        <p className="text-[11px] text-slate-600">
+                          {ready ? 'Ready to submit' : a.processing_status || 'Uploaded'} · {privacy}
+                        </p>
+                        <p className="truncate text-[11px] text-slate-500">{a.original_filename}</p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         </section>
       )}
 
-      <section className="rounded-xl border bg-white p-4 space-y-3">
-        <h3 className="text-base font-semibold text-slate-900">Submissions</h3>
-        <p className="text-xs text-slate-500">
-          Upload a draft for owner review. Approval is not publishing.
-        </p>
-        <label className="block text-sm">
-          <span className="font-medium">Title</span>
-          <input
-            className="mt-1 w-full rounded-md border px-3 py-2 min-h-[44px]"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="font-medium">Notes for owner</span>
-          <textarea
-            className="mt-1 w-full rounded-md border px-3 py-2"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-        </label>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="video/*,.mp4,.mov"
-          className="hidden"
-          onChange={(e) => uploadReel(e.target.files?.[0])}
-        />
-        <button
-          type="button"
-          disabled={busy}
-          className="rounded-md bg-blue-600 text-white px-4 py-2.5 text-sm min-h-[44px]"
-          onClick={() => fileRef.current?.click()}
-        >
-          {busy ? 'Uploading…' : 'Upload draft deliverable'}
-        </button>
-      </section>
-
-      <section className="space-y-3">
-        <h3 className="font-medium text-slate-900">Your submissions</h3>
-        {projects.length === 0 && <p className="text-sm text-slate-600">No submissions yet.</p>}
+      <section className="space-y-3" data-testid="contributor-my-submissions">
+        <h3 className="font-medium text-slate-900">My Submissions</h3>
+        <p className="text-xs text-slate-500">Business review state — same Submission ID across revisions.</p>
+        {mySubmissions.length === 0 && projects.length === 0 && (
+          <p className="text-sm text-slate-600">No submissions yet.</p>
+        )}
+        {mySubmissions.map((s) => {
+          const typeBadge = SUBMISSION_TYPES.find((t) => t.id === s.submission_type)?.badge || s.submission_type;
+          return (
+            <div key={s.id} className="rounded-xl border bg-white p-4 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-semibold tracking-wide rounded bg-slate-100 px-1.5 py-0.5 text-slate-700">
+                  {typeBadge}
+                </span>
+                <span className="font-mono text-xs text-slate-600">{s.public_id}</span>
+              </div>
+              <div className="font-medium text-slate-900">{s.title || 'Untitled'}</div>
+              <div className="text-sm text-slate-600">
+                {SUBMISSION_REVIEW_LABELS[s.review_status] || s.review_status}
+                {s.submitted_at
+                  ? ` · ${new Date(s.submitted_at).toLocaleString(undefined, {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}`
+                  : ''}
+                {` · v${s.latest_version_number || 1}`}
+              </div>
+              {s.context_kind && s.context_kind !== 'general' && (
+                <div className="text-xs text-slate-500">
+                  Context: {s.context_kind}
+                  {s.context_label ? ` · ${s.context_label}` : ''}
+                </div>
+              )}
+            </div>
+          );
+        })}
         {projects.map((p) => {
           const versions = (p.mil_reel_versions || []).sort((a, b) => b.version_number - a.version_number);
           const latest = versions[0];
+          const alreadyListed = mySubmissions.some((s) => s.reel_project_id === p.id);
+          if (alreadyListed) {
+            return latest?.status === 'creator_draft' ? (
+              <div key={`draft-actions-${p.id}`} className="rounded-xl border bg-white p-4 space-y-2">
+                <div className="font-medium">{p.title}</div>
+                <div className="text-sm text-slate-600">Draft reel — not yet submitted</div>
+                <button
+                  type="button"
+                  className="rounded-md border px-3 py-2 text-sm min-h-[44px]"
+                  onClick={async () => {
+                    try {
+                      await submitReelVersion(latest.id);
+                      setSubmitConfirm({
+                        publicId: '(see My Submissions)',
+                        submittedAt: new Date().toISOString(),
+                        typeLabel: 'Reel',
+                      });
+                      setMessage(null);
+                      await load();
+                    } catch (err) {
+                      setError(err.message || 'Submit failed');
+                    }
+                  }}
+                >
+                  Submit for Review
+                </button>
+              </div>
+            ) : null;
+          }
           return (
             <div key={p.id} className="rounded-xl border bg-white p-4 space-y-2">
               <div className="font-medium">{p.title}</div>
@@ -753,18 +1064,7 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
                 <div className="text-sm text-slate-700">
                   Current version v{latest.version_number}: {latest.status}
                   {latest.review_notes ? ` · Feedback: ${latest.review_notes}` : ''}
-                  {latest.review_decision === 'denied' && !latest.review_notes ? ' · Rejected' : ''}
                 </div>
-              )}
-              {versions.length > 1 && (
-                <ul className="text-xs text-slate-500 space-y-0.5">
-                  {versions.map((v) => (
-                    <li key={v.id}>
-                      v{v.version_number}: {v.status}
-                      {v.id === latest?.id ? ' (current)' : ''}
-                    </li>
-                  ))}
-                </ul>
               )}
               <div className="flex flex-wrap gap-2">
                 {latest?.status === 'creator_draft' && (
@@ -772,12 +1072,37 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
                     type="button"
                     className="rounded-md border px-3 py-2 text-sm min-h-[44px]"
                     onClick={async () => {
-                      await submitReelVersion(latest.id);
-                      setMessage('Submitted for owner review.');
-                      await load();
+                      try {
+                        await submitReelVersion(latest.id);
+                        setMessage(null);
+                        setSubmitConfirm({
+                          publicId: '(refreshing…)',
+                          submittedAt: new Date().toISOString(),
+                          typeLabel: 'Reel',
+                        });
+                        await load();
+                        const { data: auth } = await supabase.auth.getUser();
+                        if (auth?.user?.id) {
+                          const subs = await listSubmissions({
+                            contributorUserId: auth.user.id,
+                            includeDrafts: true,
+                            limit: 40,
+                          });
+                          const match = (subs || []).find((s) => s.reel_project_id === p.id);
+                          if (match?.public_id) {
+                            setSubmitConfirm({
+                              publicId: match.public_id,
+                              submittedAt: match.submitted_at || new Date().toISOString(),
+                              typeLabel: 'Reel',
+                            });
+                          }
+                        }
+                      } catch (err) {
+                        setError(err.message || 'Submit failed');
+                      }
                     }}
                   >
-                    Submit for review
+                    Submit for Review
                   </button>
                 )}
                 {['denied', 'revision_requested', 'approved_to_post'].includes(latest?.status) && (

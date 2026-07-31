@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import {
   acceptAiSuggestions,
@@ -7,14 +7,17 @@ import {
   fetchReviewBundle,
   keepAsset,
   listAssets,
+  listSubmissions,
   queueAiAnalysis,
   restrictAsset,
+  reviewContentSubmission,
   setAssetLifecycle,
   setPermittedUse,
   verifyAssetMetadata,
 } from '@/lib/mediaIntel/api';
 import AnalysisOutcomeCard from '@/components/media/AnalysisOutcomeCard';
 import { buildAnalysisOutcome } from '@/lib/mediaIntel/analysisDisplay';
+import { REVIEW_QUEUE_FILTERS, SUBMISSION_REVIEW_LABELS, SUBMISSION_TYPES } from '@/lib/mediaIntel/constants';
 
 function isContributorSelfAsset(asset) {
   const batch = asset?.mil_upload_batches;
@@ -22,13 +25,26 @@ function isContributorSelfAsset(asset) {
   return row?.source_label === 'contributor_self';
 }
 
+function submissionPrimaryAsset(submission) {
+  const links = [...(submission?.mil_submission_assets || [])].sort(
+    (a, b) => (a.sort_order || 0) - (b.sort_order || 0),
+  );
+  return links[0]?.mil_assets || null;
+}
+
 export default function MediaReviewQueue({ contributorOnly = false } = {}) {
   const { caps } = useOutletContext();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const fromContributors =
     contributorOnly || searchParams.get('source') === 'contributor';
+  const queueFilter = fromContributors
+    ? 'needs_review'
+    : searchParams.get('filter') || 'needs_review';
   const [assets, setAssets] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
   const [bundle, setBundle] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [thumbUrls, setThumbUrls] = useState({});
@@ -39,15 +55,71 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
 
+  const queueRows = useMemo(() => {
+    const subRows = (submissions || []).map((s) => {
+      const asset = submissionPrimaryAsset(s);
+      const typeMeta = SUBMISSION_TYPES.find((t) => t.id === s.submission_type);
+      return {
+        kind: 'submission',
+        id: `sub-${s.id}`,
+        submissionId: s.id,
+        assetId: asset?.id || null,
+        reelVersionId: s.current_reel_version_id || null,
+        submissionType: s.submission_type,
+        typeBadge: typeMeta?.badge || s.submission_type,
+        title: s.title || asset?.original_filename || 'Untitled',
+        publicId: s.public_id,
+        reviewStatus: s.review_status,
+        actionOwner: s.action_owner,
+        submittedAt: s.submitted_at,
+        version: s.latest_version_number || 1,
+        asset,
+        submission: s,
+      };
+    });
+
+    // Staff phone-dump intake (not contributor_self) stays visible in needs_review / all / raw.
+    const showStaffIntake =
+      !fromContributors &&
+      (queueFilter === 'needs_review' || queueFilter === 'all' || queueFilter === 'raw_video');
+    const staffRows = showStaffIntake
+      ? (assets || [])
+          .filter((a) => !isContributorSelfAsset(a))
+          .map((a) => ({
+            kind: 'asset',
+            id: `asset-${a.id}`,
+            submissionId: null,
+            assetId: a.id,
+            reelVersionId: null,
+            submissionType: a.media_kind === 'video' ? 'raw_video' : 'social_post',
+            typeBadge: a.media_kind === 'video' ? 'RAW VIDEO' : 'PHOTO',
+            title: a.original_filename || 'Untitled',
+            publicId: null,
+            reviewStatus: 'awaiting_owner_review',
+            actionOwner: 'owner',
+            submittedAt: a.created_at,
+            version: 1,
+            asset: a,
+            submission: null,
+          }))
+      : [];
+
+    return [...subRows, ...staffRows].sort(
+      (a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0),
+    );
+  }, [submissions, assets, fromContributors, queueFilter]);
+
   /** Best-effort queue thumbs via authorized derivatives only (never originals). */
   const loadQueueThumbs = async (rows) => {
     setThumbsReady(false);
     const next = {};
     await Promise.all(
-      (rows || []).map(async (asset) => {
+      (rows || []).map(async (row) => {
+        const asset = row.asset;
+        if (!asset?.id) return;
         try {
           const url = await assetPreviewUrl(asset);
-          if (url) next[asset.id] = url;
+          if (url) next[row.id] = url;
         } catch {
           /* thumbnail failure must not break the queue */
         }
@@ -60,26 +132,60 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
   const loadQueue = async () => {
     setLoading(true);
     try {
-      const rows = await listAssets({
-        humanReviewStatus: 'pending',
-        archived: false,
-        trashed: false,
-        limit: 100,
-        contributorSelf: fromContributors || undefined,
-      });
-      setAssets(rows);
-      void loadQueueThumbs(rows);
-      if (selectedId && !rows.some((r) => r.id === selectedId)) {
-        setSelectedId(rows[0]?.id || null);
-        if (!rows[0]) {
+      let subs = [];
+      try {
+        subs = await listSubmissions({
+          queueFilter: fromContributors ? 'needs_review' : queueFilter,
+          limit: 100,
+        });
+      } catch (err) {
+        // Migration not applied yet — fall back to legacy asset queue.
+        console.warn('listSubmissions unavailable; falling back to asset queue', err);
+        subs = [];
+      }
+
+      let legacyAssets = [];
+      if (!fromContributors && (queueFilter === 'needs_review' || queueFilter === 'all' || queueFilter === 'raw_video')) {
+        legacyAssets = await listAssets({
+          humanReviewStatus: 'pending',
+          archived: false,
+          trashed: false,
+          limit: 100,
+        });
+      } else if (fromContributors && subs.length === 0) {
+        // Compat: show contributor_self pending until backfill/migration is live.
+        legacyAssets = await listAssets({
+          humanReviewStatus: 'pending',
+          archived: false,
+          trashed: false,
+          limit: 100,
+          contributorSelf: true,
+        });
+      }
+
+      setSubmissions(subs);
+      setAssets(legacyAssets);
+
+      const mapped = [];
+      // thumbs loaded after rows computed in effect below
+      const firstAssetId =
+        submissionPrimaryAsset(subs[0])?.id ||
+        legacyAssets.find((a) => fromContributors || !isContributorSelfAsset(a))?.id ||
+        null;
+      if (selectedId && !legacyAssets.some((r) => r.id === selectedId) && !subs.some((s) => submissionPrimaryAsset(s)?.id === selectedId)) {
+        setSelectedId(firstAssetId);
+        setSelectedSubmissionId(subs[0]?.id || null);
+        if (!firstAssetId) {
           setBundle(null);
           setPreviewUrl(null);
           setThumbUrls({});
           setThumbsReady(true);
         }
-      } else if (!selectedId && rows[0]) {
-        setSelectedId(rows[0].id);
+      } else if (!selectedId && firstAssetId) {
+        setSelectedId(firstAssetId);
+        setSelectedSubmissionId(subs[0]?.id || null);
       }
+      void mapped;
     } catch (err) {
       setError(err.message);
     } finally {
@@ -89,11 +195,17 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
 
   useEffect(() => {
     setSelectedId(null);
+    setSelectedSubmissionId(null);
     setBundle(null);
     setPreviewUrl(null);
     loadQueue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fromContributors]);
+  }, [fromContributors, queueFilter]);
+
+  useEffect(() => {
+    void loadQueueThumbs(queueRows);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submissions, assets, queueFilter, fromContributors]);
 
   useEffect(() => {
     if (!selectedId) return undefined;
@@ -153,18 +265,25 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
     const onKey = (e) => {
       if (!caps.canVerify) return;
       if (e.target?.tagName === 'INPUT' || e.target?.tagName === 'TEXTAREA' || e.target?.tagName === 'SELECT') return;
+      const idx = queueRows.findIndex((r) => r.assetId === selectedId || r.submissionId === selectedSubmissionId);
       if (e.key === 'j' || e.key === 'ArrowDown') {
-        const idx = assets.findIndex((a) => a.id === selectedId);
-        if (idx >= 0 && idx < assets.length - 1) setSelectedId(assets[idx + 1].id);
+        if (idx >= 0 && idx < queueRows.length - 1) {
+          const next = queueRows[idx + 1];
+          setSelectedId(next.assetId);
+          setSelectedSubmissionId(next.submissionId);
+        }
       }
       if (e.key === 'k' || e.key === 'ArrowUp') {
-        const idx = assets.findIndex((a) => a.id === selectedId);
-        if (idx > 0) setSelectedId(assets[idx - 1].id);
+        if (idx > 0) {
+          const prev = queueRows[idx - 1];
+          setSelectedId(prev.assetId);
+          setSelectedSubmissionId(prev.submissionId);
+        }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [assets, selectedId, caps.canVerify]);
+  }, [queueRows, selectedId, selectedSubmissionId, caps.canVerify]);
 
   const latestAnalysis = bundle?.analyses?.[0];
   const suggested = latestAnalysis?.suggested || {};
@@ -257,78 +376,95 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
       className="space-y-4"
       data-testid={fromContributors ? 'media-received-from-contributors' : 'media-review-queue'}
     >
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">
-            {fromContributors ? 'Received from contributors' : 'Review Queue'}
-          </h2>
-          <p className="text-sm text-slate-600">
-            {fromContributors
-              ? 'Phone shots and videos contributors sent via Upload my shots. Privacy/quality check before library use.'
-              : 'All pending intake — staff phone dumps and contributor uploads.'}
-          </p>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">
+              {fromContributors ? 'Received from contributors' : 'Review Queue'}
+            </h2>
+            <p className="text-sm text-slate-600">
+              {fromContributors
+                ? 'Contributor submissions awaiting owner action. Upload-only drafts never appear here.'
+                : 'Unified queue for reels, raw media, and social posts — plus staff phone-dump intake.'}
+            </p>
+          </div>
+          {contributorOnly && (
+            <Link
+              to="/media/review"
+              className="text-sm text-blue-700 underline-offset-2 hover:underline min-h-[40px] inline-flex items-center"
+            >
+              Open full Review Queue
+            </Link>
+          )}
         </div>
         {!contributorOnly && (
-          <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 text-sm" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={!fromContributors}
-              className={`rounded px-3 py-2 min-h-[40px] ${
-                !fromContributors ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'
-              }`}
-              onClick={() => setSearchParams({})}
-            >
-              All pending
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={fromContributors}
-              data-testid="media-review-from-contributors-tab"
-              className={`rounded px-3 py-2 min-h-[40px] ${
-                fromContributors ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'
-              }`}
-              onClick={() => setSearchParams({ source: 'contributor' })}
-            >
-              From contributors
-            </button>
-          </div>
-        )}
-        {contributorOnly && (
-          <Link
-            to="/media/review"
-            className="text-sm text-blue-700 underline-offset-2 hover:underline min-h-[40px] inline-flex items-center"
+          <div
+            className="flex flex-wrap gap-1 rounded-md border border-slate-200 bg-white p-1 text-sm"
+            role="tablist"
+            aria-label="Review queue filters"
+            data-testid="media-review-queue-filters"
           >
-            Open full Review Queue
-          </Link>
+            {REVIEW_QUEUE_FILTERS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                role="tab"
+                aria-selected={queueFilter === f.id}
+                data-testid={
+                  f.id === 'needs_review' ? 'media-review-from-contributors-tab' : `media-review-filter-${f.id}`
+                }
+                className={`rounded px-3 py-2 min-h-[40px] ${
+                  queueFilter === f.id ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'
+                }`}
+                onClick={() => setSearchParams(f.id === 'needs_review' ? {} : { filter: f.id })}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
       <div className="grid lg:grid-cols-[300px_1fr] gap-4">
       <aside className="rounded-xl border border-slate-200 bg-white overflow-hidden">
         <div className="px-3 py-2 border-b text-sm font-medium text-slate-800">
-          {fromContributors ? 'Contributor uploads' : 'Awaiting review'} ({assets.length})
+          {fromContributors ? 'Contributor submissions' : 'Queue'} ({queueRows.length})
         </div>
         <ul className="max-h-[70vh] overflow-y-auto divide-y" data-testid="media-review-queue-list">
-          {assets.length === 0 && (
+          {queueRows.length === 0 && (
             <li className="p-4 text-sm text-slate-500">
               {fromContributors
-                ? 'No contributor uploads waiting. When a creator uses Upload my shots, files appear here.'
-                : 'Queue is clear. New uploads appear here after intake.'}
+                ? 'No contributor submissions waiting. Upload-only drafts stay out of this queue.'
+                : 'Queue is clear for this filter.'}
             </li>
           )}
-          {assets.map((a) => {
-            const thumb = thumbUrls[a.id];
-            const fallbackLabel = a.media_kind === 'video' ? 'Video' : a.media_kind === 'photo' ? 'Photo' : 'Media';
-            const fromCreator = isContributorSelfAsset(a);
+          {queueRows.map((row) => {
+            const thumb = thumbUrls[row.id];
+            const fallbackLabel =
+              row.submissionType === 'reel'
+                ? 'Reel'
+                : row.asset?.media_kind === 'video'
+                  ? 'Video'
+                  : row.asset?.media_kind === 'photo'
+                    ? 'Photo'
+                    : 'Media';
+            const selected =
+              (row.submissionId && row.submissionId === selectedSubmissionId) ||
+              (row.assetId && row.assetId === selectedId && !row.submissionId);
             return (
-              <li key={a.id}>
+              <li key={row.id}>
                 <button
                   type="button"
-                  onClick={() => setSelectedId(a.id)}
+                  onClick={() => {
+                    if (row.submissionType === 'reel' && row.reelVersionId) {
+                      navigate(`/media/reel-review?versionId=${encodeURIComponent(row.reelVersionId)}`);
+                      return;
+                    }
+                    setSelectedId(row.assetId);
+                    setSelectedSubmissionId(row.submissionId);
+                  }}
                   className={`w-full text-left px-2.5 py-2 text-sm min-h-[52px] flex items-center gap-2.5 ${
-                    selectedId === a.id ? 'bg-blue-50 text-blue-900' : 'hover:bg-slate-50'
+                    selected ? 'bg-blue-50 text-blue-900' : 'hover:bg-slate-50'
                   }`}
                 >
                   <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded bg-slate-100">
@@ -340,9 +476,9 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
                         data-testid="media-review-queue-thumb"
                         onError={() => {
                           setThumbUrls((prev) => {
-                            if (!prev[a.id]) return prev;
+                            if (!prev[row.id]) return prev;
                             const copy = { ...prev };
-                            delete copy[a.id];
+                            delete copy[row.id];
                             return copy;
                           });
                         }}
@@ -357,10 +493,15 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
                     )}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">{a.original_filename}</span>
+                    <span className="block text-[10px] font-semibold tracking-wide text-slate-500">
+                      {row.typeBadge}
+                      {row.publicId ? ` · ${row.publicId}` : ''}
+                    </span>
+                    <span className="block truncate font-medium">{row.title}</span>
                     <span className="block text-xs text-slate-500 mt-0.5">
-                      {a.media_kind} · {a.processing_status}
-                      {fromCreator ? ' · contributor' : ''}
+                      {SUBMISSION_REVIEW_LABELS[row.reviewStatus] || row.reviewStatus}
+                      {` · v${row.version}`}
+                      {row.actionOwner === 'contributor' ? ' · waiting on contributor' : ''}
                     </span>
                   </span>
                 </button>
@@ -494,6 +635,102 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
             </div>
 
             <div className="sticky bottom-0 -mx-4 sm:-mx-5 px-4 sm:px-5 py-3 border-t bg-white/95 backdrop-blur space-y-2">
+              {selectedSubmissionId && (
+                <div className="flex flex-wrap gap-2 pb-2 border-b" data-testid="media-review-submission-actions">
+                  <button
+                    type="button"
+                    disabled={saving}
+                    className="rounded-md bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white min-h-[44px]"
+                    onClick={async () => {
+                      setSaving(true);
+                      setError(null);
+                      try {
+                        await reviewContentSubmission({
+                          submissionId: selectedSubmissionId,
+                          decision: 'accept_into_library',
+                        });
+                        setMessage('Submission accepted into library.');
+                        await loadQueue();
+                      } catch (err) {
+                        setError(err.message || 'Accept failed');
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                  >
+                    Accept into library
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    className="rounded-md border px-4 py-2.5 text-sm min-h-[44px]"
+                    onClick={async () => {
+                      setSaving(true);
+                      setError(null);
+                      try {
+                        await reviewContentSubmission({
+                          submissionId: selectedSubmissionId,
+                          decision: 'request_changes',
+                        });
+                        setMessage('Changes requested — waiting on contributor.');
+                        await loadQueue();
+                      } catch (err) {
+                        setError(err.message || 'Request changes failed');
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                  >
+                    Request changes
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    className="rounded-md border border-red-300 text-red-800 px-4 py-2.5 text-sm min-h-[44px]"
+                    onClick={async () => {
+                      setSaving(true);
+                      setError(null);
+                      try {
+                        await reviewContentSubmission({
+                          submissionId: selectedSubmissionId,
+                          decision: 'reject',
+                        });
+                        setMessage('Submission rejected.');
+                        await loadQueue();
+                      } catch (err) {
+                        setError(err.message || 'Reject failed');
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                  >
+                    Reject
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    className="rounded-md border px-4 py-2.5 text-sm min-h-[44px]"
+                    onClick={async () => {
+                      setSaving(true);
+                      setError(null);
+                      try {
+                        await reviewContentSubmission({
+                          submissionId: selectedSubmissionId,
+                          decision: 'restrict',
+                        });
+                        setMessage('Linked media restricted for privacy review.');
+                        await loadQueue();
+                      } catch (err) {
+                        setError(err.message || 'Restrict failed');
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                  >
+                    Restrict
+                  </button>
+                </div>
+              )}
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
