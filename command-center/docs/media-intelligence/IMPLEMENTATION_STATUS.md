@@ -4,14 +4,15 @@
 **Verified HEAD at this status edit:** `28800eca7fd89bc58f7d6400c0353067a9a2076a`  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
 
-## Owner Received inbox (2026-07-31) — SOURCE-ONLY → deploy next
+## Owner Received inbox (2026-07-31) — DEPLOYED on production
 
 | Field | Value |
 |---|---|
 | Product | Dedicated **Received** nav + dashboard section for `contributor_self` uploads; Review Queue tab “From contributors” |
-| Why | Owner could not find Treezy’s video in the generic queue/dashboard |
-| Known prod row | `MVI_4463.mp4` pending on `wwyx` (Treezy / batch `contributor_self`) |
-| Evidence tier | **SOURCE-ONLY** until Hostinger production redeploy |
+| Hosted | `https://app.bhfos.com` SHA **c532ad7cc2b3** / `production` |
+| Open | https://app.bhfos.com/media/received |
+| Known prod row | `MVI_4463.mp4` pending (Treezy / `contributor_self`) should appear there |
+| Evidence tier | **DEPLOYED** (frontend). Owner browser USABLE pending hard refresh |
 
 ## Production — contributor self-upload + Treezy role (2026-07-30/31) — DEPLOYED
 
