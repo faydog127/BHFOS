@@ -89,6 +89,7 @@ export async function listAssets(filters = {}) {
   if (filters.humanReviewStatus) q = q.eq('human_review_status', filters.humanReviewStatus);
   if (filters.privacyStatus) q = q.eq('privacy_status', filters.privacyStatus);
   if (filters.processingStatus) q = q.eq('processing_status', filters.processingStatus);
+  if (filters.createdByUserId) q = q.eq('created_by_user_id', filters.createdByUserId);
   if (filters.archived === true) q = q.not('archived_at', 'is', null);
   else if (filters.archived === false) q = q.is('archived_at', null);
   if (filters.trashed === true) q = q.not('trashed_at', 'is', null);

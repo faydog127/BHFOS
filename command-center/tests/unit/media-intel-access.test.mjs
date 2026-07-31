@@ -129,6 +129,7 @@ describe('MIL upload session + signed access (no tenant)', () => {
     assert.match(fn, /token_hash/);
     assert.match(fn, /sha256Hex/);
     assert.match(fn, /action === 'create'/);
+    assert.match(fn, /action === 'create_contributor_session'/);
     assert.match(fn, /action === 'validate'/);
     assert.match(fn, /action === 'mint_upload'/);
     assert.match(fn, /action === 'revoke'/);

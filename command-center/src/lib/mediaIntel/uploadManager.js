@@ -120,6 +120,17 @@ export async function createUploadSession({ label, sourcePhone, sourcePerson, ex
   return result.payload;
 }
 
+/** Contributor JWT self-scoped session for Upload my shots (not owner phone QR). */
+export async function createContributorUploadSession({ sourcePerson, expiresHours } = {}) {
+  const result = await callUploadSession({
+    action: 'create_contributor_session',
+    sourcePerson: sourcePerson || null,
+    expiresHours: expiresHours || 12,
+  });
+  if (!result.ok) throw raiseSessionError(result, 'Could not start contributor self-upload');
+  return result.payload;
+}
+
 export async function validateUploadSession(token) {
   const result = await callUploadSession({ action: 'validate', token });
   if (!result.ok) throw raiseSessionError(result, 'Upload session is not usable');

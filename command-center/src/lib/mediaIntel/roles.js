@@ -52,6 +52,8 @@ export function milCapabilities(role) {
     // for legacy accounts. Phone uploads are authorized purely by a bearer session
     // token (mil_upload_sessions) minted by an owner/admin, never by this role.
     canUpload: isLibraryStaff,
+    // Contributor self-shot intake on /creator — not broad library staff upload.
+    canContributorSelfUpload: r === 'reel_creator',
     canVerify: REVIEWERS.has(r),
     canLifecycleCleanup: REVIEWERS.has(r),
     canPermanentDelete: OWNERS.has(r),

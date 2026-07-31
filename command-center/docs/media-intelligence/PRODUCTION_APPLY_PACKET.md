@@ -45,8 +45,11 @@ Related: [`STAGING_APPLY_PACKET.md`](./STAGING_APPLY_PACKET.md), [`ENV_CONTRACT.
 | `20260728010000` | `supabase/migrations/20260728010000_media_intel_client_upload_id.sql` |
 | `20260728120000` | `supabase/migrations/20260728120000_media_intel_quality_cleanup_lifecycle.sql` |
 | `20260728140000` | `supabase/migrations/20260728140000_media_intel_contributor_workspace.sql` |
+| `20260730180000` | `supabase/migrations/20260730180000_media_intel_contributor_self_upload.sql` |
 
 Preflight (read-only): list `supabase_migrations.schema_migrations` on production and skip any version already present. Never re-apply a version that is already recorded.
+
+**Apply note (2026-07-31):** Production had unrelated older CRM migration gaps that blocked plain `db push`. MIL versions were applied file-by-file with `supabase db query --linked -f` and then recorded in `schema_migrations` — do **not** use `db push --include-all` to force non-MIL historical gaps as part of an MIL release.
 
 ## Edge functions (after secrets)
 

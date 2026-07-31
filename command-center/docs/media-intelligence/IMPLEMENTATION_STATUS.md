@@ -1,23 +1,60 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** production apply packet + release kickoff (see git log)  
+**Verified HEAD at this status edit:** `28800eca7fd89bc58f7d6400c0353067a9a2076a`  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
 
-## Production release kickoff (2026-07-30) — PACKET + PR PATH; MUTATIONS BLOCKED ON CREDENTIALS
+## Production — contributor self-upload + Treezy role (2026-07-30/31) — DEPLOYED
 
 | Field | Value |
 |---|---|
-| Founder intent | Proceed with remaining production jobs (merge → prod migrate → edges → `app.bhfos.com` deploy → synthetic smoke) |
+| Production home | `https://app.bhfos.com` + Supabase **`wwyxohjnyqnegzbxtuxs`** |
+| Git tip deployed | `28800eca7fd8` (`feat/media-intelligence-library`; PR [#128](https://github.com/faydog127/BHFOS/pull/128) open for `main`) |
+| Migrations | Twelve MIL versions `20260725120000`…`20260730180000` applied on `wwyx` (no unrelated older CRM gaps forced via `db push --include-all`) |
+| Secrets | `MIL_RECONCILE_KEY` (new prod entropy) + `MIL_ALLOWED_ORIGINS` (includes `https://app.bhfos.com`); existing `OPENAI_API_KEY` retained |
+| Edges | All seven `media-intel-*` ACTIVE on `wwyx` (deployed `--use-api`) |
+| Frontend | Hostinger `production` / `app.bhfos.com` `build-info` SHA **28800eca7fd8** / `environment=production` / `migrationVersion=20260730180000`; bundle Supabase ref **only** `wwyxohjnyqnegzbxtuxs` |
+| Hosted UI marker | `CreatorRoutes-2351ca8d.js` contains Upload my shots / My shots / contributor-upload-my-shots |
+| Deploy archive | `command-center/tmp/production-28800eca7fd8-20260731T010029Z.zip` (auth `MIL-PROD-CONTRIBUTOR-SELF-UPLOAD-2026-07-30`) |
+| Treezy | `treezyincent@gmail.com` on prod Auth (confirmed) + `app_user_roles.role = reel_creator` (**no** `tenant_id` column on prod) |
+| Staging remains | `https://mil.bhfos.com` / `sdzhdupekcnekesbtxsl` untouched as staging |
+| Explicit non-actions | No reconcile cron; website promote stays 503 |
+| Evidence tier | **DEPLOYED** (prod schema + edges + CRM frontend + role). Browser **USABLE** for Treezy Upload my shots still owner/contributor hands-on |
+
+## Contributor self-upload — Upload my shots (2026-07-30) — STAGING DEPLOYED; browser USABLE pending
+
+| Field | Value |
+|---|---|
+| Commit | `52527c59de2b0817ae770d1d2f648f1fbf9b7ed3` |
+| Product | Contributor JWT mints `create_contributor_session`; quarantine finalize; Review Queue; auto-assign to uploader; My shots list on `/creator` |
+| Schema | `20260730180000_media_intel_contributor_self_upload.sql` — **applied** on `sdzhdupekcnekesbtxsl` |
+| Edge | `media-intel-upload-session` + `media-intel-sign` redeployed (`--use-api`); creator mint smoke HTTP 200 + token |
+| UI | Hosted `CreatorRoutes-92513759.js` has Upload my shots / contributor-upload-my-shots |
+| Hosted frontend | `https://mil.bhfos.com` SHA **52527c59de2b** / `mil-staging` / `migrationVersion=20260730180000` / asset `2dbb7ce8b75daa50`; Supabase only `sdzhdupekcnekesbtxsl` |
+| Deploy archive | `command-center/tmp/mil-staging-52527c59de2b-20260730T211125Z.zip` (auth `MIL-CONTRIBUTOR-SELF-UPLOAD-FRONTEND-2026-07-30`) |
+| Tests | `npm run test:media-intel-helpers` **181 pass** |
+| Non-goals | No full library browse; no originals; no reconcile cron |
+| Evidence tier | **DEPLOYED** (API mint smoke). Browser USABLE (1–2 JPEG self-upload → Review → My shots) still owner/contributor hands-on |
+
+## Owner-led acceptance (2026-07-30) — CONTRIBUTOR ACCEPT + DENY USABLE (ERRON)
+
+| Field | Value |
+|---|---|
+| Observer | Erron (owner-led hands-on) |
+| Host | `https://mil.bhfos.com` staging (`build-info` tip **39e4b941dc63** / `mil-staging` at record time) |
+| Observed | Accept **and** denial tested from the contributor path — **worked** (owner-confirmed) |
+| Prior distinct-identity (2026-07-29) | owner assignment → separate contributor login → preview/download → submit → owner review |
+| Evidence tier | **USABLE** (owner-confirmed). Closes the prior gap that final accept/deny had not been evidenced. |
+| Still not claimed | changes-requested / revised-version preservation cycle (unless later separately confirmed) |
+| Production | Code merged via PR #127 (`9d70ef9` on `main`); production migrate/edge/CRM deploy still gated on credentials per packet below |
+
+## Production release kickoff (2026-07-30) — SUPERSEDED BY PROD DEPLOY SECTION ABOVE
+
+| Field | Value |
+|---|---|
 | Packet | [`PRODUCTION_APPLY_PACKET.md`](./PRODUCTION_APPLY_PACKET.md) |
-| Production home | CRM `https://app.bhfos.com` + Supabase **`wwyxohjnyqnegzbxtuxs`** (not `mil.bhfos.com`) |
-| Staging remains | `https://mil.bhfos.com` / `sdzhdupekcnekesbtxsl` / Hostinger target `mil-staging` |
-| Local helpers | `npm run test:media-intel-helpers` **180 pass / 0 fail** (this session) |
-| Hosted staging tip | `https://mil.bhfos.com` `build-info` SHA **39e4b941dc63** / `mil-staging` (unchanged by this kickoff) |
-| Blocking for mutate | Process/User `SUPABASE_ACCESS_TOKEN` **absent**; linked CLI project is staging only; production `VITE_*` for CRM build not confirmed in this worktree |
-| Available (names) | Sibling operator env has `HOSTINGER_API_TOKEN` (for later `production` Hostinger deploy) — not used yet |
-| Explicit non-actions until unblocked | No prod migration apply, no prod edge deploy, no `app.bhfos.com` Hostinger mutate, no reconcile cron, no website promote |
-| Next mutate gate | Provide `SUPABASE_ACCESS_TOKEN` (management PAT) for project `wwyxohjnyqnegzbxtuxs` + confirm production frontend `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` for that project; then execute packet steps 3–8 after PR/CI/merge |
+| Git (earlier) | PR [#127](https://github.com/faydog127/BHFOS/pull/127) **merged** to `main` (`9d70ef9`); self-upload tip via PR [#128](https://github.com/faydog127/BHFOS/pull/128) |
+| Outcome | Prod migrate + edges + `app.bhfos.com` Hostinger deploy completed 2026-07-31 (see **Production — contributor self-upload** section) |
 
 ## Owner-led acceptance (2026-07-29) — DISTINCT-IDENTITY WORKFLOW OBSERVED BY ERRON
 
@@ -25,10 +62,10 @@
 |---|---|
 | Observer | Erron (owner-led hands-on) |
 | Observed | owner assignment → genuinely separate contributor login → contributor preview/download → contributor submission → owner review |
-| Not claimed here | changes-requested cycle, revised-version preservation, or final approval — not evidenced as performed in this acceptance |
-| Management API | Relisting **unavailable** this session (`SUPABASE_ACCESS_TOKEN` absent). Do not treat frontend work as blocked. Do not use anon/service-role/JWT as a management token. |
+| Follow-up (2026-07-30) | Accept **and** denial from contributor path confirmed **USABLE** — see section above |
+| Management API | Relisting **unavailable** when recorded (`SUPABASE_ACCESS_TOKEN` absent). Do not treat frontend work as blocked. Do not use anon/service-role/JWT as a management token. |
 | Credential scan (prior + this session) | No credential-exposure incident. Hosted/frontend artifact: no `SUPABASE_ACCESS_TOKEN`, no `sbp_*` management-token pattern; any `service_role` hit is a role-name literal, not an embedded key. |
-| Evidence tier | **USABLE** for the observed steps above (owner-confirmed). Staging ship checklist complete enough for production packet; remaining = PR/merge + production apply. |
+| Evidence tier | **USABLE** for the observed steps (owner-confirmed). |
 
 ## Contributor Workspace (2026-07-28) — FRONTEND DEPLOYED; owner-observed acceptance recorded
 
@@ -455,9 +492,9 @@ Accepted (SOURCE + unit/contract tests + local SQL where noted; staging-unproven
 
 Still open (production path — Founder authorized kickoff 2026-07-30):
 
-1. **Exact next action:** PR `feat/media-intelligence-library` → `main` → CI green → merge → execute [`PRODUCTION_APPLY_PACKET.md`](./PRODUCTION_APPLY_PACKET.md) on `wwyxohjnyqnegzbxtuxs` + Hostinger `production` (`app.bhfos.com`)
+1. **Exact next action:** Execute [`PRODUCTION_APPLY_PACKET.md`](./PRODUCTION_APPLY_PACKET.md) on `wwyxohjnyqnegzbxtuxs` + Hostinger `production` (`app.bhfos.com`) once credentials are available (PR #127 already merged)
 2. **Authorization boundary:** Founder authorized production release intent; mutating steps still require `SUPABASE_ACCESS_TOKEN` + production `VITE_*`. No reconcile cron. No website promote. Leave mil-staging untouched as staging.
-3. Staging acceptance (distinct-identity) already owner-observed **USABLE**; list-thumb browser USABLE optional spot-check only
+3. Staging acceptance: distinct-identity + contributor **accept/deny** owner-confirmed **USABLE** (2026-07-30)
 
 ### Active defects (honest)
 
