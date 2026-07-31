@@ -6,7 +6,6 @@ import {
   assetPreviewUrl,
   fetchReviewBundle,
   keepAsset,
-  listAssets,
   listSubmissions,
   queueAiAnalysis,
   resolveReviewPreviewAccess,
@@ -19,22 +18,14 @@ import {
 } from '@/lib/mediaIntel/api';
 import { requestSignedMediaUrl } from '@/lib/mediaIntel/signedAccess';
 import { PREVIEW_STATES, buildReelReviewPath } from '@/lib/mediaIntel/previewAccess';
+import {
+  buildSubmissionQueueRows,
+  shouldIncludeStaffIntakeAssets,
+  submissionPrimaryAsset,
+} from '@/lib/mediaIntel/reviewQueueModel';
 import AnalysisOutcomeCard from '@/components/media/AnalysisOutcomeCard';
 import { buildAnalysisOutcome } from '@/lib/mediaIntel/analysisDisplay';
-import { REVIEW_QUEUE_FILTERS, SUBMISSION_REVIEW_LABELS, SUBMISSION_TYPES } from '@/lib/mediaIntel/constants';
-
-function isContributorSelfAsset(asset) {
-  const batch = asset?.mil_upload_batches;
-  const row = Array.isArray(batch) ? batch[0] : batch;
-  return row?.source_label === 'contributor_self';
-}
-
-function submissionPrimaryAsset(submission) {
-  const links = [...(submission?.mil_submission_assets || [])].sort(
-    (a, b) => (a.sort_order || 0) - (b.sort_order || 0),
-  );
-  return links[0]?.mil_assets || null;
-}
+import { REVIEW_QUEUE_FILTERS, SUBMISSION_REVIEW_LABELS } from '@/lib/mediaIntel/constants';
 
 export default function MediaReviewQueue({ contributorOnly = false } = {}) {
   const { caps } = useOutletContext();
@@ -44,7 +35,6 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
   const queueFilter = fromContributors
     ? 'needs_review'
     : searchParams.get('filter') || 'needs_review';
-  const [assets, setAssets] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
@@ -60,59 +50,14 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
 
-  const queueRows = useMemo(() => {
-    const subRows = (submissions || []).map((s) => {
-      const asset = submissionPrimaryAsset(s);
-      const typeMeta = SUBMISSION_TYPES.find((t) => t.id === s.submission_type);
-      return {
-        kind: 'submission',
-        id: `sub-${s.id}`,
-        submissionId: s.id,
-        assetId: asset?.id || null,
-        reelVersionId: s.current_reel_version_id || null,
-        submissionType: s.submission_type,
-        typeBadge: typeMeta?.badge || s.submission_type,
-        title: s.title || asset?.original_filename || 'Untitled',
-        publicId: s.public_id,
-        reviewStatus: s.review_status,
-        actionOwner: s.action_owner,
-        submittedAt: s.submitted_at,
-        version: s.latest_version_number || 1,
-        asset,
-        submission: s,
-      };
-    });
-
-    // Staff phone-dump intake (not contributor_self) stays visible in needs_review / all / raw.
-    const showStaffIntake =
-      !fromContributors &&
-      (queueFilter === 'needs_review' || queueFilter === 'all' || queueFilter === 'raw_video');
-    const staffRows = showStaffIntake
-      ? (assets || [])
-          .filter((a) => !isContributorSelfAsset(a))
-          .map((a) => ({
-            kind: 'asset',
-            id: `asset-${a.id}`,
-            submissionId: null,
-            assetId: a.id,
-            reelVersionId: null,
-            submissionType: a.media_kind === 'video' ? 'raw_video' : 'social_post',
-            typeBadge: a.media_kind === 'video' ? 'RAW VIDEO' : 'PHOTO',
-            title: a.original_filename || 'Untitled',
-            publicId: null,
-            reviewStatus: 'awaiting_owner_review',
-            actionOwner: 'owner',
-            submittedAt: a.created_at,
-            version: 1,
-            asset: a,
-            submission: null,
-          }))
-      : [];
-
-    return [...subRows, ...staffRows].sort(
-      (a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0),
-    );
-  }, [submissions, assets, fromContributors, queueFilter]);
+  // Fix C: actionable queues are mil_submissions only (never staff/legacy assets).
+  const queueRows = useMemo(
+    () =>
+      buildSubmissionQueueRows(submissions).sort(
+        (a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0),
+      ),
+    [submissions],
+  );
 
   const selectedRow = useMemo(
     () =>
@@ -165,52 +110,30 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
           limit: 100,
         });
       } catch (err) {
-        // Migration not applied yet — fall back to legacy asset queue.
-        console.warn('listSubmissions unavailable; falling back to asset queue', err);
+        // Do not fall back to staff/legacy asset lists — that polluted Needs review / Raw media.
+        console.warn('listSubmissions unavailable; showing empty submission queue', err);
         subs = [];
       }
 
-      let legacyAssets = [];
-      if (!fromContributors && (queueFilter === 'needs_review' || queueFilter === 'all' || queueFilter === 'raw_video')) {
-        legacyAssets = await listAssets({
-          humanReviewStatus: 'pending',
-          archived: false,
-          trashed: false,
-          limit: 100,
-        });
-      } else if (fromContributors && subs.length === 0) {
-        // Compat: show contributor_self pending until backfill/migration is live.
-        legacyAssets = await listAssets({
-          humanReviewStatus: 'pending',
-          archived: false,
-          trashed: false,
-          limit: 100,
-          contributorSelf: true,
-        });
+      // Guard: staff intake must never re-enter this view-model (Uploads / All Media / Phone upload instead).
+      if (shouldIncludeStaffIntakeAssets()) {
+        throw new Error('Staff intake assets must not be merged into Review Queue filters');
       }
 
       setSubmissions(subs);
-      setAssets(legacyAssets);
 
-      // Prefer first submission (may be reel-only with no asset), else staff asset.
       const firstSub = subs[0] || null;
-      const firstAssetId =
-        submissionPrimaryAsset(firstSub)?.id ||
-        legacyAssets.find((a) => fromContributors || !isContributorSelfAsset(a))?.id ||
-        null;
+      const firstAssetId = submissionPrimaryAsset(firstSub)?.id || null;
       const firstReelVersionId =
         firstSub?.submission_type === 'reel' ? firstSub.current_reel_version_id || null : null;
       const selectionStillPresent =
         (selectedSubmissionId && subs.some((s) => s.id === selectedSubmissionId))
-        || (selectedId && (
-          legacyAssets.some((r) => r.id === selectedId)
-          || subs.some((s) => submissionPrimaryAsset(s)?.id === selectedId)
-        ));
+        || (selectedId && subs.some((s) => submissionPrimaryAsset(s)?.id === selectedId));
 
       if (!selectionStillPresent) {
-        if (firstSub || firstAssetId) {
+        if (firstSub) {
           setSelectedId(firstAssetId);
-          setSelectedSubmissionId(firstSub?.id || null);
+          setSelectedSubmissionId(firstSub.id);
           setSelectedReelVersionId(firstReelVersionId);
         } else {
           setSelectedId(null);
@@ -222,9 +145,9 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
           setThumbUrls({});
           setThumbsReady(true);
         }
-      } else if (!selectedId && !selectedSubmissionId && (firstSub || firstAssetId)) {
+      } else if (!selectedId && !selectedSubmissionId && firstSub) {
         setSelectedId(firstAssetId);
-        setSelectedSubmissionId(firstSub?.id || null);
+        setSelectedSubmissionId(firstSub.id);
         setSelectedReelVersionId(firstReelVersionId);
       }
     } catch (err) {
@@ -248,7 +171,7 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
   useEffect(() => {
     void loadQueueThumbs(queueRows);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submissions, assets, queueFilter, fromContributors]);
+  }, [submissions, queueFilter, fromContributors]);
 
   useEffect(() => {
     if (!selectedId && !selectedReelVersionId) {
@@ -450,7 +373,7 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
             <p className="text-sm text-slate-600">
               {fromContributors
                 ? 'Contributor submissions awaiting owner action. Upload-only drafts never appear here.'
-                : 'Unified queue for reels, raw media, and social posts — plus staff phone-dump intake.'}
+                : 'Unified queue for finalized contributor submissions — reels, raw media, and social posts. Staff phone-dump and library intake stay in Uploads / All Media / Phone upload.'}
             </p>
           </div>
           {contributorOnly && (
@@ -493,14 +416,15 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
       <div className="grid lg:grid-cols-[minmax(0,300px)_minmax(0,1fr)] gap-4 min-w-0">
       <aside className="rounded-xl border border-slate-200 bg-white overflow-hidden min-w-0">
         <div className="px-3 py-2 border-b text-sm font-medium text-slate-800">
-          {fromContributors ? 'Contributor submissions' : 'Queue'} ({queueRows.length})
+          {fromContributors ? 'Contributor submissions' : 'Queue'}{' '}
+          <span data-testid="media-review-queue-count">({queueRows.length})</span>
         </div>
         <ul className="max-h-[70vh] overflow-y-auto divide-y" data-testid="media-review-queue-list">
           {queueRows.length === 0 && (
-            <li className="p-4 text-sm text-slate-500">
+            <li className="p-4 text-sm text-slate-500" data-testid="media-review-queue-empty">
               {fromContributors
                 ? 'No contributor submissions waiting. Upload-only drafts stay out of this queue.'
-                : 'Queue is clear for this filter.'}
+                : 'No finalized contributor submissions for this filter. Staff intake is not listed here.'}
             </li>
           )}
           {queueRows.map((row) => {

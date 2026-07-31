@@ -1,9 +1,20 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** `75bafc4dd3a57505592b9070d18a45f54c22273d`  
-**Upstream divergence at edit:** `origin/feat/media-intelligence-library` **0 behind / 0 ahead**  
+**Verified HEAD at this status edit:** _(set at Fix C commit)_  
+**Upstream divergence at edit:** _(record after push)_  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
+
+## Fix C — Review Queue filter semantics (2026-07-31) — STAGING ONLY
+
+| Field | Value |
+|---|---|
+| Mission | Contributor-submission filters only; exclude staff/legacy assets from Review Queue |
+| Root cause | Client merged `listAssets(human_review_status=pending)` staff rows into Needs review / Raw / All |
+| Fix | Stop loading/merging staff assets; `reviewQueueModel.js` builds submission-only rows; no schema migration |
+| Preserved | Fix A preview states; Fix B in-queue reel select + Open in Reel Review; Reel Review nav |
+| Non-goals | No prod; no storage/object/history mutation; no V2; no Reel Review removal |
+| Evidence tier | **SOURCE** + unit; staging deploy evidence below after Hostinger |
 
 ## Fix B — In-queue reel select/preview (2026-07-31) — STAGING DEPLOYED
 
