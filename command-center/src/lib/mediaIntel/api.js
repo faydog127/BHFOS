@@ -205,6 +205,13 @@ export async function resolveReviewPreviewAccess(asset) {
   return resolveAssetPreviewAccess(asset, { requestSignedMediaUrl });
 }
 
+/** Evidence-based preview for a reel version shown inline in the owner queue. */
+export async function resolveReviewReelPreviewAccess(reelVersionId) {
+  const { requestSignedMediaUrl } = await import('./signedAccess');
+  const { resolveReelPreviewAccess } = await import('./previewAccess');
+  return resolveReelPreviewAccess(reelVersionId, { requestSignedMediaUrl });
+}
+
 export async function fetchReviewBundle(assetId) {
   const [assetRes, aiRes, tagsRes, qualityRes, privacyRes, neighborsRes, relRes] = await Promise.all([
     supabase.from('mil_assets').select('*, mil_derivatives(*), mil_verified_metadata(*), mil_permitted_uses(*)').eq('id', assetId).single(),

@@ -136,7 +136,14 @@ describe('MIL unified submission Release A', () => {
     assert.match(review, /listSubmissions/);
     assert.match(review, /media-review-queue-filters/);
     assert.match(review, /REVIEW_QUEUE_FILTERS/);
-    assert.match(review, /reel-review\?versionId=/);
+    // Fix B: row click selects in place; specialized workspace is an explicit action.
+    assert.match(review, /selectQueueRow/);
+    assert.match(review, /media-review-open-reel-review/);
+    assert.match(review, /buildReelReviewPath/);
+    assert.doesNotMatch(
+      review,
+      /if \(row\.submissionType === 'reel' && row\.reelVersionId\) \{\s*navigate\(/,
+    );
     assert.match(review, /reviewContentSubmission/);
     assert.match(review, /accept_into_library/);
 

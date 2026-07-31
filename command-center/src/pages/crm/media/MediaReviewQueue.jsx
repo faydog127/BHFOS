@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
+import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import {
   acceptAiSuggestions,
@@ -10,6 +10,7 @@ import {
   listSubmissions,
   queueAiAnalysis,
   resolveReviewPreviewAccess,
+  resolveReviewReelPreviewAccess,
   restrictAsset,
   reviewContentSubmission,
   setAssetLifecycle,
@@ -17,7 +18,7 @@ import {
   verifyAssetMetadata,
 } from '@/lib/mediaIntel/api';
 import { requestSignedMediaUrl } from '@/lib/mediaIntel/signedAccess';
-import { PREVIEW_STATES } from '@/lib/mediaIntel/previewAccess';
+import { PREVIEW_STATES, buildReelReviewPath } from '@/lib/mediaIntel/previewAccess';
 import AnalysisOutcomeCard from '@/components/media/AnalysisOutcomeCard';
 import { buildAnalysisOutcome } from '@/lib/mediaIntel/analysisDisplay';
 import { REVIEW_QUEUE_FILTERS, SUBMISSION_REVIEW_LABELS, SUBMISSION_TYPES } from '@/lib/mediaIntel/constants';
@@ -37,7 +38,6 @@ function submissionPrimaryAsset(submission) {
 
 export default function MediaReviewQueue({ contributorOnly = false } = {}) {
   const { caps } = useOutletContext();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const fromContributors =
     contributorOnly || searchParams.get('source') === 'contributor';
@@ -48,6 +48,7 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
   const [submissions, setSubmissions] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
+  const [selectedReelVersionId, setSelectedReelVersionId] = useState(null);
   const [bundle, setBundle] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewAccess, setPreviewAccess] = useState(null);
@@ -113,6 +114,27 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
     );
   }, [submissions, assets, fromContributors, queueFilter]);
 
+  const selectedRow = useMemo(
+    () =>
+      queueRows.find(
+        (r) =>
+          (r.submissionId && r.submissionId === selectedSubmissionId)
+          || (r.assetId && r.assetId === selectedId && !r.submissionId),
+      ) || null,
+    [queueRows, selectedId, selectedSubmissionId],
+  );
+
+  /** Select in place — never auto-navigate (Fix B). */
+  const selectQueueRow = (row) => {
+    setSelectedId(row?.assetId || null);
+    setSelectedSubmissionId(row?.submissionId || null);
+    setSelectedReelVersionId(
+      row?.submissionType === 'reel' && row?.reelVersionId ? row.reelVersionId : null,
+    );
+    setError(null);
+    setMessage(null);
+  };
+
   /** Best-effort queue thumbs via authorized derivatives only (never originals). */
   const loadQueueThumbs = async (rows) => {
     setThumbsReady(false);
@@ -170,27 +192,41 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
       setSubmissions(subs);
       setAssets(legacyAssets);
 
-      const mapped = [];
-      // thumbs loaded after rows computed in effect below
+      // Prefer first submission (may be reel-only with no asset), else staff asset.
+      const firstSub = subs[0] || null;
       const firstAssetId =
-        submissionPrimaryAsset(subs[0])?.id ||
+        submissionPrimaryAsset(firstSub)?.id ||
         legacyAssets.find((a) => fromContributors || !isContributorSelfAsset(a))?.id ||
         null;
-      if (selectedId && !legacyAssets.some((r) => r.id === selectedId) && !subs.some((s) => submissionPrimaryAsset(s)?.id === selectedId)) {
-        setSelectedId(firstAssetId);
-        setSelectedSubmissionId(subs[0]?.id || null);
-        if (!firstAssetId) {
+      const firstReelVersionId =
+        firstSub?.submission_type === 'reel' ? firstSub.current_reel_version_id || null : null;
+      const selectionStillPresent =
+        (selectedSubmissionId && subs.some((s) => s.id === selectedSubmissionId))
+        || (selectedId && (
+          legacyAssets.some((r) => r.id === selectedId)
+          || subs.some((s) => submissionPrimaryAsset(s)?.id === selectedId)
+        ));
+
+      if (!selectionStillPresent) {
+        if (firstSub || firstAssetId) {
+          setSelectedId(firstAssetId);
+          setSelectedSubmissionId(firstSub?.id || null);
+          setSelectedReelVersionId(firstReelVersionId);
+        } else {
+          setSelectedId(null);
+          setSelectedSubmissionId(null);
+          setSelectedReelVersionId(null);
           setBundle(null);
           setPreviewUrl(null);
           setPreviewAccess(null);
           setThumbUrls({});
           setThumbsReady(true);
         }
-      } else if (!selectedId && firstAssetId) {
+      } else if (!selectedId && !selectedSubmissionId && (firstSub || firstAssetId)) {
         setSelectedId(firstAssetId);
-        setSelectedSubmissionId(subs[0]?.id || null);
+        setSelectedSubmissionId(firstSub?.id || null);
+        setSelectedReelVersionId(firstReelVersionId);
       }
-      void mapped;
     } catch (err) {
       setError(err.message);
     } finally {
@@ -201,6 +237,7 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
   useEffect(() => {
     setSelectedId(null);
     setSelectedSubmissionId(null);
+    setSelectedReelVersionId(null);
     setBundle(null);
     setPreviewUrl(null);
     setPreviewAccess(null);
@@ -214,14 +251,31 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
   }, [submissions, assets, queueFilter, fromContributors]);
 
   useEffect(() => {
-    if (!selectedId) return undefined;
+    if (!selectedId && !selectedReelVersionId) {
+      setBundle(null);
+      setPreviewUrl(null);
+      setPreviewAccess(null);
+      return undefined;
+    }
     let cancelled = false;
-    const loadBundle = async () => {
+    const loadSelection = async () => {
       try {
         setPreviewUrl(null);
         setPreviewAccess(null);
+
+        // Reel versions preview from mil_reel_versions signing (not asset originals).
+        if (selectedReelVersionId) {
+          if (!selectedId) setBundle(null);
+          const access = await resolveReviewReelPreviewAccess(selectedReelVersionId);
+          if (cancelled) return null;
+          setPreviewAccess(access);
+          setPreviewUrl(access?.canPreview ? access.url : null);
+        }
+
+        if (!selectedId) return null;
+
         const b = await fetchReviewBundle(selectedId);
-        if (cancelled) return;
+        if (cancelled) return null;
         setBundle(b);
         const verified = b.asset.mil_verified_metadata?.[0] || b.asset.mil_verified_metadata || {};
         const latestAi = b.analyses?.[0]?.suggested || {};
@@ -234,10 +288,13 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
           condition_notes: verified.condition_notes || latestAi.condition_notes || '',
           location_component: verified.location_component || latestAi.location_component || '',
         });
-        const access = await resolveReviewPreviewAccess(b.asset);
-        if (!cancelled) {
-          setPreviewAccess(access);
-          setPreviewUrl(access?.canPreview ? access.url : null);
+        // Linked asset on a reel is secondary — reel version preview already set above.
+        if (!selectedReelVersionId) {
+          const access = await resolveReviewPreviewAccess(b.asset);
+          if (!cancelled) {
+            setPreviewAccess(access);
+            setPreviewUrl(access?.canPreview ? access.url : null);
+          }
         }
         return b;
       } catch (err) {
@@ -246,11 +303,12 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
       }
     };
 
-    void loadBundle();
+    void loadSelection();
 
     // Bounded poll while analysis is in flight so the owner does not need a manual refresh.
     const timer = setInterval(async () => {
-      const b = await loadBundle();
+      if (!selectedId || selectedReelVersionId) return;
+      const b = await loadSelection();
       const processing = b?.asset?.processing_status;
       const analysisStatus = b?.analyses?.[0]?.status;
       const terminal =
@@ -270,7 +328,7 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
       clearInterval(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
+  }, [selectedId, selectedReelVersionId]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -279,16 +337,12 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
       const idx = queueRows.findIndex((r) => r.assetId === selectedId || r.submissionId === selectedSubmissionId);
       if (e.key === 'j' || e.key === 'ArrowDown') {
         if (idx >= 0 && idx < queueRows.length - 1) {
-          const next = queueRows[idx + 1];
-          setSelectedId(next.assetId);
-          setSelectedSubmissionId(next.submissionId);
+          selectQueueRow(queueRows[idx + 1]);
         }
       }
       if (e.key === 'k' || e.key === 'ArrowUp') {
         if (idx > 0) {
-          const prev = queueRows[idx - 1];
-          setSelectedId(prev.assetId);
-          setSelectedSubmissionId(prev.submissionId);
+          selectQueueRow(queueRows[idx - 1]);
         }
       }
     };
@@ -436,8 +490,8 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
         )}
       </div>
 
-      <div className="grid lg:grid-cols-[300px_1fr] gap-4">
-      <aside className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+      <div className="grid lg:grid-cols-[minmax(0,300px)_minmax(0,1fr)] gap-4 min-w-0">
+      <aside className="rounded-xl border border-slate-200 bg-white overflow-hidden min-w-0">
         <div className="px-3 py-2 border-b text-sm font-medium text-slate-800">
           {fromContributors ? 'Contributor submissions' : 'Queue'} ({queueRows.length})
         </div>
@@ -466,14 +520,10 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
               <li key={row.id}>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (row.submissionType === 'reel' && row.reelVersionId) {
-                      navigate(`/media/reel-review?versionId=${encodeURIComponent(row.reelVersionId)}`);
-                      return;
-                    }
-                    setSelectedId(row.assetId);
-                    setSelectedSubmissionId(row.submissionId);
-                  }}
+                  data-testid="media-review-queue-row"
+                  data-submission-type={row.submissionType || ''}
+                  data-reel-version-id={row.reelVersionId || ''}
+                  onClick={() => selectQueueRow(row)}
                   className={`w-full text-left px-2.5 py-2 text-sm min-h-[52px] flex items-center gap-2.5 ${
                     selected ? 'bg-blue-50 text-blue-900' : 'hover:bg-slate-50'
                   }`}
@@ -522,21 +572,26 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
         </ul>
       </aside>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 space-y-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 space-y-4 min-w-0">
         {error && <div className="text-sm text-red-700">{error}</div>}
         {message && <div className="text-sm text-emerald-700">{message}</div>}
-        {!bundle && <p className="text-sm text-slate-500">Select an asset to review.</p>}
-        {bundle && (
+        {!selectedRow && <p className="text-sm text-slate-500">Select an item to review.</p>}
+        {selectedRow && (
           <>
-            <div className="flex flex-col xl:flex-row gap-4">
-              <div className="xl:w-1/2">
+            <div className="flex flex-col xl:flex-row gap-4 min-w-0">
+              <div className="xl:w-1/2 min-w-0">
                 <div
                   className="aspect-[4/3] rounded-lg bg-slate-100 overflow-hidden flex items-center justify-center"
                   data-testid="media-review-preview-pane"
                   data-preview-state={previewAccess?.state || 'loading'}
                 >
-                  {previewUrl && bundle.asset.media_kind === 'video' ? (
-                    <video src={previewUrl} controls className="max-h-full max-w-full" />
+                  {previewUrl && (selectedReelVersionId || bundle?.asset?.media_kind === 'video') ? (
+                    <video
+                      src={previewUrl}
+                      controls
+                      className="max-h-full max-w-full"
+                      data-testid="media-review-inline-video"
+                    />
                   ) : previewUrl ? (
                     <img src={previewUrl} alt="" className="max-h-full max-w-full object-contain" />
                   ) : (
@@ -570,22 +625,27 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
                       previewAccess?.state === PREVIEW_STATES.SOURCE_MISSING
                         ? 'Download unavailable — source file missing from storage'
                         : previewAccess?.canDownload
-                          ? 'Download original via authorized short-lived URL'
+                          ? 'Download via authorized short-lived URL'
                           : 'Download unavailable'
                     }
                     onClick={async () => {
-                      if (!previewAccess?.canDownload || !selectedId) return;
+                      if (!previewAccess?.canDownload) return;
                       try {
                         setError(null);
-                        const signed = await requestSignedMediaUrl({
-                          assetId: selectedId,
-                          purpose: 'download',
-                          allowOriginal: true,
-                        });
+                        const signed = selectedReelVersionId
+                          ? await requestSignedMediaUrl({
+                            reelVersionId: selectedReelVersionId,
+                            purpose: 'download',
+                          })
+                          : await requestSignedMediaUrl({
+                            assetId: selectedId,
+                            purpose: 'download',
+                            allowOriginal: true,
+                          });
                         if (!signed?.url) throw new Error('Download URL unavailable');
                         const a = document.createElement('a');
                         a.href = signed.url;
-                        a.download = bundle?.asset?.original_filename || 'media';
+                        a.download = selectedRow?.title || bundle?.asset?.original_filename || 'media';
                         a.rel = 'noopener';
                         a.target = '_blank';
                         a.click();
@@ -596,14 +656,61 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
                   >
                     Download
                   </button>
+                  {selectedReelVersionId && (
+                    <Link
+                      to={buildReelReviewPath(selectedReelVersionId)}
+                      className="rounded-md border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900 min-h-[40px] inline-flex items-center"
+                      data-testid="media-review-open-reel-review"
+                    >
+                      Open in Reel Review
+                    </Link>
+                  )}
                   <p className="text-xs text-slate-500">
                     Shortcuts: J/K or arrows to move queue. Each fact is verified separately.
                   </p>
                 </div>
               </div>
 
-              <div className="xl:w-1/2 space-y-3">
-                <AnalysisOutcomeCard asset={bundle.asset} analysis={latestAnalysis} />
+              <div className="xl:w-1/2 space-y-3 min-w-0">
+                {selectedRow.kind === 'submission' && (
+                  <div
+                    className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm space-y-1"
+                    data-testid="media-review-submission-meta"
+                  >
+                    <div className="font-medium text-slate-900">{selectedRow.title}</div>
+                    <div className="text-xs text-slate-600">
+                      {selectedRow.typeBadge}
+                      {selectedRow.publicId ? ` · Submission ID ${selectedRow.publicId}` : ''}
+                      {` · v${selectedRow.version}`}
+                    </div>
+                    <div className="text-xs text-slate-600">
+                      Status: {SUBMISSION_REVIEW_LABELS[selectedRow.reviewStatus] || selectedRow.reviewStatus}
+                      {selectedRow.actionOwner === 'contributor' ? ' · waiting on contributor' : ''}
+                    </div>
+                    {selectedRow.submission?.contributor_notes ? (
+                      <div className="text-xs text-slate-600">
+                        Notes: {selectedRow.submission.contributor_notes}
+                      </div>
+                    ) : null}
+                    {selectedReelVersionId ? (
+                      <div className="text-xs text-slate-500 break-all">
+                        Reel version: {selectedReelVersionId}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                {bundle?.asset ? (
+                  <AnalysisOutcomeCard asset={bundle.asset} analysis={latestAnalysis} />
+                ) : selectedReelVersionId ? (
+                  <p className="text-sm text-slate-600" data-testid="media-review-reel-only-note">
+                    Reel submission — inspect the inline preview here, use submission actions below, or open
+                    the specialized Reel Review workspace for approve / deny / revision.
+                  </p>
+                ) : null}
+
+                {bundle?.asset && (
+                <>
 
                 <div className="rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-sm">
                   <div className="font-medium text-violet-950">AI suggestions — not verified</div>
@@ -698,6 +805,8 @@ export default function MediaReviewQueue({ contributorOnly = false } = {}) {
                     )}
                   </label>
                 ))}
+                </>
+                )}
               </div>
             </div>
 

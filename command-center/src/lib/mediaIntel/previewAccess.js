@@ -394,3 +394,115 @@ export async function resolveAssetPreviewAccess(asset, deps = {}) {
     sourceSign,
   });
 }
+
+/** Deep-link path for the specialized Reel Review workspace. */
+export function buildReelReviewPath(versionId) {
+  if (!versionId) return '/media/reel-review';
+  return `/media/reel-review?versionId=${encodeURIComponent(String(versionId))}`;
+}
+
+/**
+ * Evidence-based preview for a mil_reel_versions object (not an asset original).
+ * Reuses Fix A state vocabulary; storage 404 → source_missing.
+ */
+export async function resolveReelPreviewAccess(reelVersionId, deps = {}) {
+  const requestSigned = deps.requestSignedMediaUrl;
+  const probe = deps.probeSignedMediaUrl || probeSignedMediaUrl;
+  if (typeof requestSigned !== 'function') {
+    throw new Error('resolveReelPreviewAccess requires requestSignedMediaUrl');
+  }
+  if (!reelVersionId) {
+    return finalize(PREVIEW_STATES.TEMPORARILY_UNAVAILABLE, null, false, false);
+  }
+
+  let previewSign = null;
+  let probeResult = null;
+  try {
+    const signed = await requestSigned({
+      reelVersionId,
+      purpose: 'preview',
+    });
+    previewSign = {
+      ok: Boolean(signed?.url),
+      url: signed?.url || null,
+      kind: signed?.kind || 'reel_version',
+      code: null,
+      error: null,
+      httpStatus: 200,
+    };
+    if (previewSign.url) {
+      probeResult = await probe(previewSign.url);
+      if (probeResult && !probeResult.ok && !probeResult.expired && Number(probeResult.status) === 404) {
+        previewSign = {
+          ...previewSign,
+          ok: false,
+          code: 'SOURCE_OBJECT_MISSING',
+          error: 'Signed URL probe returned 404',
+        };
+      }
+    }
+  } catch (err) {
+    const message = err?.message || String(err);
+    const code =
+      err?.code
+      || (isStorageMissingMessage(message) ? 'SOURCE_OBJECT_MISSING' : null);
+    previewSign = {
+      ok: false,
+      url: null,
+      kind: 'reel_version',
+      code,
+      error: message,
+      httpStatus: err?.status || null,
+    };
+  }
+
+  let downloadSign = null;
+  try {
+    const signed = await requestSigned({
+      reelVersionId,
+      purpose: 'download',
+    });
+    downloadSign = {
+      ok: Boolean(signed?.url),
+      code: null,
+      error: null,
+      httpStatus: 200,
+    };
+  } catch (err) {
+    const message = err?.message || String(err);
+    downloadSign = {
+      ok: false,
+      code: err?.code || (isStorageMissingMessage(message) ? 'SOURCE_OBJECT_MISSING' : null),
+      error: message,
+      httpStatus: err?.status || null,
+    };
+  }
+
+  const probeAllowsReady =
+    !probeResult
+    || probeResult.ok
+    || (probeResult.status == null && !probeResult.expired);
+
+  if (previewSign?.ok && previewSign.url && probeAllowsReady) {
+    return finalize(
+      PREVIEW_STATES.READY,
+      previewSign.url,
+      true,
+      Boolean(downloadSign?.ok),
+    );
+  }
+
+  if (
+    previewSign?.code === 'SOURCE_OBJECT_MISSING'
+    || downloadSign?.code === 'SOURCE_OBJECT_MISSING'
+    || (probeResult && !probeResult.ok && !probeResult.expired && Number(probeResult.status) === 404)
+  ) {
+    return finalize(PREVIEW_STATES.SOURCE_MISSING, null, false, false);
+  }
+
+  if (probeResult?.expired) {
+    return finalize(PREVIEW_STATES.TEMPORARILY_UNAVAILABLE, null, false, Boolean(downloadSign?.ok));
+  }
+
+  return finalize(PREVIEW_STATES.TEMPORARILY_UNAVAILABLE, null, false, Boolean(downloadSign?.ok));
+}

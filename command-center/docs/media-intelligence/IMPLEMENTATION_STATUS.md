@@ -1,9 +1,20 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** `6863daf8bbf96455a5deaf356c01b9af504effef`  
-**Upstream divergence at edit:** `origin/feat/media-intelligence-library` **0 behind / 0 ahead**  
+**Verified HEAD at this status edit:** _(set at Fix B commit)_  
+**Upstream divergence at edit:** _(record after push)_  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
+
+## Fix B — In-queue reel select/preview (2026-07-31) — STAGING ONLY
+
+| Field | Value |
+|---|---|
+| Mission | Keep reel selection + preview inside Review Queue / Received; explicit Open in Reel Review |
+| Root cause | Row click auto-`navigate`d to `/media/reel-review?versionId=` before inspect-in-place |
+| Design | Click = `selectQueueRow` in place; reel preview via `resolveReelPreviewAccess` + Fix A states; `Open in Reel Review` = `buildReelReviewPath(versionId)` |
+| Surfaces | `MediaReviewQueue.jsx` (Review Queue + Received `contributorOnly`) |
+| Non-goals | No Fix C; no nav removal; no filter/review-state/storage changes; **no production** |
+| Evidence tier | **SOURCE** + unit; staging deploy evidence below after Hostinger |
 
 ## Fix A — Preview-state accuracy (2026-07-31) — STAGING DEPLOYED
 
