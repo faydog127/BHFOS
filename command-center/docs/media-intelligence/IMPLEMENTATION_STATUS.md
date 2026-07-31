@@ -1,9 +1,28 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** `d485aaef1c32254291ed6a5591a29eaa58a88a34`  
+**Verified HEAD at this status edit:** `8827014fe715fbde6c55c092c75e54812824cb69`  
 **Upstream divergence at edit:** `origin/feat/media-intelligence-library` **0 behind / 0 ahead**  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
+
+## Fix A–C staging regression (2026-07-31) — PASS — PROD NOT AUTHORIZED
+
+| Field | Value |
+|---|---|
+| Scope | Full A–C staging regression after Fix C deploy; no production deploy |
+| Staging frontend | `mil.bhfos.com` SHA **d485aae…** / `mil-staging` / migration `20260731130000` |
+| Unit tests | `npm run test:media-intel-helpers` **241 pass / 0 fail** |
+| Distinct identities | Owner `mil-staging-admin@…` ≠ contributor `mil-staging-creator@…` (JWT subs distinct); user JWTs only |
+| Security | anon EXECUTE count=0; anon RPC → `42501 permission denied`; contributor review → `Only owner/admin may review content submissions`; RLS on `mil_submissions` / `mil_submission_assets` / `mil_assets` |
+| Duplicate prevention | Staging `MVI_4463.mp4` → exactly **1** submission `SUB-1A7D4481`; would-insert-again=0; re-submit linked asset → `Asset already belongs to an active submission`; canary count remains 1 |
+| Queue reconciliation | DB = owner REST = UI counts after live contributor reel submit: Needs **5**, Raw **2**, Social **1**, Reels **4**, Changes **2**, drafts **0**; `IMG_4862` submission links=0; staff HEIC still in All Media |
+| Distinct submit | Contributor `mil_submit_reel_version` → `SUB-427B4C78` (`ventguys_brand_reel.mp4`); owner Needs/Reels/Received show it; contributor still cannot review |
+| Fix A UI | `MVI_4463` + `SUB-ADA4EF85` → File unavailable / source missing; Download disabled; no HEIC copy |
+| Fix B UI | `IMG_4106` stays on `/media/review`, inline video, Open in Reel Review → `?versionId=81d820b9-…` |
+| Fix C UI | No `IMG_4862` in any actionable filter; type/state filters match; Received (5) clean |
+| Mobile | 390×844 Needs review count (5); no overflowX |
+| Production | **Unchanged** — `app.bhfos.com` SHA `5d7389c…` / `production` — **prod deploy not authorized** |
+| Evidence tier | **STAGING USABLE** (API + browser). Prod deploy remains blocked until Founder authorizes |
 
 ## Fix C — Review Queue filter semantics (2026-07-31) — STAGING DEPLOYED
 
