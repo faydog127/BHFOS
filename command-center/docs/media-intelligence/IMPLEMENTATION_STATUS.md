@@ -1,26 +1,28 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** local tip of `feat(mil): unify contributor submissions and owner review queue` (see `git log -1`)  
-**Upstream divergence at edit:** `origin/feat/media-intelligence-library` — local tip **ahead by 1** after this commit; **not pushed**  
+**Verified HEAD at this status edit:** see tip after permission-hardening commit  
+**Upstream divergence at edit:** track `origin/feat/media-intelligence-library` after push  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
 
-## Unified submission + Review Queue — Release A (2026-07-31) — LOCALLY PASSING — HOSTED BLOCKED
+## Unified submission + Review Queue — Release A (2026-07-31) — STAGING ACCEPTANCE PASSED
 
 | Field | Value |
 |---|---|
 | Mission | Contributor Submit Content + explicit type + upload≠submit + unified owner Review Queue |
-| Root cause (missing path) | Two parallel products: self-upload finalized straight into `mil_assets` Review/Received; reels used `mil_reel_versions` + `/media/reel-review` only. No `submission_type`, no human-readable Submission ID, no single queue. Looking in the wrong queue (or pre-Received bundle) looked like a “missing submission.” |
-| Schema | Additive `20260731120000_media_intel_unified_submissions.sql` — `mil_submissions` + `mil_submission_assets`; RPCs `mil_submit_content_package`, `mil_review_content_submission`; dual-write on `mil_submit_reel_version` / `mil_review_reel_version`; RLS browse; idempotent backfill for submitted reels + pending `contributor_self` assets |
-| UI | `/creator` **Submit Content** (Reel default); Upload Activity + My Submissions; `/media/review` filters Needs review / Reels / Raw / Social / Changes requested / Approved / All; Reel Review kept + `?versionId=` deep link |
-| Local tests (pre-commit) | `npm run test:media-intel-helpers` — **200 pass** / 0 fail |
-| Local build (pre-commit) | `npm run build` — **PASS**; `migrationVersion=20260731120000`; secret-scan OK |
-| Migration apply | **`20260731120000` remains UNAPPLIED** on staging (`sdzhdupekcnekesbtxsl`) and production (`wwyxohjnyqnegzbxtuxs`) — source only |
-| Push / deploy | **Not done** (local commit only) |
-| Hosted | **Blocked** — migration not applied; frontend not deployed; distinct-identity hosted acceptance not run |
-| Known prod canary | `MVI_4463.mp4` (Treezy) — backfill will create a `mil_submissions` row on apply; until then Received/legacy pending path still applies |
-| Next authorization | (1) push (2) apply migration on staging then prod (3) deploy frontend (4) distinct-identity hosted acceptance |
-| Evidence tier | **SOURCE-ONLY** + **locally verified** (unit + production build). Not staging/deployed/USABLE |
+| Release A commit | `86f6ae9de62b14713ff579337c406b7de9fc24f8` on `feat/media-intelligence-library` (pushed) |
+| Schema | Additive `20260731120000_media_intel_unified_submissions.sql` — **applied on staging only** (`sdzhdupekcnekesbtxsl` / BHFOS MIL Staging). Ledger row present. **Not** on production (`wwyxohjnyqnegzbxtuxs`; `mil_submissions` null; mig count 0). |
+| ACL hardening | Additive `20260731130000_media_intel_submission_rpc_execute_acl.sql` — revokes EXECUTE from `PUBLIC` + `anon` on submission/review RPCs; grants `authenticated` + `service_role` only. Does not edit `20260731120000` in place. |
+| Staging acceptance | **Passed** (distinct authenticated owner + contributor JWTs; no service-role for accept mutations). |
+| Contributor isolation | **Proven** — contributor cannot execute owner review RPC; creator cannot see other contributors’ submissions. |
+| Cross-company isolation | **Not independently testable** — current MIL is single-company by design (no second company entity / `company_id` ownership surface). |
+| Canary | Staging used a **synthetic same-filename** `MVI_4463.mp4` → one submission `SUB-1A7D4481`. The **actual production Treezy** `MVI_4463.mp4` record remains **untouched**. |
+| Frontend (staging) | `https://mil.bhfos.com` `build-info` SHA **86f6ae9…** / `environment=mil-staging` / `migrationVersion=20260731120000`; archive `tmp/mil-staging-86f6ae9de62b-20260731T034703Z.zip` |
+| Acceptance IDs | Reel `SUB-2F3E969E`; raw `SUB-BFC645B1`; social `SUB-ADA4EF85`; request-changes + idempotent retry + upload-only drafts outside owner queue + Reel `?versionId=` deep link |
+| Root-cause note (anon EXECUTE) | `20260731120000` revoked EXECUTE only `FROM PUBLIC`. Hosted create-time / default privileges left a **direct** `anon` EXECUTE grant; same class as `20260727140000` finalization ACL fix. Manual staging revoke was interim; `20260731130000` makes final grants reproducible from source. |
+| Production | **Unchanged** — no migration, no frontend deploy, no merge. |
+| Next authorization | Production migrate (`20260731120000` then `20260731130000`) + prod frontend deploy (Category C). |
+| Evidence tier | **STAGING DEPLOYED** + **STAGING USABLE**. Not production verified. |
 
 ## Owner Received inbox (2026-07-31) — DEPLOYED on production
 

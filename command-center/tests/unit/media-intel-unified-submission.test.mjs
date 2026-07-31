@@ -35,6 +35,60 @@ describe('MIL unified submission Release A', () => {
     assert.match(sql, /contributor_self/);
     assert.match(sql, /mil_browse_submissions/);
     assert.doesNotMatch(sql, /drop table/i);
+    // Historical gap: Release A revoked EXECUTE only FROM PUBLIC (not anon).
+    // Final browser-safe ACL is asserted on the additive hardening migration.
+    assert.match(
+      sql,
+      /revoke all on function public\.mil_submit_content_package\([\s\S]*?\) from public;/,
+    );
+    assert.doesNotMatch(
+      sql,
+      /revoke all on function public\.mil_submit_content_package\([\s\S]*?\) from public,\s*anon/,
+    );
+  });
+
+  it('additive ACL migration revokes PUBLIC/anon EXECUTE and grants only intended roles', () => {
+    const acl = read('supabase/migrations/20260731130000_media_intel_submission_rpc_execute_acl.sql');
+    const clientRpcs = [
+      'mil_submit_content_package',
+      'mil_review_content_submission',
+      'mil_submit_reel_version',
+      'mil_review_reel_version',
+    ];
+
+    assert.match(acl, /ALTER DEFAULT PRIVILEGES|default privileges are left unchanged/i);
+    assert.match(
+      acl,
+      /revoke all on function public\.mil_generate_submission_public_id\(\)\s+from public, anon, authenticated/,
+    );
+
+    for (const rpc of clientRpcs) {
+      assert.match(
+        acl,
+        new RegExp(
+          `revoke all on function public\\.${rpc}\\([\\s\\S]*?\\)\\s*from public, anon, authenticated`,
+        ),
+        `${rpc} must revoke PUBLIC + anon (+ authenticated before re-grant)`,
+      );
+      assert.match(
+        acl,
+        new RegExp(
+          `grant execute on function public\\.${rpc}\\([\\s\\S]*?\\)\\s*to authenticated, service_role`,
+        ),
+        `${rpc} must grant authenticated + service_role only`,
+      );
+      assert.doesNotMatch(
+        acl,
+        new RegExp(`grant execute on function public\\.${rpc}\\([\\s\\S]*?\\)\\s*to anon`),
+        `${rpc} must not grant anon`,
+      );
+    }
+
+    // Helper stays internal — no authenticated/anon EXECUTE grant.
+    assert.doesNotMatch(
+      acl,
+      /grant execute on function public\.mil_generate_submission_public_id\(\)/,
+    );
   });
 
   it('API exposes submit package, list submissions, and owner-action count', () => {
