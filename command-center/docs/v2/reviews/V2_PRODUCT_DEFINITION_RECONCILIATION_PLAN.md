@@ -17,17 +17,23 @@ Reconcile the substantive product-definition research preserved in closed PR #12
 
 This plan does not approve product scope, requirements, architecture, releases, migrations, or application implementation.
 
-## Authority order
+## Reconciliation precedence
 
-Reconciliation must follow:
+Reconciliation must distinguish binding authority from supporting evidence.
+
+### Binding authority
 
 1. Active decisions in `V2_DECISION_REGISTER.md`
-2. Active governance policies
-3. Ratified V1 closeout evidence
-4. Founder product discussions and operational observations
-5. Closed PR #125 as source material
+2. Active Command Center governance policies
 
-PR #125 is evidence and draft content. It is not current authority.
+### Supporting evidence
+
+3. Ratified V1 closeout evidence
+4. Recorded founder observations and product discussions
+5. Closed PR #125
+6. Competitor research, demonstrations, screenshots, and informal notes
+
+Supporting evidence may inform the Product Definition but cannot override an active decision or become approved scope without founder ratification.
 
 ## Sources
 
@@ -53,6 +59,19 @@ PR #125 is evidence and draft content. It is not current authority.
 - Keep franchise and multi-tenant capability deferred under DEC-V2-010.
 - Maintain explicit separation between product-definition ratification and implementation authorization.
 
+## Reconciliation-plan acceptance criteria
+
+Reconciliation is complete only when:
+
+- every PR #125 section has a recorded disposition;
+- every binding statement traces to active authority or explicit founder ratification;
+- V1 rules are not imported automatically;
+- current users are separated from future stakeholders;
+- strategic product areas are separated from deferred capabilities;
+- unresolved questions remain visible;
+- workflow, architecture, requirements, and release detail remain in their proper documents;
+- the Product Definition does not authorize application implementation.
+
 ## Source-section reconciliation
 
 | Source section | Proposed disposition | Conflict or risk | Required resolution | Final disposition |
@@ -73,65 +92,39 @@ PR #125 is evidence and draft content. It is not current authority.
 
 The `Final disposition` column remains `Pending` until the substantive Product Definition draft is reconciled.
 
-## Material conflicts to resolve
-
-### Franchise and multi-tenant scope
-
-PR #125 treats future franchise operation as a product consideration and lists a future franchise operator among users.
-
-DEC-V2-010 makes franchise-management, multi-tenant, and cross-company data-isolation capability explicitly deferred.
-
-The reconciled Product Definition may state that architecture should avoid unnecessary irreversible barriers, but it may not create current franchise requirements or implementation complexity.
-
-### Inherited V1 constraints
-
-PR #125 presents several V1 rules as carried constraints, including quote-to-job behavior, financial controls, auto-send settings, stored-card exclusions, offline candidates, and integration boundaries.
-
-Only active decisions are binding automatically. Each additional V1 constraint must be confirmed as an active decision, proposed as a new decision, recorded as a requirement, placed in capability disposition, or treated as historical evidence only.
-
-### Ratification gates
-
-The reconciled process must distinguish Product Definition ratification from implementation authorization.
-
-**Product-definition ratification**
-
-- business purpose approved;
-- current users approved;
-- product promise approved;
-- principles and boundaries approved;
-- major non-goals approved;
-- unresolved questions explicitly recorded.
-
-**Implementation authorization**
-
-- workflows mapped;
-- capabilities classified;
-- canonical business model defined;
-- architecture boundaries approved;
-- requirements ready;
-- an implementation release authorized.
-
-### Controlled terminology
-
-Replace ambiguous governance uses of `feature`, `feature coding`, and `feature scope` with `capability`, `requirement`, `implementation slice`, `product area`, or `application implementation` as applicable.
-
 ## Founder-direction items requiring explicit treatment
 
-### Field usability
+### Fast capture and field adoption
 
-The system must be practical enough that incoming calls, unscheduled work, and field actions are captured in BHFOS rather than being placed in phone notes because the system is slower or harder to use. This is a product outcome, not yet an implementation requirement.
+The product outcome is practical capture of customer, property, appointment, add-on service, field action, time, mileage, evidence, and completion information in BHFOS rather than fallback to Notes, texts, memory, or disconnected tools because the system is slower or harder to use. Interrupted-network behavior remains discovery. This is a product outcome, not yet an implementation requirement.
 
 ### Coach's Corner
 
-Coach's Corner is a proposed differentiator that would use business state and performance signals to offer small, practical business-growth challenges. The Product Definition must establish whether this is part of the long-term product promise, a deferred strategic capability, or outside the V2 boundary. Mentioning it must not become an early implementation commitment.
+Coach's Corner is a proposed differentiator that would use business state and performance signals to offer small, practical business-growth challenges. It should be optional, achievable, non-punitive, and tied to observable outcomes where practical, with no forced gamification. It is deferred from early implementation unless separately authorized.
 
 ### Commercial Account Manager
 
-Commercial-account management is a proposed product area covering multi-property relationships, recurring service, compliance evidence, account history, and account growth. The Product Definition should establish its strategic role without assigning it to the first release.
+Commercial Account Manager is a proposed dedicated-TVG product area covering customer, contact, property, and account hierarchy; multi-property relationships; recurring service; compliance evidence; account history; and account growth. It is explicitly not multi-tenancy or franchise architecture and is not assigned to the first release.
 
 ### Media Intelligence and marketing reuse
 
-V2 should determine whether approved field evidence can support customer reporting, education, social content, lead attribution, and repeatable marketing operations. Customer consent, data classification, and public-use approval remain mandatory.
+Operational evidence, customer reporting, internal training, and public marketing are separate purposes. Approval for one does not authorize the others. Customer consent, data classification, and public-use approval remain mandatory for any marketing reuse.
+
+## Workflow exception families
+
+The Product Definition should acknowledge estimate-only visits, same-visit work, unscheduled add-ons, return visits, unsafe-to-proceed work, commercial recurring service, multi-property accounts, change orders, and payment/reconciliation exceptions. Detailed states remain in the Workflow Map.
+
+## Architecture neutrality
+
+The Product Definition may set constraints but may not select PWA/native, Supabase topology, vendors, payment architecture, hosting, offline technique, AI vendor, or integration design.
+
+## V1 financial and operational constraint disposition
+
+Each inherited constraint must be classified as an active decision, proposed decision, requirement candidate, architecture candidate, risk-control candidate, capability-disposition item, or historical evidence only.
+
+## AI and automation authority boundary
+
+AI may assist analysis, drafting, and prioritization but may not authorize pricing, customer commitments, financial transactions, deployment, release activation, or founder decisions.
 
 ## Proposed structure for the reconciled Product Definition
 
@@ -164,17 +157,20 @@ The draft pull request must link the review records and state how every required
 
 A review round may report that no material changes are required, but it may not be silently omitted.
 
-## Required review sequence
+## Required review and ratification sequence
 
-1. Produce reconciled draft.
-2. Verify against DEC-V2-001 through DEC-V2-010.
-3. Conduct product and governance critique.
-4. Conduct field and operational-usability critique.
-5. Conduct security, data, financial, legal, and implementation-boundary critique.
-6. Reconcile findings.
-7. Record founder approval or requested changes.
-8. Add a proposed Product Definition ratification decision.
-9. Change the Product Definition to `Active` only after formal approval and merge.
+1. Produce the reconciled Product Definition draft.
+2. Verify it against DEC-V2-001 through DEC-V2-010.
+3. Conduct the three required critique rounds.
+4. Reconcile all required findings.
+5. Add proposed DEC-V2-011 for Product Definition ratification.
+6. Open a draft pull request.
+7. Review the complete pull-request diff and required checks.
+8. Record founder approval or requested changes.
+9. Change the Product Definition and DEC-V2-011 to `Active` only after explicit founder approval.
+10. Merge the ratified Product Definition.
+
+Ratification of the Product Definition does not authorize application implementation.
 
 An AI agent or reviewer may prepare the pull request, analyze the diff, identify conflicts, and recommend approval or changes. Only the founder may approve the Product Definition, activate the ratification decision, mark the Product Definition as `Active`, or authorize the merge.
 
@@ -280,10 +276,6 @@ Closed PR #125 must remain traceable until every retained or rejected section ha
 These remain discovery questions. They do not make legal conclusions or select an implementation.
 
 ## Final alignment status
-
-**CONDITIONALLY ALIGNED — REQUIRED REVISIONS BEFORE COMMIT OR PUSH**
-
-After the required revisions are incorporated:
 
 **ALIGNED FOR PLANNING COMMIT AND DRAFT PULL-REQUEST REVIEW**
 
