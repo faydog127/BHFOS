@@ -2,23 +2,23 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Active |
 | Version | 0.2 |
 | Owner | Founder |
 | Last reviewed | 2026-08-01 |
 | Active governance baseline | `f81ed30` |
 | Supporting product source | Closed PR #125 at `d0f57b0` |
+| Founder approval | Explicitly approved for activation by the founder in PR #131 final ratification review on 2026-08-01 |
 | Implementation authority | None — product-definition planning only |
 
 ## 1. Authority and status
 
-This document defines the proposed product direction for BHFOS V2.
+This document defines the ratified product direction for BHFOS V2.
 
-Active DEC-V2-001 through DEC-V2-010 and the active Command Center governance remain binding. Closed PR #125, V1 closeout material, demonstrations, screenshots, founder discussions, and operational observations are supporting evidence only unless incorporated into an active decision or explicitly ratified with this document.
+Active DEC-V2-001 through DEC-V2-013 and the active Command Center governance remain binding. Closed PR #125, V1 closeout material, demonstrations, screenshots, founder discussions, and operational observations are supporting evidence only unless incorporated into an active decision or explicitly ratified with this document.
 
-This draft does not:
+This Product Definition does not:
 
-- ratify the Product Definition;
 - approve requirements or architecture;
 - authorize a release;
 - authorize application implementation;
@@ -26,12 +26,12 @@ This draft does not:
 - authorize financial-policy changes; or
 - activate any AI or automation capability.
 
-This draft proposes two material directions that require separate governing decisions before ratification:
+This Product Definition incorporates two material directions ratified through DEC-V2-012 and DEC-V2-013:
 
 1. multi-tenancy is reserved for a separate future build and must not influence the current TVG platform; and
 2. BHFOS V2 is an AI-native, founder-by-exception operating platform.
 
-Until those decisions are approved, active governance remains controlling.
+Active governance remains controlling, and this Product Definition does not authorize implementation.
 
 ## 2. Business platform definition
 
@@ -490,7 +490,7 @@ These require a separate future product and architecture decision.
 
 ## 10. AI-native operating model
 
-BHFOS V2 is proposed as an automation-first, AI-assisted operating platform.
+BHFOS V2 is an automation-first, AI-assisted operating platform.
 
 AI is a shared platform capability serving:
 
@@ -792,7 +792,7 @@ Governance and safety controls may establish pass/fail or zero-tolerance limits 
 
 ## 19. Product Definition ratification gates
 
-The Product Definition may be ratified only when:
+The Product Definition was ratified only after:
 
 - the founder approves the business purpose;
 - the founder approves the business-platform definition;
@@ -806,9 +806,9 @@ The Product Definition may be ratified only when:
 - the required critique rounds are completed;
 - all required findings are reconciled;
 - source gaps are resolved, explicitly restated by the founder, or retained as non-binding proposals;
-- proposed DEC-V2-011 is approved for activation with this document;
-- the decision superseding the future-compatibility portion of DEC-V2-010 is approved; and
-- the AI-native, founder-by-exception governing decision is approved.
+- DEC-V2-011 was approved for activation with this document;
+- DEC-V2-012 was approved to supersede the future-readiness portion of DEC-V2-010 while preserving its current franchise and multi-company prohibition; and
+- DEC-V2-013 was approved as the AI-native, founder-by-exception governing decision.
 
 Product Definition ratification does not authorize application implementation.
 
@@ -947,7 +947,7 @@ No Product Definition statement is implementation authority by itself.
 
 | Source | Authority / use | State |
 | --- | --- | --- |
-| Active DEC-V2-001 through DEC-V2-010 | Binding governance decisions | Available |
+| Active DEC-V2-001 through DEC-V2-013 | Binding governance decisions | Available; DEC-V2-011 through DEC-V2-013 activated in PR #131 |
 | Active Command Center governance | Binding process and safety rules | Merge `f81ed30` |
 | Active Product Definition reconciliation plan | Binding planning process | Merge `f81ed30` |
 | Closed PR #125 at `d0f57b0` | Supporting product-definition evidence | Available; not authority |
@@ -957,15 +957,15 @@ No Product Definition statement is implementation authority by itself.
 | MIL and reporting direction | Founder direction plus prior project work | Exact durable references still required |
 | Coach's Corner direction | Supporting founder direction | Exact durable references still required |
 | Commercial Account Manager direction | Supporting founder direction | Exact durable references still required |
-| AI-native and founder-by-exception direction | Proposed founder direction | Requires governing decision before ratification |
-| Stable-platform-first multi-tenancy boundary | Proposed founder direction | Requires governing decision before ratification |
+| AI-native and founder-by-exception direction | Founder-approved governing direction | DEC-V2-013 Active in PR #131 ratification commit |
+| Stable-platform-first multi-tenancy boundary | Founder-approved governing direction | DEC-V2-012 Active in PR #131 ratification commit |
 | Competitor research and demonstrations | Supporting evidence | Exact references required |
 
 A source marked as requiring capture cannot support a binding statement until its relevant finding has been recorded durably, explicitly restated and approved by the founder during Product Definition review, or retained as a non-binding proposal or open question.
 
 ## 23. Current conclusion
 
-BHFOS V2 is proposed as a complete, AI-native business operating platform for The Vent Guys.
+BHFOS V2 is a complete, AI-native business operating platform for The Vent Guys.
 
 Its current direction is:
 
@@ -982,4 +982,4 @@ Its current direction is:
 - no present multi-tenancy influence; and
 - no implementation authority until downstream planning and release gates are satisfied.
 
-The Product Definition remains `Draft` until the required governing decisions, source reconciliation, critique, founder approval, and merge are complete.
+The Product Definition is `Active` following founder approval, source reconciliation, required critique, activation of DEC-V2-011 through DEC-V2-013, and merge of PR #131. It remains non-implementation authority.

@@ -158,13 +158,14 @@ V2 will not build multi-tenant, franchise-management, or cross-company data-isol
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active |
 | Date | 2026-08-01 |
 | Decision owner | Founder |
+| Founder approval | Explicitly approved by the founder in PR #131 final ratification review on 2026-08-01 |
 
 ### Decision
 
-Upon explicit founder approval of the reconciled `V2_PRODUCT_DEFINITION.md`, the Product Definition and this decision may become `Active` together through the formal pull-request review and merge process.
+The reconciled `V2_PRODUCT_DEFINITION.md` is ratified and this decision is Active through the formal pull-request review, explicit founder approval, activation commit, and merge of PR #131.
 
 ### Consequences
 
@@ -176,9 +177,10 @@ Upon explicit founder approval of the reconciled `V2_PRODUCT_DEFINITION.md`, the
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active |
 | Date | 2026-08-01 |
 | Decision owner | Founder |
+| Founder approval | Explicitly approved by the founder in PR #131 final ratification review on 2026-08-01 |
 
 ### Decision
 
@@ -191,15 +193,16 @@ Multi-tenancy may be reconsidered only after the founder confirms approved stabi
 - Normal users enter the TVG workspace without tenant selection or switching.
 - No tenant provisioning, per-tenant configuration or billing, cross-company administration, franchise controls, or tenant-oriented module design is authorized in the current program.
 - Existing tenant-related structures require dependency, architecture, security, and migration analysis before any remediation.
-- This proposed decision supersedes the future-expansion portion of DEC-V2-010 only when activated by the founder.
+- This decision supersedes the future-readiness portion of DEC-V2-010 while preserving DEC-V2-010's prohibition on current franchise and multi-company scope.
 
 ## DEC-V2-013 — Adopt an AI-native, founder-by-exception operating model
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active |
 | Date | 2026-08-01 |
 | Decision owner | Founder |
+| Founder approval | Explicitly approved by the founder in PR #131 final ratification review on 2026-08-01 |
 
 ### Decision
 
