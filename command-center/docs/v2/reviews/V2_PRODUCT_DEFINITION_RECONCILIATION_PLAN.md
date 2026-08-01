@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Active |
 | Version | 0.1 |
 | Owner | Founder |
 | Date | 2026-08-01 |
@@ -10,6 +10,12 @@
 | Prior product draft | Closed PR #125 at `d0f57b0` |
 | Target document | `V2_PRODUCT_DEFINITION.md` |
 | Implementation authority | None — product-definition planning only |
+
+## Founder planning-process approval
+
+Approved by the founder in PR #130 at commit `91a9673` as the active planning process for drafting and reviewing the Product Definition.
+
+This approval does not ratify the Product Definition, approve requirements or architecture, authorize a release, or authorize application implementation, migrations, deployment, or production changes.
 
 ## Purpose
 
