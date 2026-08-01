@@ -5,20 +5,22 @@
 **Upstream divergence at edit:** `origin/feat/media-intelligence-library` **0 behind / 0 ahead**  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
 
-## Creator login destination (2026-08-01) — STAGING USABLE
+## Creator login destination (2026-08-01) — STAGING DEPLOYED + USABLE
 
 | Field | Value |
 |---|---|
-| Live creator host | **`https://mil.bhfos.com/creator`** (build SHA **d485aae…** / `mil-staging` / Supabase **`sdzhdupekcnekesbtxsl`**) |
-| Why not app.bhfos.com | Live `app.bhfos.com` shell `index-34a5a779.js` has **zero** `/creator` routes (CRM-only / rolled-back). Catch-all → Select Workspace → CRM |
+| Live creator host | **`https://mil.bhfos.com/creator`** |
+| Live frontend | SHA **d90eb8f…** / `mil-staging` / asset `4930a35b4c7bb80f` / index `index-0af9f76f.js` / Supabase **`sdzhdupekcnekesbtxsl` only** |
+| Deploy archive | `tmp/mil-staging-d90eb8fc622b-20260801T042201Z.zip` (auth `MIL-CREATOR-LOGIN-AUTH-UX-2026-08-01`) |
+| Why not app.bhfos.com | Live `app.bhfos.com` shell `index-34a5a779.js` has **zero** `/creator` routes (CRM-only / rolled-back) |
 | Treezy identity | `treezyincent@gmail.com` on **staging** Auth; `reel_creator`; user id `4f442f1b-9a0d-4102-8c64-ac5df5352f74` |
-| Credentials file | `command-center/tmp/treezy-staging-temp-password.txt` (fresh mint; password verify via anon sign-in **OK**) |
-| Browser USABLE | Signed-out → `/tvg/login?next=%2Fcreator` → Treezy password → lands on Contributor Workspace with email visible |
-| Staging Auth config | `site_url=https://mil.bhfos.com`; `uri_allow_list` includes `https://mil.bhfos.com/**`; `external_google_enabled=True` |
-| Prod Auth config (for future app redeploy) | `site_url=https://app.bhfos.com`; allow-list includes `https://app.bhfos.com/**`; Google enabled — **frontend still missing MIL routes** |
-| Source prep (not yet hosted) | Forgot password + `/tvg/reset-password`, OAuth/`next=/creator` preserve, exact `/creator` route — local unit tests **249 pass** |
-| Hostinger deploy | **Blocked locally** — `HOSTINGER_API_TOKEN` not present in operator `.env`; cannot redeploy `app.bhfos.com` or push auth UX to `mil.bhfos.com` from this worktree until token is provided |
-| Evidence tier | **STAGING USABLE** (Treezy password login). Prod creator URL remains **SOURCE-ONLY / not live** until MIL frontend redeploy |
+| Credentials file | `command-center/tmp/treezy-staging-temp-password.txt` |
+| Browser USABLE | Treezy password → Contributor Workspace (`treezyincent@gmail.com` visible) |
+| Hosted auth UX | Live bundle contains **Forgot password**, `reset-password`, `/creator` |
+| Staging Auth config | `site_url=https://mil.bhfos.com`; allow-list includes `https://mil.bhfos.com/**`; Google enabled |
+| Hostinger token source | Loaded from operator `F:\Dev\BHFOS\command-center\.env.local` (not from frontend build artifact) |
+| Unit tests | `npm run test:media-intel-helpers` **249 pass** |
+| Evidence tier | **STAGING DEPLOYED** + **STAGING USABLE**. Prod creator URL still not live |
 
 ## Fix A–C staging regression (2026-07-31) — PASS — PROD NOT AUTHORIZED
 
