@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Draft |
-| Version | 0.1 |
+| Version | 0.2 |
 | Owner | Founder |
 | Last reviewed | 2026-08-01 |
 | Active governance baseline | `f81ed30` |
@@ -12,245 +12,974 @@
 
 ## 1. Authority and status
 
-This reconciled Product Definition draft is governed by active DEC-V2-001 through DEC-V2-010 and the active Command Center foundation. Closed PR #125 is supporting evidence only. This draft does not ratify product scope, approve requirements or architecture, authorize a release, or authorize application implementation, migrations, deployment, or production changes.
+This document defines the proposed product direction for BHFOS V2.
 
-## 2. Business purpose
+Active DEC-V2-001 through DEC-V2-010 and the active Command Center governance remain binding. Closed PR #125, V1 closeout material, demonstrations, screenshots, founder discussions, and operational observations are supporting evidence only unless incorporated into an active decision or explicitly ratified with this document.
 
-BHFOS V2 is first an in-house operating system for The Vent Guys. It should help TVG turn demand, field labor, inspections, estimates, completed work, billing, and follow-up into profitable revenue while producing dependable customer experiences and professional evidence.
+This draft does not:
 
-BHFOS V2 is a dedicated operating system for The Vent Guys. The current product, architecture, requirements, and releases must optimize for one operating company and must not introduce multi-tenant, franchise-management, or cross-company capabilities.
+- ratify the Product Definition;
+- approve requirements or architecture;
+- authorize a release;
+- authorize application implementation;
+- authorize migrations, deployment, or production changes;
+- authorize financial-policy changes; or
+- activate any AI or automation capability.
 
-Multi-tenancy is reserved for a separate future build requiring explicit founder authorization. The current program is not required to preserve speculative multi-tenant compatibility or absorb present complexity for that future possibility.
+This draft proposes two material directions that require separate governing decisions before ratification:
 
-## 3. Product promise
+1. multi-tenancy is reserved for a separate future build and must not influence the current TVG platform; and
+2. BHFOS V2 is an AI-native, founder-by-exception operating platform.
 
-BHFOS V2 should make the right work easier to perform, harder to miss, and easier to verify. It should reduce handoffs and duplicate entry, make next actions clear, support fast real-world field capture, connect evidence to recommendations and approvals, preserve financial integrity, and make operational value visible.
+Until those decisions are approved, active governance remains controlling.
 
-## 4. Current users
+## 2. Business platform definition
+
+BHFOS V2 is the dedicated business operating platform for The Vent Guys.
+
+It is intended to connect marketing, demand generation, sales conversion, customer and property management, scheduling, field execution, evidence, reporting, billing, collections, retention, management visibility, and business controls into one dependable operating system.
+
+BHFOS is not complete merely because individual modules exist. The platform is complete only when the approved core capabilities operate together through dependable end-to-end business workflows with:
+
+- authoritative records;
+- controlled handoffs;
+- clear ownership;
+- visible exceptions;
+- recoverable failures;
+- usable office and field experiences;
+- trustworthy reporting; and
+- validated financial, security, and production controls.
+
+The Product Definition establishes the full business-platform direction. It does not assign every capability to the first release.
+
+## 3. Business purpose
+
+BHFOS V2 should help The Vent Guys:
+
+- create and capture qualified demand;
+- convert opportunities into scheduled and approved work;
+- perform field services dependably;
+- collect and organize professional evidence;
+- produce useful customer reports;
+- invoice, collect, and reconcile revenue accurately;
+- retain and reactivate customers;
+- grow residential and commercial relationships;
+- understand business performance; and
+- reduce routine founder involvement without weakening control.
+
+The platform must first become stable and dependable for one operating company: The Vent Guys.
+
+## 4. Product promise
+
+BHFOS V2 should make the right work easier to perform, harder to miss, and easier to verify.
+
+It should:
+
+- reduce handoffs and duplicate entry;
+- make next actions clear;
+- support fast real-world office and field capture;
+- connect evidence to findings, recommendations, approvals, reports, and outcomes;
+- preserve financial and operational integrity;
+- automate approved routine work;
+- prepare decisions before they reach the founder;
+- surface material exceptions, risks, and opportunities; and
+- make business value visible.
+
+The founder should operate primarily through strategy, approvals, exceptions, risks, opportunities, and performance review rather than repetitive workflow administration.
+
+## 5. Current users
 
 | User | Current need |
 | --- | --- |
-| Founder / owner | See exceptions, protect cash flow, verify performance, and make decisions without operating every workflow |
-| Office / customer service | Respond, qualify, book, schedule, communicate, prepare quotes, and collect |
-| Field technician / inspector | Know where to go, what to do, what evidence is required, and what must happen before completion |
-| Customer | Understand the problem, review evidence, approve work, receive reports and invoices, and pay clearly |
+| Founder / owner | Understand performance, protect cash flow, review material exceptions, approve high-impact decisions, and avoid manually coordinating routine work |
+| Office / customer service | Respond, qualify, book, schedule, communicate, prepare quotes, follow up, collect, and resolve customer or workflow exceptions |
+| Field technician / inspector | Know where to go, what to do, what evidence is required, what is authorized, and what must happen before completion |
+| Customer | Understand the problem, review evidence, approve work, receive reports and invoices, communicate clearly, and pay |
+| Approved marketing or content user | Access governed, approved business information and media needed for marketing execution without gaining unrestricted operational access |
 
-Commercial customer contacts are included within the Customer role where applicable. Future managers may be considered only as users of the dedicated TVG operation. Franchise operators, external operating companies, tenants, and SaaS administrators are outside the current user model.
+Commercial customer contacts are included within the Customer role where applicable.
 
-## 5. Operating problem
+Future franchise operators, tenant administrators, external operating companies, and shared-SaaS users are outside the current user model.
 
-TVG needs a dependable path from demand to cash that works under office interruptions, field time pressure, imperfect connectivity, evidence requirements, customer approvals, and financial controls. The product must reduce fallback to phone Notes, texts, memory, and disconnected tools because BHFOS is slower or harder to use.
+## 6. Operating problem
 
-The current system also carries legacy tenant behavior that requires a user to choose a tenant during login, even though V2 is a dedicated TVG operation. This creates unnecessary login friction and presents multi-company behavior that is outside the current product boundary.
+TVG needs one dependable operating platform that works under:
 
-## 6. Core operating loop and exception families
+- office interruptions;
+- field time pressure;
+- imperfect connectivity;
+- evidence requirements;
+- customer approvals;
+- financial controls;
+- changing schedules;
+- vendor outages;
+- recurring work;
+- marketing and sales follow-up;
+- customer-retention needs; and
+- limited founder attention.
 
-**Demand -> lead response -> qualification -> booking or next-step commitment -> dispatch -> inspection or planned service -> recommendation or estimate as needed -> customer approval as needed -> authorized work -> completion evidence -> report -> invoice -> payment and reconciliation -> follow-up**
+The product must reduce fallback to phone Notes, texts, memory, spreadsheets, disconnected tools, and duplicate systems because BHFOS is slower, harder to use, incomplete, or unreliable.
 
-Important exception families include estimate-only visits, same-visit work, unscheduled add-ons, return visits, unsafe-to-proceed work, commercial recurring service, multi-property accounts, change orders, and payment or reconciliation exceptions. Detailed states belong in `V2_WORKFLOW_MAP.md`.
+The current system also contains legacy tenant behavior that requires a user to select a tenant during login even though the active product is a dedicated TVG operation. That creates unnecessary friction and presents multi-company behavior outside the current product boundary.
 
-Not every service follows every step. The Workflow Map must define which steps are required, optional, repeated, or skipped for each approved workflow.
+## 7. Core business operating loop
 
-## 7. Strategic product areas
+**Market presence and demand generation -> lead capture and attribution -> response and qualification -> opportunity follow-up -> booking or next-step commitment -> scheduling and dispatch -> inspection or planned service -> recommendation or estimate as needed -> customer approval as needed -> authorized work -> completion evidence -> customer report -> invoice -> payment and reconciliation -> review, referral, retention, reactivation, and renewed demand**
 
-### Established strategic product areas
+Not every service or customer journey follows every step.
 
-- Demand capture, response, attribution, and follow-up.
-- Field inspection, evidence, recommendations, approvals, and completion.
-- Office scheduling, dispatch, customer communication, billing, and reconciliation.
-- Customer reporting, education, retention, and referrals.
+The Workflow Map must define which steps are:
 
-### Proposed strategic product areas pending source capture and founder disposition
+- required;
+- optional;
+- repeated;
+- skipped;
+- automated;
+- AI-assisted;
+- approval-controlled; or
+- exception-driven
 
-- **Commercial Account Manager:** a proposed dedicated-TVG area for managing commercial customers, contacts, properties, recurring service, compliance evidence, history, and account growth inside one TVG operation. Multiple customer properties do not constitute multi-tenancy. This area must not introduce tenant abstractions, cross-company administration, or franchise architecture.
-- **Coach's Corner:** a possible long-term differentiator using business state and performance signals for optional, achievable, non-punitive growth challenges. It is deferred from early implementation unless separately authorized; no forced gamification is implied.
-- **Approved reuse of field media for customer education and marketing operations:** a proposed area pending exact source references, consent decisions, data classification, and founder disposition.
+for each approved workflow.
 
-Proposed areas are not requirements or release scope merely because they appear here.
+Important exception families include:
 
-## 8. Revenue and operational outcomes
+- estimate-only visits;
+- same-visit work;
+- unscheduled add-ons;
+- return visits;
+- unsafe-to-proceed work;
+- deferred recommendations;
+- stalled estimates;
+- commercial recurring service;
+- multi-property customer accounts;
+- schedule changes;
+- change orders;
+- failed communications;
+- payment and reconciliation exceptions;
+- media-consent exceptions; and
+- automation failures.
 
-Candidate outcomes include faster demand response, better booking conversion, faster booking-to-completion flow, evidence-led recommendations, appropriate same-visit completion, accurate invoicing, disciplined collection, lower reconciliation exceptions, stronger customer proof, repeat work, and measurable lead-source performance.
+Detailed workflow states do not belong in this Product Definition.
 
-Commercial-account growth and approved reuse of field media are strategic outcomes to evaluate, not first-release commitments. Operational evidence, customer reporting, internal training, and public marketing are separate purposes; approval for one does not authorize the others. Operational job evidence remains restricted to its approved service, reporting, safety, warranty, training, or dispute purpose by default. Public marketing use requires separate, recorded authorization and may not be inferred from the existence of the media.
+## 8. Core platform capability domains
 
-## 9. Product principles
+The following are core business-platform capabilities. Their inclusion here does not assign them to a specific release or authorize implementation.
 
-1. **TVG first:** optimize the proven in-house operating model.
-2. **Revenue with integrity:** improve speed and conversion without weakening evidence, approval, safety, or financial controls.
-3. **Field reality over office theory:** account for time, attention, signal, device, and photo constraints.
-4. **One business event, one accountable state:** avoid duplicate writers and competing records.
-5. **Evidence before claims:** customer and internal claims should be supported by appropriate evidence.
-6. **Dependability before breadth:** prefer a smaller reliable operating loop.
-7. **Controlled flexibility:** configure useful TVG variation without bespoke sprawl.
-8. **Founder focus:** surface decisions and exceptions rather than maintenance mechanics.
-9. **Interruptible automation:** AI, communication, billing, and integrations require safe failure and auditability.
-10. **No automatic V1 inheritance:** existing code and behavior are evidence, not the V2 specification.
-11. **Environment isolation and production safety:** training, development, testing, staging, and synthetic activity must not contact real customers, mutate production records, enter live payment or accounting systems, or distort production reporting, consistent with DEC-V2-009.
+### 8.1 Marketing and demand generation
 
-## 10. Boundaries and non-goals
+BHFOS should support business visibility across:
 
-This draft authorizes Product Definition planning only. It does not authorize application implementation, requirements, architecture selection, releases, migrations, deployment, production changes, or financial-policy changes.
+- lead sources;
+- campaigns and promotions;
+- website and local-search demand;
+- educational and social content;
+- reputation and review generation;
+- referral activity;
+- customer reactivation;
+- seasonal service opportunities;
+- commercial prospecting; and
+- booked and collected revenue by source or campaign where practical.
 
-Current non-goals include:
+BHFOS may integrate with specialized marketing platforms rather than replacing them. Marketing performance must still be visible within the business operating platform.
 
-- shared multi-tenant SaaS;
-- tenant or organization abstraction;
-- cross-company data isolation;
-- organization switching;
-- per-tenant configuration or billing;
-- franchise-management capability;
-- SaaS administration;
-- architectural work intended to preserve or accelerate those capabilities;
-- premature commitment to a client-platform or application architecture;
-- automatic inheritance of V1 behavior.
+### 8.2 Lead and opportunity conversion
 
-The current Product Definition does not require architecture to remain multi-tenant-ready. Reconsideration requires a separate founder-approved benchmark review and active governing decision. The Product Definition does not select PWA/native, Supabase topology, hosting, vendors, payment architecture, offline technique, AI vendor, or integration design.
+BHFOS should support:
 
-### Stable-platform-first boundary
+- lead capture;
+- response;
+- qualification;
+- booking;
+- estimate follow-up;
+- declined or deferred recommendations;
+- stalled opportunities;
+- lost opportunities;
+- same-visit opportunities;
+- commercial sales opportunities; and
+- conversion measurement.
 
-BHFOS V2 must first become a stable, dependable operating platform for The Vent Guys with working modules, reliable workflows, strong field and office adoption, and validated financial, security, and production controls.
+Marketing creates demand. This capability converts demand into appropriate work and revenue.
 
-Multi-tenancy, tenant provisioning, tenant switching, cross-company administration, franchise management, per-tenant configuration, and per-tenant billing are outside the current product, architecture, requirements, and release scope.
+### 8.3 Customer, contact, property, and account management
 
-Existing tenant-related database structures may remain where required for compatibility, security, data integrity, or migration safety. Their presence does not establish multi-tenancy as an active product capability and must not influence current module design.
+BHFOS should provide dependable records for:
 
-Multi-tenancy may be considered only in a separate future build after the founder confirms that the dedicated TVG platform has passed approved stability, module-completeness, adoption, operational, security, and business-value benchmarks.
+- residential customers;
+- commercial customers;
+- contacts;
+- service properties;
+- communication preferences;
+- service history;
+- account relationships; and
+- multiple properties associated with one customer or commercial account.
 
-### Single-company architecture boundary
+Multiple customer properties do not constitute multi-tenancy.
 
-The current V2 program must be designed and built for one operating company: The Vent Guys.
+### 8.4 Scheduling, dispatch, time, mileage, and capacity
 
-Current architecture and implementation must not add:
+BHFOS should support:
+
+- appointments;
+- technician availability;
+- dispatch;
+- routing context;
+- on-my-way activity;
+- work start and finish;
+- time tracking;
+- mileage;
+- schedule changes;
+- return visits;
+- unscheduled work; and
+- capacity visibility.
+
+### 8.5 Field execution and inspection
+
+BHFOS should support:
+
+- job instructions;
+- inspections;
+- findings;
+- required evidence;
+- safety conditions;
+- add-on opportunities;
+- authorized work;
+- completion;
+- field reporting; and
+- interrupted-network recovery.
+
+The field experience must be fast enough that technicians do not routinely fall back to Notes, texts, memory, or disconnected tools.
+
+### 8.6 Media Intelligence Library
+
+The Media Intelligence Library, or MIL, is a core shared platform capability.
+
+MIL should connect governed photos and videos to:
+
+- customers;
+- properties;
+- appointments;
+- jobs;
+- inspections;
+- findings;
+- recommendations;
+- completed work;
+- reports;
+- warranty or dispute evidence;
+- internal training;
+- customer education; and
+- approved marketing activity.
+
+MIL may use AI to assist with:
+
+- classification;
+- tagging;
+- retrieval;
+- before-and-after grouping;
+- evidence selection;
+- report preparation;
+- marketing-candidate identification;
+- content-creator asset preparation; and
+- reuse history.
+
+Operational evidence, customer-report use, internal training, customer education, content-creator use, and public marketing are separate purposes.
+
+AI classification or recommendation does not grant consent or public-use authority.
+
+### 8.7 Recommendations, estimates, approvals, and authorized work
+
+BHFOS should support:
+
+- findings and recommendations;
+- estimate preparation;
+- customer review;
+- approvals;
+- declined work;
+- deferred work;
+- change orders;
+- same-visit authorization;
+- work-scope accountability; and
+- follow-up.
+
+The platform must distinguish recommendation, estimate, approval, authorization, and completed work.
+
+### 8.8 Customer reporting and communication
+
+BHFOS should support:
+
+- booking confirmations;
+- appointment reminders;
+- on-my-way notices;
+- estimates;
+- approval requests;
+- service reports;
+- invoices;
+- payment reminders;
+- educational communication;
+- review requests;
+- referral requests;
+- sales follow-up; and
+- approved marketing communication.
+
+Operational, transactional, educational, sales-related, promotional, and marketing communications are separate purposes with separate authority and consent requirements.
+
+### 8.9 Financial operations
+
+BHFOS should support or control the operational path for:
+
+- pricing;
+- estimates;
+- deposits;
+- invoices;
+- payments;
+- credits;
+- refunds;
+- collections;
+- aging;
+- reconciliation;
+- financial exceptions; and
+- accounting integration.
+
+BHFOS does not need to become the accounting system. It must preserve financial integrity and provide traceable operational inputs and outcomes.
+
+### 8.10 Reviews, referrals, retention, and reactivation
+
+BHFOS should support:
+
+- review requests;
+- referral activity;
+- recurring reminders;
+- maintenance cycles;
+- customer reactivation;
+- deferred-work follow-up;
+- repeat-service opportunities; and
+- relationship history.
+
+The operating loop does not end when the invoice is paid.
+
+### 8.11 Management visibility and exception control
+
+BHFOS should provide the founder and authorized managers with visibility into:
+
+- demand;
+- conversion;
+- capacity;
+- job progress;
+- evidence completeness;
+- invoicing;
+- collections;
+- marketing contribution;
+- customer retention;
+- operational exceptions;
+- financial exceptions;
+- automation activity;
+- automation failures; and
+- system health.
+
+The platform should surface what requires attention rather than requiring the founder to inspect every record.
+
+### 8.12 Shared platform services
+
+Every business capability depends on shared services for:
+
+- authentication;
+- roles and permissions;
+- authoritative records;
+- audit history;
+- configuration;
+- notifications;
+- files and media;
+- search;
+- integrations;
+- background work;
+- monitoring;
+- backup and restoration;
+- environment isolation;
+- production safety;
+- error recovery;
+- data quality;
+- manual takeover; and
+- controlled automation.
+
+## 9. Capability classification
+
+### 9.1 Core TVG platform
+
+The core TVG platform includes:
+
+- marketing and demand generation;
+- lead and opportunity conversion;
+- customer, contact, property, and account management;
+- scheduling and dispatch;
+- field execution and inspection;
+- MIL;
+- recommendations, estimates, approvals, and authorized work;
+- customer reporting and communication;
+- financial operations;
+- reviews, referrals, retention, and reactivation;
+- management visibility; and
+- shared platform services.
+
+### 9.2 Strategic candidates requiring explicit disposition
+
+#### Commercial Account Manager
+
+Commercial Account Manager is a proposed dedicated-TVG product area for:
+
+- commercial customers;
+- contacts;
+- properties;
+- recurring service;
+- compliance evidence;
+- history;
+- account growth; and
+- multi-property relationships.
+
+It must not introduce tenant abstractions, cross-company administration, or franchise architecture.
+
+Its final core-versus-later classification requires founder disposition and durable source capture.
+
+### 9.3 Deferred differentiators
+
+#### Coach's Corner
+
+Coach's Corner is a proposed differentiator that may use business state and performance signals to offer:
+
+- optional;
+- achievable;
+- non-punitive;
+- practical; and
+- outcome-connected
+
+business-growth challenges.
+
+It is deferred from early implementation unless separately authorized. No forced gamification is implied.
+
+### 9.4 External systems or integrations
+
+Some capabilities may remain in specialized external systems while BHFOS retains operational visibility and controlled integration.
+
+Potential external capability areas include:
+
+- accounting;
+- payment processing;
+- email and SMS delivery;
+- maps and routing;
+- calendars;
+- website management;
+- advertising platforms;
+- social-media publishing;
+- file storage; and
+- external AI providers.
+
+The Product Definition does not select vendors or integration designs.
+
+### 9.5 Future separate builds
+
+The following are not part of the current TVG-first platform:
+
+- multi-tenancy;
+- tenant provisioning;
+- tenant switching;
+- cross-company administration;
+- per-tenant configuration;
+- per-tenant billing;
+- franchise management; and
+- shared SaaS administration.
+
+These require a separate future product and architecture decision.
+
+## 10. AI-native operating model
+
+BHFOS V2 is proposed as an automation-first, AI-assisted operating platform.
+
+AI is a shared platform capability serving:
+
+- marketing;
+- lead intake;
+- sales;
+- scheduling;
+- field execution;
+- MIL;
+- reporting;
+- financial operations;
+- customer retention;
+- management visibility;
+- coaching; and
+- platform support.
+
+The platform should:
+
+- observe business events;
+- complete approved routine actions;
+- prepare decisions;
+- identify missing information;
+- detect exceptions;
+- surface risks and opportunities; and
+- reduce repetitive founder administration.
+
+AI does not replace:
+
+- authoritative records;
+- controlled workflows;
+- permissions;
+- approval rules;
+- financial controls;
+- consent;
+- audit evidence;
+- human accountability; or
+- founder authority.
+
+Core business workflows must remain usable through controlled manual operation when AI or automation is unavailable, inaccurate, slow, disabled, or over budget.
+
+## 11. Founder-by-exception operating objective
+
+BHFOS succeeds when routine business activity proceeds within approved controls without direct founder coordination while material exceptions, risks, opportunities, and decisions remain visible and actionable.
+
+The founder should not need to monitor every:
+
+- lead;
+- appointment;
+- job;
+- estimate;
+- report;
+- invoice;
+- follow-up;
+- marketing activity; or
+- routine automation.
+
+The founder should receive concise visibility into:
+
+- what changed;
+- what requires action;
+- what is at risk;
+- what opportunity may be missed;
+- what automation completed;
+- where automation failed;
+- what exceeded delegated authority; and
+- what decision requires founder judgment.
+
+## 12. Automation authority principle
+
+Every automation or AI-assisted capability must have a defined authority level before implementation.
+
+### Level 1 — Assist
+
+May summarize, search, classify, transcribe, extract, organize, and draft.
+
+### Level 2 — Recommend
+
+May prioritize, flag, suggest, identify opportunities, propose next actions, and prepare decisions.
+
+### Level 3 — Execute low-risk reversible actions
+
+May perform approved actions such as:
+
+- creating internal tasks;
+- preparing reports;
+- requesting missing information;
+- queuing approved communications;
+- organizing media; and
+- assembling review packages.
+
+These actions must be logged, recoverable, and reversible where practical.
+
+### Level 4 — Execute governed actions within approved limits
+
+May perform higher-impact actions only inside explicit business rules, permissions, approval limits, and monitoring.
+
+Examples may include:
+
+- booking approved service types;
+- sending approved follow-up;
+- applying configured pricing;
+- generating recurring work; or
+- publishing preapproved content.
+
+Level 4 authority requires capability-specific approval. It is not authorized by this Product Definition.
+
+### Level 5 — Human authority required
+
+AI may not independently authorize:
+
+- pricing-policy changes;
+- customer commitments outside approved rules;
+- unusual discounts;
+- refunds or credits outside approved limits;
+- financial transactions outside approved authority;
+- public use of restricted media;
+- production deployment;
+- release activation;
+- governance changes;
+- product decisions;
+- architecture decisions; or
+- founder decisions.
+
+Automation authority must be earned through measured reliability, recoverability, correction rates, cost, and business value.
+
+## 13. Product principles
+
+1. **TVG first:** optimize the dedicated operating model for The Vent Guys.
+2. **Complete business platform:** connect marketing, sales, operations, finance, retention, and management rather than building disconnected modules.
+3. **Stable platform before expansion:** deliver dependable working modules before future platform expansion.
+4. **Revenue with integrity:** improve demand, conversion, productivity, and cash flow without weakening evidence, approval, safety, consent, or financial controls.
+5. **Field reality over office theory:** account for time, attention, signal, device, photo, and interruption constraints.
+6. **One business event, one accountable state:** avoid duplicate writers, competing records, and ambiguous ownership.
+7. **Evidence before claims:** customer, marketing, operational, and internal claims should be supported by appropriate evidence.
+8. **Dependability before breadth:** prefer a smaller reliable operating loop over a larger unstable one.
+9. **Controlled flexibility:** support useful TVG variation without bespoke sprawl.
+10. **Founder focus:** surface decisions and exceptions rather than maintenance mechanics.
+11. **AI as an acceleration layer:** core workflows must remain controllable when AI is unavailable.
+12. **AI is not the source of truth:** authoritative facts remain in governed records.
+13. **Interruptible automation:** automation requires safe failure, auditability, override, and manual takeover.
+14. **Authority grows gradually:** autonomous execution must be earned through evidence.
+15. **No automatic V1 inheritance:** existing code and behavior are evidence, not the V2 specification.
+16. **Environment isolation and production safety:** training, development, testing, staging, and synthetic activity must not contact real customers, mutate production records, enter live payment or accounting systems, or distort production reporting.
+17. **Purpose-bound data and media:** access or approval for one purpose does not authorize another.
+18. **Measured value:** automation and AI must demonstrate acceptable reliability, cost, and business value.
+
+## 14. Stable-module and platform-completeness standard
+
+A module is not considered working and stable merely because its main screen loads or its ideal workflow succeeds once.
+
+Before a module is considered stable, it should meet approved criteria for:
+
+- end-to-end workflow completion;
+- correct data preservation;
+- authoritative-state integrity;
+- permissions and approvals;
+- visible errors;
+- retries or recovery;
+- manual takeover;
+- reconcilable financial and operational outputs;
+- expected network and vendor failures;
+- audit evidence;
+- monitoring;
+- support ownership;
+- usability;
+- field or office adoption;
+- acceptable defect severity; and
+- reduced fallback to disconnected tools.
+
+BHFOS is not considered a stable business platform until the approved core modules work together through dependable end-to-end workflows.
+
+Exact numeric thresholds belong in controlled benchmark, requirement, risk, and release records rather than this Product Definition.
+
+## 15. Stable-platform-first and single-company boundary
+
+BHFOS V2 must first become a stable, dependable operating platform for The Vent Guys with working modules, reliable workflows, strong field and office adoption, validated controls, maintainable operations, and demonstrated business value.
+
+The current product, architecture, requirements, and releases must optimize for one operating company: The Vent Guys.
+
+### 15.1 Existing tenant structures
+
+Existing `tenant_id` fields, relationships, policies, claims, or records may remain where they are needed for compatibility, security, data integrity, production safety, or controlled migration.
+
+Their presence does not establish multi-tenancy as an active product capability.
+
+Existing tenant structures must be treated as legacy implementation constraints, not as the foundation of current product design.
+
+### 15.2 Normal login experience
+
+Approved users should enter the TVG operating context without being required to select a tenant, organization, franchise, or operating company during normal login.
+
+This is a product direction only. It does not authorize authentication, database, policy, or migration changes.
+
+### 15.3 Current prohibitions
+
+The current V2 program must not introduce:
 
 - tenant provisioning;
-- tenant or organization switching;
-- customer-facing tenant selection;
-- per-tenant configuration or billing;
+- tenant switching;
+- organization switching;
+- per-tenant configuration;
+- per-tenant billing;
 - cross-company administration;
 - franchise-management controls;
 - speculative tenant abstraction; or
-- implementation complexity intended primarily to support a future multi-tenant product.
+- implementation complexity intended primarily to support future multi-tenancy.
 
-Existing `tenant_id` fields, relationships, policies, or claims may remain temporarily where they are required for compatibility, security, data integrity, or controlled migration. Their presence does not establish multi-tenancy as a V2 requirement.
+Current architecture is not required to preserve speculative multi-tenant readiness.
 
-The technical disposition of existing tenant-related structures must be determined during architecture and capability review. They may be retained, fixed to the TVG operating context, renamed, redesigned, or removed through separately authorized work.
+### 15.4 Future reconsideration
 
-### Dedicated TVG operating context
+Multi-tenancy may not enter active product scope, architecture design, requirements development, implementation planning, or release scope until the founder confirms that TVG has passed approved benchmarks in:
 
-V2 must not require users to select a tenant, organization, franchise, or operating company during normal login.
+- internal adoption;
+- core operating-loop reliability;
+- module stability;
+- business results;
+- operational maturity;
+- security and data controls;
+- maintainability; and
+- verified external demand.
 
-The Vent Guys is the single authorized operating context for the current product. Approved users should enter the TVG operating context directly, subject to their TVG role and permissions.
+Limited planning may define benchmark categories and evidence for a future reconsideration. It must not design the multi-tenant product or influence the current TVG platform.
 
-Existing tenant-related tables, fields, foreign keys, policies, claims, routes, or application logic are legacy implementation residuals. Their presence does not create a V2 multi-tenancy requirement and must not be expanded.
+Passing the benchmarks authorizes reconsideration only. It does not authorize multi-tenancy, franchise capability, SaaS development, architecture changes, or implementation.
 
-This Product Definition does not authorize deleting or migrating those structures. Their technical disposition requires controlled data-model, architecture, security, and migration analysis.
+The founder must approve measurable thresholds and required evidence before any formal multi-tenancy reconsideration begins.
 
-### Multi-tenancy reconsideration gate
+## 16. Architecture and implementation neutrality
 
-Multi-tenancy may not enter active product scope, architecture design, requirements development, implementation planning, or release scope until the founder confirms that TVG has passed approved benchmarks in all of these areas.
+This Product Definition may establish product constraints and boundaries. It may not select:
 
-Limited planning may define the benchmark categories and evidence needed for a future reconsideration, but it must not design the multi-tenant product or influence the current TVG platform.
+- native, web, or hybrid client architecture;
+- database topology;
+- Supabase topology;
+- hosting;
+- vendors;
+- payment architecture;
+- offline implementation technique;
+- AI provider;
+- model provider;
+- integration design;
+- queue technology;
+- monitoring technology; or
+- deployment design.
 
-1. **Core platform stability:** The core platform is stable and can be maintained without constant repair or workaround.
-2. **Module completeness:** Primary modules work end to end across approved workflows.
-3. **Internal adoption:** Office and field users consistently operate through BHFOS, and fallback to Notes, texts, memory, and disconnected tools is reduced to an accepted level.
-4. **Core operating-loop reliability:** The approved demand-to-cash workflow operates dependably, and important exceptions are visible, controlled, and recoverable.
-5. **Business results:** BHFOS demonstrates measurable improvement or protection in agreed revenue, productivity, customer-proof, or cash-flow outcomes.
-6. **Operational maturity:** Roles, permissions, configuration ownership, support responsibilities, and data ownership are stable for the dedicated TVG operation.
-7. **Security and data controls:** Environment isolation, access control, audit evidence, production safety, retention, and financial-data boundaries have been validated.
-8. **External business case:** There is verified demand and a founder-approved economic reason to support more than one operating company.
+The stable-platform-first single-company boundary is a product constraint, not a technical design.
 
-Passing these benchmarks authorizes reconsideration only. It does not automatically authorize multi-tenancy, franchise capability, SaaS development, architecture changes, or implementation.
+## 17. V1 inheritance rule
 
-The founder must approve the measurable thresholds and required evidence before any formal multi-tenancy reconsideration begins. Those thresholds may be recorded in the eventual superseding decision or a separately controlled benchmark record.
+Every inherited V1 capability, constraint, residual, deferred item, or material code path must be classified as `Reuse`, `Redesign`, `Replace`, `Abandon`, `Defer`, or `Investigate further` in the Capability Disposition Matrix.
 
-AI and automation may assist with analysis, drafting, prioritization, preparation, and execution of separately authorized actions. They may not independently authorize pricing or policy changes, customer commitments, financial transactions, production deployment, release activation, or founder decisions.
+A disposition is not implementation authorization.
 
-## 11. V1 inheritance rule
+V1 rules are not binding automatically. Each rule must instead be confirmed as an active decision, proposed as a new decision, recorded as a requirement candidate, treated as an architecture candidate, treated as a risk-control candidate, placed in capability disposition, or retained as historical evidence only.
 
-Every inherited V1 capability, constraint, residual, deferred item, or material code path must be classified as `Reuse`, `Redesign`, `Replace`, `Abandon`, `Defer`, or `Investigate further` in the Capability Disposition Matrix. A disposition is not implementation authorization.
+This includes financial controls, quote-to-job behavior, auto-send settings, stored-card exclusions, offline candidates, integration boundaries, tenant selection, tenant-related schema, and authentication context.
 
-V1 rules are not binding automatically. Each rule must instead be confirmed as an active decision, proposed as a decision, recorded as a requirement candidate, treated as an architecture or risk-control candidate, placed in capability disposition, or retained as historical evidence only. This includes financial controls, quote-to-job behavior, auto-send settings, stored-card exclusions, offline candidates, and integration boundaries.
+Existing tenant-related structures must receive a separate technical disposition covering:
 
-Existing tenant-related schema and login-selection behavior must receive an explicit V2 disposition. The disposition must separately address the user-facing tenant-selection experience; authentication claims and session context; authorization and row-level security dependencies; database tables and foreign keys; production records associated with the current TVG tenant; and integrations, reports, storage paths, and background jobs that depend on tenant identifiers. Removing the user-facing selector does not authorize deleting tenant-related database structures.
+- user-facing tenant selection;
+- authentication claims;
+- session context;
+- authorization dependencies;
+- row-level security;
+- database relationships;
+- production records;
+- storage paths;
+- integrations;
+- reports; and
+- background work.
 
-## 12. Candidate success measures
+Removing the user-facing selector does not authorize deleting tenant-related database structures.
+
+## 18. Candidate outcomes and measures
 
 | Outcome | Candidate measures |
 | --- | --- |
-| Faster intake | response time, mobile capture time, booking conversion, fallback-to-Notes/text frequency |
-| Dedicated-login adoption | approved users enter the TVG workspace without tenant selection; tenant-selection prompts encountered |
-| Better field adoption | capture completeness for customer, property, appointment, add-on, action, time, mileage, evidence, and completion; technician admin time |
+| Marketing and demand generation | qualified leads by source, response and booking conversion, booked revenue by source, collected revenue by source, review generation, referral activity, reactivation results, campaign contribution |
+| Faster intake | response time, mobile capture time, booking conversion, fallback-to-Notes or text frequency |
+| Better opportunity conversion | estimate follow-up completion, stalled opportunities, deferred-work recovery, lost-opportunity reasons |
+| Better field adoption | capture completeness for customer, property, appointment, add-on, action, time, mileage, evidence, and completion; technician administrative time |
 | Better job flow | approval wait, return trips, same-visit completion, exception resolution |
+| Better reporting | evidence completeness, report-preparation time, missing-evidence rate, customer report delivery |
 | Stronger cash flow | completion-to-invoice time, aging, payment completion, reconciliation exceptions |
-| Better customer proof | evidence completeness, report delivery, disputed-scope rate, reviews and referrals |
-| Cleaner operations | duplicate records, alternate-writer exceptions, manual corrections |
+| Better customer proof | disputed-scope rate, reviews, referrals, repeat work |
+| Better retention | recurring-service completion, reactivation conversion, deferred-work follow-up, repeat-service rate |
+| Better management visibility | exception age, unresolved high-impact decisions, founder manual coordination time |
+| Cleaner operations | duplicate records, alternate-writer exceptions, manual corrections, data-quality failures |
 | Production safety | environment-isolation violations, synthetic contamination events, unauthorized production mutations |
-| Better marketing | source attribution, approved content-ready evidence, publishing cadence, lead conversion by source |
+| Automation value | time saved, completion rate, correction rate, override rate, failed-action rate, cost per completed task, measured business contribution |
+| AI quality | approval rate, human correction rate, false-positive and false-negative rates where measurable, performance drift |
+| Dedicated-login adoption | approved users entering the TVG workspace without tenant selection; tenant-selection prompts encountered |
+| Platform stability | critical workflow success, recoverable-failure rate, serious defect level, monitoring coverage, support ownership, fallback-tool frequency |
 
-Numeric business targets require current-state measurement or founder-approved targets. Governance and safety controls may establish pass/fail or zero-tolerance limits without waiting for a business-performance baseline.
+Numeric business targets require current-state measurement or founder-approved targets.
 
-## 13. Product Definition ratification gates
+Governance and safety controls may establish pass/fail or zero-tolerance limits without waiting for a business-performance baseline.
 
-The Product Definition may be ratified only when the founder approves the business purpose, current users, product promise, principles, boundaries, major non-goals, and candidate outcomes; acknowledges and accepts the explicitly recorded unresolved questions; and approves proposed DEC-V2-011 for activation with this document. The three required critique rounds must be completed and all required findings must be reconciled.
+## 19. Product Definition ratification gates
 
-Because the benchmark-gated multi-tenancy boundary supersedes the applicable future-expansion language in DEC-V2-010, the ratification package must also include proposed DEC-V2-012. DEC-V2-012 is not created or active in this draft.
+The Product Definition may be ratified only when:
 
-Any statement dependent on a source marked `Specific references still must be captured` or `Exact references required` must, before ratification, either receive a durable source reference, be explicitly restated and approved by the founder during Product Definition review, or remain identified as a non-binding proposal or open question.
+- the founder approves the business purpose;
+- the founder approves the business-platform definition;
+- the founder approves current users;
+- the founder approves the product promise;
+- the founder approves the capability classification;
+- the founder approves the AI-native and founder-by-exception direction;
+- the founder approves the stable-platform-first single-company boundary;
+- the founder approves the principles and major non-goals;
+- the founder acknowledges and accepts the recorded unresolved questions;
+- the required critique rounds are completed;
+- all required findings are reconciled;
+- source gaps are resolved, explicitly restated by the founder, or retained as non-binding proposals;
+- proposed DEC-V2-011 is approved for activation with this document;
+- the decision superseding the future-compatibility portion of DEC-V2-010 is approved; and
+- the AI-native, founder-by-exception governing decision is approved.
 
 Product Definition ratification does not authorize application implementation.
 
-## 14. Implementation-authorization gates
+## 20. Implementation-authorization gates
 
-Implementation authorization is a separate later gate requiring mapped workflows, classified capabilities, a canonical business model, approved architecture boundaries, ready requirements, an active release, and founder approval. No implementation slice may begin without the active Requirement ID, Release ID, governing decisions, branch/worktree, and validation method required by the active governance foundation.
+Implementation authorization is a separate later gate.
 
-## 15. Open discovery questions
+Before an implementation slice begins, the relevant planning package must include the controlled portions of:
 
+- Business Capability Map;
+- Workflow Map;
+- Canonical Business Model;
+- Capability Disposition Matrix;
+- AI Capability Register;
+- Automation Authority Matrix;
+- Data and Consent Matrix;
+- Integration Ownership Map;
+- Module Stability Standard;
+- Architecture Register;
+- Requirements Register;
+- Risk Register; and
+- Release Register.
+
+Each implementation slice also requires:
+
+- an active Requirement ID;
+- an active Release ID;
+- governing decisions;
+- a controlled branch and worktree;
+- an identified owner;
+- a validation method;
+- environment identification; and
+- explicit founder authorization where required.
+
+No Product Definition statement is implementation authority by itself.
+
+## 21. Open discovery questions
+
+### 21.1 Business-platform coverage
+
+- Which modules are essential for BHFOS to operate the complete TVG business?
+- Which capabilities are strategic additions rather than essential modules?
+- Which capabilities should remain in external systems?
+- What minimum capability set makes BHFOS a complete TVG business platform?
 - Which service lines and job types need first-class support?
-- What must live in BHFOS versus integrate with another system?
-- What evidence is mandatory for each service, recommendation, completion, and report?
-- Which recommendations may be priced and approved during a visit?
+
+### 21.2 Module stability and platform readiness
+
+- What functional, reliability, usability, support, recovery, and adoption criteria must a module meet before it is considered working and stable?
+- Which core modules must work end to end before platform expansion may be considered?
+- What defect severity, workflow success, recovery, and adoption evidence is required?
+- What business-continuity, backup, restoration, degraded-operation, monitoring, and support capabilities are necessary?
+
+### 21.3 Marketing, sales, and retention
+
+- Which marketing activities must BHFOS manage directly?
+- Which activities should remain in specialized external platforms?
+- Which lead sources, campaigns, referral programs, and reactivation efforts must be traceable through booked and collected revenue?
+- What distinguishes a lead, qualified opportunity, estimate opportunity, deferred recommendation, booked job, lost opportunity, and reactivation opportunity?
+- What marketing and sales follow-up should be automatic, manual, or approval-controlled?
 - What prevents same-visit completion today?
-- What decisions should the founder see daily, and what should be handled through role-based exception queues?
-- What TVG configuration is genuinely necessary without creating bespoke complexity?
-- What measurable benchmarks define a stable and dependable TVG platform?
-- Which core modules must work end to end before future platform expansion may be considered?
-- What adoption, workflow-reliability, security, financial-control, and maintainability evidence must the founder review before multi-tenancy may be reconsidered?
-- Which V1 residuals create current operational, financial, security, or data risk, and which may remain accepted?
-- What measurements exist for response, conversion, completion, invoicing, payment, and repeat work?
-- What is Coach's Corner's long-term product role, if any?
-- What commercial-account outcomes matter before any first-release commitment?
-- How should approved field evidence support reporting, education, internal training, and public marketing separately?
-- What technician-location tracking is permitted during active work, on personal devices, and outside work hours; who may access it; and how long may it be retained?
-- What disclosure or consent is required for operational service-evidence photos and videos?
-- What separate consent is required for public marketing use, and how is consent withdrawal handled?
-- What customer and technician data-retention, deletion, correction, and export obligations apply?
-- What commercial-account records may contain confidential customer information, and which roles may access them?
+- Which recommendations may be priced and approved during a visit?
+
+### 21.4 Authoritative records and transitions
+
+- Which system or record is authoritative for each major business object and business event?
+- What transition and cutover principles will prevent duplicate records, lost work, conflicting sources of truth, or premature retirement of current tools?
+- Which historical data should move, remain archived, or be abandoned?
+- Which V1 residuals create operational, financial, security, or data risk?
+- What data-quality, duplicate-prevention, merge, correction, and historical-preservation principles are required?
+
+### 21.5 Roles, authority, and founder visibility
+
+- Which actions require role-based permission, approval, audit evidence, or founder-only authority?
+- What decisions should the founder see daily?
+- What should be handled through role-based exception queues?
+- What operating, financial, marketing, customer, automation, and system-health information must the founder see regularly?
+- What defines a material exception, risk, opportunity, or decision?
+
+### 21.6 AI and automation
+
+- Which AI capabilities are needed in each core business area?
+- What authority level applies to each capability?
+- What data may each AI capability access?
 - What information may be submitted to external AI services?
-- What payment-data boundaries and architecture controls are required to minimize PCI scope and prevent raw card-data storage?
-- What interrupted-network behavior is needed for field adoption?
-- Which database tables, policies, functions, authentication claims, routes, reports, storage paths, and integrations currently depend on a tenant identifier?
+- What sensitive data must be excluded, redacted, or processed internally?
+- What human approval is required?
+- What happens when AI is unavailable, wrong, slow, or over budget?
+- What manual takeover and emergency-disable controls are required?
+- What audit evidence must be retained?
+- How will correction, override, and failure data be captured?
+- How will reliability, cost, value, and performance drift be measured?
+- When may an automation move from drafting to recommendation, approval-controlled execution, or governed autonomous execution?
+- How should provider dependence and model lock-in be limited without prematurely selecting multiple vendors?
+
+### 21.7 MIL, reporting, and media use
+
+- What evidence is mandatory for each service, recommendation, completion, and report?
+- What AI-assisted media classifications are useful and sufficiently reliable?
+- What disclosure or consent is required for operational service-evidence photos and videos?
+- What separate consent is required for public marketing use?
+- How is consent withdrawal handled?
+- What rules govern content-creator handoff?
+- What customer, property, or occupant information must be excluded from public use?
+- What media may be used for internal training or external AI processing?
+- What human review is required before public claims or publication?
+
+### 21.8 Communications and consent
+
+- Which communications are operational, transactional, educational, sales-related, promotional, or marketing?
+- What consent and approval apply to each category?
+- When must customers be told they are interacting with automation or AI?
+- What customer-facing topics require immediate human escalation?
+- What identity, tone, and promise limits apply to customer-facing AI?
+
+### 21.9 Financial and security controls
+
+- What payment-data boundaries and architecture controls are required to minimize PCI scope?
+- How will raw payment-card data be prevented from entering BHFOS?
+- Which pricing, discount, credit, refund, collection, and reconciliation actions require approval?
+- What financial events require audit evidence?
+- What security, privacy, retention, deletion, correction, and export obligations apply?
+- What technician-location tracking is permitted, when, and for how long?
+
+### 21.10 Single-company and future multi-tenancy boundary
+
+- Which current database tables, policies, functions, claims, routes, reports, storage paths, and integrations depend on tenant identifiers?
 - Is there exactly one valid production tenant representing The Vent Guys?
-- Can the current TVG context be resolved safely without a user-facing tenant selector?
-- Which tenant references are required temporarily for production compatibility?
-- Which tenant references should be renamed, replaced, fixed to the TVG context, or removed?
-- What migration and rollback evidence would be required before changing production tenant-related data?
+- Can the TVG context be resolved safely without a user-facing tenant selector?
+- Which tenant references should remain temporarily for compatibility or security?
+- What migration and rollback evidence would be required before changing tenant-related production data?
+- What measurable thresholds define successful internal adoption, operating-loop reliability, module stability, business results, operational maturity, security readiness, maintainability, and external demand?
+- What evidence must the founder review before multi-tenancy may be reconsidered?
 
-Undocumented conversations cannot be treated as binding answers. Missing sources remain explicit evidence gaps.
-
-## 16. Source and decision traceability
+## 22. Source and decision traceability
 
 | Source | Authority / use | State |
 | --- | --- | --- |
 | Active DEC-V2-001 through DEC-V2-010 | Binding governance decisions | Available |
 | Active Command Center governance | Binding process and safety rules | Merge `f81ed30` |
+| Active Product Definition reconciliation plan | Binding planning process | Merge `f81ed30` |
 | Closed PR #125 at `d0f57b0` | Supporting product-definition evidence | Available; not authority |
 | V1 closeout and deferred-scope records | Ratified historical evidence | Available under `command-center/docs/v2-handoff/` |
-| Field and office observations | Supporting evidence | Specific references still must be captured |
-| Coach's Corner discussions | Supporting evidence | Specific references still must be captured |
-| Commercial Account Manager discussions | Supporting evidence | Specific references still must be captured |
-| Media Intelligence discussions | Supporting evidence | Exact references required |
+| Field and office observations | Supporting evidence | Exact durable references still required |
+| Marketing and business-platform direction | Founder direction | Must be captured durably in review or decision records |
+| MIL and reporting direction | Founder direction plus prior project work | Exact durable references still required |
+| Coach's Corner direction | Supporting founder direction | Exact durable references still required |
+| Commercial Account Manager direction | Supporting founder direction | Exact durable references still required |
+| AI-native and founder-by-exception direction | Proposed founder direction | Requires governing decision before ratification |
+| Stable-platform-first multi-tenancy boundary | Proposed founder direction | Requires governing decision before ratification |
 | Competitor research and demonstrations | Supporting evidence | Exact references required |
 
-A source marked as requiring capture cannot support a binding statement until its relevant finding is recorded durably. The Product Definition remains `Draft` until formal critique, proposed DEC-V2-011 approval, founder approval, and merge.
+A source marked as requiring capture cannot support a binding statement until its relevant finding has been recorded durably, explicitly restated and approved by the founder during Product Definition review, or retained as a non-binding proposal or open question.
+
+## 23. Current conclusion
+
+BHFOS V2 is proposed as a complete, AI-native business operating platform for The Vent Guys.
+
+Its current direction is:
+
+- stable TVG platform first;
+- complete business-capability coverage;
+- marketing and sales as core;
+- MIL as core shared infrastructure;
+- AI across the platform;
+- founder operation by exception;
+- authoritative records and deterministic controls beneath AI;
+- staged automation authority;
+- human control for high-impact decisions;
+- dependable modules before broad autonomy;
+- no present multi-tenancy influence; and
+- no implementation authority until downstream planning and release gates are satisfied.
+
+The Product Definition remains `Draft` until the required governing decisions, source reconciliation, critique, founder approval, and merge are complete.
