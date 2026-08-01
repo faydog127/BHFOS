@@ -36,10 +36,14 @@
 
 The three review rounds are critique passes using separate professional lenses, not three human reviewers. Approval remains conditional until all required changes are applied and rechecked.
 
-## Final draft status
+## Final authority status
 
-**ALIGNED FOR DRAFT COMMIT AND FORMAL PULL-REQUEST REVIEW**
+**RATIFIED GOVERNANCE FOUNDATION**
 
-**NOT RATIFIED AND NOT IMPLEMENTATION AUTHORITY**
+**ACTIVE GOVERNANCE AUTHORITY; NOT IMPLEMENTATION AUTHORITY**
 
-This report records reviewed draft alignment. It does not authorize V2 application implementation.
+This report records the reviewed foundation and its ratification. It does not authorize V2 application implementation, production changes, migrations, or an implementation release.
+
+## Ratification outcome
+
+Founder ratification was recorded for PR #129 at commit `a5491a6` on 2026-08-01. The authorized governance documents and DEC-V2-001 through DEC-V2-010 are now Active. This ratification does not authorize V2 application implementation, production changes, migrations, or an implementation release.

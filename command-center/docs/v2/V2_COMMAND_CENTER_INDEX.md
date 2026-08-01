@@ -3,12 +3,12 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Active |
 | Version | 0.1 |
 | Owner | Founder |
 | Last reviewed | 2026-08-01 |
 | Source baseline | `c65a923` |
-| Implementation authority | None — governance setup only |
+| Implementation authority | Active governance authority; no implementation authority |
 
 ## Current control state
 
@@ -17,15 +17,15 @@
 | Active phase | Command Center foundation |
 | Active implementation slice | None |
 | Active release | None |
-| Next required action | Reconcile and ratify foundation documents |
-| Decisions awaiting approval | DEC-V2-005 |
+| Next required action | Reconcile Product Definition and planning registers |
+| Decisions awaiting approval | None |
 | Coding authorized | No |
-| Current blocker | Foundation PR review and founder ratification pending |
+| Current blocker | None |
 | Implementation blocker | Product definition and planning registers not yet reconciled |
 
 ## Purpose
 
-This index is the landing page for V2 product governance, requirements, release control, risk management, workflow definition, and evidence. The foundation is conditionally aligned for a draft commit and formal pull-request review; it is not implementation authority.
+This index is the active landing page for V2 product governance, requirements, release control, risk management, workflow definition, and evidence. The governance foundation is ratified; it does not authorize V2 application implementation, production changes, migrations, or an implementation release.
 
 ## Authority hierarchy
 

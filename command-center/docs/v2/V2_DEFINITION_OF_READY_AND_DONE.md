@@ -3,11 +3,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Active |
 | Version | 0.1 |
 | Owner | Founder |
 | Last reviewed | 2026-08-01 |
-| Implementation authority | Governance draft; not yet active |
+| Implementation authority | Active governance authority; no implementation authority |
 
 ## Work classes
 

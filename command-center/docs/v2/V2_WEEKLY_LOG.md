@@ -5,6 +5,7 @@
 | Status | Active |
 | Owner | Founder |
 | Started | 2026-08-01 |
+| Implementation authority | Active governance authority; control evidence only |
 
 ## Entry template
 

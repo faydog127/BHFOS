@@ -2,11 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Active |
 | Version | 0.1 |
 | Owner | Founder |
 | Last reviewed | 2026-08-01 |
-| Implementation authority | Policy foundation only |
+| Implementation authority | Active governance authority; policy only |
 
 ## Purpose
 

@@ -3,11 +3,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Active |
 | Version | 0.1 |
 | Owner | Founder |
 | Last reviewed | 2026-08-01 |
-| Implementation authority | Governance draft; not yet active |
+| Implementation authority | Active governance authority; no implementation authority |
 
 ## Decision control
 
@@ -23,7 +23,7 @@ Only the founder may approve product scope, release scope, financial-policy chan
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active |
 | Date | 2026-08-01 |
 | Decision owner | Founder |
 
@@ -33,7 +33,7 @@ V2 is first an in-house operating system for The Vent Guys. Future franchise com
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active |
 | Date | 2026-08-01 |
 | Decision owner | Founder |
 
@@ -43,7 +43,7 @@ V2 continues within the existing `faydog127/BHFOS` repository, isolated through 
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active |
 | Date | 2026-08-01 |
 | Decision owner | Founder |
 
@@ -53,7 +53,7 @@ Documents under `command-center/docs/v2/` are the authoritative V2 product and b
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active |
 | Date | 2026-08-01 |
 | Decision owner | Founder |
 
@@ -63,7 +63,7 @@ The initial solo-development process uses the repository-based Command Center, G
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active |
 | Date | 2026-08-01 |
 | Decision owner | Founder |
 
@@ -83,7 +83,7 @@ The V2 foundation becomes active authority only after reconciliation, review, fo
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active |
 | Date | 2026-08-01 |
 | Decision owner | Founder |
 
@@ -97,7 +97,7 @@ AI agents, reviewers, and contractors may recommend, analyze, document, or imple
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active |
 | Date | 2026-08-01 |
 | Decision owner | Founder |
 
@@ -107,7 +107,7 @@ The solo-development process permits no more than one active implementation slic
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active |
 | Date | 2026-08-01 |
 | Decision owner | Founder |
 
@@ -117,7 +117,7 @@ GitHub is authoritative for committed code history, branches, pull requests, and
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active |
 | Date | 2026-08-01 |
 | Decision owner | Founder |
 
@@ -139,7 +139,7 @@ This policy does not prematurely decide the number of Supabase projects, hosting
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active |
 | Date | 2026-08-01 |
 | Decision owner | Founder |
 
