@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { supabase } from '@/lib/customSupabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -11,6 +12,13 @@ import { tenantPath, getUrlTenant } from '@/lib/tenantUtils';
 import {
   hostedLocalSupabaseErrorMessage,
 } from '@/lib/supabaseEnv';
+import {
+  clearPendingPostLoginPath,
+  isSafeMilPostLoginPath,
+  isSafeTenantPostLoginPath,
+  passwordResetRedirectTo,
+  sanitizePostLoginPath,
+} from '@/lib/postLoginRedirect';
 
 const Login = () => {
   const {
@@ -26,72 +34,69 @@ const Login = () => {
   const [password, setPassword] = useState(() => (isLocalAuth ? localDevPassword : ''));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [info, setInfo] = useState(null);
 
   const navigate = useNavigate();
-  // Prefer params, fallback to util
   const { tenantId: paramTenant } = useParams();
   const urlTenant = paramTenant || getUrlTenant() || 'tvg';
-  
   const location = useLocation();
+
+  const searchParams = new URLSearchParams(location.search);
+  const nextRaw = searchParams.get('next');
+  const safeNext = sanitizePostLoginPath(nextRaw, urlTenant);
+  const isCreatorEntry =
+    isSafeMilPostLoginPath(safeNext) &&
+    (safeNext.startsWith('/creator') || safeNext.startsWith('/contributor'));
 
   // Redirect if already logged in
   useEffect(() => {
-    if (user) {
-      // 1. Check for 'next' query param (may be URI-encoded by MediaSessionGuard)
-      const searchParams = new URLSearchParams(location.search);
-      let next = searchParams.get('next');
-      if (next) {
-        try {
-          next = decodeURIComponent(next);
-        } catch {
-          // keep raw
+    if (!user) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { fetchMilRole, milCapabilities } = await import('@/lib/mediaIntel/roles');
+        const role = await fetchMilRole();
+        if (cancelled) return;
+        const caps = milCapabilities(role);
+
+        // MIL product next always wins.
+        if (safeNext && isSafeMilPostLoginPath(safeNext)) {
+          clearPendingPostLoginPath();
+          navigate(safeNext, { replace: true });
+          return;
         }
-      }
 
-      // 2. Safe internal destinations only:
-      //    - same-tenant CRM paths /:tenant/...
-      //    - MIL product paths (/media/*, /creator/*, /contributor/*, short aliases)
-      const isSafeMilNext =
-        typeof next === 'string' &&
-        (next.startsWith('/media') ||
-          next.startsWith('/creator') ||
-          next.startsWith('/contributor') ||
-          next === '/uploads' ||
-          next === '/all' ||
-          next === '/review' ||
-          next.startsWith('/uploads?') ||
-          next.startsWith('/all?') ||
-          next.startsWith('/review?'));
-      const isSafeTenantNext =
-        typeof next === 'string' && next.startsWith(`/${urlTenant}/`);
+        // Creators must not land on CRM even when next points at the CRM hub.
+        if (caps.isCreator && !caps.isStaff) {
+          clearPendingPostLoginPath();
+          navigate('/creator', { replace: true });
+          return;
+        }
 
-      if (isSafeTenantNext || isSafeMilNext) {
-        navigate(next, { replace: true });
-        return;
-      }
+        if (safeNext && isSafeTenantPostLoginPath(safeNext, urlTenant)) {
+          clearPendingPostLoginPath();
+          navigate(safeNext, { replace: true });
+          return;
+        }
 
-      // Contributors (reel_creator) land in Contributor Workspace — never CRM by default.
-      let cancelled = false;
-      (async () => {
-        try {
-          const { fetchMilRole, milCapabilities } = await import('@/lib/mediaIntel/roles');
-          const role = await fetchMilRole();
-          if (cancelled) return;
-          const caps = milCapabilities(role);
-          if (caps.isCreator && !caps.isStaff) {
-            navigate('/creator', { replace: true });
-            return;
+        navigate(tenantPath('/crm', urlTenant), { replace: true });
+      } catch {
+        if (!cancelled) {
+          if (safeNext && (isSafeMilPostLoginPath(safeNext) || isSafeTenantPostLoginPath(safeNext, urlTenant))) {
+            navigate(safeNext, { replace: true });
+          } else {
+            navigate(tenantPath('/crm', urlTenant), { replace: true });
           }
-        } catch {
-          // Fall through to CRM default if role lookup fails.
         }
-        if (!cancelled) navigate(tenantPath('/crm', urlTenant), { replace: true });
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }
-  }, [user, navigate, urlTenant, location]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, navigate, urlTenant, safeNext]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -103,10 +108,11 @@ const Login = () => {
 
     setIsSubmitting(true);
     setError(null);
+    setInfo(null);
 
     try {
-      const { error } = await signIn({ email, password });
-      if (error) throw error;
+      const { error: signInError } = await signIn({ email, password });
+      if (signInError) throw signInError;
       // Success is handled by useEffect above
     } catch (err) {
       console.error('Login failed:', err);
@@ -116,17 +122,47 @@ const Login = () => {
     }
   };
 
+  const handleForgotPassword = async () => {
+    setError(null);
+    setInfo(null);
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setError('Enter your email address first, then select Forgot password.');
+      return;
+    }
+    if (hasHostedLocalSupabaseMismatch) {
+      setError(hostedLocalSupabaseErrorMessage);
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const redirectTo = passwordResetRedirectTo(window.location.origin, urlTenant);
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(trimmed, {
+        redirectTo,
+      });
+      if (resetError) throw resetError;
+      setInfo('If an account exists for this email, a password-reset link has been sent.');
+    } catch (err) {
+      setError(err?.message || 'Unable to send a password-reset email.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleGoogle = async () => {
     setIsSubmitting(true);
     setError(null);
+    setInfo(null);
 
     try {
-      const { error } = await signInWithGoogle();
-      if (error) throw error;
+      const { error: googleError } = await signInWithGoogle({
+        nextPath: safeNext,
+      });
+      if (googleError) throw googleError;
       // Redirect handled by Supabase (OAuth)
     } catch (err) {
-      console.error("Google sign-in failed:", err);
-      setError(err?.message || "Failed to sign in with Google.");
+      console.error('Google sign-in failed:', err);
+      setError(err?.message || 'Failed to sign in with Google.');
       setIsSubmitting(false);
     }
   };
@@ -135,6 +171,7 @@ const Login = () => {
     setEmail(localDevEmail);
     setPassword(localDevPassword);
     setError(null);
+    setInfo(null);
   };
 
   return (
@@ -153,7 +190,9 @@ const Login = () => {
           </div>
           <CardTitle className="text-2xl font-bold capitalize">Sign in to {urlTenant}</CardTitle>
           <CardDescription>
-            Enter your credentials to access the {urlTenant} CRM
+            {isCreatorEntry
+              ? 'Enter your credentials to open the Contributor Workspace.'
+              : `Enter your credentials to access ${urlTenant}.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -162,6 +201,12 @@ const Login = () => {
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            {info && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{info}</AlertDescription>
               </Alert>
             )}
 
@@ -188,7 +233,7 @@ const Login = () => {
                 </AlertDescription>
               </Alert>
             ) : null}
-            
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -201,9 +246,22 @@ const Login = () => {
                 className="bg-white/50"
               />
             </div>
-            
+
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="password">Password</Label>
+                {!isLocalAuth && !hasHostedLocalSupabaseMismatch ? (
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-blue-700 hover:underline"
+                    disabled={isSubmitting}
+                    onClick={handleForgotPassword}
+                    data-testid="forgot-password"
+                  >
+                    Forgot password?
+                  </button>
+                ) : null}
+              </div>
               <Input
                 id="password"
                 type="password"
@@ -215,8 +273,8 @@ const Login = () => {
               />
             </div>
 
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               className="w-full bg-blue-600 hover:bg-blue-700 transition-colors"
               disabled={isSubmitting || hasHostedLocalSupabaseMismatch}
             >

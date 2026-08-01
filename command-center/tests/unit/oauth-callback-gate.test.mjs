@@ -34,6 +34,18 @@ test('OAuth success navigates to post-login redirect and clears flag', () => {
   assert.equal(decision.clearPostLoginRedirect, true);
 });
 
+test('OAuth success honors creator post-login redirect', () => {
+  const decision = resolveOAuthCallbackNavigation({
+    hasOAuthParams: true,
+    session: { access_token: 't' },
+    postLoginRedirect: '/creator',
+    waitedMs: 0,
+  });
+  assert.equal(decision.action, 'navigate');
+  assert.equal(decision.to, '/creator');
+  assert.equal(decision.clearPostLoginRedirect, true);
+});
+
 test('OAuth code with no session yet must WAIT (do not bounce to select-tenant)', () => {
   const decision = resolveOAuthCallbackNavigation({
     hasOAuthParams: true,

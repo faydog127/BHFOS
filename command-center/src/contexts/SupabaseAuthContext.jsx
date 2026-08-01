@@ -11,6 +11,11 @@ import {
   recoverOAuthSessionFromUrl,
 } from '@/lib/oauthSessionRecovery';
 import { urlHasOAuthCallbackParams } from '@/lib/oauthCallbackGate';
+import {
+  POST_OAUTH_REDIRECT_KEY,
+  resolveOAuthDesiredPath,
+  sanitizePostLoginPath,
+} from '@/lib/postLoginRedirect';
 import { resolveTenantIdFromSession, logTenantDebugInfo, getSelectedTenantId } from '@/lib/tenantUtils';
 import { jwtDecode } from "jwt-decode";
 
@@ -284,7 +289,7 @@ export const SupabaseAuthProvider = ({ children }) => {
 
       return supabase.auth.signInWithPassword(data);
     },
-    signInWithGoogle: async () => {
+    signInWithGoogle: async ({ nextPath } = {}) => {
       if (hasHostedLocalSupabaseMismatch) {
         return {
           data: null,
@@ -300,20 +305,24 @@ export const SupabaseAuthProvider = ({ children }) => {
       }
 
       // OAuth redirect URLs must match the project's allowlist.
-      // To avoid requiring wildcard redirect URLs for every tenant/path, we:
-      // 1) Store the intended post-login path locally
-      // 2) Redirect OAuth back to the site origin only
-      const selectedTenantId = getSelectedTenantId();
-      const desiredPath = selectedTenantId ? `/${selectedTenantId}/crm` : '/select-tenant';
+      // Store intended post-login path locally; callback returns to site origin only.
+      const selectedTenantId = getSelectedTenantId() || 'tvg';
+      const fromArg = sanitizePostLoginPath(nextPath, selectedTenantId);
+      const desiredPath =
+        fromArg ||
+        resolveOAuthDesiredPath({
+          locationSearch: typeof window !== 'undefined' ? window.location.search : '',
+          tenantId: selectedTenantId,
+        });
 
       try {
-        localStorage.setItem('post_oauth_redirect', desiredPath);
+        localStorage.setItem(POST_OAUTH_REDIRECT_KEY, desiredPath);
       } catch {
         // ignore storage failures (private mode / blocked storage)
       }
 
       const redirectTo = window.location.origin;
-      
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {

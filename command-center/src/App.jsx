@@ -21,6 +21,7 @@ import {
 import { supabase } from '@/lib/customSupabaseClient';
 
 import Login from '@/pages/Login';
+import ResetPassword from '@/pages/ResetPassword';
 import Contact from '@/pages/Contact';
 import ThankYou from '@/pages/ThankYou';
 import QuoteView from '@/pages/public/QuoteView';
@@ -522,6 +523,7 @@ function App() {
         <Route path="/bhf/crm/*" element={<CrmAliasRedirect fromPrefix="/bhf/crm" />} />
         <Route path="/app/:tenantId/*" element={<AppAliasRedirect />} />
         <Route path="/:tenantId/login" element={<Login />} />
+        <Route path="/:tenantId/reset-password" element={<ResetPassword />} />
         <Route
           path="/:tenantId/crm/*"
           element={
@@ -543,6 +545,20 @@ function App() {
                 <MediaLibraryRoutes />
               </Suspense>
             </RouteErrorBoundary>
+          }
+        />
+        <Route
+          path="/creator"
+          element={
+            <MediaSessionGuard>
+              <RouteErrorBoundary>
+                <Suspense fallback={<LoadingFallback />}>
+                  <FeatureGuard flag="enableMediaIntelligence">
+                    <CreatorRoutesPage />
+                  </FeatureGuard>
+                </Suspense>
+              </RouteErrorBoundary>
+            </MediaSessionGuard>
           }
         />
         <Route

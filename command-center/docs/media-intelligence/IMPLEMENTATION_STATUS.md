@@ -1,9 +1,24 @@
 # Media Intelligence Library — Implementation Status
 
 **Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** `8827014fe715fbde6c55c092c75e54812824cb69`  
+**Verified HEAD at this status edit:** `dfa978d521798c5fb036d140127dd33d73c7707e` (+ uncommitted auth UX fixes for Forgot password / OAuth creator landing)  
 **Upstream divergence at edit:** `origin/feat/media-intelligence-library` **0 behind / 0 ahead**  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
+
+## Creator login destination (2026-08-01) — STAGING USABLE
+
+| Field | Value |
+|---|---|
+| Live creator host | **`https://mil.bhfos.com/creator`** (build SHA **d485aae…** / `mil-staging` / Supabase **`sdzhdupekcnekesbtxsl`**) |
+| Why not app.bhfos.com | Live `app.bhfos.com` shell `index-34a5a779.js` has **zero** `/creator` routes (CRM-only / rolled-back). Catch-all → Select Workspace → CRM |
+| Treezy identity | `treezyincent@gmail.com` on **staging** Auth; `reel_creator`; user id `4f442f1b-9a0d-4102-8c64-ac5df5352f74` |
+| Credentials file | `command-center/tmp/treezy-staging-temp-password.txt` (fresh mint; password verify via anon sign-in **OK**) |
+| Browser USABLE | Signed-out → `/tvg/login?next=%2Fcreator` → Treezy password → lands on Contributor Workspace with email visible |
+| Staging Auth config | `site_url=https://mil.bhfos.com`; `uri_allow_list` includes `https://mil.bhfos.com/**`; `external_google_enabled=True` |
+| Prod Auth config (for future app redeploy) | `site_url=https://app.bhfos.com`; allow-list includes `https://app.bhfos.com/**`; Google enabled — **frontend still missing MIL routes** |
+| Source prep (not yet hosted) | Forgot password + `/tvg/reset-password`, OAuth/`next=/creator` preserve, exact `/creator` route — local unit tests **249 pass** |
+| Hostinger deploy | **Blocked locally** — `HOSTINGER_API_TOKEN` not present in operator `.env`; cannot redeploy `app.bhfos.com` or push auth UX to `mil.bhfos.com` from this worktree until token is provided |
+| Evidence tier | **STAGING USABLE** (Treezy password login). Prod creator URL remains **SOURCE-ONLY / not live** until MIL frontend redeploy |
 
 ## Fix A–C staging regression (2026-07-31) — PASS — PROD NOT AUTHORIZED
 
