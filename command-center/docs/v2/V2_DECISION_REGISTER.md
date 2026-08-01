@@ -153,3 +153,65 @@ V2 will not build multi-tenant, franchise-management, or cross-company data-isol
 - No speculative tenant abstraction is required.
 - No capability may claim franchise support without separate authorization.
 - Material architecture decisions may record future expansion consequences without implementing them.
+
+## DEC-V2-011 — Product Definition ratification
+
+| Field | Value |
+| --- | --- |
+| Status | Active |
+| Date | 2026-08-01 |
+| Decision owner | Founder |
+| Founder approval | Explicitly approved by the founder in PR #131 final ratification review on 2026-08-01 |
+
+### Decision
+
+The reconciled `V2_PRODUCT_DEFINITION.md` is ratified and this decision is Active through the formal pull-request review, explicit founder approval, activation commit, and merge of PR #131.
+
+### Consequences
+
+- Product Definition ratification does not authorize requirements, architecture, releases, migrations, deployment, production changes, or application implementation.
+- Unresolved product questions remain recorded and do not become silent scope.
+- Implementation authorization remains a separate governed gate.
+
+## DEC-V2-012 — Multi-tenancy requires demonstrated TVG operating maturity
+
+| Field | Value |
+| --- | --- |
+| Status | Active |
+| Date | 2026-08-01 |
+| Decision owner | Founder |
+| Founder approval | Explicitly approved by the founder in PR #131 final ratification review on 2026-08-01 |
+
+### Decision
+
+BHFOS V2 is designed and built as a single-company operating system for The Vent Guys. Multi-tenancy is reserved for a separate future build requiring explicit founder authorization. Existing `tenant_id` fields may remain where needed for compatibility, security, data integrity, or migration safety, but they must not drive current product design or create multi-tenant scope.
+
+Multi-tenancy may be reconsidered only after the founder confirms approved stability, working-module, adoption, workflow-reliability, operational-maturity, security, financial-control, maintainability, and external-business-case benchmarks. Passing those benchmarks permits reconsideration only; it does not authorize a multi-tenant build.
+
+### Consequences
+
+- Normal users enter the TVG workspace without tenant selection or switching.
+- No tenant provisioning, per-tenant configuration or billing, cross-company administration, franchise controls, or tenant-oriented module design is authorized in the current program.
+- Existing tenant-related structures require dependency, architecture, security, and migration analysis before any remediation.
+- This decision supersedes the future-readiness portion of DEC-V2-010 while preserving DEC-V2-010's prohibition on current franchise and multi-company scope.
+
+## DEC-V2-013 — Adopt an AI-native, founder-by-exception operating model
+
+| Field | Value |
+| --- | --- |
+| Status | Active |
+| Date | 2026-08-01 |
+| Decision owner | Founder |
+| Founder approval | Explicitly approved by the founder in PR #131 final ratification review on 2026-08-01 |
+
+### Decision
+
+BHFOS V2 is an automation-first, AI-assisted operating platform for The Vent Guys. It should reduce routine administrative, analytical, coordination, reporting, marketing, financial, retention, and follow-up work so the founder operates primarily through strategy, approvals, exceptions, and performance review.
+
+Every AI or automation capability must have an explicit authority level from assistance through governed execution within approved limits. Authority must grow only after the underlying module, deterministic controls, evaluation evidence, failure recovery, and human-accountability requirements are satisfied.
+
+### Consequences
+
+- AI may assist, recommend, execute low-risk reversible actions, or execute governed actions within approved limits as explicitly authorized.
+- AI may not independently authorize pricing-policy changes, unusual customer commitments, out-of-limit financial transactions, public use of restricted media, production deployment, release activation, governance decisions, or founder decisions.
+- This decision establishes product direction and governance; it does not authorize any individual AI implementation, requirement, architecture, release, deployment, or production change.
