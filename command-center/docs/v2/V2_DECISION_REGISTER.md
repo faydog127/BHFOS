@@ -19,6 +19,46 @@ Decision statuses are `Proposed`, `Active`, `Rejected`, `Superseded`, and `Suspe
 
 Only the founder may approve product scope, release scope, financial-policy changes, production deployment authority, or a departure from the Definition of Ready or Definition of Done. AI agents may recommend or document a decision but cannot approve one.
 
+## DEC-V2-001 — TVG-first product
+
+| Field | Value |
+| --- | --- |
+| Status | Proposed |
+| Date | 2026-08-01 |
+| Decision owner | Founder |
+
+V2 is first an in-house operating system for The Vent Guys. Future franchise compatibility may be preserved where practical, but shared multi-tenant SaaS development is not authorized without a new decision.
+
+## DEC-V2-002 — Existing BHFOS repository remains authoritative
+
+| Field | Value |
+| --- | --- |
+| Status | Proposed |
+| Date | 2026-08-01 |
+| Decision owner | Founder |
+
+V2 continues within the existing `faydog127/BHFOS` repository, isolated through controlled branches and worktrees rather than a disconnected repository.
+
+## DEC-V2-003 — Command Center is the product and build-control authority
+
+| Field | Value |
+| --- | --- |
+| Status | Proposed |
+| Date | 2026-08-01 |
+| Decision owner | Founder |
+
+Documents under `command-center/docs/v2/` are the authoritative V2 product and build-control system. Conversations, screenshots, and demonstrations are inputs, not final authority.
+
+## DEC-V2-004 — Jira and Confluence will not be used initially
+
+| Field | Value |
+| --- | --- |
+| Status | Proposed |
+| Date | 2026-08-01 |
+| Decision owner | Founder |
+
+The initial solo-development process uses the repository-based Command Center, GitHub branches, pull requests, and automated validation instead of Jira or Confluence.
+
 ## DEC-V2-005 — Foundation ratification gate
 
 | Field | Value |
@@ -43,7 +83,7 @@ The V2 foundation becomes active authority only after reconciliation, review, fo
 
 | Field | Value |
 | --- | --- |
-| Status | Active |
+| Status | Proposed |
 | Date | 2026-08-01 |
 | Decision owner | Founder |
 
@@ -53,11 +93,31 @@ Only the founder may approve product-scope changes, release authorization, relea
 
 AI agents, reviewers, and contractors may recommend, analyze, document, or implement authorized work but may not grant themselves authority.
 
+## DEC-V2-006 — One active implementation slice at a time
+
+| Field | Value |
+| --- | --- |
+| Status | Proposed |
+| Date | 2026-08-01 |
+| Decision owner | Founder |
+
+The solo-development process permits no more than one active implementation slice at a time. Newly discovered ideas go to the appropriate intake or register instead of silently entering active work.
+
+## DEC-V2-007 — GitHub remains the code source of truth
+
+| Field | Value |
+| --- | --- |
+| Status | Proposed |
+| Date | 2026-08-01 |
+| Decision owner | Founder |
+
+GitHub is authoritative for committed code history, branches, pull requests, and release SHAs. The local `F:` workspace is an active development environment, not the sole backup.
+
 ## DEC-V2-009 — Environment isolation is mandatory
 
 | Field | Value |
 | --- | --- |
-| Status | Active |
+| Status | Proposed |
 | Date | 2026-08-01 |
 | Decision owner | Founder |
 
@@ -79,7 +139,7 @@ This policy does not prematurely decide the number of Supabase projects, hosting
 
 | Field | Value |
 | --- | --- |
-| Status | Active |
+| Status | Proposed |
 | Date | 2026-08-01 |
 | Decision owner | Founder |
 

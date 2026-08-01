@@ -7,8 +7,8 @@
 | Owner | Founder |
 | Last reviewed | 2026-08-01 |
 | Review lenses | Product and governance; engineering and software process; solo-founder usability; security, data, financial risk, and AI-agent adoption |
-| Documents reviewed | Index, Definition of Ready and Done, Decision Register |
-| Baseline | Uncommitted V2 Command Center foundation |
+| Documents reviewed | Command Center Index; Definition of Ready and Done; Decision Register; Data Classification; Weekly Log; six controlled document shells |
+| Baseline | PR #129 at `0baffcb` |
 | Verdict | CONDITIONALLY ALIGNED — FOUNDATION CHANGES REQUIRED BEFORE RATIFICATION |
 
 ## Review lenses
@@ -18,12 +18,21 @@
 3. **Solo-founder usability.** The index is the landing page, the weekly log is intentionally lightweight, and stop rules make unresolved control gaps visible without requiring a large process overhead.
 4. **Security, data, financial risk, and AI-agent adoption.** Data classification, restricted-data handling, environment isolation, emergency limits, and AI-agent authority boundaries are recorded. Automated enforcement is deferred.
 
-## Required before ratification
+## Required before foundation ratification
 
-- Reconcile the product definition and remaining registers.
-- Complete formal review of this draft pull request.
+- Complete formal review of PR #129.
+- Resolve all review findings.
+- Wait for required CI checks to pass.
 - Record founder approval.
-- Change applicable documents from `Draft` to `Active` only after the gate is complete.
+- Change approved governance documents and decisions from `Draft` or `Proposed` to `Active`.
+- Merge the governance foundation.
+
+## Required before implementation authorization
+
+- Reconcile and ratify the Product Definition.
+- Complete the required workflow and capability-disposition work.
+- Approve requirements and architecture boundaries.
+- Authorize the first implementation release.
 
 The three review rounds are critique passes using separate professional lenses, not three human reviewers. Approval remains conditional until all required changes are applied and rechecked.
 

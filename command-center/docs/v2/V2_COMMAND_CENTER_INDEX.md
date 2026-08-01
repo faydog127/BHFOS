@@ -20,7 +20,8 @@
 | Next required action | Reconcile and ratify foundation documents |
 | Decisions awaiting approval | DEC-V2-005 |
 | Coding authorized | No |
-| Current blocker | Product definition not yet reconciled |
+| Current blocker | Foundation PR review and founder ratification pending |
+| Implementation blocker | Product definition and planning registers not yet reconciled |
 
 ## Purpose
 
