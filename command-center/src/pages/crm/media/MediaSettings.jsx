@@ -7,7 +7,7 @@ import { UPLOAD_PHONE_NOTICE } from '@/lib/mediaIntel/constants';
 import { isValidContributorBrief } from '@/lib/mediaIntel/contributorWorkspace';
 
 const CREATOR_ADMIN_UNAVAILABLE_MESSAGE =
-  'Contributor invite/roster requires deployed media-intel-creator-admin — not available until staging deploy.';
+  'Contributor invite/roster requires the media-intel-creator-admin edge function on the MIL production backend.';
 
 const PROMOTE_DISABLED_COPY =
   'Website promotion is paused pending a proven, end-to-end-validated public-safe transform pipeline (EXIF/metadata strip + derivative verification). Promotion must never copy a private original — see mil_website_promotions table comment for the current gate.';

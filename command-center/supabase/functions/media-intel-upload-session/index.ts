@@ -30,6 +30,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 import { milCorsHeaders, milCorsPreflight } from '../_shared/milCors.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
 import { isMilOwnerAdmin, normalizeMilRole } from '../_shared/milRoles.ts'
+import {
+  newCorrelationId,
+  redactErrorForClient,
+} from '../_shared/milSafeErrors.ts'
 
 /** True if the user has a reel_creator (contributor) grant row — not only the resolved primary role. */
 async function hasMilCreatorGrant(userId: string): Promise<boolean> {
@@ -315,7 +319,13 @@ async function mintSignedUpload(objectPath: string) {
 Deno.serve(async (req) => {
   const cors = milCorsHeaders(req)
   if (req.method === 'OPTIONS') return milCorsPreflight(req)
-  const json = (body: unknown, status = 200) => jsonWith(cors, body, status)
+  const correlationId = req.headers.get('x-correlation-id') || newCorrelationId()
+  const json = (body: Record<string, unknown>, status = 200) =>
+    jsonWith(
+      { ...cors, 'x-correlation-id': correlationId },
+      { ...body, correlationId },
+      status,
+    )
 
   try {
     const body = await req.json().catch(() => ({}))
@@ -362,13 +372,6 @@ Deno.serve(async (req) => {
         .single()
       if (sessErr) throw sessErr
 
-      await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: auth.user.id,
-        action: 'upload_session_created',
-        target_type: 'mil_upload_sessions',
-        target_id: session.id,
-        details: { batchId: batch.id, expiresAt, hours },
-      })
 
       // Token travels in a URL fragment (never a query string) so it is never sent to the
       // server in a request line, never captured by access/referrer logs, and never persisted
@@ -428,13 +431,6 @@ Deno.serve(async (req) => {
         .single()
       if (sessErr) throw sessErr
 
-      await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: auth.user.id,
-        action: 'contributor_upload_session_created',
-        target_type: 'mil_upload_sessions',
-        target_id: session.id,
-        details: { batchId: batch.id, expiresAt, hours, source: 'contributor_self' },
-      })
 
       return json({
         sessionId: session.id,
@@ -681,13 +677,6 @@ Deno.serve(async (req) => {
           .eq('id', grant.id)
       }
 
-      await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: loaded.session.created_by,
-        action: 'upload_session_mint',
-        target_type: 'mil_upload_grants',
-        target_id: grant.id,
-        details: { sessionId: loaded.session.id, assetId, objectPath, contentType, tokenExpiresAt, clientUploadId },
-      })
 
       return json({
         grantId: grant.id,
@@ -881,13 +870,6 @@ Deno.serve(async (req) => {
         }
 
         if (clientChecksum && clientChecksum !== verifiedChecksum) {
-          await supabaseAdmin.from('mil_audit_events').insert({
-            actor_user_id: loaded.session.created_by,
-            action: 'upload_client_checksum_mismatch',
-            target_type: 'mil_upload_grants',
-            target_id: grant.id,
-            details: { clientChecksum, verifiedChecksum },
-          })
         }
 
         // Duplicate detection before placement: identical bytes must not be
@@ -1121,13 +1103,6 @@ Deno.serve(async (req) => {
         .update({ revoked_at: new Date().toISOString() })
         .eq('id', sessionId)
       if (error) throw error
-      await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: auth.user.id,
-        action: 'upload_session_revoked',
-        target_type: 'mil_upload_sessions',
-        target_id: sessionId,
-        details: {},
-      })
       return json({ ok: true })
     }
 
@@ -1147,7 +1122,9 @@ Deno.serve(async (req) => {
     return json({ error: 'Unknown action' }, 400)
   } catch (error) {
     // Never log request bodies here — tokens must never reach logs.
-    console.error('media-intel-upload-session', error instanceof Error ? error.message : error)
-    return json({ error: error instanceof Error ? error.message : 'Session error' }, 500)
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error('media-intel-upload-session', { correlationId, msg })
+    const redacted = redactErrorForClient(error, { correlationId, fallbackCode: 'INTERNAL_ERROR' })
+    return json({ error: redacted.error, code: redacted.code }, 500)
   }
 })

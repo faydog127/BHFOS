@@ -32,6 +32,22 @@ const HOSTINGER_API_BASE = 'https://developers.hostinger.com/api/hosting/v1';
  * Recognised deploy targets. A mutating upload must name one of these
  * explicitly; there is no implicit default target for mutation.
  */
+/** Canonical MIL production Supabase ref. CRM production is wwyx… and must never be a MIL deploy target. */
+export const MIL_PRODUCTION_SUPABASE_REF = 'sdzhdupekcnekesbtxsl';
+export const CRM_PRODUCTION_SUPABASE_REF = 'wwyxohjnyqnegzbxtuxs';
+
+const MIL_PRODUCTION_TARGET = {
+  id: 'mil-production',
+  domain: 'mil.bhfos.com',
+  routePath: '/',
+  // Upload paths are relative to the mil.bhfos.com website root (already …/public_html/mil).
+  remoteRoot: '',
+  identityText: 'MIL Production',
+  allowedSupabaseProjectRefs: [MIL_PRODUCTION_SUPABASE_REF],
+  // Explicit deny list — MIL deploy tooling must never target CRM production.
+  forbiddenSupabaseProjectRefs: [CRM_PRODUCTION_SUPABASE_REF],
+};
+
 export const TARGETS = {
   production: {
     id: 'production',
@@ -39,24 +55,29 @@ export const TARGETS = {
     routePath: '/',
     remoteRoot: 'public_html',
     identityText: 'The Vent Guys CRM',
-    // Production CRM only — never use for MIL staging.
-    allowedSupabaseProjectRefs: null,
+    // CRM production only — never use for MIL host deploys.
+    allowedSupabaseProjectRefs: [CRM_PRODUCTION_SUPABASE_REF],
   },
   /**
-   * Non-production internal MIL frontend.
+   * Canonical MIL production frontend (ratified: mil.bhfos.com + sdzh…).
    * Hostinger document root (verified): /home/u986242606/domains/bhfos.com/public_html/mil
-   * Must never target bhfos.com public_html root or app.bhfos.com.
+   * Must never target bhfos.com public_html root, app.bhfos.com, or wwyx….
+   */
+  'mil-production': MIL_PRODUCTION_TARGET,
+  /**
+   * Deprecated alias for mil-production (pre-Phase-2A operator scripts).
+   * Same host + backend allowlist; prefer --environment=mil-production.
    */
   'mil-staging': {
+    ...MIL_PRODUCTION_TARGET,
     id: 'mil-staging',
-    domain: 'mil.bhfos.com',
-    routePath: '/',
-    // Upload paths are relative to the mil.bhfos.com website root (already …/public_html/mil).
-    remoteRoot: '',
-    identityText: 'BHFOS MIL Staging (internal)',
-    allowedSupabaseProjectRefs: ['sdzhdupekcnekesbtxsl'],
+    deprecatedAliasOf: 'mil-production',
   },
 };
+
+export function isMilDeployTarget(target) {
+  return Boolean(target && (target.id === 'mil-production' || target.id === 'mil-staging'));
+}
 
 /** Apps that can be staged. Source directories are local build outputs only. */
 export const APPS = {
@@ -134,19 +155,50 @@ export function resolveTarget(environment) {
 }
 
 /**
- * Hard safety: mil-staging must never resolve to the bhfos.com testing-site
- * document root or the CRM production root.
+ * Hard safety: MIL host deploys must never resolve to the bhfos.com testing-site
+ * document root, the CRM production root, or the CRM Supabase project (wwyx…).
  */
 export function assertMilTargetIsolation(target) {
-  if (!target || target.id !== 'mil-staging') return;
+  if (!isMilDeployTarget(target)) return;
+  const label = target.id;
   if (target.domain !== 'mil.bhfos.com') {
-    throw new Error(`mil-staging domain must be mil.bhfos.com (got ${target.domain})`);
+    throw new Error(`${label} domain must be mil.bhfos.com (got ${target.domain})`);
   }
   const root = String(target.remoteRoot || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
   // Empty remoteRoot is OK: upload is scoped to the mil.bhfos.com website root
   // (…/public_html/mil). Bare public_html would target the bhfos.com testing site.
   if (root === 'public_html') {
-    throw new Error('mil-staging refuses remoteRoot=public_html (that is the bhfos.com testing-site root)');
+    throw new Error(`${label} refuses remoteRoot=public_html (that is the bhfos.com testing-site root)`);
+  }
+  const allowed = target.allowedSupabaseProjectRefs || [];
+  if (!allowed.includes(MIL_PRODUCTION_SUPABASE_REF)) {
+    throw new Error(`${label} must allow only MIL production backend ${MIL_PRODUCTION_SUPABASE_REF}`);
+  }
+  if (allowed.includes(CRM_PRODUCTION_SUPABASE_REF)) {
+    throw new Error(`${label} must never allow CRM production backend ${CRM_PRODUCTION_SUPABASE_REF}`);
+  }
+  const forbidden = target.forbiddenSupabaseProjectRefs || [];
+  if (!forbidden.includes(CRM_PRODUCTION_SUPABASE_REF)) {
+    throw new Error(`${label} must explicitly forbid CRM production backend ${CRM_PRODUCTION_SUPABASE_REF}`);
+  }
+}
+
+/** Refuse MIL deploy plans that mention the CRM Supabase ref in build artifacts. */
+export function assertMilArtifactBackend(sourceDir, target) {
+  if (!isMilDeployTarget(target) || !sourceDir || !fs.existsSync(sourceDir)) return;
+  for (const rel of walkFiles(sourceDir)) {
+    if (!SCANNABLE_EXT.has(path.extname(rel).toLowerCase())) continue;
+    let content = '';
+    try {
+      content = fs.readFileSync(path.join(sourceDir, rel), 'utf8');
+    } catch {
+      continue;
+    }
+    if (content.includes(CRM_PRODUCTION_SUPABASE_REF)) {
+      throw new Error(
+        `MIL deploy refused: artifact ${rel} references CRM backend ${CRM_PRODUCTION_SUPABASE_REF}`,
+      );
+    }
   }
 }
 
@@ -266,14 +318,22 @@ export function planDeployment({
     problems.push(`refusing to plan deploy: possible secrets in source (${secretFindings.map((f) => `${f.patternId}:${f.file}`).join(', ')})`);
   }
 
-  if (target?.id === 'mil-staging') {
+  if (isMilDeployTarget(target)) {
     try {
       assertMilTargetIsolation(target);
     } catch (err) {
       problems.push(err.message);
     }
     if (target.domain === 'bhfos.com' || target.domain === 'app.bhfos.com' || target.domain === 'vent-guys.com') {
-      problems.push(`mil-staging refuses forbidden domain ${target.domain}`);
+      problems.push(`${target.id} refuses forbidden domain ${target.domain}`);
+    }
+    try {
+      assertMilArtifactBackend(resolvedSourceDir, target);
+    } catch (err) {
+      problems.push(err.message);
+    }
+    if (buildInfo?.environment === 'production') {
+      problems.push('MIL host deploy refuses CRM production build-info environment');
     }
   }
 
@@ -467,8 +527,8 @@ export async function executeDeploy(gate, credentials, { archivePath } = {}) {
   if (!credentials || !credentials.present) throw new Error('missing HOSTINGER_API_TOKEN');
   if (!archivePath) throw new Error('executeDeploy requires a pre-built archivePath');
   assertMilTargetIsolation(gate.target);
-  if (gate.target?.id === 'mil-staging' && gate.target.domain !== 'mil.bhfos.com') {
-    throw new Error('executeDeploy mil-staging refused: domain is not mil.bhfos.com');
+  if (isMilDeployTarget(gate.target) && gate.target.domain !== 'mil.bhfos.com') {
+    throw new Error(`executeDeploy ${gate.target.id} refused: domain is not mil.bhfos.com`);
   }
   const username = await resolveHostingerUsername(gate, credentials);
   const uploadCredentials = await fetchUploadCredentials(gate, credentials, username);

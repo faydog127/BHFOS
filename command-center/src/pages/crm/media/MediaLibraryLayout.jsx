@@ -7,6 +7,7 @@ import { tenantPath } from '@/lib/tenantUtils';
 import { MIL_NAV } from '@/lib/mediaIntel/constants';
 import { fetchMilRole, milCapabilities } from '@/lib/mediaIntel/roles';
 import { getAiConfigState } from '@/lib/mediaIntel/api';
+import MilEnvironmentBanner from '@/components/media/MilEnvironmentBanner';
 
 export default function MediaLibraryLayout() {
   const [caps, setCaps] = useState(milCapabilities('unauthenticated'));
@@ -48,15 +49,18 @@ export default function MediaLibraryLayout() {
                 </p>
               </div>
             </div>
-            {caps.isStaff && (
-              <Link
-                // Legacy V1 CRM remains on tenant-prefixed routes; MIL product routes are /media
-                to={tenantPath('/crm', DEFAULT_TENANT_ID)}
-                className="shrink-0 text-sm text-blue-700 underline-offset-2 hover:underline min-h-[44px] inline-flex items-center"
-              >
-                Back to Hub
-              </Link>
-            )}
+            <div className="shrink-0 flex flex-col items-end gap-2">
+              <MilEnvironmentBanner caps={caps} />
+              {caps.isStaff && (
+                <Link
+                  // Legacy V1 CRM remains on tenant-prefixed routes; MIL product routes are /media
+                  to={tenantPath('/crm', DEFAULT_TENANT_ID)}
+                  className="text-sm text-blue-700 underline-offset-2 hover:underline min-h-[44px] inline-flex items-center"
+                >
+                  Back to Hub
+                </Link>
+              )}
+            </div>
           </div>
           {aiState && !aiState.configured && (
             <div

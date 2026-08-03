@@ -310,10 +310,10 @@ describe('Review Queue / Received wiring contracts', () => {
     assert.match(api, /export async function resolveReviewPreviewAccess/);
   });
 
-  it('sign edge returns structured SOURCE_OBJECT_MISSING / DERIVATIVE_OBJECT_MISSING', () => {
+  it('sign edge returns structured MEDIA_SOURCE_MISSING (redacted public code)', () => {
     const sign = read('supabase/functions/media-intel-sign/index.ts');
-    assert.match(sign, /SOURCE_OBJECT_MISSING/);
-    assert.match(sign, /DERIVATIVE_OBJECT_MISSING/);
+    assert.match(sign, /MEDIA_SOURCE_MISSING/);
+    assert.match(sign, /toPublicSignCode|PUBLIC_ERROR_CATALOG/);
     assert.match(sign, /isStorageObjectMissingMessage/);
   });
 });

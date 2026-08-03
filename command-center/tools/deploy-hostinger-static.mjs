@@ -78,12 +78,14 @@ function printHelp() {
       '  --execute --environment=<env> --authorization=<ref> --sha=<hex>',
       '  --archive=<path>',
       '  and ONE of:',
-      '    --i-understand-production     (required when environment=production)',
-      '    --i-understand-mil-staging    (required when environment=mil-staging)',
+      '    --i-understand-production       (required when environment=production / CRM)',
+      '    --i-understand-mil-production   (required when environment=mil-production)',
+      '    --i-understand-mil-staging      (deprecated alias; same as mil-production)',
       '',
       'Safety: ordinary validation (lint/build/test) never invokes this CLI, and a',
       'dry run performs no network mutation. Remote deletion and server-side rollback',
-      'are intentionally not implemented. mil-staging refuses remoteRoot=public_html.',
+      'are intentionally not implemented. MIL targets refuse remoteRoot=public_html',
+      'and refuse CRM backend wwyxohjnyqnegzbxtuxs.',
     ].join('\n')
   );
 }
@@ -192,9 +194,10 @@ async function main() {
 
   let gate;
   try {
-    const isMil = String(environment || '').trim() === 'mil-staging';
+    const envName = String(environment || '').trim();
+    const isMil = envName === 'mil-production' || envName === 'mil-staging';
     const acknowledged = isMil
-      ? args['i-understand-mil-staging'] === true
+      ? args['i-understand-mil-production'] === true || args['i-understand-mil-staging'] === true
       : args['i-understand-production'] === true;
     gate = createMutationGate({
       environment,

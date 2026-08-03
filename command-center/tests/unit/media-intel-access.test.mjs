@@ -144,10 +144,12 @@ describe('MIL upload session + signed access (no tenant)', () => {
 
   it('sign function blocks creators from originals and uses short TTLs', () => {
     const fn = read('supabase/functions/media-intel-sign/index.ts');
+    const policy = read('supabase/functions/_shared/milSignPolicy.ts');
     assert.match(fn, /PREVIEW_TTL = 300/);
     assert.match(fn, /DOWNLOAD_TTL = 600/);
-    assert.match(fn, /Creators never get originals/);
-    assert.match(fn, /creatorCanView/);
+    assert.match(fn, /allowOriginal/);
+    assert.match(fn, /creatorAssetSignDecision|OWN_UPLOAD_EXCEPTION/);
+    assert.match(policy, /OWN_UPLOAD_EXCEPTION|created_by_user_id/);
     assert.match(fn, /creator_download|detail_preview|grid_thumb/);
     assert.doesNotMatch(fn, /tenant_id|tenantId/);
   });
@@ -155,10 +157,11 @@ describe('MIL upload session + signed access (no tenant)', () => {
   it('sign function is fail-closed: auth, purpose, staff/creator gate, no client createSignedUrl', () => {
     const fn = read('supabase/functions/media-intel-sign/index.ts');
     const api = read('src/lib/mediaIntel/api.js');
+    const errors = read('supabase/functions/_shared/milSafeErrors.ts');
     assert.match(fn, /auth\.getUser\(\)/);
     assert.match(fn, /VALID_PURPOSES/);
     assert.match(fn, /STAFF_ROLES/);
-    assert.match(fn, /You do not have access to this media/);
+    assert.match(errors, /MEDIA_ACCESS_DENIED/);
     assert.match(fn, /allowOriginal === true/);
     assert.match(fn, /createSignedUrl/);
     // Browser must not mint storage signed URLs; only the edge may.

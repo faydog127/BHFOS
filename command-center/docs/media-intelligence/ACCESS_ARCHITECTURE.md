@@ -1,9 +1,16 @@
 # Media Library — Access Architecture
 
-**Branch:** `feat/media-intelligence-library`  
-**Baseline:** `9369d206bfbcaf32267e9e88518b222146e11de8`  
-**App URL (existing):** `https://app.bhfos.com` (authenticated CRM; no new domain)  
+**Branch:** `feat/media-intelligence-library` (Phase 2A work on `fix/mil-phase2a-security-integrity`)  
 **Governing correction:** `SINGLE_COMPANY_CORRECTION.md` — BHFOS is a single-company OS for The Vent Guys.
+
+### Ratified hosts (Phase 2A)
+
+| Plane | Host | Backend |
+|---|---|---|
+| **MIL Production** | `https://mil.bhfos.com` | `sdzhdupekcnekesbtxsl` |
+| **CRM Production** | `https://app.bhfos.com` | `wwyxohjnyqnegzbxtuxs` |
+
+MIL is single-company on its own production plane. CRM remains on `app.bhfos.com`. No data migration between the two projects is authorized.
 
 ## Product routes (MIL)
 
