@@ -1,24 +1,41 @@
 # Media Intelligence Library — Implementation Status
 
-**Branch (Phase 2A worktree):** `fix/mil-phase2a-security-integrity` @ worktree `F:/Dev/BHFOS-media-intel-phase2a`  
-**Base SHA:** `5a5653e0a24c002da38f3bb4dc215bce1b44f7ca` (`feat/media-intelligence-library`)  
+**Branch:** `feat/media-intelligence-library`  
+**Deployment-boundary SHA:** `63d619fcc3303f05a60888174585408b745f79fc` (PR #132 merge commit)  
+**Certified Phase 2A parent:** `20cdd2202dee68ca5901e0f2c9920d0e0f69c9de` (unchanged in ancestry)  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)  
 **Ratified planes:** MIL Production = `mil.bhfos.com` + `sdzhdupekcnekesbtxsl`; CRM Production = `app.bhfos.com` + `wwyxohjnyqnegzbxtuxs`
 
-## Phase 2A — Concurrent reel-mint proof (2026-08-03) — LOCALLY VERIFIED — NOT DEPLOYED / NOT COMMITTED
+## Phase 2A — Merged to integration (2026-08-04) — MERGED / NOT HOSTED-APPLIED
+
+| Field | Value |
+|---|---|
+| PR | [#132](https://github.com/faydog127/BHFOS/pull/132) — merge commit (not squash) |
+| Merge SHA / boundary | `63d619fcc3303f05a60888174585408b745f79fc` |
+| Parents | `dfa978d…` + `20cdd22…` |
+| Post-merge verification worktree | `F:/Dev/BHFOS-media-intel-phase2a-merged` @ `63d619f` |
+| Helpers | **307 pass / 0 fail** |
+| SQL | **`SUCCESSFUL_AB_VERIFY_ROLLBACK_REAPPLY`** |
+| Concurrent mint | **PASS** |
+| Package | `tmp/mil-production-63d619fcc330-20260804T001318Z.zip` (SHA-256 `DD97B56370E5874A9129091E326846C7F1079DF0E191DDEACFBF32B36C4DAD93`) |
+| build-info | `mil-production` / `migrationVersion=20260802130000` / asset `31a5145632e3dc13` / `commitSha=63d619fcc330…` |
+| Bundle | `sdzh…` only; no `wwyx…`; no service_role JWT; no `sbp_` |
+| Apply packet | [`PRODUCTION_APPLY_PACKET.md`](./PRODUCTION_APPLY_PACKET.md) |
+| Explicit non-actions | **No hosted Migration A/B**, no edge/frontend deploy, no `wwyx…` mutation, source branch not deleted |
+| Evidence tier | **merged** + **locally verified** on merge tip. Not hosted-applied / not production-deployed |
+| Next action | Founder authorize hosted sequence: Migration A → edges → `mil-production` frontend → fixtures → Migration B → lockdown |
+
+## Phase 2A — Concurrent reel-mint proof (2026-08-03) — LOCALLY VERIFIED (superseded by merge above)
 
 | Field | Value |
 |---|---|
 | Mission | Close final Phase 2A uncertainty: true concurrent reel-mint idempotency across independent DB sessions |
 | Worktree / branch | `F:/Dev/BHFOS-media-intel-phase2a` / `fix/mil-phase2a-security-integrity` |
-| HEAD / baseline | `5a5653e0a24c002da38f3bb4dc215bce1b44f7ca` (dirty tip; no upstream tracking) |
+| Certified commit | `20cdd2202dee68ca5901e0f2c9920d0e0f69c9de` |
 | Concurrent harness | `tools/mil-phase2a-reel-mint-concurrency.mjs` / `npm run test:media-intel-phase2a-concurrent-mint` |
 | Concurrent result | **PASS** on disposable `127.0.0.1:25432` — independent backends, same IDs, 1 ledger/version/grant/audit, negatives + response-loss OK; **no SQL correction required** |
-| Unit / SQL / build | Helpers **307 pass**; SQL **SUCCESSFUL_AB_VERIFY_ROLLBACK_REAPPLY**; build `mil-production` ok; package `tmp/mil-production-5a5653e0a24c-20260803T234853Z.zip` (warn: rebuild with `VITE_SUPABASE_URL` before deploy) |
 | Report | [`PHASE2A_SECURITY_INTEGRITY_REPORT.md`](./PHASE2A_SECURITY_INTEGRITY_REPORT.md) |
-| Explicit non-actions | **No commit**, no push, no deploy, no hosted migration apply, no `wwyx…` / `sdzh…` mutation |
-| Evidence tier | **locally verified** concurrent mint + unit/SQL/build. Not staging/deployed/merged |
-| Next action | Commit authorization → independent re-review → Founder authorize Migration A → code → Migration B on `sdzh…` / `mil-production` only |
+| Evidence tier | **locally verified** (pre-merge). Superseded for deployment boundary by merge `63d619f` |
 
 ## Creator login destination (2026-08-01) — STAGING DEPLOYED + USABLE
 
