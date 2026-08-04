@@ -1,29 +1,25 @@
 /**
  * Explicit owner/admin website promotion (single-company).
  *
- * PRE-STAGING HARDENING: `prepare_public_safe` and `promote` are intentionally
- * DISABLED (503) pending a proven decode/re-encode public-safe transform
- * pipeline. The previous implementation only stripped JPEG APP0–APP15
- * segments (EXIF/XMP marker removal) from the *original* container — it never
- * decoded and re-encoded pixel data. Stripping metadata markers does NOT
- * prove an image is safe to publish (embedded thumbnails, non-EXIF
- * steganographic content, or marker-parsing edge cases in other viewers can
- * still leak data), so this function must not claim it does. Re-enable only
- * after a verified decode → re-encode → strip pipeline exists and has been
- * reviewed.
- *
- * `unpublish` remains available so owner/admin can pull anything already
- * live (or that predates this hardening) without waiting on that work.
+ * prepare_public_safe / promote remain DISABLED (503).
+ * unpublish uses mil_unpublish_website_audited (mutation + audit one TX);
+ * storage / website_media cleanup happen after the durable DB state is recorded.
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 import { milCorsHeaders, milCorsPreflight } from '../_shared/milCors.ts'
+import { persistAccessAudit } from '../_shared/milAudit.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
 import { isMilOwnerAdmin } from '../_shared/milRoles.ts'
+import {
+  newCorrelationId,
+  PUBLIC_ERROR_CATALOG,
+  redactErrorForClient,
+} from '../_shared/milSafeErrors.ts'
 
-const PUBLIC_SAFE_DISABLED_MESSAGE =
-  'Public-safe transform is not implemented. Stripping EXIF/XMP markers from the original container does not prove an image is safe to publish (it does not decode/re-encode pixel data). This action is disabled until a proven decode → re-encode → strip pipeline is built and reviewed. media-intel-originals is never copied directly to website-public-media.'
+// prepare_public_safe / promote remain disabled until a proven decode → re-encode →
+// strip pipeline exists. Client responses must not reveal storage topology.
 
-/** Remove JPEG APP0–APP15 segments (includes EXIF APP1 / XMP). Kept for future re-enablement only — NOT wired in below. */
+/** Remove JPEG APP0–APP15 segments (includes EXIF APP1 / XMP). Kept for future re-enablement only — NOT wired below. */
 function stripJpegExif(input: Uint8Array): Uint8Array {
   if (input.length < 4 || input[0] !== 0xff || input[1] !== 0xd8) {
     throw new Error('Not a JPEG')
@@ -63,47 +59,28 @@ function stripJpegExif(input: Uint8Array): Uint8Array {
   }
   return new Uint8Array(out)
 }
-
-/** Eligibility gates a future proven pipeline must still enforce. Not currently invoked by promote (disabled). */
-async function loadEligibleAsset(assetId: string) {
-  const { data: asset, error: assetErr } = await supabaseAdmin
-    .from('mil_assets')
-    .select('*, mil_verified_metadata(*)')
-    .eq('id', assetId)
-    .maybeSingle()
-  if (assetErr) throw assetErr
-  if (!asset) return { error: 'Asset not found', status: 404 }
-  if (asset.archived_at || asset.trashed_at) {
-    return { error: 'Archived or trashed assets cannot be promoted to the website', status: 400 }
-  }
-  if (asset.human_review_status !== 'verified') {
-    return { error: 'Asset must be human-verified before website promotion', status: 400 }
-  }
-  if (asset.privacy_status !== 'clear') {
-    return { error: 'Privacy must be clear before website promotion', status: 400 }
-  }
-  if (['ownership_unknown', 'permission_unknown', 'public_use_prohibited'].includes(asset.rights_status)) {
-    return { error: 'Rights/permission block public promotion', status: 400 }
-  }
-  if (asset.customer_permission_status === 'unknown') {
-    return { error: 'Customer permission unknown — cannot promote', status: 400 }
-  }
-  const { data: useRow } = await supabaseAdmin
-    .from('mil_permitted_uses')
-    .select('*')
-    .eq('asset_id', assetId)
-    .eq('use_key', 'website')
-    .eq('approved', true)
-    .maybeSingle()
-  if (!useRow) return { error: 'Website permitted use must be approved first', status: 400 }
-  return { asset }
-}
+void stripJpegExif
 
 Deno.serve(async (req) => {
   const cors = milCorsHeaders(req)
   if (req.method === 'OPTIONS') return milCorsPreflight(req)
-  const json = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } })
+  const correlationId = req.headers.get('x-correlation-id') || newCorrelationId()
+
+  const json = (body: Record<string, unknown>, status = 200) =>
+    new Response(JSON.stringify({ ...body, correlationId }), {
+      status,
+      headers: {
+        ...cors,
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+        'x-correlation-id': correlationId,
+      },
+    })
+
+  const deny = (code: string, status = 403, extra: Record<string, unknown> = {}) => {
+    const pub = PUBLIC_ERROR_CATALOG[code] ? code : 'INTERNAL_ERROR'
+    return json({ error: PUBLIC_ERROR_CATALOG[pub], code: pub, ...extra }, status)
+  }
 
   try {
     const authHeader = req.headers.get('Authorization') || ''
@@ -111,81 +88,88 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: authHeader } },
     })
     const { data: { user }, error: authError } = await authClient.auth.getUser()
-    if (authError || !user) return json({ error: 'Unauthorized' }, 401)
+    if (authError || !user) return deny('SIGN_IN_REQUIRED', 401)
 
     const body = await req.json().catch(() => ({}))
     const action = String(body.action || 'promote')
     const assetId = String(body.assetId || '').trim()
 
     if (!(await isMilOwnerAdmin(user.id))) {
-      return json({ error: 'Only owner/admin may manage website promotions' }, 403)
+      return deny('MEDIA_ACCESS_DENIED', 403)
     }
 
     if (action === 'prepare_public_safe' || action === 'promote') {
-      if (!assetId) return json({ error: 'Missing asset' }, 400)
-      await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: user.id,
+      if (!assetId) return deny('INVALID_REQUEST', 400)
+      // No business mutation — advisory access audit only.
+      await persistAccessAudit({
+        actorUserId: user.id,
         action: 'website_promotion_attempt_blocked',
-        target_type: 'mil_assets',
-        target_id: assetId,
-        details: { action, reason: 'public_safe_transform_not_implemented' },
+        targetType: 'mil_assets',
+        targetId: assetId,
+        details: { action, reason: 'public_safe_transform_not_implemented', correlationId },
       })
-      return json({ error: PUBLIC_SAFE_DISABLED_MESSAGE, code: 'not_implemented' }, 503)
+      // Catalog-only 503 — never expose storage topology or pipeline internals to clients.
+      return deny('PUBLIC_PROMOTION_UNAVAILABLE', 503)
     }
 
     if (action === 'unpublish') {
-      if (!assetId) return json({ error: 'Missing asset' }, 400)
+      if (!assetId) return deny('INVALID_REQUEST', 400)
 
-      const { data: promotions, error: promoErr } = await supabaseAdmin
-        .from('mil_website_promotions')
-        .select('*')
-        .eq('asset_id', assetId)
-        .order('promoted_at', { ascending: false })
-      if (promoErr) throw promoErr
-      if (!promotions || !promotions.length) {
-        return json({ error: 'No website promotion found for this asset' }, 404)
+      const { data: unpublished, error: unpubErr } = await supabaseAdmin.rpc(
+        'mil_unpublish_website_audited',
+        {
+          p_actor_id: user.id,
+          p_asset_id: assetId,
+          p_details: { correlationId },
+          p_idempotency_key: `website_unpublish:${assetId}:${user.id}`,
+        },
+      )
+      if (unpubErr) {
+        const msg = String(unpubErr.message || '')
+        if (/No active website promotion/i.test(msg)) return deny('MEDIA_NOT_AVAILABLE', 404)
+        throw unpubErr
       }
+      const payload = unpublished as {
+        ok?: boolean
+        cleanup?: Array<{ promotionId?: string; derivativeId?: string; websiteMediaId?: string }>
+      }
+      if (!payload?.ok) return deny('INTERNAL_ERROR', 500)
 
-      const results: Array<{ promotionId: string; ok: boolean; error?: string }> = []
-      for (const promo of promotions) {
+      const results: Array<{ promotionId: string; ok: boolean }> = []
+      for (const item of payload.cleanup || []) {
+        const promotionId = String(item.promotionId || '')
         try {
-          if (promo.website_media_id) {
+          if (item.websiteMediaId) {
             await supabaseAdmin
               .from('website_media')
               .update({ display_status: 'unavailable' })
-              .eq('id', promo.website_media_id)
+              .eq('id', item.websiteMediaId)
           }
-
-          const { data: der } = await supabaseAdmin
-            .from('mil_derivatives')
-            .select('bucket, object_path')
-            .eq('id', promo.derivative_id)
-            .maybeSingle()
-          if (der && der.bucket === 'website-public-media') {
-            await supabaseAdmin.storage.from(der.bucket).remove([der.object_path]).catch(() => {})
+          if (item.derivativeId) {
+            const { data: der } = await supabaseAdmin
+              .from('mil_derivatives')
+              .select('bucket, object_path')
+              .eq('id', item.derivativeId)
+              .maybeSingle()
+            if (der && der.bucket === 'website-public-media') {
+              await supabaseAdmin.storage.from(der.bucket).remove([der.object_path]).catch(() => {})
+            }
           }
-
-          results.push({ promotionId: promo.id, ok: true })
+          results.push({ promotionId, ok: true })
         } catch (err) {
-          results.push({ promotionId: promo.id, ok: false, error: err instanceof Error ? err.message : 'unpublish failed' })
+          console.error('media-intel-promote-website cleanup', { correlationId, err })
+          results.push({ promotionId, ok: false })
         }
       }
 
-      await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: user.id,
-        action: 'website_unpublish',
-        target_type: 'mil_assets',
-        target_id: assetId,
-        details: { results },
-      })
-
-      const allOk = results.every((r) => r.ok)
-      return json({ ok: allOk, results }, allOk ? 200 : 500)
+      return json({ ok: true, results, durableUnpublish: true })
     }
 
-    return json({ error: `Unknown action: ${action}` }, 400)
+    return deny('INVALID_REQUEST', 400)
   } catch (error) {
-    console.error('media-intel-promote-website', error instanceof Error ? error.message : error)
-    return json({ error: error instanceof Error ? error.message : 'Promotion failed' }, 500)
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error('media-intel-promote-website', { correlationId, msg })
+    const redacted = redactErrorForClient(error, { correlationId, fallbackCode: 'INTERNAL_ERROR' })
+    return json({ error: redacted.error, code: redacted.code }, 500)
   }
 })

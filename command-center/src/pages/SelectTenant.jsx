@@ -3,6 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Building2, ArrowRight } from 'lucide-react';
+import {
+  getPendingPostLoginPath,
+  sanitizePostLoginPath,
+} from '@/lib/postLoginRedirect';
 
 // Simple placeholder page for handling root / accesses where no tenant is specified
 const SelectTenant = () => {
@@ -25,13 +29,15 @@ const SelectTenant = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           {commonTenants.map((tenant) => (
-            <Button 
+            <Button
               key={tenant.id}
               variant="outline"
               className="w-full justify-between h-14"
               onClick={() => {
                 localStorage.setItem('currentTenantId', tenant.id);
-                navigate(`/${tenant.id}/login?next=/${tenant.id}/crm`);
+                const pending = sanitizePostLoginPath(getPendingPostLoginPath(), tenant.id);
+                const next = pending || `/${tenant.id}/crm`;
+                navigate(`/${tenant.id}/login?next=${encodeURIComponent(next)}`);
               }}
             >
               <span className="font-semibold">{tenant.name}</span>

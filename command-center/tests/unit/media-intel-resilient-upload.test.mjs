@@ -119,8 +119,11 @@ describe('MIL resilient upload + analysis', () => {
 
   it('login preserves MIL next destinations', () => {
     const login = read('src/pages/Login.jsx');
-    assert.match(login, /isSafeMilNext/);
-    assert.match(login, /next\.startsWith\('\/media'\)/);
+    const helper = read('src/lib/postLoginRedirect.js');
+    assert.match(login, /isSafeMilPostLoginPath/);
+    assert.match(login, /sanitizePostLoginPath/);
+    assert.match(helper, /next\.startsWith\('\/media'\)/);
+    assert.match(helper, /next\.startsWith\('\/creator'\)/);
   });
 
   it('UI no longer claims uploads are non-resumable', () => {

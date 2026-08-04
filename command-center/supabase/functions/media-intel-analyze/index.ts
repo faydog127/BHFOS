@@ -14,8 +14,14 @@
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 import { milCorsHeaders, milCorsPreflight } from '../_shared/milCors.ts'
+import { persistAccessAudit } from '../_shared/milAudit.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
 import { isMilStaff } from '../_shared/milRoles.ts'
+import {
+  newCorrelationId,
+  PUBLIC_ERROR_CATALOG,
+  redactErrorForClient,
+} from '../_shared/milSafeErrors.ts'
 
 const PROMPT_VERSION = 'mil-v2-lifecycle'
 const PROVIDER = 'openai'
@@ -379,7 +385,9 @@ async function settleJob(jobId: string | null, status: 'succeeded' | 'failed' | 
 Deno.serve(async (req) => {
   const cors = milCorsHeaders(req)
   if (req.method === 'OPTIONS') return milCorsPreflight(req)
-  const respond = (body: unknown, status = 200) => json(cors, body, status)
+  const correlationId = req.headers.get('x-correlation-id') || newCorrelationId()
+  const respond = (body: Record<string, unknown>, status = 200) =>
+    json({ ...cors, 'x-correlation-id': correlationId }, { ...body, correlationId }, status)
 
   try {
     const authHeader = req.headers.get('Authorization') || ''
@@ -458,11 +466,11 @@ Deno.serve(async (req) => {
         explanation: 'OPENAI_API_KEY not configured',
       })
       await supabaseAdmin.from('mil_assets').update({ processing_status: 'uploaded' }).eq('id', assetId)
-      await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: actorUserId,
+      await persistAccessAudit({
+        actorUserId: actorUserId,
         action: 'ai_analysis_skipped_no_key',
-        target_type: 'mil_assets',
-        target_id: assetId,
+        targetType: 'mil_assets',
+        targetId: assetId,
         details: {},
       })
       await settleJob(job?.id || null, 'cancelled', 'skipped_no_key: OPENAI_API_KEY not configured')
@@ -481,11 +489,11 @@ Deno.serve(async (req) => {
         explanation: 'Video analysis is not implemented (awaiting_video_support). No AI analysis was performed; human review is required.',
       })
       await supabaseAdmin.from('mil_assets').update({ processing_status: 'uploaded' }).eq('id', assetId)
-      await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: actorUserId,
+      await persistAccessAudit({
+        actorUserId: actorUserId,
         action: 'ai_analysis_skipped_unsupported',
-        target_type: 'mil_assets',
-        target_id: assetId,
+        targetType: 'mil_assets',
+        targetId: assetId,
         details: { mediaKind: asset.media_kind, reason: 'awaiting_video_support' },
       })
       await settleJob(job?.id || null, 'cancelled', 'skipped_unsupported: awaiting_video_support')
@@ -506,11 +514,11 @@ Deno.serve(async (req) => {
         explanation: resolved.explanation,
       })
       await supabaseAdmin.from('mil_assets').update({ processing_status: 'uploaded' }).eq('id', assetId)
-      await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: actorUserId,
+      await persistAccessAudit({
+        actorUserId: actorUserId,
         action: 'ai_analysis_skipped_needs_derivative',
-        target_type: 'mil_assets',
-        target_id: assetId,
+        targetType: 'mil_assets',
+        targetId: assetId,
         details: resolved.details || {},
       })
       await settleJob(job?.id || null, 'cancelled', resolved.skipStatus)
@@ -577,11 +585,11 @@ Deno.serve(async (req) => {
         ai_usability: aiUsability,
       }).eq('id', assetId)
 
-      await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: actorUserId,
+      await persistAccessAudit({
+        actorUserId: actorUserId,
         action: 'ai_analysis',
-        target_type: 'mil_assets',
-        target_id: assetId,
+        targetType: 'mil_assets',
+        targetId: assetId,
         details: { provider: PROVIDER, model: result.model, prompt_version: PROMPT_VERSION },
       })
 
@@ -598,18 +606,24 @@ Deno.serve(async (req) => {
         error_message: message.slice(0, 500),
       })
       await supabaseAdmin.from('mil_assets').update({ processing_status: 'processing_failed' }).eq('id', assetId)
-      await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: actorUserId,
+      await persistAccessAudit({
+        actorUserId: actorUserId,
         action: 'ai_analysis_failure',
-        target_type: 'mil_assets',
-        target_id: assetId,
+        targetType: 'mil_assets',
+        targetId: assetId,
         details: { message: message.slice(0, 200) },
       })
       await settleJob(job?.id || null, 'failed', message.slice(0, 500))
-      return respond({ error: message }, 500)
+      console.error('media-intel-analyze provider failure', { correlationId, message })
+      return respond({
+        error: PUBLIC_ERROR_CATALOG.INTERNAL_ERROR,
+        code: 'INTERNAL_ERROR',
+      }, 500)
     }
   } catch (error) {
-    console.error('media-intel-analyze', error instanceof Error ? error.message : error)
-    return respond({ error: error instanceof Error ? error.message : 'Analysis failed' }, 500)
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error('media-intel-analyze', { correlationId, msg })
+    const redacted = redactErrorForClient(error, { correlationId, fallbackCode: 'INTERNAL_ERROR' })
+    return respond({ error: redacted.error, code: redacted.code }, 500)
   }
 })

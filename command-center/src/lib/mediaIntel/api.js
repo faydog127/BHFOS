@@ -282,6 +282,28 @@ export async function setPermittedUse(assetId, useKey, approved, notes) {
   if (error) throw error;
 }
 
+/**
+ * Privacy / rights / customer-permission changes via audited RPC.
+ * Direct PATCH of these mil_assets columns is revoked (Phase 2A).
+ */
+export async function setAssetCompliance(assetId, {
+  privacyStatus = null,
+  rightsStatus = null,
+  customerPermissionStatus = null,
+  reason = null,
+} = {}) {
+  if (!assetId) throw new Error('Missing assetId');
+  const { data, error } = await supabase.rpc('mil_set_asset_compliance', {
+    p_asset_id: assetId,
+    p_privacy_status: privacyStatus,
+    p_rights_status: rightsStatus,
+    p_customer_permission_status: customerPermissionStatus,
+    p_reason: reason?.trim() ? reason.trim() : null,
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function confirmBeforeAfter(relationshipId, confirm) {
   const { error } = await supabase
     .from('mil_asset_relationships')

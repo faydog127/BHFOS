@@ -12,15 +12,14 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 import { milCorsHeaders, milCorsPreflight } from '../_shared/milCors.ts'
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts'
 import { isMilOwnerAdmin, normalizeMilRole } from '../_shared/milRoles.ts'
+import {
+  newCorrelationId,
+  PUBLIC_ERROR_CATALOG,
+  redactErrorForClient,
+} from '../_shared/milSafeErrors.ts'
+// Essential role mutations use transactional SQL RPCs (mutation+audit).
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-function authClientFor(req: Request) {
-  const authHeader = req.headers.get('Authorization') || ''
-  return createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
-    global: { headers: { Authorization: authHeader } },
-  })
-}
 
 async function findUserByEmail(email: string) {
   const target = email.toLowerCase().trim()
@@ -38,8 +37,21 @@ async function findUserByEmail(email: string) {
 Deno.serve(async (req) => {
   const cors = milCorsHeaders(req)
   if (req.method === 'OPTIONS') return milCorsPreflight(req)
-  const json = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } })
+  const correlationId = req.headers.get('x-correlation-id') || newCorrelationId()
+  const json = (body: Record<string, unknown>, status = 200) =>
+    new Response(JSON.stringify({ ...body, correlationId }), {
+      status,
+      headers: {
+        ...cors,
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+        'x-correlation-id': correlationId,
+      },
+    })
+  const deny = (code: string, status = 403) => {
+    const pub = PUBLIC_ERROR_CATALOG[code] ? code : 'INTERNAL_ERROR'
+    return json({ error: PUBLIC_ERROR_CATALOG[pub], code: pub }, status)
+  }
 
   try {
     const authHeader = req.headers.get('Authorization') || ''
@@ -47,10 +59,10 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: authHeader } },
     })
     const { data: { user }, error: authError } = await authClient.auth.getUser()
-    if (authError || !user) return json({ error: 'Sign in required' }, 401)
+    if (authError || !user) return deny('SIGN_IN_REQUIRED', 401)
 
     if (!(await isMilOwnerAdmin(user.id))) {
-      return json({ error: 'Only owner/admin may manage creator access' }, 403)
+      return deny('MEDIA_ACCESS_DENIED', 403)
     }
 
     const body = await req.json().catch(() => ({}))
@@ -58,7 +70,7 @@ Deno.serve(async (req) => {
 
     if (action === 'invite_creator') {
       const email = String(body.email || '').trim().toLowerCase()
-      if (!email || !EMAIL_RE.test(email)) return json({ error: 'Valid email is required' }, 400)
+      if (!email || !EMAIL_RE.test(email)) return deny('INVALID_REQUEST', 400)
 
       let targetUser = await findUserByEmail(email)
       let invited = false
@@ -66,42 +78,28 @@ Deno.serve(async (req) => {
       if (!targetUser) {
         const { data: created, error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(email)
         if (inviteErr || !created?.user) {
-          return json({ error: inviteErr?.message || 'Could not invite this email address' }, 400)
+          console.error('media-intel-creator-admin invite', { correlationId, msg: inviteErr?.message })
+          return deny('INVALID_REQUEST', 400)
         }
         targetUser = created.user
         invited = true
       }
 
-      const { data: existingRoles, error: rolesErr } = await supabaseAdmin
-        .from('app_user_roles')
-        .select('id, role, created_at')
-        .eq('user_id', targetUser.id)
-      if (rolesErr) throw rolesErr
-
-      const existingCreatorRow = (existingRoles || []).find((r) => normalizeMilRole(r.role) === 'reel_creator')
-
-      if (existingCreatorRow) {
-        if (existingCreatorRow.role !== 'reel_creator') {
-          const { error: updErr } = await supabaseAdmin
-            .from('app_user_roles')
-            .update({ role: 'reel_creator' })
-            .eq('id', existingCreatorRow.id)
-          if (updErr) throw updErr
-        }
-      } else {
-        const { error: insErr } = await supabaseAdmin
-          .from('app_user_roles')
-          .insert({ user_id: targetUser.id, role: 'reel_creator' })
-        if (insErr) throw insErr
+      // Auth invite is outside the DB. Role grant + essential audit are atomic
+      // in mil_grant_creator_role_audited — failure rolls back the role row.
+      const { data: granted, error: grantErr } = await supabaseAdmin.rpc(
+        'mil_grant_creator_role_audited',
+        {
+          p_user_id: targetUser.id,
+          p_actor_id: user.id,
+          p_details: { email, invited },
+          p_idempotency_key: `creator_invited:${targetUser.id}:${user.id}`,
+        },
+      )
+      if (grantErr) throw grantErr
+      if (!(granted as { ok?: boolean })?.ok) {
+        return deny('INTERNAL_ERROR', 500)
       }
-
-      await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: user.id,
-        action: 'creator_invited',
-        target_type: 'auth.users',
-        target_id: targetUser.id,
-        details: { email, invited },
-      })
 
       return json({ ok: true, userId: targetUser.id, email, role: 'reel_creator', invited })
     }
@@ -143,9 +141,9 @@ Deno.serve(async (req) => {
       const dueAt = body.dueAt ? String(body.dueAt) : null
       const requestedOutput = body.requestedOutput ? String(body.requestedOutput) : null
       const platformFormat = body.platformFormat ? String(body.platformFormat) : null
-      if (!creatorUserId) return json({ error: 'Missing creatorUserId' }, 400)
+      if (!creatorUserId) return deny('INVALID_REQUEST', 400)
       if ((assetId === null) === (collectionId === null)) {
-        return json({ error: 'Provide exactly one of assetId or collectionId' }, 400)
+        return deny('INVALID_REQUEST', 400)
       }
 
       // Call via the caller's own JWT so mil_assign_creator's SECURITY DEFINER
@@ -161,69 +159,61 @@ Deno.serve(async (req) => {
         p_platform_format: platformFormat,
         p_instructions: instructions,
       })
-      if (error) return json({ error: error.message }, 400)
+      if (error) {
+        console.error('media-intel-creator-admin assign', { correlationId, msg: error.message })
+        return deny('INVALID_REQUEST', 400)
+      }
       return json({ ok: true, assignmentId: data })
     }
 
     if (action === 'revoke_assignment') {
       const assignmentId = String(body.assignmentId || '').trim()
-      if (!assignmentId) return json({ error: 'Missing assignmentId' }, 400)
+      if (!assignmentId) return deny('INVALID_REQUEST', 400)
       const { data, error } = await authClient.rpc('mil_revoke_creator_assignment', {
         p_assignment_id: assignmentId,
       })
-      if (error) return json({ error: error.message }, 400)
+      if (error) {
+        console.error('media-intel-creator-admin revoke_assignment', { correlationId, msg: error.message })
+        return deny('INVALID_REQUEST', 400)
+      }
       return json({ ok: true, revoked: Boolean(data) })
     }
 
     if (action === 'revoke_access') {
       const creatorUserId = String(body.creatorUserId || '').trim()
-      if (!creatorUserId) return json({ error: 'Missing creatorUserId' }, 400)
+      if (!creatorUserId) return deny('INVALID_REQUEST', 400)
 
-      const { data: existingRoles, error: rolesErr } = await supabaseAdmin
-        .from('app_user_roles')
-        .select('id, role')
-        .eq('user_id', creatorUserId)
-      if (rolesErr) throw rolesErr
-      const creatorRowIds = (existingRoles || [])
-        .filter((r) => normalizeMilRole(r.role) === 'reel_creator')
-        .map((r) => r.id)
-
-      if (!creatorRowIds.length) {
-        return json({ error: 'This user does not have the reel_creator role' }, 404)
+      const { data: revoked, error: revErr } = await supabaseAdmin.rpc(
+        'mil_revoke_creator_access_audited',
+        {
+          p_user_id: creatorUserId,
+          p_actor_id: user.id,
+          p_details: {},
+          p_idempotency_key: `creator_access_revoked:${creatorUserId}:${user.id}`,
+        },
+      )
+      if (revErr) throw revErr
+      const payload = revoked as {
+        ok?: boolean
+        revokedRoleRows?: number
+        revokedAssignments?: number
       }
-
-      // Deleting (not soft-flagging) the role row means mil_current_role() and
-      // every edge/RLS role check fail closed on the very next request — the
-      // revoked user cannot obtain a new signed URL, even mid-session.
-      const { error: delErr } = await supabaseAdmin
-        .from('app_user_roles')
-        .delete()
-        .in('id', creatorRowIds)
-      if (delErr) throw delErr
-
-      // Defense in depth: also revoke any active assignments so a stale
-      // assignment cannot be reused if the role is later re-granted in error.
-      const { data: revokedAssignments } = await supabaseAdmin
-        .from('mil_creator_assignments')
-        .update({ status: 'revoked', revoked_at: new Date().toISOString() })
-        .eq('creator_user_id', creatorUserId)
-        .eq('status', 'active')
-        .select('id')
-
-      await supabaseAdmin.from('mil_audit_events').insert({
-        actor_user_id: user.id,
-        action: 'creator_access_revoked',
-        target_type: 'auth.users',
-        target_id: creatorUserId,
-        details: { revokedRoleRows: creatorRowIds.length, revokedAssignments: (revokedAssignments || []).length },
+      if (!payload?.ok) return deny('INTERNAL_ERROR', 500)
+      if (!payload.revokedRoleRows) {
+        return deny('MEDIA_NOT_AVAILABLE', 404)
+      }
+      return json({
+        ok: true,
+        revokedRoleRows: payload.revokedRoleRows,
+        revokedAssignments: payload.revokedAssignments || 0,
       })
-
-      return json({ ok: true, revokedRoleRows: creatorRowIds.length, revokedAssignments: (revokedAssignments || []).length })
     }
 
-    return json({ error: `Unknown action: ${action}` }, 400)
+    return deny('INVALID_REQUEST', 400)
   } catch (error) {
-    console.error('media-intel-creator-admin', error instanceof Error ? error.message : error)
-    return json({ error: error instanceof Error ? error.message : 'Creator admin action failed' }, 500)
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error('media-intel-creator-admin', { correlationId, msg })
+    const redacted = redactErrorForClient(error, { correlationId, fallbackCode: 'INTERNAL_ERROR' })
+    return json({ error: redacted.error, code: redacted.code }, 500)
   }
 })

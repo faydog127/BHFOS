@@ -1,10 +1,9 @@
 /**
- * Shared MIL role resolution for edge functions (single-company; auth.uid()-based).
- * Mirrors SQL `mil_current_role()` in 20260725120000_media_intelligence_library.sql —
- * a user may have multiple app_user_roles rows; the MIL-relevant role with the
- * highest priority wins (ties broken by newest created_at). Picking merely the
- * newest row (as earlier drafts of these edge functions did) lets a stale or
- * lower-privilege row shadow an admin/manager grant, or vice versa.
+ * Shared MIL role resolution for edge functions.
+ * Total order (must match rolePriority.js + SQL mil_current_role):
+ *   1. normalized priority ASC
+ *   2. created_at DESC NULLS LAST
+ *   3. row id DESC
  */
 import { supabaseAdmin } from './supabaseAdmin.ts'
 
@@ -18,7 +17,7 @@ export type MilRole =
   | 'technician'
   | 'unauthenticated'
 
-const ROLE_PRIORITY: Record<string, number> = {
+export const ROLE_PRIORITY: Record<string, number> = {
   admin: 1,
   manager: 2,
   media_reviewer: 3,
@@ -40,30 +39,58 @@ export function normalizeMilRole(role: string | null | undefined): MilRole {
   return 'unauthenticated'
 }
 
-/** Query every app_user_roles row for the user and pick the highest-priority MIL role. */
+function createdAtSortKey(createdAt: string | null | undefined): number | null {
+  if (createdAt == null || createdAt === '') return null
+  const t = new Date(createdAt).getTime()
+  return Number.isFinite(t) ? t : null
+}
+
+export function compareMilRoleRows(
+  a: { id?: string | null; role?: string | null; created_at?: string | null },
+  b: { id?: string | null; role?: string | null; created_at?: string | null },
+): number {
+  const roleA = normalizeMilRole(a?.role)
+  const roleB = normalizeMilRole(b?.role)
+  const priA = roleA === 'unauthenticated' ? 99 : (ROLE_PRIORITY[roleA] ?? 99)
+  const priB = roleB === 'unauthenticated' ? 99 : (ROLE_PRIORITY[roleB] ?? 99)
+  if (priA !== priB) return priA - priB
+
+  const tsA = createdAtSortKey(a?.created_at)
+  const tsB = createdAtSortKey(b?.created_at)
+  if (tsA == null && tsB == null) {
+    /* id */
+  } else if (tsA == null) return 1
+  else if (tsB == null) return -1
+  else if (tsA !== tsB) return tsB - tsA
+
+  const idA = a?.id == null ? '' : String(a.id)
+  const idB = b?.id == null ? '' : String(b.id)
+  if (idA === idB) return 0
+  return idA < idB ? 1 : -1
+}
+
+export function resolveMilRoleFromRows(
+  rows: Array<{ id?: string | null; role?: string | null; created_at?: string | null }>,
+): MilRole {
+  if (!rows?.length) return 'unauthenticated'
+  let best: { id?: string | null; role?: string | null; created_at?: string | null } | null = null
+  for (const row of rows) {
+    const role = normalizeMilRole(row.role)
+    if (role === 'unauthenticated') continue
+    if (!best || compareMilRoleRows(row, best) < 0) best = row
+  }
+  return best ? normalizeMilRole(best.role) : 'unauthenticated'
+}
+
 export async function resolveMilRole(userId: string): Promise<MilRole> {
   if (!userId) return 'unauthenticated'
   const { data, error } = await supabaseAdmin
     .from('app_user_roles')
-    .select('role, created_at')
+    .select('id, role, created_at')
     .eq('user_id', userId)
   if (error) throw error
   if (!data || !data.length) return 'unauthenticated'
-
-  let best: { role: MilRole; priority: number; createdAt: number } | null = null
-  for (const row of data) {
-    const role = normalizeMilRole(row.role)
-    const priority = ROLE_PRIORITY[role] ?? 99
-    const createdAt = row.created_at ? new Date(row.created_at).getTime() : 0
-    if (
-      !best ||
-      priority < best.priority ||
-      (priority === best.priority && createdAt > best.createdAt)
-    ) {
-      best = { role, priority, createdAt }
-    }
-  }
-  return best?.role ?? 'unauthenticated'
+  return resolveMilRoleFromRows(data)
 }
 
 export async function isMilOwnerAdmin(userId: string): Promise<boolean> {
@@ -71,13 +98,11 @@ export async function isMilOwnerAdmin(userId: string): Promise<boolean> {
   return role === 'admin' || role === 'manager'
 }
 
-/** Library staff: browse private originals / library surfaces. Technicians excluded by default. */
 export async function isMilStaff(userId: string): Promise<boolean> {
   const role = await resolveMilRole(userId)
   return ['admin', 'manager', 'office', 'media_reviewer'].includes(role)
 }
 
-/** Reviewer writes: mirrors SQL mil_is_reviewer() — office excluded. */
 export async function isMilReviewer(userId: string): Promise<boolean> {
   const role = await resolveMilRole(userId)
   return ['admin', 'manager', 'media_reviewer'].includes(role)

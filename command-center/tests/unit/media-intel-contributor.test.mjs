@@ -34,8 +34,10 @@ describe('Contributor Workspace source contracts', () => {
 
   it('sign edge mirrors trash denial for creator access', () => {
     const src = read('supabase/functions/media-intel-sign/index.ts');
-    assert.match(src, /trashed_at/);
-    assert.match(src, /asset\.trashed_at/);
+    const policy = read('supabase/functions/_shared/milSignPolicy.ts');
+    assert.match(src, /creatorAssetSignDecision|milSignPolicy/);
+    assert.match(policy, /trashed_at/);
+    assert.match(policy, /MEDIA_TRASHED/);
   });
 
   it('contributor self-upload: session mint, visibility migration, UI, no originals', () => {
@@ -60,8 +62,10 @@ describe('Contributor Workspace source contracts', () => {
     assert.match(mig, /contributor_self/);
     assert.match(mig, /contractor_supplied/);
 
-    assert.match(sign, /created_by_user_id/);
-    assert.match(sign, /Creators may never access originals/);
+    const signPolicy = read('supabase/functions/_shared/milSignPolicy.ts');
+    assert.match(signPolicy, /created_by_user_id/);
+    assert.match(sign, /creatorAssetSignDecision|OWN_UPLOAD_EXCEPTION/);
+    assert.match(signPolicy, /OWN_UPLOAD_EXCEPTION|MEDIA_ACCESS_DENIED/);
     assert.match(sign, /allowOriginal === true/);
 
     assert.match(roles, /canContributorSelfUpload/);

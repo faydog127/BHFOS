@@ -1,5 +1,14 @@
 # Media Intelligence — Environment Variable Contract
 
+## Ratified planes (Phase 2A)
+
+| Plane | Host | Supabase ref | Deploy target id |
+|---|---|---|---|
+| **MIL Production** | `https://mil.bhfos.com` | `sdzhdupekcnekesbtxsl` | `mil-production` (`mil-staging` = deprecated alias) |
+| **CRM Production** | `https://app.bhfos.com` | `wwyxohjnyqnegzbxtuxs` | `production` |
+
+MIL deploy tooling must refuse `wwyxohjnyqnegzbxtuxs`. Do not expose project refs in founder UI — show plain **MIL Production** / **CRM Production** only.
+
 Never place these values in the browser bundle, client source, logs, repository, or database rows.
 
 | Variable | Where | Purpose |

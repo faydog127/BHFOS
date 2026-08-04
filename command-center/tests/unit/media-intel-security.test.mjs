@@ -194,8 +194,10 @@ describe('Creator storage / reel signing', () => {
 
   it('sign function supports reelVersionId ownership check and audits', () => {
     const fn = read('supabase/functions/media-intel-sign/index.ts');
+    const policy = read('supabase/functions/_shared/milSignPolicy.ts');
     assert.match(fn, /reelVersionId/);
-    assert.match(fn, /creator_user_id !== user\.id/);
+    assert.match(fn, /reelVersionSignDecision/);
+    assert.match(policy, /creator_user_id === actorId|REEL_NOT_ASSIGNED/);
     assert.match(fn, /reel_preview|reel_download/);
     assert.match(fn, /mil\/reels\//);
     assert.doesNotMatch(fn, /if \(use\) return true/);
@@ -254,30 +256,30 @@ describe('Upload grant binding', () => {
 });
 
 describe('Website promotion public-safe path', () => {
-  it('prepare_public_safe and promote are disabled (503) pending a proven decode/re-encode pipeline', () => {
+  it('prepare_public_safe and promote are disabled (503) with catalog-safe body', () => {
     const fn = read('supabase/functions/media-intel-promote-website/index.ts');
     assert.match(fn, /prepare_public_safe/);
     assert.match(fn, /stripJpegExif/);
-    // Stripping EXIF/XMP markers from the original container is explicitly
-    // documented as NOT proving public-safety (no decode/re-encode occurs).
-    assert.match(fn, /does not prove an image is safe to publish/);
     assert.match(fn, /action === 'prepare_public_safe' \|\| action === 'promote'/);
-    assert.match(fn, /503/);
-    assert.match(fn, /not_implemented/);
+    assert.match(fn, /PUBLIC_PROMOTION_UNAVAILABLE/);
     assert.match(fn, /website_promotion_attempt_blocked/);
-    // stripJpegExif is retained for future re-enablement only — not wired into promote.
+    assert.doesNotMatch(fn, /PUBLIC_SAFE_DISABLED_MESSAGE/);
+    assert.doesNotMatch(fn, /code:\s*['"]not_implemented['"]/);
+    // Client-visible path must not name storage topology.
     const promoteBlock = fn.slice(
       fn.indexOf("action === 'prepare_public_safe' || action === 'promote'"),
       fn.indexOf("if (action === 'unpublish')"),
     );
     assert.doesNotMatch(promoteBlock, /stripJpegExif\(/);
     assert.doesNotMatch(promoteBlock, /website-public-media/);
+    assert.doesNotMatch(promoteBlock, /media-intel-originals/);
+    assert.match(promoteBlock, /deny\('PUBLIC_PROMOTION_UNAVAILABLE',\s*503\)/);
   });
 
   it('unpublish removes public objects and marks promotions unavailable', () => {
     const fn = read('supabase/functions/media-intel-promote-website/index.ts');
     assert.match(fn, /action === 'unpublish'/);
-    assert.match(fn, /mil_website_promotions/);
+    assert.match(fn, /mil_unpublish_website_audited/);
     assert.match(fn, /display_status: 'unavailable'/);
     assert.match(fn, /website-public-media/);
     assert.match(fn, /website_unpublish/);

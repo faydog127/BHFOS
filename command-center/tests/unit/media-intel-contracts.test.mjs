@@ -57,12 +57,13 @@ describe('MIL edge functions share milCors', () => {
 });
 
 describe('MIL promote website honesty', () => {
-  it('prepare_public_safe and promote return not_implemented (503)', () => {
+  it('prepare_public_safe and promote return PUBLIC_PROMOTION_UNAVAILABLE (503)', () => {
     const fn = read('supabase/functions/media-intel-promote-website/index.ts');
     assert.match(fn, /action === 'prepare_public_safe' \|\| action === 'promote'/);
-    assert.match(fn, /503/);
-    assert.match(fn, /not_implemented/);
+    assert.match(fn, /PUBLIC_PROMOTION_UNAVAILABLE/);
+    assert.match(fn, /deny\('PUBLIC_PROMOTION_UNAVAILABLE',\s*503\)/);
     assert.match(fn, /public_safe_transform_not_implemented/);
+    assert.doesNotMatch(fn, /code:\s*['"]not_implemented['"]/);
   });
 
   it('unpublishWebsiteMedia invokes edge with action unpublish + assetId only', () => {

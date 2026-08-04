@@ -23,14 +23,68 @@ import {
 } from '@/lib/mediaIntel/contributorWorkspace';
 
 const REEL_UPLOAD_UNAVAILABLE_MESSAGE =
-  'Submission upload requires deployed media-intel-reel-upload — not available until staging deploy. ' +
+  'Submission upload requires the media-intel-reel-upload edge function on the MIL production backend. ' +
   'Direct client writes to mil/reels/% are disabled (contributors/staff have no storage or table ' +
-  'insert access there under pre-staging hardening).';
+  'insert access there under MIL hardening).';
+
+const REEL_MINT_OP_STORAGE_PREFIX = 'mil.reelMintOp.';
+
+function newOperationId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `00000000-0000-4000-8000-${Date.now().toString(16).padStart(12, '0').slice(-12)}`;
+}
+
+/** Persist pending mint op across network/retry; clear only on success or abandon. */
+function loadOrCreateReelMintOperation({ projectId, contentType, byteSize }) {
+  const scopeKey = `${REEL_MINT_OP_STORAGE_PREFIX}${projectId || 'new'}`;
+  try {
+    const raw = sessionStorage.getItem(scopeKey);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (
+        parsed?.operationId
+        && parsed?.phase === 'pending_mint'
+        && parsed.contentType === contentType
+        && Number(parsed.byteSize) === Number(byteSize)
+        && (parsed.projectId || null) === (projectId || null)
+      ) {
+        return parsed;
+      }
+    }
+  } catch {
+    /* ignore corrupt storage */
+  }
+  const op = {
+    operationId: newOperationId(),
+    projectId: projectId || null,
+    contentType,
+    byteSize,
+    phase: 'pending_mint',
+    createdAt: Date.now(),
+  };
+  try {
+    sessionStorage.setItem(scopeKey, JSON.stringify(op));
+  } catch {
+    /* private mode */
+  }
+  return op;
+}
+
+function clearReelMintOperation(projectId) {
+  try {
+    sessionStorage.removeItem(`${REEL_MINT_OP_STORAGE_PREFIX}${projectId || 'new'}`);
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * Mint a server-authorized reel upload target. Contributors/staff must never write
  * mil/reels/% storage or insert mil_reel_versions rows directly — RLS only allows
  * SELECT and owner-approve UPDATEs on that table now.
+ * Retries must reuse the same operationId until complete succeeds or the user abandons.
  */
 async function mintReelUpload(body) {
   const { data, error } = await supabase.functions.invoke('media-intel-reel-upload', {
@@ -480,20 +534,45 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
     setBusy(true);
     setError(null);
     let project = null;
+    let mintOp = null;
     try {
       const { data: auth } = await supabase.auth.getUser();
       const mime = file.type || 'video/mp4';
-      const { data: created, error: pErr } = await supabase
-        .from('mil_reel_projects')
-        .insert({
-          title: title.trim() || file.name,
-          creator_user_id: auth.user.id,
-          status: 'creator_draft',
-        })
-        .select('*')
-        .single();
-      if (pErr) throw pErr;
-      project = created;
+
+      mintOp = loadOrCreateReelMintOperation({
+        projectId: null,
+        contentType: mime,
+        byteSize: file.size,
+      });
+      if (mintOp.projectId) {
+        const { data: existing } = await supabase
+          .from('mil_reel_projects')
+          .select('*')
+          .eq('id', mintOp.projectId)
+          .eq('status', 'creator_draft')
+          .maybeSingle();
+        project = existing || null;
+      }
+      if (!project) {
+        const { data: created, error: pErr } = await supabase
+          .from('mil_reel_projects')
+          .insert({
+            title: title.trim() || file.name,
+            creator_user_id: auth.user.id,
+            status: 'creator_draft',
+          })
+          .select('*')
+          .single();
+        if (pErr) throw pErr;
+        project = created;
+        mintOp = { ...mintOp, projectId: project.id };
+        try {
+          sessionStorage.setItem(`${REEL_MINT_OP_STORAGE_PREFIX}new`, JSON.stringify(mintOp));
+          sessionStorage.setItem(`${REEL_MINT_OP_STORAGE_PREFIX}${project.id}`, JSON.stringify(mintOp));
+        } catch {
+          /* ignore */
+        }
+      }
 
       const minted = await mintReelUpload({
         projectId: project.id,
@@ -502,6 +581,7 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
         contentType: mime,
         byteSize: file.size,
         creatorNotes: notes || null,
+        operationId: mintOp.operationId,
       });
       await putToMintedTarget(minted, file, mime);
       await completeReelUpload({
@@ -510,6 +590,8 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
         byteSize: file.size,
       });
 
+      clearReelMintOperation('new');
+      clearReelMintOperation(project.id);
       setMessage('Draft uploaded. Submit when ready for owner review.');
       setTitle('');
       setNotes('');
@@ -517,9 +599,7 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
     } catch (err) {
       setError(REEL_UPLOAD_UNAVAILABLE_MESSAGE);
       if (fileRef.current) fileRef.current.value = '';
-      if (project?.id) {
-        await supabase.from('mil_reel_projects').delete().eq('id', project.id).eq('status', 'creator_draft');
-      }
+      // Keep mintOp + draft project for retry; do not delete on transient failure.
     } finally {
       setBusy(false);
     }
@@ -528,10 +608,15 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
   const uploadRevision = async (project, file) => {
     setBusy(true);
     setError(null);
+    const mime = file.type || 'video/mp4';
+    const mintOp = loadOrCreateReelMintOperation({
+      projectId: project.id,
+      contentType: mime,
+      byteSize: file.size,
+    });
     try {
       const versions = project.mil_reel_versions || [];
       const nextNum = versions.reduce((m, v) => Math.max(m, v.version_number || 0), 0) + 1;
-      const mime = file.type || 'video/mp4';
 
       const minted = await mintReelUpload({
         projectId: project.id,
@@ -540,6 +625,7 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
         contentType: mime,
         byteSize: file.size,
         creatorNotes: notes || null,
+        operationId: mintOp.operationId,
       });
       await putToMintedTarget(minted, file, mime);
       await completeReelUpload({
@@ -548,10 +634,12 @@ export default function MediaCreatorWorkspace({ caps: capsProp } = {}) {
         byteSize: file.size,
       });
 
+      clearReelMintOperation(project.id);
       setMessage(`Version ${nextNum} uploaded. Fresh owner approval is required.`);
       await load();
     } catch (err) {
       setError(REEL_UPLOAD_UNAVAILABLE_MESSAGE);
+      // Retain operationId for retry of the same logical mint.
     } finally {
       setBusy(false);
     }

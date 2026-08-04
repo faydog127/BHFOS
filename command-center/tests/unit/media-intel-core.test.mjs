@@ -195,11 +195,13 @@ describe('MIL AI edge contract', () => {
 
   it('promote function requires verified + privacy clear + website use + admin role', () => {
     const src = read('supabase/functions/media-intel-promote-website/index.ts');
-    assert.match(src, /human_review_status !== 'verified'/);
-    assert.match(src, /privacy_status !== 'clear'/);
-    assert.match(src, /use_key', 'website'/);
+    // Promote/prepare remain disabled; unpublish is transactional + audited.
+    assert.match(src, /prepare_public_safe/);
+    assert.match(src, /mil_unpublish_website_audited/);
+    assert.match(src, /isMilOwnerAdmin/);
+    assert.match(src, /PUBLIC_PROMOTION_UNAVAILABLE/);
+    // Unpublish cleanup may reference the public website bucket server-side only.
     assert.match(src, /website-public-media/);
-    assert.match(src, /media-intel-originals/);
     assert.doesNotMatch(src, /tenant_id/);
     assert.doesNotMatch(src, /tenantId/);
   });

@@ -1,9 +1,41 @@
 # Media Intelligence Library — Implementation Status
 
-**Branch:** `feat/media-intelligence-library`  
-**Verified HEAD at this status edit:** `8827014fe715fbde6c55c092c75e54812824cb69`  
-**Upstream divergence at edit:** `origin/feat/media-intelligence-library` **0 behind / 0 ahead**  
-**Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)
+**Branch (Phase 2A worktree):** `fix/mil-phase2a-security-integrity` @ worktree `F:/Dev/BHFOS-media-intel-phase2a`  
+**Base SHA:** `5a5653e0a24c002da38f3bb4dc215bce1b44f7ca` (`feat/media-intelligence-library`)  
+**Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)  
+**Ratified planes:** MIL Production = `mil.bhfos.com` + `sdzhdupekcnekesbtxsl`; CRM Production = `app.bhfos.com` + `wwyxohjnyqnegzbxtuxs`
+
+## Phase 2A — Concurrent reel-mint proof (2026-08-03) — LOCALLY VERIFIED — NOT DEPLOYED / NOT COMMITTED
+
+| Field | Value |
+|---|---|
+| Mission | Close final Phase 2A uncertainty: true concurrent reel-mint idempotency across independent DB sessions |
+| Worktree / branch | `F:/Dev/BHFOS-media-intel-phase2a` / `fix/mil-phase2a-security-integrity` |
+| HEAD / baseline | `5a5653e0a24c002da38f3bb4dc215bce1b44f7ca` (dirty tip; no upstream tracking) |
+| Concurrent harness | `tools/mil-phase2a-reel-mint-concurrency.mjs` / `npm run test:media-intel-phase2a-concurrent-mint` |
+| Concurrent result | **PASS** on disposable `127.0.0.1:25432` — independent backends, same IDs, 1 ledger/version/grant/audit, negatives + response-loss OK; **no SQL correction required** |
+| Unit / SQL / build | Helpers **307 pass**; SQL **SUCCESSFUL_AB_VERIFY_ROLLBACK_REAPPLY**; build `mil-production` ok; package `tmp/mil-production-5a5653e0a24c-20260803T234853Z.zip` (warn: rebuild with `VITE_SUPABASE_URL` before deploy) |
+| Report | [`PHASE2A_SECURITY_INTEGRITY_REPORT.md`](./PHASE2A_SECURITY_INTEGRITY_REPORT.md) |
+| Explicit non-actions | **No commit**, no push, no deploy, no hosted migration apply, no `wwyx…` / `sdzh…` mutation |
+| Evidence tier | **locally verified** concurrent mint + unit/SQL/build. Not staging/deployed/merged |
+| Next action | Commit authorization → independent re-review → Founder authorize Migration A → code → Migration B on `sdzh…` / `mil-production` only |
+
+## Creator login destination (2026-08-01) — STAGING DEPLOYED + USABLE
+
+| Field | Value |
+|---|---|
+| Live creator host | **`https://mil.bhfos.com/creator`** |
+| Live frontend | SHA **d90eb8f…** / `mil-staging` / asset `4930a35b4c7bb80f` / index `index-0af9f76f.js` / Supabase **`sdzhdupekcnekesbtxsl` only** |
+| Deploy archive | `tmp/mil-staging-d90eb8fc622b-20260801T042201Z.zip` (auth `MIL-CREATOR-LOGIN-AUTH-UX-2026-08-01`) |
+| Why not app.bhfos.com | Live `app.bhfos.com` shell `index-34a5a779.js` has **zero** `/creator` routes (CRM-only / rolled-back) |
+| Treezy identity | `treezyincent@gmail.com` on **staging** Auth; `reel_creator`; user id `4f442f1b-9a0d-4102-8c64-ac5df5352f74` |
+| Credentials file | `command-center/tmp/treezy-staging-temp-password.txt` |
+| Browser USABLE | Treezy password → Contributor Workspace (`treezyincent@gmail.com` visible) |
+| Hosted auth UX | Live bundle contains **Forgot password**, `reset-password`, `/creator` |
+| Staging Auth config | `site_url=https://mil.bhfos.com`; allow-list includes `https://mil.bhfos.com/**`; Google enabled |
+| Hostinger token source | Loaded from operator `F:\Dev\BHFOS\command-center\.env.local` (not from frontend build artifact) |
+| Unit tests | `npm run test:media-intel-helpers` **249 pass** |
+| Evidence tier | **STAGING DEPLOYED** + **STAGING USABLE**. Prod creator URL still not live |
 
 ## Fix A–C staging regression (2026-07-31) — PASS — PROD NOT AUTHORIZED
 

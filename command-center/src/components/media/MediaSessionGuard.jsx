@@ -3,6 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { DEFAULT_TENANT_ID } from '@/config/tenantDefaults';
+import { setPendingPostLoginPath } from '@/lib/postLoginRedirect';
 
 /**
  * Session-only guard for MIL product routes (/media, /creator).
@@ -19,6 +20,11 @@ export default function MediaSessionGuard({ children }) {
     if (!loading) setReady(true);
   }, [loading]);
 
+  useEffect(() => {
+    if (loading || session) return;
+    setPendingPostLoginPath(`${location.pathname}${location.search || ''}`);
+  }, [loading, session, location.pathname, location.search]);
+
   if (loading || !ready) {
     return (
       <div className="min-h-screen flex items-center justify-center gap-2 text-slate-500 bg-slate-50">
@@ -28,7 +34,8 @@ export default function MediaSessionGuard({ children }) {
   }
 
   if (!session) {
-    const next = encodeURIComponent(location.pathname + location.search);
+    const nextPath = `${location.pathname}${location.search || ''}`;
+    const next = encodeURIComponent(nextPath);
     // Legacy V1 auth entry — not an MIL product tenant boundary.
     return <Navigate to={`/${DEFAULT_TENANT_ID}/login?next=${next}`} replace />;
   }
