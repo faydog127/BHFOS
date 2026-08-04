@@ -102,8 +102,8 @@ Drops Phase 2A RPCs/triggers/ledger/event_key helpers; restores pre-B authentica
 | Unit / source contract | `npm run test:media-intel-helpers` | **307 pass / 0 fail** (locally verified; includes concurrent-harness source contract) |
 | SQL integration | `LOCAL_DB_URL=postgresql://postgres:postgres@127.0.0.1:25432/postgres npm run test:media-intel-phase2a-sql` | **SUCCESSFUL_AB_VERIFY_ROLLBACK_REAPPLY** — notices include `PASS upload_audit_coexistence`, `PASS reel_mint_idempotency` (+ prior PASS cases) |
 | Concurrent mint | `LOCAL_DB_URL=… npm run test:media-intel-phase2a-concurrent-mint` | **PASS** — independent-session same-op adopt, cross-creator deny, cross-project deny, distinct-ops create, response-loss retry |
-| Build | `npm run build:mil-production` | **ok** — `environment=mil-production` / SHA `5a5653e…` / `migrationVersion=20260802130000` / asset `5ef8aa36ece59f8d` |
-| Package | `npm run package:mil-production` | `tmp/mil-production-5a5653e0a24c-20260803T234853Z.zip` — **no** `wwyx…`, no `sbp_`; WARNING: this build lacked baked `sdzh…` (`VITE_SUPABASE_URL` not set at build) — verify before any deploy |
+| Build | `npm run build:mil-production` | **HISTORICAL** pre-boundary build at `5a5653e…` — **UNSAFE — DO NOT DEPLOY** |
+| Package | `npm run package:mil-production` | `tmp/mil-production-5a5653e0a24c-*.zip` — **UNSAFE — DO NOT DEPLOY** (pre-boundary; may lack baked `sdzh…`) |
 | Hosted apply / deploy | — | **Not executed** (unauthorized) |
 | Edge HTTP catch-path probes | — | **Not executed** — promote 503 path covered by source+catalog unit contracts only |
 
@@ -113,24 +113,35 @@ Local disposable stack only. SQL suite PASS ≠ staging/production proof. Concur
 
 ## Remaining unverified (live / independent)
 
-- Hosted Migration A/B on `sdzh…`
-- Edge/frontend deploy to `mil.bhfos.com` (rebuild with `VITE_SUPABASE_URL` pointing at `sdzh…` before deploy package)
+**Hosted progress already confirmed (do not re-list as pending apply):**
+- Migration A `20260802120000` — **applied** on `sdzh…`
+- Seven Phase 2A edges — **deployed**
+- Unauthenticated denial/redaction probes — **passed**
+
+**Still open:**
+- Privileged positive-path edge verification (synthetic fixtures)
+- Phase 2A frontend deploy to `mil.bhfos.com` (not live; prior `d90eb8f…` remains)
+- Migration B `20260802130000` — **absent**; apply only after authorization
 - Live outbox worker under load
-- Live creator invite / reel / upload / staff review after deploy
-- Production privilege probe with real PostgREST JWT
-- Edge HTTP invocation probes for every catch path (unit/source contracts ≠ live HTTP)
-- Independent re-review PASS + commit authorization
+- Live creator invite / reel / upload / staff review after Phase 2A frontend deploy
+- Production privilege probe with real PostgREST JWT (privileged path)
+- Edge HTTP invocation probes for every catch path beyond unauth denial (unit/source contracts ≠ live privileged HTTP)
+
+**HISTORICAL — DO NOT EXECUTE / DO NOT DEPLOY:** baseline SHA `5a5653e…` packages and any `mil-production-5a5653e0a24c-*.zip` archives. Runtime boundary is `63d619f…`.
 
 ---
 
-## Proposed deployment order (authorization required)
+## Proposed remaining deployment order (authorization required)
 
-1. Independent re-review PASS + Founder authorize  
-2. Migration A → `sdzh…`  
-3. Deploy edges + frontend `mil-production`  
+1. Control-plane remediation committed + independent certification PASS  
+2. Synthetic privileged verification on deployed edges / Migration A schema  
+3. If authorized: Phase 2A frontend `mil-production` (`--rollout-stage=phase-a`)  
 4. Fixture verification  
-5. Migration B → `sdzh…`  
+5. If authorized: Migration B → `sdzh…` via single-migration wrapper  
 6. Lockdown verification  
+
+Do **not** re-apply Migration A. Do **not** use bare `supabase db push` for Phase 2A.  
+
 
 ## Rollback sequence
 
@@ -140,4 +151,4 @@ Local disposable stack only. SQL suite PASS ≠ staging/production proof. Concur
 
 ---
 
-**PHASE 2A CONCURRENT MINT PROOF COMPLETE — COMMIT AUTHORIZATION REQUIRED**
+**PHASE 2A CONCURRENT MINT PROOF — HISTORICAL (merged via PR #132 / `63d619f`). Control-plane remediation tracks hosted A+edges progress separately.**

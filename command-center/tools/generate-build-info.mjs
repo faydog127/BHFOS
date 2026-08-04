@@ -19,6 +19,14 @@
  * Usage:
  *   node tools/generate-build-info.mjs [--dist=dist] [--environment=<env>]
  *                                      [--release=<id>] [--out=<path>]
+ *                                      [--rollout-stage=phase-a|phase-b]
+ *                                      [--expected-sha=<sha>] [--require-clean]
+ *
+ * For mil-production builds, --rollout-stage is REQUIRED. Schema fields are
+ * pinned by rollout stage (not by max migration filename):
+ *   schemaAppliedThrough / schemaRequiredThrough
+ * migrationVersion is retained as an alias of schemaRequiredThrough for the
+ * selected stage (never the source-tree maximum when a stage is set).
  *
  * This tool performs NO network operation and NO deployment. It only reads the
  * local repository/build output and writes one JSON file.
@@ -29,6 +37,12 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import {
+  resolveRolloutStage,
+  assertExpectedSha,
+  assertCleanWorktree,
+  resolveGitHead,
+} from './mil-control-plane.mjs';
 
 const SCHEMA = 'bhfos.build-info/v1';
 const UNKNOWN = 'unknown';
@@ -116,7 +130,8 @@ async function resolveReleaseId(args) {
   return UNKNOWN;
 }
 
-function resolveMigrationVersion() {
+/** Source-tree maximum migration filename — NOT applied schema; NOT used for mil-production stage builds. */
+function resolveSourceTipMigrationVersion() {
   const migrationsDir = path.join(commandCenterRoot, 'supabase', 'migrations');
   if (!fs.existsSync(migrationsDir)) return UNKNOWN;
   const prefixes = fs
@@ -160,7 +175,43 @@ async function main() {
     ? (path.isAbsolute(args.out) ? args.out : path.join(commandCenterRoot, args.out))
     : path.join(distDir, 'build-info.json');
 
-  const commitSha = resolveCommitSha();
+  const environment = resolveEnvironment(args);
+  const sourceTipMigration = resolveSourceTipMigrationVersion();
+
+  let rolloutStage = null;
+  let schemaAppliedThrough = UNKNOWN;
+  let schemaRequiredThrough = UNKNOWN;
+  let migrationVersion = sourceTipMigration;
+
+  if (environment === 'mil-production') {
+    rolloutStage = resolveRolloutStage(args['rollout-stage']);
+    schemaAppliedThrough = rolloutStage.schemaAppliedThrough;
+    schemaRequiredThrough = rolloutStage.schemaRequiredThrough;
+    // Alias: stage-required tip — never the source-tree maximum while B is pending.
+    migrationVersion = schemaRequiredThrough;
+    if (args['require-clean']) assertCleanWorktree();
+    if (args['expected-sha']) {
+      assertExpectedSha(args['expected-sha']);
+    } else {
+      // mil-production always needs a resolvable SHA
+      resolveGitHead();
+    }
+  } else if (typeof args['rollout-stage'] === 'string' && args['rollout-stage'].trim()) {
+    rolloutStage = resolveRolloutStage(args['rollout-stage']);
+    schemaAppliedThrough = rolloutStage.schemaAppliedThrough;
+    schemaRequiredThrough = rolloutStage.schemaRequiredThrough;
+    migrationVersion = schemaRequiredThrough;
+  }
+
+  let commitSha = resolveCommitSha();
+  if (environment === 'mil-production' && commitSha === UNKNOWN) {
+    throw new Error('build-info refused: mil-production requires a resolvable commit SHA');
+  }
+  if (args['expected-sha'] && commitSha !== UNKNOWN) {
+    const head = assertExpectedSha(args['expected-sha']);
+    commitSha = head;
+  }
+
   const { assetVersion, assetRefs } = resolveFrontendAssetVersion(distDir);
 
   const buildInfo = {
@@ -173,8 +224,14 @@ async function main() {
     mergeSha: resolveMergeSha(),
     branch: resolveBranch(),
     releaseId: await resolveReleaseId(args),
-    environment: resolveEnvironment(args),
-    migrationVersion: resolveMigrationVersion(),
+    environment,
+    // Truthful Phase-A/B metadata (stage-pinned). Not live hosted probe.
+    schemaAppliedThrough,
+    schemaRequiredThrough,
+    sourceTipMigrationVersion: sourceTipMigration,
+    // Backward-compatible alias of schemaRequiredThrough when stage is set.
+    migrationVersion,
+    rolloutStage: rolloutStage ? rolloutStage.id : UNKNOWN,
     frontendAssetVersion: assetVersion,
     frontendAssetCount: assetRefs.length,
     node: process.version,
@@ -186,7 +243,9 @@ async function main() {
   const rel = path.relative(commandCenterRoot, outPath).replaceAll('\\', '/');
   console.log(`[build-info] wrote ${rel}`);
   console.log(`[build-info] commitSha=${buildInfo.commitSha} environment=${buildInfo.environment} releaseId=${buildInfo.releaseId}`);
-  console.log(`[build-info] migrationVersion=${buildInfo.migrationVersion} frontendAssetVersion=${buildInfo.frontendAssetVersion}`);
+  console.log(
+    `[build-info] schemaAppliedThrough=${buildInfo.schemaAppliedThrough} schemaRequiredThrough=${buildInfo.schemaRequiredThrough} migrationVersion=${buildInfo.migrationVersion} sourceTip=${buildInfo.sourceTipMigrationVersion}`,
+  );
   if (buildInfo.commitSha === UNKNOWN) {
     console.warn('[build-info] WARNING: commitSha is unknown (git/CI SHA unavailable). Not a release-grade identity.');
   }

@@ -186,6 +186,7 @@ export function assertMilTargetIsolation(target) {
 /** Refuse MIL deploy plans that mention the CRM Supabase ref in build artifacts. */
 export function assertMilArtifactBackend(sourceDir, target) {
   if (!isMilDeployTarget(target) || !sourceDir || !fs.existsSync(sourceDir)) return;
+  let sawMilRef = false;
   for (const rel of walkFiles(sourceDir)) {
     if (!SCANNABLE_EXT.has(path.extname(rel).toLowerCase())) continue;
     let content = '';
@@ -199,6 +200,12 @@ export function assertMilArtifactBackend(sourceDir, target) {
         `MIL deploy refused: artifact ${rel} references CRM backend ${CRM_PRODUCTION_SUPABASE_REF}`,
       );
     }
+    if (content.includes(MIL_PRODUCTION_SUPABASE_REF)) sawMilRef = true;
+  }
+  if (!sawMilRef) {
+    throw new Error(
+      `MIL deploy refused: artifact missing required MIL backend ${MIL_PRODUCTION_SUPABASE_REF}`,
+    );
   }
 }
 

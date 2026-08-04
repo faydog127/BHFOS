@@ -1,29 +1,32 @@
 # Media Intelligence Library — Implementation Status
 
-**Branch:** `feat/media-intelligence-library`  
-**Deployment-boundary SHA:** `63d619fcc3303f05a60888174585408b745f79fc` (PR #132 merge commit)  
+**Branch:** `fix/mil-phase2a-control-plane-drift` (integration parent `feat/media-intelligence-library`)  
+**Runtime edge source boundary:** `63d619fcc3303f05a60888174585408b745f79fc` (PR #132 merge commit)  
 **Certified Phase 2A parent:** `20cdd2202dee68ca5901e0f2c9920d0e0f69c9de` (unchanged in ancestry)  
 **Architecture:** Single-company (see `SINGLE_COMPANY_CORRECTION.md`)  
-**Ratified planes:** MIL Production = `mil.bhfos.com` + `sdzhdupekcnekesbtxsl`; CRM Production = `app.bhfos.com` + `wwyxohjnyqnegzbxtuxs`
+**Ratified planes:** MIL Production = `mil.bhfos.com` + `sdzhdupekcnekesbtxsl`; CRM Production = `app.bhfos.com` + `wwyxohjnyqnegzbxtuxs`  
+**Control plane:** [`PHASE2A_CONTROL_PLANE.md`](./PHASE2A_CONTROL_PLANE.md)
 
-## Phase 2A — Merged to integration (2026-08-04) — MERGED / NOT HOSTED-APPLIED
+## Phase 2A — Hosted partial progress (2026-08-04) — A + EDGES LIVE / FE + B HELD
 
 | Field | Value |
 |---|---|
-| PR | [#132](https://github.com/faydog127/BHFOS/pull/132) — merge commit (not squash) |
-| Merge SHA / boundary | `63d619fcc3303f05a60888174585408b745f79fc` |
-| Parents | `dfa978d…` + `20cdd22…` |
-| Post-merge verification worktree | `F:/Dev/BHFOS-media-intel-phase2a-merged` @ `63d619f` |
-| Helpers | **307 pass / 0 fail** |
-| SQL | **`SUCCESSFUL_AB_VERIFY_ROLLBACK_REAPPLY`** |
-| Concurrent mint | **PASS** |
-| Package | `tmp/mil-production-63d619fcc330-20260804T001318Z.zip` (SHA-256 `DD97B56370E5874A9129091E326846C7F1079DF0E191DDEACFBF32B36C4DAD93`) |
-| build-info | `mil-production` / `migrationVersion=20260802130000` / asset `31a5145632e3dc13` / `commitSha=63d619fcc330…` |
-| Bundle | `sdzh…` only; no `wwyx…`; no service_role JWT; no `sbp_` |
-| Apply packet | [`PRODUCTION_APPLY_PACKET.md`](./PRODUCTION_APPLY_PACKET.md) |
-| Explicit non-actions | **No hosted Migration A/B**, no edge/frontend deploy, no `wwyx…` mutation, source branch not deleted |
-| Evidence tier | **merged** + **locally verified** on merge tip. Not hosted-applied / not production-deployed |
-| Next action | Founder authorize hosted sequence: Migration A → edges → `mil-production` frontend → fixtures → Migration B → lockdown |
+| PR / merge | [#132](https://github.com/faydog127/BHFOS/pull/132) → `63d619fcc3303f05a60888174585408b745f79fc` |
+| Runtime edge source boundary | `63d619f…` — later control-plane commits do **not** prove runtime deployment |
+| Hosted Migration A `20260802120000` | **Applied** on `sdzhdupekcnekesbtxsl` |
+| Hosted Migration B `20260802130000` | **Absent** |
+| Phase 2A edge functions (7) | **Deployed** on `sdzh…` |
+| Unauthenticated denial/redaction probes | **Passed** |
+| Privileged positive-path edge verification | **Incomplete** |
+| Phase 2A frontend | **Not deployed** — live FE remains prior `d90eb8f…` / `mil-staging` / `migrationVersion=20260731130000` |
+| Pre-control package note | Historical `migrationVersion=20260802130000` on `63d619f` local zip was **source-tip labeling**, not hosted B applied. Phase-A tooling now pins `schemaAppliedThrough`/`schemaRequiredThrough`=`20260802120000` |
+| Stale packages | `mil-production-5a5653e0a24c-*.zip` = **UNSAFE — DO NOT DEPLOY** |
+| Apply / control docs | [`PRODUCTION_APPLY_PACKET.md`](./PRODUCTION_APPLY_PACKET.md), [`PHASE2A_CONTROL_PLANE.md`](./PHASE2A_CONTROL_PLANE.md) |
+| Explicit non-actions | No Migration B apply, no Phase 2A frontend deploy, no edge redeploy, no `wwyx…` mutation, no bare `supabase db push` for multi-pending Phase 2A |
+| Control-plane branch | `fix/mil-phase2a-control-plane-drift` @ worktree `F:/Dev/BHFOS-media-intel-phase2a-controls` (uncommitted until authorized) |
+| Helpers | `npm run test:media-intel-helpers` **330 pass / 0 fail** (includes `mil-control-plane.test.mjs`) |
+| Evidence tier | **hosted read-only** (A + edges) + **merged** runtime boundary + **control-plane locally verified** (this branch). Phase 2A frontend **not** production-deployed |
+| Next action | Authorize bounded local commit of control-plane remediation; then synthetic privileged positive-path verification on `sdzh…` / live edges — **not** Migration B and **not** frontend deploy until separately authorized |
 
 ## Phase 2A — Concurrent reel-mint proof (2026-08-03) — LOCALLY VERIFIED (superseded by merge above)
 
@@ -649,11 +652,11 @@ Accepted (SOURCE + unit/contract tests + local SQL where noted; staging-unproven
 - Cursor Relay Protocol (docs only): root [`AGENTS.md`](../../../AGENTS.md) + [`docs/RELAY_PROTOCOL.md`](../RELAY_PROTOCOL.md)
 - Helper suite: `npm run test:media-intel-helpers` **129 pass / 0 fail**
 
-Still open (production path — Founder authorized kickoff 2026-07-30):
+Still open (MIL Phase 2A runtime — current):
 
-1. **Exact next action:** Execute [`PRODUCTION_APPLY_PACKET.md`](./PRODUCTION_APPLY_PACKET.md) on `wwyxohjnyqnegzbxtuxs` + Hostinger `production` (`app.bhfos.com`) once credentials are available (PR #127 already merged)
-2. **Authorization boundary:** Founder authorized production release intent; mutating steps still require `SUPABASE_ACCESS_TOKEN` + production `VITE_*`. No reconcile cron. No website promote. Leave mil-staging untouched as staging.
-3. Staging acceptance: distinct-identity + contributor **accept/deny** owner-confirmed **USABLE** (2026-07-30)
+1. **Exact next action:** Synthetic privileged positive-path verification against `sdzhdupekcnekesbtxsl` / deployed Phase 2A edges (no Migration B; no Phase 2A frontend deploy until authorized)
+2. **Authorization boundary:** MIL mutations only on `sdzh…` / `mil.bhfos.com` / `mil-production`. CRM `wwyx…` / `app.bhfos.com` is out of scope for MIL Phase 2A
+3. **HISTORICAL — DO NOT EXECUTE:** Jul-30 CRM promote path that said “execute PRODUCTION_APPLY_PACKET on `wwyxohjnyqnegzbxtuxs` + Hostinger `production`” — void for MIL plane (see packet historical section)
 
 ### Active defects (honest)
 
