@@ -15,6 +15,8 @@ Record approved, deferred, rejected, and discovered requirements with traceabili
 
 ## Register status
 
+This register remains draft and is not ratified as a complete V2 requirements baseline. An individual entry may be founder-approved for planning and controlled design within this draft register; that entry-level approval does not ratify the register, authorize implementation, or activate a release.
+
 No V2 requirement is authorized for implementation until it has a Requirement ID, an active Release ID, applicable Decision IDs, acceptance criteria, and a recorded Definition of Ready assessment.
 
 ## Required fields
@@ -25,7 +27,7 @@ Each requirement entry must include: ID, statement, product area, status, source
 
 | Field | Value |
 | --- | --- |
-| Status | Approved — planning and controlled design only |
+| Status | Founder-approved for planning within draft register; controlled design only |
 | Date registered | 2026-08-05 |
 | Product area | Platform governance / AI orchestration |
 | Owner | Founder |
