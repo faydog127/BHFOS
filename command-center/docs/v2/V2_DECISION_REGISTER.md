@@ -4,9 +4,9 @@
 | Field | Value |
 | --- | --- |
 | Status | Active |
-| Version | 0.1 |
+| Version | 0.2 |
 | Owner | Founder |
-| Last reviewed | 2026-08-01 |
+| Last reviewed | 2026-08-05 |
 | Implementation authority | Active governance authority; no implementation authority |
 
 ## Decision control
@@ -215,3 +215,31 @@ Every AI or automation capability must have an explicit authority level from ass
 - AI may assist, recommend, execute low-risk reversible actions, or execute governed actions within approved limits as explicitly authorized.
 - AI may not independently authorize pricing-policy changes, unusual customer commitments, out-of-limit financial transactions, public use of restricted media, production deployment, release activation, governance decisions, or founder decisions.
 - This decision establishes product direction and governance; it does not authorize any individual AI implementation, requirement, architecture, release, deployment, or production change.
+
+## DEC-V2-014 — Review Board authority remains in BHFOS; n8n orchestrates execution
+
+| Field | Value |
+| --- | --- |
+| Status | Active |
+| Date | 2026-08-05 |
+| Decision owner | Founder |
+| Founder approval | Explicit approval recorded on 2026-08-05 |
+| Implementation authority | Planning and controlled design only; none for migrations, application code, production changes, release activation, or n8n activation |
+| Architecture record | [ADR-DEC-V2-014](./ADR-DEC-V2-014_REVIEW_BOARD_AUTHORITY_AND_N8N_INTEGRATION.md) |
+
+### Decision
+
+BHFOS shall own authoritative Review Board requests, runs, idempotency, claims, leases, state transitions, provider-action reservations, artifacts, costs, reconciliation, append-only audit evidence, and human decisions. n8n is approved only as the orchestration and provider-coordination layer.
+
+n8n may execute only claimed work and may perform a provider action only after BHFOS authorizes the exact logical action. n8n must report progress and results through narrow authenticated services and may not directly write authoritative Review Board tables using broad `service_role` access.
+
+Multi-model reviewers, if separately authorized, must operate as blind independent critics behind deterministic validation and a governed adjudication step. No AI model or n8n workflow may make the final business decision.
+
+### Consequences
+
+- The Review Board authority layer must exist in BHFOS before n8n becomes the authoritative integration.
+- A Drive file, provider execution, or n8n execution history is evidence or delivery output, not the system of record.
+- Request-scoped authorization, atomic duplicate protection, provider-action reservations, reconciliation, and human-decision boundaries are required.
+- TVG remains the single-company operating context; this decision creates no multi-tenant product scope.
+- This decision establishes architecture and planning authority only. Implementation remains blocked until an active Release ID and the complete Definition of Ready gate are satisfied.
+
