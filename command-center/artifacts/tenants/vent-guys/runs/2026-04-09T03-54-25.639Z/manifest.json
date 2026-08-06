@@ -1,9 +1,19 @@
 {
+  "manifest_version": "2.0",
   "run_id": "2026-04-09T03:54:25.639Z",
+  "tenant_id": "vent-guys",
+  "artifact_class": "ledger_lock_full",
+  "created_at": "2026-04-09T03:54:25.639Z",
   "change_id": "CHANGE-20260408-LAYER2-LEDGER-LOCK",
   "title": "Layer 2 (Orchestrator v2) — observed judgment lock for ledger contention invariants",
   "source_commit": "5862bf696f147cbbe13fb7a301b5cae4927236f5",
   "observed_bundle_root": ".\\artifacts\\tenants\\vent-guys\\runs\\2026-04-09T03-54-25.639Z\\observed_bundle",
   "source_observed_bundle_root": ".\\tmp\\orchestrator-v2\\observed\\20260408_150010",
-  "created_at": null
+  "paths": {
+    "judgment_json": "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/layer2_observed_judgment.json",
+    "raw_doc": "docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md",
+    "review_doc": "docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_REVIEW_v1.md",
+    "observed_bundle_root": "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle",
+    "manifest": "artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/manifest.json"
+  }
 }

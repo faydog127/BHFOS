@@ -2,6 +2,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeNewlines, renderLayer3ReviewV1 } from './_review_lib.mjs';
+import {
+  assertManifestJudgmentConsistency,
+  findSiblingManifestForJson,
+  loadJson,
+} from '../eval/validate_tenant_scope.mjs';
 
 const parseArgs = (argv) => {
   const args = { mode: 'exact' };
@@ -27,6 +32,21 @@ if (args.help || !args.doc) {
 }
 
 const doc = normalizeNewlines(fs.readFileSync(args.doc, 'utf8'));
+const resolveRepoPath = (p) => path.resolve(process.cwd(), String(p || '').replaceAll('\\', '/').replace(/^\.\//, ''));
+const existsFile = (p) => {
+  try {
+    return fs.statSync(p).isFile();
+  } catch {
+    return false;
+  }
+};
+const existsDir = (p) => {
+  try {
+    return fs.statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+};
 
 const requiredHeadings = [
   '# Ledger Lock — Review Summary',
@@ -71,8 +91,31 @@ if (args.mode !== 'exact' || !args.json) {
 }
 
 const observedJudgmentJson = JSON.parse(fs.readFileSync(args.json, 'utf8'));
+
+// Manifest-first: if the judgment JSON lives inside a run folder with a manifest, prefer it and enforce consistency.
+let manifest = null;
+const siblingManifest = findSiblingManifestForJson(resolveRepoPath(args.json));
+if (siblingManifest) {
+  try {
+    manifest = loadJson(siblingManifest);
+    assertManifestJudgmentConsistency({
+      manifestPath: siblingManifest,
+      manifest,
+      judgmentPath: resolveRepoPath(args.json),
+      judgment: observedJudgmentJson,
+    });
+  } catch (e) {
+    console.error(`LAYER3 REVIEW VALIDATION: FAILED\n\n${e?.message || String(e)}`);
+    process.exit(1);
+  }
+}
+
+const manifestPaths = manifest?.paths || {};
+const manifestEvidence = typeof manifestPaths.observed_bundle_root === 'string' ? manifestPaths.observed_bundle_root : null;
 const preferredEvidenceBundlePath =
-  observedJudgmentJson?.observed_bundle_root || './artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/';
+  (manifestEvidence && existsDir(resolveRepoPath(manifestEvidence)) ? manifestEvidence : null) ||
+  observedJudgmentJson?.observed_bundle_root ||
+  './artifacts/tenants/vent-guys/runs/2026-04-09T03-54-25.639Z/observed_bundle/';
 
 const deriveSiblingRaw = (reviewDocPath) => {
   if (!reviewDocPath) return null;
@@ -80,8 +123,10 @@ const deriveSiblingRaw = (reviewDocPath) => {
   return fs.existsSync(candidate) ? candidate : null;
 };
 
+const manifestRawDoc = typeof manifestPaths.raw_doc === 'string' ? manifestPaths.raw_doc : null;
 const rawDocPath =
   args.raw ||
+  (manifestRawDoc && existsFile(resolveRepoPath(manifestRawDoc)) ? manifestRawDoc : null) ||
   deriveSiblingRaw(args.doc) ||
   './docs/reconciliation/lock/layer3/LAYER3_LEDGER_LOCK_JUDGMENT_RAW.md';
 

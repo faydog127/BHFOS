@@ -28,6 +28,14 @@ Re-run the lock validation lane whenever any of these change:
 - Review gate enforcement or policy: `tools/review-gate.mjs`, `review-policy.json`
 - Any change that touches `domain_tags` `money_state` scope and claims the lock still holds.
 
+## Hardening freeze (governance rule)
+
+Do not keep “tightening the lock” without a triggering signal.
+Allowed triggers for lock/hardening changes:
+- a failing CI/nightly run
+- a real incident/postmortem action item
+- a concrete, logged risk with evidence (run folder + judgment)
+
 ## CI lane (maintained standard)
 
 The lightweight CI lane must run:
@@ -49,4 +57,5 @@ The lightweight CI lane must run:
 ## Notes
 
 - This baseline is **local/CI-grade proof**, not production validation.
+- Layer 3 outputs are **internal governed artifacts** (not external product documents).
 - Do not claim `P0-02: PRODUCTION-VALIDATED` without separate production artifacts.

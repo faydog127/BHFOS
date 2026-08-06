@@ -28,6 +28,7 @@ const schema = {
   required: Array.isArray(policy.required_top_level_fields) ? policy.required_top_level_fields : [],
   properties: {
     gate_version: { type: 'string', minLength: 1 },
+    tenant_id: { type: 'string', minLength: 1, description: 'Tenant slug (e.g. "vent-guys").' },
     change_id: { type: 'string', minLength: 1 },
     pr_id: { type: 'string', minLength: 1, description: 'Use "LOCAL" when not in a PR.' },
     title: { type: 'string', minLength: 1 },
@@ -191,6 +192,7 @@ const schema = {
 const template = {
   $schema: './review-input.schema.json',
   gate_version: 'v1',
+  tenant_id: 'vent-guys',
   change_id: 'CHANGE-REPLACE-ME',
   pr_id: 'LOCAL',
   title: 'REPLACE ME',
