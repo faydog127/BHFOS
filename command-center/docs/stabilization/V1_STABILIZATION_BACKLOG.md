@@ -94,7 +94,7 @@ Disposition meanings:
 | Smallest fix | Mount read-only tech schedule **or** improve queue date navigation — no CRM rewrite |
 | Test | Mobile tech route smoke |
 | Release | R3 |
-| Disposition | **Fixed in V1** (`/tech/schedule` mounted; multi-day read-only schedule) |
+| Disposition | **Fixed in V1** (`/tech/schedule` mounted; multi-day read-only schedule). Production verified after PR #44. |
 
 ### B-006 — Lead / customer / property intake ambiguity
 
@@ -235,7 +235,7 @@ Disposition meanings:
 | Evidence | Packet 008 sync trigger; both surfaces editable historically |
 | Smallest fix | UI: edit appointments only; jobs schedule read-only when linked |
 | Release | R3 |
-| Disposition | **Fixed in V1** (Jobs + Dispatch lock schedule when `appointments.job_id` set; note: app still rarely sets `job_id`) |
+| Disposition | **Frontend fixed in V1** (Jobs + Dispatch lock when `appointments.job_id` set; PR #44). **Production activation blocked** by enum-unsafe appointment triggers (`coalesce(status, '')` vs `appointment_status`) — repaired by R3B migration `20260716003000_fix_appointment_trigger_enum_safety.sql`. No automatic linking. Production B-016 re-smoke still required after migration deploy. |
 
 ### B-017 — Tracked `tmp/` tenant / ledger artifacts noise
 
