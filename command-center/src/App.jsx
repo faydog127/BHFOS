@@ -108,11 +108,14 @@ const LoadingFallback = () => {
 class RouteErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, errorMessage: null };
   }
 
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error) {
+    return {
+      hasError: true,
+      errorMessage: error?.message ? String(error.message) : 'Unknown render error',
+    };
   }
 
   componentDidCatch(error) {
@@ -125,6 +128,11 @@ class RouteErrorBoundary extends React.Component {
         <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center gap-3">
           <p className="text-base font-semibold text-slate-900">Unable to load this screen.</p>
           <p className="text-sm text-slate-600">Please reload and try again.</p>
+          {this.state.errorMessage && (
+            <p className="max-w-md break-words text-xs text-slate-500" data-testid="route-error-detail">
+              {this.state.errorMessage}
+            </p>
+          )}
           <button
             type="button"
             className="text-sm font-medium text-blue-700 underline underline-offset-2"

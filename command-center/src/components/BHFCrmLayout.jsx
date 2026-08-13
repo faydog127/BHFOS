@@ -30,6 +30,23 @@ const BHFCrmLayout = () => {
     };
   }, []);
 
+  // Hooks must run on every render, including the creator-access gate. Calling
+  // useMemo after those early returns crashed staff CRM with
+  // "Rendered more hooks than during the previous render."
+  const currentPageLabel = useMemo(() => {
+    const path = location.pathname.toLowerCase();
+    if (path.includes('/crm/quotes') || path.includes('/crm/estimates')) return 'Quotes';
+    if (path.includes('/crm/inspections')) return 'Inspections';
+    if (path.includes('/crm/invoices')) return 'Invoices';
+    if (path.includes('/crm/leads')) return 'Leads';
+    if (path.includes('/crm/calendar')) return 'Calendar';
+    if (path.includes('/crm/jobs')) return 'Work Orders';
+    if (path.includes('/crm/reporting')) return 'Analytics';
+    if (path.includes('/crm/dispatch')) return 'Dispatch';
+    if (path.includes('/crm/settings')) return 'Settings';
+    return 'Hub';
+  }, [location.pathname]);
+
   // Creators must never briefly browse CRM chrome — send them to the focused portal.
   if (accessGate === 'checking') {
     return (
@@ -64,20 +81,6 @@ const BHFCrmLayout = () => {
     mobileHeaderClass = "lg:hidden sticky top-0 z-30 px-4 h-16 flex items-center justify-between border-b bg-white/80 backdrop-blur-md border-orange-100";
     sidebarWrapperClass += " border-r border-orange-100 shadow-xl shadow-orange-500/5";
   }
-
-  const currentPageLabel = useMemo(() => {
-    const path = location.pathname.toLowerCase();
-    if (path.includes('/crm/quotes') || path.includes('/crm/estimates')) return 'Quotes';
-    if (path.includes('/crm/inspections')) return 'Inspections';
-    if (path.includes('/crm/invoices')) return 'Invoices';
-    if (path.includes('/crm/leads')) return 'Leads';
-    if (path.includes('/crm/calendar')) return 'Calendar';
-    if (path.includes('/crm/jobs')) return 'Work Orders';
-    if (path.includes('/crm/reporting')) return 'Analytics';
-    if (path.includes('/crm/dispatch')) return 'Dispatch';
-    if (path.includes('/crm/settings')) return 'Settings';
-    return 'Hub';
-  }, [location.pathname]);
 
   return (
     <div className={mainWrapperClass}>
