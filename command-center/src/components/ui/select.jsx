@@ -43,8 +43,17 @@ const SelectContent = React.forwardRef(({ className, children, position = "poppe
       <SelectPrimitive.Viewport
         className={cn(
           "p-1",
+          // Bound the list to the space the popper has (falling back to 24rem for
+          // the item-aligned position) so long option sets never run off-screen and
+          // the last option is always reachable. Radix already sets overflow:hidden
+          // auto on the viewport, so this makes it scroll (wheel + keyboard) natively.
+          "max-h-[min(24rem,var(--radix-select-content-available-height,24rem))]",
+          // Radix hides the viewport scrollbar by default (scrollbar-width:none /
+          // ::-webkit-scrollbar{display:none}); re-enable a real, draggable scrollbar
+          // where the browser renders one, using !important to beat Radix's injected rule.
+          "![scrollbar-width:thin] [&::-webkit-scrollbar]:![display:block] [&::-webkit-scrollbar]:!w-2 [&::-webkit-scrollbar-thumb]:!rounded-full [&::-webkit-scrollbar-thumb]:!bg-gray-300",
           position === "popper" &&
-            "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
+            "w-full min-w-[var(--radix-select-trigger-width)]"
         )}
       >
         {children}
