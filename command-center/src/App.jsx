@@ -526,7 +526,14 @@ function App() {
         <Route path="/pay/:token" element={<PaymentPage />} />
         <Route path="/invoices/:token" element={<InvoiceView />} />
         {/* Temporary top-level CRM alias may hit /crm/media — redirect before CrmAliasRedirect. */}
-        <Route path="/crm/media/*" element={<MediaCrmAliasRedirect />} />
+        <Route
+          path="/crm/media/*"
+          element={
+            <CrmHostMilOffload>
+              <MediaCrmAliasRedirect />
+            </CrmHostMilOffload>
+          }
+        />
         <Route path="/crm/*" element={<CrmAliasRedirect fromPrefix="/crm" />} />
         <Route path="/bhf/crm/*" element={<CrmAliasRedirect fromPrefix="/bhf/crm" />} />
         <Route path="/app/:tenantId/*" element={<AppAliasRedirect />} />
@@ -589,8 +596,22 @@ function App() {
           }
         />
         {/* Product alias: Contributor Workspace uses the Creator architecture under /creator. */}
-        <Route path="/contributor/*" element={<Navigate to="/creator" replace />} />
-        <Route path="/contributor" element={<Navigate to="/creator" replace />} />
+        <Route
+          path="/contributor/*"
+          element={
+            <CrmHostMilOffload>
+              <Navigate to="/creator" replace />
+            </CrmHostMilOffload>
+          }
+        />
+        <Route
+          path="/contributor"
+          element={
+            <CrmHostMilOffload>
+              <Navigate to="/creator" replace />
+            </CrmHostMilOffload>
+          }
+        />
         <Route
           path="/:tenantId/tech/*"
           element={

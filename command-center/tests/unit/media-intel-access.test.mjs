@@ -37,6 +37,16 @@ describe('MIL access routes (single-company)', () => {
     assert.match(staffBlock, /MediaSessionGuard/);
   });
 
+  it('offloads MIL product routes from CRM production host to mil.bhfos.com', () => {
+    assert.match(app, /CrmHostMilOffload/);
+    const mediaBlock = app.slice(app.indexOf('path="/media/*"'), app.indexOf('path="/creator"'));
+    assert.match(mediaBlock, /CrmHostMilOffload/);
+    const creatorBlock = app.slice(app.indexOf('path="/creator/*"'), app.indexOf('path="/contributor/*"'));
+    assert.match(creatorBlock, /CrmHostMilOffload/);
+    const aliasBlock = app.slice(app.indexOf('path="/crm/media/*"'), app.indexOf('path="/crm/*"'));
+    assert.match(aliasBlock, /CrmHostMilOffload/);
+  });
+
   it('documents temporary /crm/media → /media alias without tenant-prefixed MIL aliases', () => {
     assert.match(app, /MediaCrmAliasRedirect/);
     assert.match(app, /path="\/crm\/media\/\*"/);
