@@ -1,7 +1,7 @@
 /**
  * CRM IA — UX-REFACTOR primary + UXV2 mobile money parity (PD-UXV2-05).
- * Paths are CRM-relative (tenantPath applied at render), except MIL product routes
- * marked absolute (e.g. Media → /media — no tenant prefix).
+ * Paths are CRM-relative (tenantPath applied at render).
+ * Media Intelligence is not a CRM nav item — source of record is mil.bhfos.com.
  */
 import {
   LayoutDashboard,
@@ -12,7 +12,6 @@ import {
   Settings,
   MoreHorizontal,
   Receipt,
-  Image,
 } from 'lucide-react';
 
 /** Primary desktop nav — above divider */
@@ -21,7 +20,6 @@ export const CRM_PRIMARY_NAV = [
   { name: 'Work Orders', path: '/crm/jobs', icon: Hammer },
   { name: 'Quotes', path: '/crm/quotes', icon: FileText },
   { name: 'Inspections', path: '/crm/inspections', icon: ClipboardList },
-  { name: 'Media', path: '/media', icon: Image, absolute: true },
   { name: 'Analytics', path: '/crm/reporting', icon: BarChart },
   { name: 'Settings', path: '/crm/settings', icon: Settings },
 ];

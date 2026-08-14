@@ -7,6 +7,7 @@ import SelectTenant from '@/pages/SelectTenant';
 import { Loader2 } from 'lucide-react';
 import TenantGuard from '@/components/TenantGuard';
 import MediaSessionGuard from '@/components/media/MediaSessionGuard';
+import { CrmHostMilOffload } from '@/components/media/MilRecordRedirect';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import {
   OAUTH_CALLBACK_MAX_WAIT_MS,
@@ -542,29 +543,49 @@ function App() {
             </TenantGuard>
           }
         />
-        {/* MIL product routes — single-company; no tenant segment. */}
+        {/* MIL product routes — on app.bhfos.com these offload to mil.bhfos.com. */}
         <Route
           path="/media/*"
           element={
-            <RouteErrorBoundary>
-              <Suspense fallback={<LoadingFallback />}>
-                <MediaLibraryRoutes />
-              </Suspense>
-            </RouteErrorBoundary>
+            <CrmHostMilOffload>
+              <RouteErrorBoundary>
+                <Suspense fallback={<LoadingFallback />}>
+                  <MediaLibraryRoutes />
+                </Suspense>
+              </RouteErrorBoundary>
+            </CrmHostMilOffload>
+          }
+        />
+        <Route
+          path="/creator"
+          element={
+            <CrmHostMilOffload>
+              <MediaSessionGuard>
+                <RouteErrorBoundary>
+                  <Suspense fallback={<LoadingFallback />}>
+                    <FeatureGuard flag="enableMediaIntelligence">
+                      <CreatorRoutesPage />
+                    </FeatureGuard>
+                  </Suspense>
+                </RouteErrorBoundary>
+              </MediaSessionGuard>
+            </CrmHostMilOffload>
           }
         />
         <Route
           path="/creator/*"
           element={
-            <MediaSessionGuard>
-              <RouteErrorBoundary>
-                <Suspense fallback={<LoadingFallback />}>
-                  <FeatureGuard flag="enableMediaIntelligence">
-                    <CreatorRoutesPage />
-                  </FeatureGuard>
-                </Suspense>
-              </RouteErrorBoundary>
-            </MediaSessionGuard>
+            <CrmHostMilOffload>
+              <MediaSessionGuard>
+                <RouteErrorBoundary>
+                  <Suspense fallback={<LoadingFallback />}>
+                    <FeatureGuard flag="enableMediaIntelligence">
+                      <CreatorRoutesPage />
+                    </FeatureGuard>
+                  </Suspense>
+                </RouteErrorBoundary>
+              </MediaSessionGuard>
+            </CrmHostMilOffload>
           }
         />
         {/* Product alias: Contributor Workspace uses the Creator architecture under /creator. */}

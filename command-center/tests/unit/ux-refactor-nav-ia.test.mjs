@@ -16,7 +16,6 @@ const EXPECTED_PRIMARY = [
   { name: 'Work Orders', path: '/crm/jobs' },
   { name: 'Quotes', path: '/crm/quotes' },
   { name: 'Inspections', path: '/crm/inspections' },
-  { name: 'Media', path: '/media' },
   { name: 'Analytics', path: '/crm/reporting' },
   { name: 'Settings', path: '/crm/settings' },
 ];
@@ -47,6 +46,13 @@ describe('UX-REFACTOR primary nav IA', () => {
     assert.match(read('src/components/BHFSidebar.jsx'), /crm-nav-divider/);
     assert.match(read('src/components/BHFCrmLayout.jsx'), /CRM_MOBILE_BOTTOM_NAV/);
     assert.match(read('src/components/BHFCrmLayout.jsx'), /openSidebar/);
+  });
+
+  it('CRM primary nav does not include Media (MIL lives on mil.bhfos.com)', () => {
+    const src = read('src/config/crmPrimaryNav.js');
+    const primary = src.slice(0, src.indexOf('CRM_MOBILE_BOTTOM_NAV'));
+    assert.doesNotMatch(primary, /name: 'Media'/);
+    assert.doesNotMatch(primary, /path: '\/media'/);
   });
 
   it('mobile bottom bar uses Hub · Work Orders · Quotes · Invoices · More (UXV2 money parity)', () => {
