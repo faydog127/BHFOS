@@ -192,8 +192,14 @@ I2; negative mutation test failed closed. If only shared-admin login works →
 | Secret create/update | No |
 | Storage writes | No |
 
-**Negative test (B3):** attempt insert/update/delete, function deploy, or
-`execute-sql` invoke → expect denial. Never use a successful mutation path.
+**Negative test (B3 default):** attempt insert/update/delete, function deploy,
+or `execute-sql` invoke → expect denial. Never use a successful mutation path.
+
+**Network OS Slice 1 exception:** for `NOS-I2-S1-EVIDENCE-01`, the Founder's
+newer explicit no-DDL/no-DML/no-mutation directive prohibits sending any such
+production request, including one expected to fail. Use local adapter denial,
+static allowlist/route proof, grants/permission metadata, and post-revocation
+denial on an approved read endpoint instead.
 
 **Acceptance evidence (B3):** read of project status and at least one log surface
 (reference only); negative mutation tests failed closed; no service-role used.

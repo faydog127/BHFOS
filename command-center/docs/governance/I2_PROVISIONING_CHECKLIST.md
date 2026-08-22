@@ -1,7 +1,8 @@
-# I2 Provisioning Checklist (G2.3B-B2 template)
+# I2 Provisioning Checklist — current campaign controls
 
-> **BHFOS Operating Model v2.2 — G2.3B-B1.** Template for **future** B2 identity
-> and credential provisioning. **Do not provision or revoke anything under B1.**
+> **BHFOS Operating Model v2.2.** Based on the G2.3B-B1/B2 template and extended
+> for `NOS-I2-S1-EVIDENCE-01`. Closed G2.3 is not reopened. Do not provision or
+> revoke anything until the current campaign gates pass.
 >
 > Content rules: names and categories only — **never** secret values, token
 > fragments, passwords, or private keys.
@@ -12,9 +13,9 @@
 
 | Field | Value |
 | --- | --- |
-| Authorization reference | B2A/B2C/B2C-App granted; B2C merge `9ba22c28…`; **B2D pending** for Supabase adapter credential |
+| Authorization reference | B2A/B2C/B2C-App granted; B2C merge `9ba22c28…`; Supabase campaign governed by approved `NOS-R1-S1-I2-CAP-01`, execution gates pending |
 | Risk tier | Tier 3 |
-| Actor allowed to provision | Founder or delegated operator **under exact B2 auth** |
+| Actor allowed to provision | Founder-authorized human credential provisioner under `NOS-R1-S1-I2-CAP-01`, after `FOUNDER_RUN_READY`; no agent reads secret values |
 | B1 prerequisite | G2.3B-B1 merged; `DIAGNOSTICS_ACCESS.md` accepted |
 | Live provisioning in B1 | **Not authorized / not performed** |
 
@@ -66,17 +67,17 @@ only in the approved secret-store category.
 | Field | Planned / recorded value |
 | --- | --- |
 | Exact system | Production Supabase project ref `wwyxohjnyqnegzbxtuxs` (adapter lock) |
-| Exact identity | Dedicated OAuth application + Founder authorization (pending corrected B2D) |
-| Exact permissions | Dashboard **Projects Read** only (wire scope `projects:read`); adapter allowlist metadata/health only |
+| Exact identity | Dedicated campaign OAuth application + Founder authorization under `NOS-R1-S1-I2-CAP-01` |
+| Exact permissions | Dashboard **Projects Read + Database Read** only (wire scopes `projects:read` + `database:read`); adapter allowlist metadata/health/bounded catalog only |
 | Token project scope | **Not proven** at token layer; project isolation is adapter-enforced |
-| Issue time | _pending corrected G2.3B-B2D after AG_ |
+| Issue time | _pending exact-head review, merge authorization, merge, and `FOUNDER_RUN_READY` under `NOS-R1-S1-I2-CAP-01`_ |
 | Expiration | Short-lived access token; refresh until revoked (platform-controlled) |
 | Credential-storage category | Diagnostics adapter secret env only |
 | Inventory name rows | `I2_SUPABASE_OAUTH_CLIENT_ID`, `I2_SUPABASE_OAUTH_CLIENT_SECRET` (if issued), `I2_SUPABASE_OAUTH_ACCESS_TOKEN`, `I2_SUPABASE_OAUTH_REFRESH_TOKEN`, `I2_SUPABASE_OAUTH_TOKEN_EXPIRY`, `SUPABASE_DIAGNOSTICS_PROJECT_REF` |
-| Actor | Founder under B2D only |
+| Actor | Founder-authorized human credential provisioner under `NOS-R1-S1-I2-CAP-01`; Production Diagnostics uses but does not provision or inspect values |
 | Audit attribution | OAuth app identity (not founder-personal PAT) |
 | Successful read test | _pending B3_ |
-| Negative mutation test | Writes/SQL/secrets/`/body`/listing/bypass denied — _pending B3_ |
+| Negative-capability test | Local adapter denial + static allowlist/route proof + permission metadata; **no production write request** — _pending campaign verification_ |
 | Explicitly not provisioned | PAT; Dashboard Read-Only member; service-role; `SUPABASE_DIAGNOSTICS_ADAPTER_TOKEN`; agent-held OAuth; unrestricted Supabase MCP |
 
 ### 2.4 Application build identity / health
@@ -106,11 +107,13 @@ only in the approved secret-store category.
 - [x] Founder B2 authorization references recorded on Baton/Ledger (B2A/B2C/B2C-App; B2C merge `9ba22c28…`)
 - [x] GitHub App secret **names** in `SECRET_INVENTORY.md` (`founder_attested_present`)
 - [x] Hostinger recorded `READ_ONLY_CAPABILITY_UNAVAILABLE` (no Diagnostics credential)
-- [ ] Supabase OAuth lifecycle credentials issued under corrected **G2.3B-B2D** (or Option C deferral recorded)
+- [ ] Supabase campaign OAuth lifecycle credentials issued only after all `NOS-R1-S1-I2-CAP-01` gates pass (or deferral recorded)
 - [x] **No** secret value in repository, PR, chat, or Markdown
-- [x] Over-scope review: GitHub Administration none; Hostinger none; Supabase none until B2D
+- [x] Over-scope review: GitHub Administration none; Hostinger none; Supabase campaign ceiling Projects Read + Database Read only
 - [x] Emergency-disable procedure acknowledged (`I2_REVOCATION_CHECKLIST.md`)
 - [ ] B3 connection verification scheduled under separate authorization
+- [ ] Campaign expiry recorded: 2026-09-30 23:59 America/New_York or evidence completion, whichever comes first
+- [ ] Mandatory campaign revocation and read-endpoint denial check scheduled
 
 ---
 

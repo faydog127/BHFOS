@@ -63,7 +63,8 @@
 
 > No secret values. **G2.3B-B2C** merged (`9ba22c28…`). GitHub App provisioned
 > (Founder-attested). Hostinger blocked. Supabase adapter present; **no** Supabase
-> OAuth credential until corrected **G2.3B-B2D** Founder auth after AG.
+> OAuth credential until all execution gates in approved
+> **NOS-R1-S1-I2-CAP-01** pass. This does not reopen closed G2.3.
 
 | Name | Owning system | Purpose | Environment | Expected storage | Responsible role | Rotation requirement | Revocation method | Verified? | Notes (non-sensitive) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -76,12 +77,12 @@
 | `I2_SUPABASE_DIAGNOSTICS_TOKEN` | Supabase | — | — | — | — | — | — | unverified | Legacy; not issued. |
 | `I2_SUPABASE_OAUTH_DIAGNOSTICS_TOKEN` | Supabase | — | — | — | — | — | — | unverified | Superseded by OAuth lifecycle names below. |
 | `SUPABASE_DIAGNOSTICS_ADAPTER_TOKEN` | Supabase | — | — | — | — | — | — | unverified | **Retired.** Do not issue. Replaced by OAuth lifecycle names. |
-| `I2_SUPABASE_OAUTH_CLIENT_ID` | Supabase | OAuth app client id for Diagnostics adapter | production-diagnostics (adapter) | Diagnostics adapter secret env only | Production Diagnostics | n/a (id) | Disable/delete OAuth app | unverified | **Not issued.** Pending corrected G2.3B-B2D after AG. |
-| `I2_SUPABASE_OAUTH_CLIENT_SECRET` | Supabase | OAuth client secret **if issued** for app type | production-diagnostics (adapter) | Diagnostics adapter secret env only | Production Diagnostics | Rotate on suspicion / cadence | Rotate secret; re-authorize if required | unverified | **Not issued.** Omit row usage if platform issues public client without secret. |
-| `I2_SUPABASE_OAUTH_ACCESS_TOKEN` | Supabase | Short-lived Management API Bearer token | production-diagnostics (adapter) | Diagnostics adapter secret env only | Production Diagnostics adapter | Refresh before expiry; fail closed on 401 | Revoke app auth; clear env | unverified | **Not issued.** Not claimed project-scoped at token layer. |
-| `I2_SUPABASE_OAUTH_REFRESH_TOKEN` | Supabase | Refresh token for access-token rotation | production-diagnostics (adapter) | Diagnostics adapter secret env only | Production Diagnostics adapter | Rotate with re-auth | Revoke app auth; clear env | unverified | **Not issued.** Never agent-visible. |
-| `I2_SUPABASE_OAUTH_TOKEN_EXPIRY` | Supabase | Access-token expiry reference | production-diagnostics (adapter) | Diagnostics adapter env only | Production Diagnostics adapter | Update on refresh | Clear with tokens | unverified | **Not issued.** Metadata; still Diagnostics-env only. |
-| `SUPABASE_DIAGNOSTICS_PROJECT_REF` | Supabase | Fixed production project ref for adapter lock | production-diagnostics (adapter) | Diagnostics adapter env only | Production Diagnostics adapter | n/a | Clear env | unverified | Must equal `wwyxohjnyqnegzbxtuxs`. Adapter isolation — **not** proof of token-level project scope. |
+| `I2_SUPABASE_OAUTH_CLIENT_ID` | Supabase | OAuth app client id for Diagnostics adapter | production-diagnostics (adapter) | Diagnostics adapter secret env only | Human credential provisioner (create); Production Diagnostics (adapter-only use) | n/a (id) | Disable/delete OAuth app | unverified | **Not issued.** Pending exact-head approval, merge, and `FOUNDER_RUN_READY` under `NOS-R1-S1-I2-CAP-01`. Campaign expires 2026-09-30 or on evidence completion. |
+| `I2_SUPABASE_OAUTH_CLIENT_SECRET` | Supabase | OAuth client secret **if issued** for app type | production-diagnostics (adapter) | Diagnostics adapter secret env only | Human credential provisioner (create/rotate); protected helper only thereafter | Rotate on suspicion / cadence | Rotate secret; re-authorize if required | unverified | **Not issued.** Omit row usage if platform issues public client without secret. Never agent-visible. |
+| `I2_SUPABASE_OAUTH_ACCESS_TOKEN` | Supabase | Short-lived Management API Bearer token | production-diagnostics (adapter) | Diagnostics adapter secret env only | Protected helper/adapter only | Refresh before expiry; fail closed on 401 | Revoke app auth; clear env | unverified | **Not issued.** Not claimed project-scoped at token layer; never agent-visible. |
+| `I2_SUPABASE_OAUTH_REFRESH_TOKEN` | Supabase | Refresh token for access-token rotation | production-diagnostics (adapter) | Diagnostics adapter secret env only | Protected helper only | Rotate with re-auth | Revoke app auth; clear env | unverified | **Not issued.** Never agent-visible. |
+| `I2_SUPABASE_OAUTH_TOKEN_EXPIRY` | Supabase | Access-token expiry reference | production-diagnostics (adapter) | Diagnostics adapter env only | Protected helper/adapter | Update on refresh | Clear with tokens | unverified | **Not issued.** Metadata; still Diagnostics-env only. |
+| `SUPABASE_DIAGNOSTICS_PROJECT_REF` | Supabase | Fixed production project ref for adapter lock | production-diagnostics (adapter) | Diagnostics adapter env only | Protected helper/adapter | n/a | Clear env | unverified | Must equal `wwyxohjnyqnegzbxtuxs`. Adapter isolation — **not** proof of token-level project scope. |
 | `I2_DIAGNOSTICS_SECRET_ENV_FILE` | Local | Absolute path to durable Diagnostics env file | production-diagnostics | Path only (file is gitignored) | Production Diagnostics | n/a | Delete path env; shred file | unverified | Required by protected OAuth helper for durable token writes. Path only in docs — never commit file contents. |
 
 ## Handling rules (binding)

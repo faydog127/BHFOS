@@ -36,10 +36,12 @@ node tools/supabase-diagnostics-adapter/cli.mjs catalog catalog_quotes_s2_active
 ```
 
 See `docs/governance/I2_CATALOG_METADATA_CAPABILITY.md`.
-## Credential issuance
+## Credential issuance — Network OS Slice 1 campaign
 
-Requires Founder Decision Packet **G2.3B-B2D Option A** after Architecture Guard
-approval of the corrected packet **and** the protected OAuth helper.
+For control-plane release `NOS-I2-S1-EVIDENCE-01`, requires approved Founder
+Decision Packet **NOS-R1-S1-I2-CAP-01**, separate exact PR/SHA review and merge
+authorization, approved merge SHA, and `FOUNDER_RUN_READY`. This campaign does
+not reopen closed G2.3.
 
 Inventory names (values never in repo):
 
@@ -79,5 +81,12 @@ Founder creates the OAuth app with the **exact HTTPS** redirect, places client
 id/secret + tunnel credentials in Diagnostics env (outside repo), then runs the
 helper once and approves the browser consent screen. The helper never prints
 token values.
+
+The campaign OAuth ceiling is **Projects Read + Database Read only**
+(`projects:read` + `database:read`). The credential expires for governance
+purposes at evidence completion or 2026-09-30 23:59 America/New_York, whichever
+comes first, and must then be revoked and removed from the external Diagnostics
+environment. Production negative-write requests are prohibited; post-revocation
+verification retries an approved read endpoint only.
 
 Legacy `SUPABASE_DIAGNOSTICS_ADAPTER_TOKEN` is **retired** — do not issue.

@@ -9,10 +9,10 @@
 | Release | R1 — proposed |
 | Slice | S1 — Customer Network + Service Need Foundation |
 | Owner | Founder |
-| Implementation authority | None |
+| Network OS product implementation authority | None |
 | Founder direction ratified | 2026-08-22 |
 | Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md` |
-| Diagnostics capability decision | `governance/decisions/NOS_R1_S1_I2_CAPABILITY_AND_AGGREGATE_TEMPLATE_DECISION_PACKET.md` — Founder approved, execution gates pending |
+| Diagnostics capability decision | `governance/decisions/NOS_R1_S1_I2_CAPABILITY_AND_AGGREGATE_TEMPLATE_DECISION_PACKET.md` Revision 1 — Founder approved, corrected staged gates pending |
 | Reconciled through source HEAD | `02b628b97b1b38f32fe7c8902fdbad34778cf3c4` plus ratification-record changes |
 
 ## 1. Purpose
@@ -304,17 +304,21 @@ The product, requirements, workflow, and core domain direction are mature enough
 
 Founder ratification of product, requirements, architecture direction, and experience/design direction is complete. The SOURCE-ONLY legacy dependency inventory is also complete. The shortest path to implementation readiness is now:
 
-1. Execute the approved `NOS-R1-S1-I2-CAP-01` diagnostics workstream through bounded Builder preparation, local proof, and independent exact-head Architecture Guard review.
-2. After all packet gates pass and `FOUNDER_RUN_READY`, provision the protected I2 identity and collect the already-authorized hosted schema/RLS/dependency evidence; then implement/review and run the fixed aggregate templates.
-3. Draft the exact Slice 1 domain/data model and migration/compatibility plan from source plus hosted evidence.
-4. Define the Slice 1 permission matrix, RLS design, restricted-field strategy, and security tests.
-5. Define the Slice 1 operational-event taxonomy, write ownership, retention/access, and provenance tests.
-6. Define the exact Service Need fields, lifecycle transitions, reasons, permissions, and event behavior.
-7. Approve exact design tokens, governed Tailgrids component adaptations, and canonical desktop/mobile screen references.
-8. Declare the authorized non-production environment and synthetic/training-data strategy.
-9. Create the requirement-to-test validation matrix and mobile usability protocol.
-10. Identify bounded work items and an implementation branch/worktree only after the preceding gates are reviewed.
-11. Perform a final Definition of Ready review.
-12. Return to the Founder for a separate Release 1 / Slice 1 activation decision.
+1. Complete local Stage A of `NOS-R1-S1-I2-CAP-01`: reconcile the two-scope OAuth contract and prepare only missing fixed metadata/dependency capability.
+2. Obtain separate push/PR authority, independent exact-head Architecture Guard review, exact merge authority, and merge.
+3. After `FOUNDER_RUN_READY`, provision the campaign-scoped I2 identity and collect the already-authorized hosted schema/RLS/dependency metadata.
+4. Derive, implement, review, and separately merge fixed aggregate templates from that verified metadata; run them through I2 and complete mandatory campaign revocation.
+5. Draft the exact Slice 1 domain/data model and migration/compatibility plan from source plus hosted evidence.
+6. Define the Slice 1 permission matrix, RLS design, restricted-field strategy, and security tests.
+7. Define the Slice 1 operational-event taxonomy, write ownership, retention/access, and provenance tests.
+8. Define the exact Service Need fields, lifecycle transitions, reasons, permissions, and event behavior.
+9. Approve exact design tokens, governed Tailgrids component adaptations, and canonical desktop/mobile screen references.
+10. Declare the authorized non-production environment and synthetic/training-data strategy.
+11. Create the requirement-to-test validation matrix and mobile usability protocol.
+12. Identify bounded work items and an implementation branch/worktree only after the preceding gates are reviewed.
+13. Perform a final Definition of Ready review.
+14. Return to the Founder for a separate Release 1 / Slice 1 activation decision.
 
-No code should begin before those gates are satisfied.
+No Network OS product code should begin before those gates are satisfied. The
+separately approved diagnostics control-plane workstream does not activate or
+implement the product.

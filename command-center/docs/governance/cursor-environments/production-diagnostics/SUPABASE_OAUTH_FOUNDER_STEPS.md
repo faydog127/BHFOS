@@ -1,14 +1,16 @@
-# Exact Supabase OAuth App creation — G2.3B-B2D Option B (Founder UI)
+# Exact Supabase OAuth App creation — Network OS Slice 1 I2 campaign (Founder UI)
 
-> Binding ceiling from Founder **G2.3B-B2D Option B** authorization
-> (Cloudflare Named Tunnel → loopback helper).
+> Binding ceiling from Founder decision **NOS-R1-S1-I2-CAP-01** for control-plane
+> release `NOS-I2-S1-EVIDENCE-01` (Cloudflare Named Tunnel → loopback helper).
+> This campaign does not reopen closed G2.3.
 > **No secret values** belong in this file, chat, repository files, Cursor, or
 > terminal command history.
 >
 > OAuth code exchange is performed by the **protected local helper only** — the
 > Founder does **not** construct URLs, run PKCE, capture codes, or copy tokens.
 
-**Authorized scope only:** Dashboard **Projects** → **Read** (wire `projects:read`).  
+**Authorized scopes only:** Dashboard **Projects** → **Read** and **Database** →
+**Read** (wire `projects:read` + `database:read`). No other scope.
 **Project ref (adapter lock):** `wwyxohjnyqnegzbxtuxs`  
 **Public redirect URI (exact):** `https://oauth-diagnostics.bhfos.com/oauth/callback`  
 **Local listener (helper bind only):** `http://127.0.0.1:8765/oauth/callback`  
@@ -39,7 +41,7 @@ be merged as the tunnel baseline.
 3. Create or edit **`BHFOS I2 Diagnostics`**.
 4. Set:
    - **Redirect URI (exact):** `https://oauth-diagnostics.bhfos.com/oauth/callback`
-   - **Scopes:** **Projects → Read** only (nothing else)
+   - **Scopes:** **Projects → Read** and **Database → Read** only (nothing else)
 5. Confirm / save.
 
 Do **not** register HTTP loopback, self-signed HTTPS loopback, `localhost`, or
@@ -116,7 +118,18 @@ Confirm status includes `OAuth authorization: completed`,
 
 ## F. Explicit non-actions
 
-Do **not**: grant other OAuth scopes; use HTTPS self-signed callbacks; reuse or
+Do **not**: perform these steps before the exact Stage A PR/SHA is independently
+reviewed, separately merge-authorized, merged, and `FOUNDER_RUN_READY`; grant
+other OAuth scopes; use HTTPS self-signed callbacks; reuse or
 merge PR #58; paste secrets/tunnel credentials into Cursor/chat/repo/history;
 reuse quarantined tokens; start B3; use PAT / Dashboard Read-Only / service-role;
 provision Hostinger; leave the tunnel running after the authorize attempt.
+
+## G. Campaign closure
+
+This credential is campaign-scoped, not standing access. Revoke the OAuth
+authorization and clear campaign token material from the external Diagnostics
+environment after the approved Slice 1 evidence collection or by 2026-09-30
+23:59 America/New_York, whichever occurs first. Verify revocation only by retrying
+an approved read endpoint and expecting authentication denial. Never send a
+production write request as a negative test.

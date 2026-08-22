@@ -31,6 +31,15 @@ authorizations enable live steps.
 
 If any precondition fails → **stop** and report missing authorization or access.
 
+### Network OS Slice 1 campaign override
+
+For `NOS-I2-S1-EVIDENCE-01`, the Founder's newer explicit prohibition on DDL,
+DML, migrations, and environment mutation supersedes any older requirement to
+send a production negative-write request. Negative-capability evidence is
+limited to local adapter denial tests, static allowlist/route proof,
+grants/permission metadata, and post-revocation denial on an approved read
+endpoint. Do not send a production write request even when denial is expected.
+
 ---
 
 ## 3. Investigation sequence (read-only)
