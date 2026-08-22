@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | LIVE_CHECK_UNAVAILABLE — protected I2 credential not provisioned |
+| Status | CAPABILITY WORKSTREAM APPROVED; LIVE CHECK REMAINS UNAVAILABLE |
 | Date | 2026-08-22 |
 | Product | Network OS |
 | Release / Slice | Release 1 / Slice 1 — Customer Network + Service Need Foundation |
@@ -12,7 +12,7 @@
 | Authorization reference | Founder authorization in Command Center conversation, 2026-08-22 |
 | Evidence classification | LOCAL CONTROL-PLANE VERIFIED; HOSTED UNREACHED |
 | Repository HEAD at attempt | `b6d94e574c83c8970fcadaac01515a6c5097dc57` |
-| Implementation authority | None |
+| Implementation authority | Diagnostics control-plane work only under `NOS-R1-S1-I2-CAP-01`; no Network OS product implementation |
 
 ## 1. Authorized boundary
 
@@ -145,7 +145,9 @@ Before the authorized live collection can run, a controlled provisioning workstr
 
 ## 9. Exact next controlled action
 
-Prepare a **Supabase I2 Diagnostics Capability Provisioning and Slice 1 Aggregate-Template Decision Packet**. The packet must request only the minimum authority needed to provision the protected read-only identity and add/review bounded aggregate templates. It must not authorize application implementation, arbitrary SQL, service-role use, customer-row access, migration, deployment, or production mutation.
+The Founder approved `NOS-R1-S1-I2-CAP-01`, the **Supabase I2 Diagnostics Capability Provisioning and Slice 1 Aggregate-Template Decision Packet**, on 2026-08-22.
+
+The exact next action is a bounded Builder assignment for the protected diagnostics capability and fixed aggregate-template work, followed by independent Architecture Guard review. No credential creation, OAuth consent, live call, or aggregate use may occur until the staged gates in that packet are satisfied and the protected launcher returns `FOUNDER_RUN_READY`.
 
 ## 10. Explicit non-actions
 
@@ -163,4 +165,3 @@ Prepare a **Supabase I2 Diagnostics Capability Provisioning and Slice 1 Aggregat
 ## 11. Exact stopping point
 
 Stopped after local fail-closed adapter tests and credential-name presence checks, before any live Supabase request.
-

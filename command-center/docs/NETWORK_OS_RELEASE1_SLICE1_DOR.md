@@ -12,6 +12,7 @@
 | Implementation authority | None |
 | Founder direction ratified | 2026-08-22 |
 | Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md` |
+| Diagnostics capability decision | `governance/decisions/NOS_R1_S1_I2_CAPABILITY_AND_AGGREGATE_TEMPLATE_DECISION_PACKET.md` — Founder approved, execution gates pending |
 | Reconciled through source HEAD | `02b628b97b1b38f32fe7c8902fdbad34778cf3c4` plus ratification-record changes |
 
 ## 1. Purpose
@@ -128,7 +129,7 @@ REQ-NOS-P1-018 — Basic operational dashboards may be partially included only t
 | Operational event / audit direction | READY | ADR-NOS-008 Active; exact Slice 1 taxonomy/write design remains blocked |
 | Legacy `tenant_id` compatibility direction | READY | ADR-NOS-011 Active; hosted dependency verification and canonical BHIS scope remain blocked |
 | Legacy source dependency inventory | READY — SOURCE-ONLY | Repository schema/RLS/function/application dependencies classified; hosted verification remains required |
-| Hosted schema/RLS/data-quality evidence | BLOCKED — LIVE CHECK UNAVAILABLE | Founder authorized bounded collection; protected I2 credential is not provisioned; no hosted request occurred |
+| Hosted schema/RLS/data-quality evidence | BLOCKED — CAPABILITY WORKSTREAM APPROVED | Founder authorized bounded collection and approved `NOS-R1-S1-I2-CAP-01`; exact-head review, `FOUNDER_RUN_READY`, provisioning, and collection remain incomplete |
 | Exact target data model/schema | BLOCKED | Active direction exists; exact Slice 1 model not yet drafted |
 | Migration/cutover plan | BLOCKED | Must map reused/new structures after target model is drafted |
 
@@ -303,8 +304,8 @@ The product, requirements, workflow, and core domain direction are mature enough
 
 Founder ratification of product, requirements, architecture direction, and experience/design direction is complete. The SOURCE-ONLY legacy dependency inventory is also complete. The shortest path to implementation readiness is now:
 
-1. Provision the protected I2 Supabase read-only capability and bounded Slice 1 aggregate templates through separate controlled authority.
-2. Collect the already-authorized read-only hosted-schema/RLS/dependency evidence for the Slice 1 candidate objects.
+1. Execute the approved `NOS-R1-S1-I2-CAP-01` diagnostics workstream through bounded Builder preparation, local proof, and independent exact-head Architecture Guard review.
+2. After all packet gates pass and `FOUNDER_RUN_READY`, provision the protected I2 identity and collect the already-authorized hosted schema/RLS/dependency evidence; then implement/review and run the fixed aggregate templates.
 3. Draft the exact Slice 1 domain/data model and migration/compatibility plan from source plus hosted evidence.
 4. Define the Slice 1 permission matrix, RLS design, restricted-field strategy, and security tests.
 5. Define the Slice 1 operational-event taxonomy, write ownership, retention/access, and provenance tests.
