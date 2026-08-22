@@ -2,21 +2,22 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
-| Version | 0.1 |
+| Status | Active register — Slice 1-applicable decisions ratified 2026-08-22; remaining decisions Proposed |
+| Version | 0.2 |
 | Date | 2026-08-22 |
 | Owner | Founder |
 | Implementation authority | None |
+| Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md` |
 
 ## Decision control
 
-Network OS decisions become binding only after explicit founder approval and controlled activation. Draft/proposed decisions do not authorize implementation.
+Network OS decisions become binding only after explicit founder approval and controlled activation. Draft/proposed decisions do not authorize implementation. Active product or architecture direction also does not authorize implementation unless an applicable release is separately activated.
 
 ## DEC-NOS-001 — Network OS product identity
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active — founder ratified 2026-08-22 |
 | Decision owner | Founder |
 
 Network OS is the BHFOS product for managed service networks. Black Horse Integrated Services (BHIS) is the initial operating company. Multifamily is the initial customer market.
@@ -27,7 +28,7 @@ Network OS is not a contractor directory, referral marketplace, lead marketplace
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active — founder ratified 2026-08-22 |
 | Decision owner | Founder |
 
 BHFOS consists of two independent product lines:
@@ -41,7 +42,7 @@ Legacy V1/V2 terminology is historical and should not be used as the product ide
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active — founder ratified 2026-08-22 |
 | Decision owner | Founder |
 
 Partner OS and Network OS must each remain independently operable. Their stated end state is controlled interoperability through explicit contracts/events.
@@ -52,7 +53,7 @@ Network OS remains authoritative for managed customer/network coordination recor
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active — founder ratified 2026-08-22 |
 | Decision owner | Founder |
 
 The standard product term for a service company that fulfills work through the managed network is **Service Partner**. The collective qualified fulfillment network is the **Service Partner Network**.
@@ -63,7 +64,7 @@ Legacy `provider` terminology may remain in historical artifacts and code until 
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active — founder ratified 2026-08-22 |
 | Decision owner | Founder |
 
 BHIS remains the central point of accountability for managed service. The customer should not have to select the Service Partner, verify qualification, chase responses, or determine who owns resolution when service fails.
@@ -72,7 +73,7 @@ BHIS remains the central point of accountability for managed service. The custom
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active — founder ratified 2026-08-22 |
 | Decision owner | Founder |
 
 Network OS product development should primarily improve Customer Capacity, Service Partner Density, Service Coordination, Customer Trust, Demand-to-Capacity Matching, or Network Economics.
@@ -83,7 +84,7 @@ Network Fulfillment Rate is a primary long-term KPI, with a 95%+ target in matur
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active — founder ratified 2026-08-22 |
 | Decision owner | Founder |
 
 Network OS should represent identified customer demand before executable work exists through a Service Need / Opportunity concept distinct from a work order.
@@ -128,7 +129,7 @@ Network OS should be capable of coordinating customer-preferred and customer-man
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active — founder ratified 2026-08-22 |
 | Decision owner | Founder |
 
 Network OS owns authoritative managed-network state for implemented domains. Email, SMS, portals, Partner OS, n8n, AI systems, and external integrations may deliver or execute authorized actions but may not silently replace Network OS authoritative state.
@@ -146,7 +147,7 @@ A Service Partner does not initially need Partner OS to participate in Network O
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active — founder ratified 2026-08-22 |
 | Decision owner | Founder |
 
 Network OS is initially a dedicated BHIS operating system. Generic multi-tenant SaaS, franchise administration, arbitrary external operating-company onboarding, tenant switching, and per-tenant billing/configuration are not authorized without a new founder decision.
@@ -155,7 +156,7 @@ Network OS is initially a dedicated BHIS operating system. Generic multi-tenant 
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active — founder ratified 2026-08-22 |
 | Decision owner | Founder |
 
 Network OS should be automation-first and AI-assisted, with routine coordination reduced where deterministic controls and evidence permit. AI may assist or recommend but may not silently grant qualification, make final business decisions, change financial policy, authorize unusual customer commitments, or bypass human accountability.
@@ -164,7 +165,7 @@ Network OS should be automation-first and AI-assisted, with routine coordination
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active — founder ratified 2026-08-22 |
 | Decision owner | Founder |
 
 Phase 1 product direction prioritizes customer/property hierarchy, relationship/visit capture, Service Needs, Service Partner prospecting/onboarding, capability/geography, qualification/compliance, Service Partner lifecycle, basic work orders, manual assignment, scheduling/status, offer/response event capture, completion evidence, basic exception visibility, and basic dashboards.

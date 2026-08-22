@@ -2,14 +2,17 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft — not ready for implementation |
-| Version | 0.1 |
+| Status | Active readiness gate — not ready for implementation; release not activated |
+| Version | 0.2 |
 | Date | 2026-08-22 |
 | Product | Network OS |
 | Release | R1 — proposed |
 | Slice | S1 — Customer Network + Service Need Foundation |
 | Owner | Founder |
 | Implementation authority | None |
+| Founder direction ratified | 2026-08-22 |
+| Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md` |
+| Reconciled through source HEAD | `02b628b97b1b38f32fe7c8902fdbad34778cf3c4` plus ratification-record changes |
 
 ## 1. Purpose
 
@@ -66,7 +69,7 @@ REQ-NOS-P1-018 — Basic operational dashboards may be partially included only t
 ### Present
 
 - Network OS Product Definition.
-- Network OS Decision Register — proposed decisions.
+- Network OS Decision Register — Slice 1-applicable decisions Active.
 - Network OS Capability Disposition.
 - Network OS Phase 1 Requirements Register.
 - Network OS Phase 1 Workflow Map.
@@ -75,14 +78,17 @@ REQ-NOS-P1-018 — Basic operational dashboards may be partially included only t
 - ADR-NOS-002 — Service Need Authoritative Model.
 - ADR-NOS-003 — Service Partner Identity & Lifecycle.
 - ADR-NOS-004 — Qualification & Eligibility Model.
+- ADR-NOS-008 — Operational Event & Audit Model — Active.
+- ADR-NOS-010 — Identity, RBAC & RLS — Active.
+- ADR-NOS-011 — Legacy Tenant Compatibility — Active.
+- Network OS Experience & Design System Definition — Active direction; exact tokens and canonical references pending.
+- Release 1 / Slice 1 Founder Ratification & Readiness Reconciliation Packet — approved as written.
 
 ### Required before activation
 
-- Founder ratification/activation of the Product Definition and decisions applicable to Slice 1.
-- Founder approval of the Slice 1 requirements listed above.
 - Active Release 1 / Slice 1 record.
-- Architecture decisions for identity/RBAC/RLS, event/audit model, and legacy tenant compatibility sufficient for Slice 1.
-- Experience & Design System Definition with canonical Slice 1 screens.
+- Exact Slice 1 architecture designs required by the Active ADR implementation gates.
+- Approved exact design tokens and canonical Slice 1 screen references under the Active Experience & Design System.
 - Data/schema migration plan for Slice 1.
 - validation/test plan.
 - non-production environment declaration.
@@ -97,8 +103,8 @@ REQ-NOS-P1-018 — Basic operational dashboards may be partially included only t
 | Network OS product identity defined | READY | Product Definition exists |
 | Slice supports Network OS product test | READY | Customer Capacity, Customer Trust, Demand Intelligence |
 | Slice outcome is clear and bounded | READY | This document §2–4 |
-| Product Definition ratified | BLOCKED | Draft; founder activation required |
-| Applicable decisions active | BLOCKED | Network OS decisions remain Proposed |
+| Product Definition ratified | READY | Founder ratified 2026-08-22 |
+| Applicable decisions active | READY | DEC-NOS-001/002/003/004/005/006/007/012/014/015/016 Active |
 
 ### B. Requirements
 
@@ -107,40 +113,40 @@ REQ-NOS-P1-018 — Basic operational dashboards may be partially included only t
 | Requirement IDs exist | READY | REQ-NOS-P1-001/002/003/004/005/017/019/020 |
 | Acceptance criteria exist | READY | Phase 1 Requirements Register |
 | Requirements trace to workflow | READY | Phase 1 Workflow Map |
-| Requirements trace to architecture | READY/PARTIAL | ADR-NOS-001/002 plus reconciliation; cross-cutting ADRs missing |
-| Slice requirements founder-approved | BLOCKED | Explicit approval not yet recorded |
+| Requirements trace to architecture | READY | ADR-NOS-001/002/008/010/011 plus reconciliation |
+| Slice requirements founder-approved | READY | Founder approved 2026-08-22 |
 
 ### C. Architecture
 
 | Gate | Status | Evidence / blocker |
 | --- | --- | --- |
-| Customer hierarchy decision | READY FOR RATIFICATION | ADR-NOS-001 Proposed |
-| Service Need decision | READY FOR RATIFICATION | ADR-NOS-002 Proposed |
+| Customer hierarchy decision | READY | ADR-NOS-001 Active |
+| Service Need decision | READY | ADR-NOS-002 Active |
 | Domain boundaries defined | READY | Domain & Architecture Reconciliation |
-| Identity / RBAC / RLS architecture | BLOCKED | ADR-NOS-010 required before implementation |
-| Operational event / audit architecture | BLOCKED | ADR-NOS-008 required before implementation |
-| Legacy `tenant_id` compatibility | BLOCKED | ADR-NOS-011 required before implementation |
-| Exact target data model/schema | BLOCKED BY DESIGN | Created only after required ADRs and active slice authority |
+| Identity / RBAC / RLS direction | READY | ADR-NOS-010 Active; exact Slice 1 permission/RLS design remains blocked |
+| Operational event / audit direction | READY | ADR-NOS-008 Active; exact Slice 1 taxonomy/write design remains blocked |
+| Legacy `tenant_id` compatibility direction | READY | ADR-NOS-011 Active; dependency inventory and canonical BHIS scope remain blocked |
+| Exact target data model/schema | BLOCKED | Active direction exists; exact Slice 1 model not yet drafted |
 | Migration/cutover plan | BLOCKED | Must map reused/new structures after target model is drafted |
 
 ### D. Experience / design
 
 | Gate | Status | Evidence / blocker |
 | --- | --- | --- |
-| Premium product appearance is a governed requirement | READY AS FOUNDER DIRECTION | No ad hoc stylistic changes permitted |
-| Network OS Experience & Design System Definition | BLOCKED | Must be created before implementation |
+| Premium product appearance is a governed requirement | READY | Founder-ratified design direction; no ad hoc stylistic changes permitted |
+| Network OS Experience & Design System Definition | READY | Active direction; Tailgrids hierarchy recorded |
 | Canonical Slice 1 desktop screens | BLOCKED | Customer/property, relationship, Service Need, basic home/list/detail |
 | Canonical mobile visit screen | BLOCKED | Must validate one-minute capture target |
 | Approved component/style tokens | BLOCKED | Typography, spacing, surfaces, tables, states, motion, iconography, color system |
-| Ad hoc design-change prohibition in governance | BLOCKED | Must be recorded in design-system authority artifact |
+| Ad hoc design-change prohibition in governance | READY | Recorded in the Active design-system authority artifact |
 
 ### E. Security / data handling
 
 | Gate | Status | Evidence / blocker |
 | --- | --- | --- |
 | Data classification baseline exists | READY | Phase 1 Requirements Register |
-| Least-privilege role model | BLOCKED | ADR-NOS-010 |
-| RLS/authorization test plan | BLOCKED | Follows ADR-NOS-010 and target schema |
+| Least-privilege role direction | READY | ADR-NOS-010 Active |
+| Slice 1 permission/RLS design and authorization test plan | BLOCKED | Exact matrix, policies, field strategy, and tests remain to be created |
 | Restricted property/access data handling | PARTIAL | Classification known; exact field/storage/access rules pending |
 | Test-data isolation | PARTIAL | Governance principle exists; environment/test plan pending |
 
@@ -166,27 +172,31 @@ REQ-NOS-P1-018 — Basic operational dashboards may be partially included only t
 | Service Need lifecycle tests | BLOCKED | Depends on final state design |
 | RLS/security tests | BLOCKED | Depends on ADR-NOS-010 and schema |
 
-## 7. Remaining blocking decisions
+## 7. Ratified architecture directions and remaining design blockers
 
-The slice is conceptually ready but not implementation-ready. The remaining blocking architecture decisions are:
+The Founder ratified the required Slice 1 architecture directions on 2026-08-22. The release remains not implementation-ready because each Active ADR contains a release-specific implementation gate that has not yet been satisfied.
 
 ### ADR-NOS-008 — Operational Event & Audit Model
 
-Needed now because Slice 1 must preserve relationship visits, Service Need creation/status changes, actor/source, and later metric traceability without turning security audit logs into business history.
+**Active direction.** Remaining gate: define the Slice 1 event taxonomy/versioning, event-write ownership, required events, audit retention/access, sensitive metadata controls, and acceptance tests.
 
 ### ADR-NOS-010 — Identity / RBAC / RLS
 
-Needed now to define who can create/edit customer/property relationships, Service Needs, visits, internal notes, and sensitive property/access information.
+**Active direction.** Remaining gate: define the Slice 1 permission matrix, record/data scopes, restricted-field handling, RLS policies, service identities, authorization tests, and privileged-action audit requirements.
 
 ### ADR-NOS-011 — Legacy Tenant Compatibility
 
-Needed now because copied components frequently query by `tenant_id`. Slice 1 must decide how Network OS remains securely BHIS-scoped without exposing tenant-selection/product behavior or accidentally coupling to Partner OS.
+**Active direction.** Remaining gate: inventory touched `tenant_id` dependencies, define the canonical BHIS compatibility scope, document RLS implications and prohibited tenant behavior, and define migration/isolation tests.
 
-ADR-NOS-003 and ADR-NOS-004 are important for the next slice but do not block the core Customer Network + Service Need implementation once ratified, unless shared identity/security decisions depend on them.
+ADR-NOS-003 and ADR-NOS-004 remain Proposed and are intended for a later Service Partner Network/Qualification slice. They do not block the core Customer Network + Service Need slice unless later detailed design reveals a material dependency, which must return to the Command Center.
 
 ## 8. Design gate added to Definition of Ready
 
-Release 1 / Slice 1 may not enter implementation until an approved **Network OS Experience & Design System Definition** exists.
+The Founder approved the **Network OS Experience & Design System Definition** direction on 2026-08-22, including the following authority hierarchy:
+
+**Tailgrids primitives → Black Horse Design Foundation → Network OS Product Experience System → governed Network OS components/patterns → application screens**
+
+Release 1 / Slice 1 may not enter implementation until the remaining exact-token and canonical-screen gates are approved under that Active direction.
 
 That artifact must at minimum define:
 
@@ -288,15 +298,17 @@ Release 1 / Slice 1 becomes **Ready** only when all of the following are true:
 
 The product, requirements, workflow, and core domain direction are mature enough that remaining blockers are now specific rather than conceptual.
 
-The shortest path to implementation readiness is:
+Founder ratification of product, requirements, architecture direction, and experience/design direction is complete. The shortest path to implementation readiness is now:
 
-1. Complete ADR-NOS-008 — Operational Event & Audit Model.
-2. Complete ADR-NOS-010 — Identity / RBAC / RLS.
-3. Complete ADR-NOS-011 — Legacy Tenant Compatibility.
-4. Create and approve the Network OS Experience & Design System Definition and canonical Slice 1 screens.
-5. Draft the exact Slice 1 target data model/migration plan.
-6. Create the validation matrix and non-production environment declaration.
-7. Ratify the Product Definition, decisions, ADRs, and Slice 1 requirements.
-8. Activate Release 1 / Slice 1.
+1. Draft the exact Slice 1 domain/data model and migration/compatibility plan.
+2. Define the Slice 1 permission matrix, RLS design, restricted-field strategy, and security tests.
+3. Define the Slice 1 operational-event taxonomy, write ownership, retention/access, and provenance tests.
+4. Define the exact Service Need fields, lifecycle transitions, reasons, permissions, and event behavior.
+5. Approve exact design tokens, governed Tailgrids component adaptations, and canonical desktop/mobile screen references.
+6. Declare the authorized non-production environment and synthetic/training-data strategy.
+7. Create the requirement-to-test validation matrix and mobile usability protocol.
+8. Identify bounded work items and an implementation branch/worktree only after the preceding gates are reviewed.
+9. Perform a final Definition of Ready review.
+10. Return to the Founder for a separate Release 1 / Slice 1 activation decision.
 
 No code should begin before those gates are satisfied.

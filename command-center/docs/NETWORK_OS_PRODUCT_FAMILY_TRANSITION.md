@@ -2,10 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft — founder direction captured; controlled ratification pending |
+| Status | Active — founder ratified 2026-08-22 |
 | Date | 2026-08-22 |
 | Product line | Network OS |
 | Implementation authority | None |
+| Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md` |
 
 ## Product family
 

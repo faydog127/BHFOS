@@ -2,8 +2,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft — founder decision packet; no implementation authority |
-| Version | 0.1 |
+| Status | Approved — founder ratified 2026-08-22; release not activated; no implementation authority |
+| Version | 0.2 |
 | Date | 2026-08-22 |
 | Product | Network OS |
 | Proposed release | Release 1 |
@@ -13,12 +13,21 @@
 | Branch reviewed | `network-os/foundation` |
 | Verified HEAD | `02b628b97b1b38f32fe7c8902fdbad34778cf3c4` |
 | Implementation authority | **None** |
+| Founder approval | Approved as written on 2026-08-22 |
 
 > This is a governance-ratification surface, not an implementation packet.
 > Approval of product direction, decisions, requirements, architecture, or design
 > direction through this packet does not activate Release 1 / Slice 1 and does
 > not authorize coding, schema changes, migrations, environment mutation,
 > deployment, merge, or production action.
+
+## Founder approval record
+
+On 2026-08-22, the Founder approved this packet as written with the following authority boundary:
+
+> I approve the Network OS Release 1 / Slice 1 Founder Ratification Packet as written. This ratifies the product, requirements, architecture, and design direction only. It does not activate the release or authorize implementation.
+
+Accordingly, the ratified directions identified below are Active. Release 1 / Slice 1 remains **Not Ready for Implementation**, **Not Activated**, and has **no implementation authority**.
 
 ## 1. Purpose
 
@@ -97,7 +106,7 @@ Establish the minimum authoritative Network OS foundation needed for BHIS custom
 
 | Decision | Founder treatment |
 | --- | --- |
-| Approve the proposed Release 1 / Slice 1 objective, operating path, in-scope requirements, and explicit non-scope as the controlled readiness boundary | `PENDING — APPROVE / APPROVE WITH AMENDMENTS / RETURN FOR REVISION / REJECT / DEFER` |
+| Approve the proposed Release 1 / Slice 1 objective, operating path, in-scope requirements, and explicit non-scope as the controlled readiness boundary | **APPROVED — founder ratified 2026-08-22** |
 
 This treatment approves or rejects the proposed boundary only. It does not activate the release.
 
@@ -107,10 +116,10 @@ The existing `NETWORK_OS_RELEASE1_SLICE1_DOR.md` was created at commit `67a1b5c`
 
 | Previously reported blocker | Current source state | Current readiness state |
 | --- | --- | --- |
-| ADR-NOS-008 missing | Present at `3c323d7` | Proposed; founder ratification required; Slice 1 event taxonomy and tests still missing |
-| ADR-NOS-010 missing | Present at `881235c` | Proposed; founder ratification required; permission matrix, RLS design, restricted-field strategy, and tests still missing |
-| ADR-NOS-011 missing | Present at `842b223` | Proposed; founder ratification required; touched-dependency inventory and canonical BHIS scope design still missing |
-| Experience & Design System missing | Present at `02b628b` | Draft; founder ratification required; exact tokens and approved screen references still missing |
+| ADR-NOS-008 missing | Present at `3c323d7` | Active after founder ratification; Slice 1 event taxonomy and tests still missing |
+| ADR-NOS-010 missing | Present at `881235c` | Active after founder ratification; permission matrix, RLS design, restricted-field strategy, and tests still missing |
+| ADR-NOS-011 missing | Present at `842b223` | Active after founder ratification; touched-dependency inventory and canonical BHIS scope design still missing |
+| Experience & Design System missing | Present at `02b628b` | Active direction after founder ratification; exact tokens and approved screen references still missing |
 
 ### Reconciled readiness conclusion
 
@@ -147,7 +156,7 @@ The proposed primary long-term KPI is Network Fulfillment Rate. First-Match Fulf
 
 | Decision | Founder treatment |
 | --- | --- |
-| Ratify `NETWORK_OS_PRODUCT_DEFINITION.md` as Active product direction, subject to any amendments recorded here | `PENDING — APPROVE / APPROVE WITH AMENDMENTS / RETURN FOR REVISION / REJECT / DEFER` |
+| Ratify `NETWORK_OS_PRODUCT_DEFINITION.md` as Active product direction, subject to any amendments recorded here | **APPROVED — founder ratified 2026-08-22** |
 
 ### Amendments, if any
 
@@ -159,23 +168,23 @@ The following proposed decisions materially govern Slice 1. Decisions focused ex
 
 | Decision | Proposed direction | Founder treatment |
 | --- | --- | --- |
-| DEC-NOS-001 | Network OS is the managed-service-network product; BHIS is the initial operator; multifamily is the initial market; it is not a directory or marketplace | `PENDING` |
-| DEC-NOS-002 | BHFOS contains two independent product lines: Network OS and Partner OS; V1/V2 are historical labels | `PENDING` |
-| DEC-NOS-003 | Network OS and Partner OS remain independently useful and may interoperate only through controlled contracts/events | `PENDING` |
-| DEC-NOS-004 | Use Service Partner and Service Partner Network as the standard product terminology | `PENDING` |
-| DEC-NOS-005 | BHIS owns the managed customer experience and remains the central point of accountability | `PENDING` |
-| DEC-NOS-006 | Product development is evaluated through the six operating dimensions and long-term fulfillment KPIs | `PENDING` |
-| DEC-NOS-007 | Service Need is an authoritative concept distinct from Lead and Work Order | `PENDING` |
-| DEC-NOS-012 | Network OS owns authoritative managed-network state for implemented domains | `PENDING` |
-| DEC-NOS-014 | Generic multi-tenant SaaS behavior remains out of scope unless separately authorized | `PENDING` |
-| DEC-NOS-015 | Network OS is automation-first and AI-assisted, but material decisions remain human-controlled unless narrow authority is separately approved | `PENDING` |
-| DEC-NOS-016 | Phase 1 direction establishes a minimum managed-service operating loop but does not itself authorize an implementation release | `PENDING` |
+| DEC-NOS-001 | Network OS is the managed-service-network product; BHIS is the initial operator; multifamily is the initial market; it is not a directory or marketplace | **APPROVED** |
+| DEC-NOS-002 | BHFOS contains two independent product lines: Network OS and Partner OS; V1/V2 are historical labels | **APPROVED** |
+| DEC-NOS-003 | Network OS and Partner OS remain independently useful and may interoperate only through controlled contracts/events | **APPROVED** |
+| DEC-NOS-004 | Use Service Partner and Service Partner Network as the standard product terminology | **APPROVED** |
+| DEC-NOS-005 | BHIS owns the managed customer experience and remains the central point of accountability | **APPROVED** |
+| DEC-NOS-006 | Product development is evaluated through the six operating dimensions and long-term fulfillment KPIs | **APPROVED** |
+| DEC-NOS-007 | Service Need is an authoritative concept distinct from Lead and Work Order | **APPROVED** |
+| DEC-NOS-012 | Network OS owns authoritative managed-network state for implemented domains | **APPROVED** |
+| DEC-NOS-014 | Generic multi-tenant SaaS behavior remains out of scope unless separately authorized | **APPROVED** |
+| DEC-NOS-015 | Network OS is automation-first and AI-assisted, but material decisions remain human-controlled unless narrow authority is separately approved | **APPROVED** |
+| DEC-NOS-016 | Phase 1 direction establishes a minimum managed-service operating loop but does not itself authorize an implementation release | **APPROVED** |
 
 ### Founder treatment — decision group
 
 | Decision | Founder treatment |
 | --- | --- |
-| Ratify the Slice 1-applicable decisions above as Active, subject to any item-level amendments | `PENDING — APPROVE / APPROVE WITH AMENDMENTS / RETURN FOR REVISION / REJECT / DEFER` |
+| Ratify the Slice 1-applicable decisions above as Active, subject to any item-level amendments | **APPROVED — founder ratified 2026-08-22** |
 
 ### Item-level amendments, if any
 
@@ -187,21 +196,21 @@ Approval of a requirement means its business outcome and acceptance criteria may
 
 | Requirement | Controlled Slice 1 interpretation | Founder treatment |
 | --- | --- | --- |
-| REQ-NOS-P1-001 | Explicit Organization → optional Portfolio/Region → Property/Facility hierarchy with stable identities and integrity rules | `PENDING` |
-| REQ-NOS-P1-002 | BHIS relationship owner, relationship state, follow-up, context, and durable history | `PENDING` |
-| REQ-NOS-P1-003 | Purpose-built mobile property visit capture targeting approximately one minute for an ordinary visit | `PENDING` |
-| REQ-NOS-P1-004 | Authoritative Service Need distinct from work, with durable demand lineage and governed lifecycle | `PENDING` |
-| REQ-NOS-P1-005 | Stable Service Catalog references required for consistent demand capture and later reporting | `PENDING` |
-| REQ-NOS-P1-017 | Relationship, visit, follow-up, and Service Need operational events with actor/source/time provenance | `PENDING` |
-| REQ-NOS-P1-019 | Network OS authoritative state, least privilege, data scope, domain authorization, and distinct security audit evidence | `PENDING` |
-| REQ-NOS-P1-020 | Low-friction, responsive, accessible BHIS internal and mobile workflows within the Slice 1 boundary | `PENDING` |
-| REQ-NOS-P1-018 limited contribution | Simple home/attention queues and counts only where supported by authoritative Slice 1 data | `PENDING` |
+| REQ-NOS-P1-001 | Explicit Organization → optional Portfolio/Region → Property/Facility hierarchy with stable identities and integrity rules | **APPROVED** |
+| REQ-NOS-P1-002 | BHIS relationship owner, relationship state, follow-up, context, and durable history | **APPROVED** |
+| REQ-NOS-P1-003 | Purpose-built mobile property visit capture targeting approximately one minute for an ordinary visit | **APPROVED** |
+| REQ-NOS-P1-004 | Authoritative Service Need distinct from work, with durable demand lineage and governed lifecycle | **APPROVED** |
+| REQ-NOS-P1-005 | Stable Service Catalog references required for consistent demand capture and later reporting | **APPROVED** |
+| REQ-NOS-P1-017 | Relationship, visit, follow-up, and Service Need operational events with actor/source/time provenance | **APPROVED** |
+| REQ-NOS-P1-019 | Network OS authoritative state, least privilege, data scope, domain authorization, and distinct security audit evidence | **APPROVED** |
+| REQ-NOS-P1-020 | Low-friction, responsive, accessible BHIS internal and mobile workflows within the Slice 1 boundary | **APPROVED** |
+| REQ-NOS-P1-018 limited contribution | Simple home/attention queues and counts only where supported by authoritative Slice 1 data | **APPROVED FOR LIMITED SLICE 1 CONTRIBUTION** |
 
 ### Founder treatment — requirements group
 
 | Decision | Founder treatment |
 | --- | --- |
-| Approve the listed requirements and controlled interpretations as the Release 1 / Slice 1 requirements baseline | `PENDING — APPROVE / APPROVE WITH AMENDMENTS / RETURN FOR REVISION / REJECT / DEFER` |
+| Approve the listed requirements and controlled interpretations as the Release 1 / Slice 1 requirements baseline | **APPROVED — founder ratified 2026-08-22** |
 
 ### Requirement amendments, if any
 
@@ -219,7 +228,7 @@ Proposed direction:
 - `organizations` and `contacts` are reuse candidates, but legacy `leads` are not the authoritative hierarchy root;
 - exact tables, constraints, deduplication, migration, and RLS remain implementation-design work.
 
-Founder treatment: `PENDING — APPROVE / APPROVE WITH AMENDMENTS / RETURN FOR REVISION / REJECT / DEFER`
+Founder treatment: **APPROVED — founder ratified 2026-08-22**
 
 ### ADR-NOS-002 — Service Need Authoritative Model
 
@@ -231,7 +240,7 @@ Proposed direction:
 - unfulfilled/deferred/lost demand remains reportable;
 - exact fields, lifecycle transitions, reasons, permissions, and linkage remain implementation-design work.
 
-Founder treatment: `PENDING — APPROVE / APPROVE WITH AMENDMENTS / RETURN FOR REVISION / REJECT / DEFER`
+Founder treatment: **APPROVED — founder ratified 2026-08-22**
 
 ### ADR-NOS-008 — Operational Event & Audit Model
 
@@ -243,7 +252,7 @@ Proposed direction:
 - sensitive payloads are referenced, not indiscriminately copied into events;
 - Slice 1 taxonomy/versioning, write ownership, retention/access, metadata controls, and tests remain required.
 
-Founder treatment: `PENDING — APPROVE / APPROVE WITH AMENDMENTS / RETURN FOR REVISION / REJECT / DEFER`
+Founder treatment: **APPROVED — founder ratified 2026-08-22**
 
 ### ADR-NOS-010 — Identity, RBAC & RLS
 
@@ -255,7 +264,7 @@ Proposed direction:
 - Slice 1 may simplify internal roles only through explicit approval while preserving later separation;
 - permission matrix, record scopes, restricted-field isolation, RLS policies, service identities, and tests remain required.
 
-Founder treatment: `PENDING — APPROVE / APPROVE WITH AMENDMENTS / RETURN FOR REVISION / REJECT / DEFER`
+Founder treatment: **APPROVED — founder ratified 2026-08-22**
 
 ### ADR-NOS-011 — Legacy Tenant Compatibility
 
@@ -267,13 +276,13 @@ Proposed direction:
 - environment separation is independent from compatibility scope;
 - touched-dependency inventory, canonical BHIS scope, migration handling, and isolation tests remain required.
 
-Founder treatment: `PENDING — APPROVE / APPROVE WITH AMENDMENTS / RETURN FOR REVISION / REJECT / DEFER`
+Founder treatment: **APPROVED — founder ratified 2026-08-22**
 
 ### Founder treatment — architecture group
 
 | Decision | Founder treatment |
 | --- | --- |
-| Ratify ADR-NOS-001, ADR-NOS-002, ADR-NOS-008, ADR-NOS-010, and ADR-NOS-011 as Active architecture direction, subject to recorded amendments | `PENDING — APPROVE / APPROVE WITH AMENDMENTS / RETURN FOR REVISION / REJECT / DEFER` |
+| Ratify ADR-NOS-001, ADR-NOS-002, ADR-NOS-008, ADR-NOS-010, and ADR-NOS-011 as Active architecture direction, subject to recorded amendments | **APPROVED — founder ratified 2026-08-22** |
 
 ### Architecture amendments, if any
 
@@ -332,7 +341,7 @@ Before production UI implementation, approved references remain required for:
 
 | Decision | Founder treatment |
 | --- | --- |
-| Ratify `NETWORK_OS_EXPERIENCE_DESIGN_SYSTEM.md` as Active design direction, with the Tailgrids hierarchy and authority rules in this section incorporated into its next controlled revision | `PENDING — APPROVE / APPROVE WITH AMENDMENTS / RETURN FOR REVISION / REJECT / DEFER` |
+| Ratify `NETWORK_OS_EXPERIENCE_DESIGN_SYSTEM.md` as Active design direction, with the Tailgrids hierarchy and authority rules in this section incorporated into its next controlled revision | **APPROVED — founder ratified 2026-08-22** |
 
 This does not approve exact visual tokens or canonical screen references. Those remain separate readiness evidence.
 
@@ -381,18 +390,18 @@ The Founder may respond item by item or use the consolidated decision below with
 
 | Decision group | Current treatment |
 | --- | --- |
-| Release 1 / Slice 1 boundary | `PENDING` |
-| Network OS Product Definition | `PENDING` |
-| Slice 1-applicable Network OS decisions | `PENDING` |
-| Slice 1 requirements baseline | `PENDING` |
-| ADR-NOS-001/002/008/010/011 | `PENDING` |
-| Experience/design direction and Tailgrids hierarchy | `PENDING` |
+| Release 1 / Slice 1 boundary | **APPROVED** |
+| Network OS Product Definition | **APPROVED** |
+| Slice 1-applicable Network OS decisions | **APPROVED** |
+| Slice 1 requirements baseline | **APPROVED** |
+| ADR-NOS-001/002/008/010/011 | **APPROVED** |
+| Experience/design direction and Tailgrids hierarchy | **APPROVED** |
 
 ### Consolidated approval language
 
 > **Approve the Network OS Product Definition; the Release 1 / Slice 1 Customer Network + Service Need Foundation boundary; DEC-NOS-001, 002, 003, 004, 005, 006, 007, 012, 014, 015, and 016; REQ-NOS-P1-001, 002, 003, 004, 005, 017, 019, 020, plus the limited Slice 1 contribution from 018; ADR-NOS-001, 002, 008, 010, and 011; and the Network OS Experience & Design System direction with Tailgrids as the approved primitive infrastructure beneath the Black Horse Design Foundation and governed Network OS product experience. This approval ratifies product, requirement, architecture, and design direction only. Release 1 / Slice 1 remains Not Ready for Implementation and Not Activated. No coding, schema change, migration, environment mutation, implementation packet, deployment, merge, or production action is authorized. Complete the remaining Definition of Ready artifacts and return for a separate release-activation decision.**
 
-Founder treatment: `PENDING — APPROVE / APPROVE WITH AMENDMENTS / RETURN FOR REVISION / REJECT / DEFER`
+Founder treatment: **APPROVED AS WRITTEN — 2026-08-22**
 
 ### Consolidated amendments, if any
 
@@ -415,4 +424,3 @@ This packet does not authorize:
 - Release 1 / Slice 1 activation.
 
 Implementation authority remains **None** until a later founder activation is recorded after all Definition of Ready gates are satisfied.
-

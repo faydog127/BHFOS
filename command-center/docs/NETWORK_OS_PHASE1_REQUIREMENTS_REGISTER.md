@@ -2,13 +2,14 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft — founder ratification required |
-| Version | 0.1 |
+| Status | Active register — Release 1 / Slice 1 requirements approved 2026-08-22; remaining Phase 1 requirements Proposed |
+| Version | 0.2 |
 | Date | 2026-08-22 |
 | Owner | Founder |
 | Product | Network OS |
 | Initial operating company | Black Horse Integrated Services (BHIS) |
 | Implementation authority | None — requirements baseline only |
+| Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md` |
 
 ## 1. Purpose
 
@@ -60,7 +61,7 @@ Unless a requirement states otherwise:
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active for Release 1 / Slice 1 — founder approved 2026-08-22 |
 | Product area | Customer / Property Management |
 | Source | Network OS Product Definition §§8–9; BHIS operating requirements |
 | Applicable decisions | DEC-NOS-001, DEC-NOS-005, DEC-NOS-012, DEC-NOS-014 |
@@ -91,7 +92,7 @@ Network OS shall represent BHIS customer relationships using a hierarchy that ca
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active for Release 1 / Slice 1 — founder approved 2026-08-22 |
 | Product area | Relationship Management |
 | Source | Product Definition §9 |
 | Applicable decisions | DEC-NOS-005, DEC-NOS-012 |
@@ -116,7 +117,7 @@ Network OS shall allow BHIS to manage relationship state for customer organizati
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active for Release 1 / Slice 1 — founder approved 2026-08-22 |
 | Product area | Field Relationship Management |
 | Source | Product Definition §10 |
 | Applicable decisions | DEC-NOS-005, DEC-NOS-012 |
@@ -141,7 +142,7 @@ Network OS shall provide a mobile-first property visit capture workflow designed
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active for Release 1 / Slice 1 — founder approved 2026-08-22 |
 | Product area | Demand Intelligence |
 | Source | Product Definition §11; DEC-NOS-007 |
 | Applicable decisions | DEC-NOS-006, DEC-NOS-007, DEC-NOS-012 |
@@ -166,7 +167,7 @@ Network OS shall maintain a Service Need / Opportunity record distinct from a wo
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active for Release 1 / Slice 1 — founder approved 2026-08-22 |
 | Product area | Shared Service Taxonomy |
 | Source | Product Definition §12 |
 | Applicable decisions | DEC-NOS-006, DEC-NOS-008, DEC-NOS-009 |
@@ -466,7 +467,7 @@ Network OS shall provide a central exception queue so BHIS coordinators and mana
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active for Release 1 / Slice 1 — founder approved 2026-08-22 |
 | Product area | Communications / Audit |
 | Source | Product Definition §35 |
 | Applicable decisions | DEC-NOS-005, DEC-NOS-012, DEC-NOS-015 |
@@ -490,7 +491,7 @@ Network OS shall maintain a traceable operational event history connecting custo
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active only for simple Release 1 / Slice 1 queues/counts; full Phase 1 requirement remains Proposed |
 | Product area | Management Visibility |
 | Source | Product Definition §§5–6, 25, 28, 30, 42 |
 | Applicable decisions | DEC-NOS-006, DEC-NOS-016 |
@@ -526,7 +527,7 @@ Phase 1 dashboards may be operational rather than analytically sophisticated. Th
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active for Release 1 / Slice 1 — founder approved 2026-08-22 |
 | Product area | Platform Governance / Security |
 | Source | Product Definition §§39–40; copied foundation controls |
 | Applicable decisions | DEC-NOS-012, DEC-NOS-015 |
@@ -552,7 +553,7 @@ Network OS shall remain authoritative for implemented managed-network domains, w
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Active for Release 1 / Slice 1 internal/mobile workflows only — founder approved 2026-08-22 |
 | Product area | UX / Adoption |
 | Source | Product Definition §§4, 10, 19, 22, 38 |
 | Applicable decisions | DEC-NOS-003, DEC-NOS-013, DEC-NOS-016 |

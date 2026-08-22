@@ -2,12 +2,13 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft — founder ratification required |
-| Version | 0.1 |
+| Status | Active — founder ratified 2026-08-22 |
+| Version | 0.2 |
 | Date | 2026-08-22 |
 | Owner | Founder |
 | Initial operating company | Black Horse Integrated Services (BHIS; blackhorseintegrated.com) |
 | Implementation authority | None — product direction only |
+| Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md` |
 
 ## 1. Product identity
 

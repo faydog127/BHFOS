@@ -2,13 +2,14 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft — founder ratification required |
-| Version | 0.1 |
+| Status | Active direction — founder ratified 2026-08-22; exact tokens and screen references pending |
+| Version | 0.2 |
 | Date | 2026-08-22 |
 | Product | Network OS |
 | Owner | Founder |
 | Design authority | Controlled product artifact |
 | Implementation authority | None — experience/design direction only |
+| Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md` |
 
 ## 1. Purpose
 
@@ -23,6 +24,18 @@ This artifact governs product appearance, interaction language, layout, density,
 > **No designer, developer, AI agent, contractor, or implementation team may introduce ad hoc stylistic changes outside the approved Network OS design system. Material stylistic changes require controlled design approval and an update to this governing artifact before implementation.**
 
 Implementation may solve technical details inside the approved system, but may not invent new visual patterns merely for convenience.
+
+### 2.1 Approved primitive and product-design hierarchy
+
+**Tailgrids primitives → Black Horse Design Foundation → Network OS Product Experience System → governed Network OS components/patterns → application screens**
+
+- Tailgrids is the approved primitive infrastructure layer; it is not the Black Horse visual identity.
+- Stock Tailgrids page templates are not approved production designs merely because they are available.
+- Tailgrids primitives must be adapted through approved Black Horse tokens, interaction rules, component variants, and canonical Network OS patterns.
+- An approved governed component or pattern must be reused when one exists.
+- New reusable visual patterns require deliberate addition to the governed component system.
+- Mobile must be designed as a real field workflow, not compressed desktop UI.
+- Functional correctness does not satisfy Definition of Done when design-system conformance fails.
 
 ## 3. Product character
 
