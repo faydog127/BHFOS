@@ -128,7 +128,7 @@ REQ-NOS-P1-018 — Basic operational dashboards may be partially included only t
 | Operational event / audit direction | READY | ADR-NOS-008 Active; exact Slice 1 taxonomy/write design remains blocked |
 | Legacy `tenant_id` compatibility direction | READY | ADR-NOS-011 Active; hosted dependency verification and canonical BHIS scope remain blocked |
 | Legacy source dependency inventory | READY — SOURCE-ONLY | Repository schema/RLS/function/application dependencies classified; hosted verification remains required |
-| Hosted schema/RLS/data-quality evidence | BLOCKED | Current hosted definitions, policies, grants, key types, scope values, and aggregate quality are unverified |
+| Hosted schema/RLS/data-quality evidence | BLOCKED — LIVE CHECK UNAVAILABLE | Founder authorized bounded collection; protected I2 credential is not provisioned; no hosted request occurred |
 | Exact target data model/schema | BLOCKED | Active direction exists; exact Slice 1 model not yet drafted |
 | Migration/cutover plan | BLOCKED | Must map reused/new structures after target model is drafted |
 
@@ -303,16 +303,17 @@ The product, requirements, workflow, and core domain direction are mature enough
 
 Founder ratification of product, requirements, architecture direction, and experience/design direction is complete. The SOURCE-ONLY legacy dependency inventory is also complete. The shortest path to implementation readiness is now:
 
-1. Collect authorized read-only hosted-schema/RLS/dependency evidence for the Slice 1 candidate objects.
-2. Draft the exact Slice 1 domain/data model and migration/compatibility plan from source plus hosted evidence.
-3. Define the Slice 1 permission matrix, RLS design, restricted-field strategy, and security tests.
-4. Define the Slice 1 operational-event taxonomy, write ownership, retention/access, and provenance tests.
-5. Define the exact Service Need fields, lifecycle transitions, reasons, permissions, and event behavior.
-6. Approve exact design tokens, governed Tailgrids component adaptations, and canonical desktop/mobile screen references.
-7. Declare the authorized non-production environment and synthetic/training-data strategy.
-8. Create the requirement-to-test validation matrix and mobile usability protocol.
-9. Identify bounded work items and an implementation branch/worktree only after the preceding gates are reviewed.
-10. Perform a final Definition of Ready review.
-11. Return to the Founder for a separate Release 1 / Slice 1 activation decision.
+1. Provision the protected I2 Supabase read-only capability and bounded Slice 1 aggregate templates through separate controlled authority.
+2. Collect the already-authorized read-only hosted-schema/RLS/dependency evidence for the Slice 1 candidate objects.
+3. Draft the exact Slice 1 domain/data model and migration/compatibility plan from source plus hosted evidence.
+4. Define the Slice 1 permission matrix, RLS design, restricted-field strategy, and security tests.
+5. Define the Slice 1 operational-event taxonomy, write ownership, retention/access, and provenance tests.
+6. Define the exact Service Need fields, lifecycle transitions, reasons, permissions, and event behavior.
+7. Approve exact design tokens, governed Tailgrids component adaptations, and canonical desktop/mobile screen references.
+8. Declare the authorized non-production environment and synthetic/training-data strategy.
+9. Create the requirement-to-test validation matrix and mobile usability protocol.
+10. Identify bounded work items and an implementation branch/worktree only after the preceding gates are reviewed.
+11. Perform a final Definition of Ready review.
+12. Return to the Founder for a separate Release 1 / Slice 1 activation decision.
 
 No code should begin before those gates are satisfied.

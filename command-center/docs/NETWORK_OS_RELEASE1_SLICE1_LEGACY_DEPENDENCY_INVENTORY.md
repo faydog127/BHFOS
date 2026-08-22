@@ -363,6 +363,10 @@ The next evidence packet should be generated through an authorized read-only dia
 
 If only a non-production environment is authorized, the evidence must be labeled non-production and must not be treated as proof of production schema parity.
 
+### Authorized collection attempt
+
+The Founder authorized the bounded read-only hosted collection on 2026-08-22. The attempt stopped before network access because the dedicated I2 Supabase OAuth credential and external diagnostics secret-env path are not provisioned. Local adapter and catalog fail-closed tests passed. See `NETWORK_OS_RELEASE1_SLICE1_HOSTED_SCHEMA_EVIDENCE_ATTEMPT.md`.
+
 ## 12. Readiness disposition
 
 ### Source inventory gate
@@ -371,7 +375,7 @@ If only a non-production environment is authorized, the evidence must be labeled
 
 ### Exact target data-model gate
 
-**BLOCKED.** Hosted schema, identity, relationship, RLS, and data-quality evidence is missing.
+**BLOCKED.** Hosted schema, identity, relationship, RLS, and data-quality evidence is missing. The authorized live collection is currently unavailable because the protected I2 credential is not provisioned.
 
 ### Migration/cutover gate
 
@@ -383,7 +387,7 @@ If only a non-production environment is authorized, the evidence must be labeled
 
 ## 13. Exact next controlled action
 
-Prepare and execute an **authorized read-only hosted-schema evidence collection** for the Slice 1 candidate objects:
+Prepare the controlled I2 capability-provisioning decision packet, then execute the already-authorized **read-only hosted-schema evidence collection** for the Slice 1 candidate objects after all protected-path gates pass:
 
 - `organizations`;
 - `accounts`;
