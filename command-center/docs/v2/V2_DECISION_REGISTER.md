@@ -4,9 +4,9 @@
 | Field | Value |
 | --- | --- |
 | Status | Active |
-| Version | 0.2 |
+| Version | 0.3-draft |
 | Owner | Founder |
-| Last reviewed | 2026-08-05 |
+| Last reviewed | 2026-08-22 |
 | Implementation authority | Active governance authority; no implementation authority |
 
 ## Decision control
@@ -243,3 +243,39 @@ Multi-model reviewers, if separately authorized, must operate as blind independe
 - TVG remains the single-company operating context; this decision creates no multi-tenant product scope.
 - This decision establishes architecture and planning authority only. Implementation remains blocked until an active Release ID and the complete Definition of Ready gate are satisfied.
 
+## DEC-V2-015 — Expand approved operating context to TVG Direct Services and BHIS Managed Services
+
+| Field | Value |
+| --- | --- |
+| Status | Proposed |
+| Date | 2026-08-22 |
+| Decision owner | Founder |
+| Supporting amendment | [V2_BHIS_PRODUCT_DIRECTION_AMENDMENT](./V2_BHIS_PRODUCT_DIRECTION_AMENDMENT.md) |
+| Supporting reconciliation | [V2_BHIS_PRODUCT_DIRECTION_RECONCILIATION](./reviews/V2_BHIS_PRODUCT_DIRECTION_RECONCILIATION.md) |
+| Implementation authority | None |
+
+### Proposed decision
+
+BHFOS V2 shall become the operating platform for approved Black Horse service-delivery operations, initially supporting TVG Direct Services and Black Horse Integrated Services (BHIS) Managed Services.
+
+TVG Direct Services retains the direct-service operating model. BHIS Managed Services owns and manages customer service relationships while coordinating qualified fulfillment through internal, BHIS-network, customer-preferred, or customer-mandated fulfillment parties.
+
+This decision expands the approved first-party operating context but does not authorize generic multi-tenant SaaS, tenant provisioning/switching, per-tenant configuration or billing, franchise administration, cross-company tenant administration, or arbitrary external operating-company onboarding.
+
+BHIS is a managed service-delivery organization, not a contractor directory, referral marketplace, or open bidding marketplace. BHFOS remains the authoritative operational system of record where capabilities are implemented.
+
+### Proposed consequences
+
+- Upon activation, this decision supersedes DEC-V2-001's TVG-only product boundary while preserving its prohibition on shared multi-tenant SaaS without separate authority.
+- Upon activation, DEC-V2-012 must be amended/superseded only as necessary to remove the TVG-only operating-context restriction; its multi-tenancy prohibition remains materially binding.
+- Commercial Account Management moves toward a shared core relationship/account capability.
+- Provider Network, provider qualification, provider capacity/density, managed-service coordination, Service Need/demand intelligence, and network economics become approved BHIS product domains.
+- Work-order architecture may later be designed around an authorized fulfillment-party concept rather than assuming only an internal technician, subject to approved requirements and architecture.
+- Multifamily is the initial BHIS market; future ALF/senior living, group-home, commercial/institutional, and government qualification layers may be anticipated without implementing them prematurely.
+- DEC-V2-013's AI-native/founder-by-exception direction remains binding and extends conceptually to the approved operating context after corresponding Product Definition terminology is ratified.
+- DEC-V2-014's system-of-record and human-decision boundaries remain binding; terminology referring to TVG-only context requires later controlled reconciliation.
+- No implementation, release, migration, deployment, provider/customer production onboarding, AI matching, autonomous dispatch, or financial-policy authority is granted.
+
+### Activation gate
+
+This decision remains Proposed until the founder explicitly approves the product-scope change, the Product Definition amendment is reconciled through formal pull-request review, applicable controlled documents are updated, and activation is recorded according to DEC-V2-005 and DEC-V2-008.
