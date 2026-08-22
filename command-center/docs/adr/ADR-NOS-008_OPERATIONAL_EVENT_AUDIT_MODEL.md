@@ -132,4 +132,4 @@ Existing audit/event utilities may be reused after review, but legacy event nami
 
 ## Implementation gate
 
-Before implementation, the active release must define event taxonomy/versioning, event-write ownership, required Slice 1 events, audit retention/access, sensitive metadata controls, and acceptance tests for REQ-NOS-P1-017 and REQ-NOS-P1-019.
+Before implementation, the active release must define event taxonomy/versioning, event-write ownership, required Slice 1 events, audit retention/access, sensitive metadata controls, and acceptance tests for REQ-NOS-P1-017, REQ-NOS-P1-019, and REQ-NOS-P1-021. Field-closeout events must distinguish visit saved, communication queued/approved/attempted/delivered/failed, next action scheduled/completed, and explicit no-follow-up without duplicating sensitive note content.

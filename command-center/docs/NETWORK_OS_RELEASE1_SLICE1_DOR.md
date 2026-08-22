@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Active readiness gate — not ready for implementation; release not activated |
-| Version | 0.2 |
+| Version | 0.3 |
 | Date | 2026-08-22 |
 | Product | Network OS |
 | Release | R1 — proposed |
@@ -11,7 +11,7 @@
 | Owner | Founder |
 | Network OS product implementation authority | None |
 | Founder direction ratified | 2026-08-22 |
-| Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md` |
+| Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md`; `NETWORK_OS_FIELD_VISIT_CLOSEOUT_FOUNDER_DIRECTION.md` |
 | Diagnostics capability decision | `governance/decisions/NOS_R1_S1_I2_CAPABILITY_AND_AGGREGATE_TEMPLATE_DECISION_PACKET.md` Revision 1 — Founder approved, corrected staged gates pending |
 | Reconciled through source HEAD | `02b628b97b1b38f32fe7c8902fdbad34778cf3c4` plus ratification-record changes |
 
@@ -43,6 +43,8 @@ The proposed Slice 1 requirements are:
 - REQ-NOS-P1-017 — Communications and accountability event history, limited to relationship/visit/Service Need events required by this slice.
 - REQ-NOS-P1-019 — Authoritative state, audit, and role boundaries, limited to the active slice domains.
 - REQ-NOS-P1-020 — Phase 1 usability and low-friction participation, limited to BHIS internal/mobile workflows in this slice.
+- REQ-NOS-P1-021 — Field visit closeout and next-action automation, including
+  the 2–3 minute closeout SLA and no end-of-day CRM cleanup requirement.
 
 REQ-NOS-P1-018 — Basic operational dashboards may be partially included only to the extent needed for simple Slice 1 queues/counts. Full Phase 1 dashboards remain later work.
 
@@ -84,6 +86,8 @@ REQ-NOS-P1-018 — Basic operational dashboards may be partially included only t
 - ADR-NOS-011 — Legacy Tenant Compatibility — Active.
 - Network OS Experience & Design System Definition — Active direction; exact tokens and canonical references pending.
 - Release 1 / Slice 1 Founder Ratification & Readiness Reconciliation Packet — approved as written.
+- BHIS Field Visit Closeout Founder Direction — Active product/requirements
+  direction; implementation not authorized.
 - Release 1 / Slice 1 Legacy Dependency Inventory — SOURCE-ONLY inventory complete; hosted-schema verification required.
 
 ### Required before activation
@@ -106,13 +110,13 @@ REQ-NOS-P1-018 — Basic operational dashboards may be partially included only t
 | Slice supports Network OS product test | READY | Customer Capacity, Customer Trust, Demand Intelligence |
 | Slice outcome is clear and bounded | READY | This document §2–4 |
 | Product Definition ratified | READY | Founder ratified 2026-08-22 |
-| Applicable decisions active | READY | DEC-NOS-001/002/003/004/005/006/007/012/014/015/016 Active |
+| Applicable decisions active | READY | DEC-NOS-001/002/003/004/005/006/007/012/014/015/016/017/018 Active |
 
 ### B. Requirements
 
 | Gate | Status | Evidence / blocker |
 | --- | --- | --- |
-| Requirement IDs exist | READY | REQ-NOS-P1-001/002/003/004/005/017/019/020 |
+| Requirement IDs exist | READY | REQ-NOS-P1-001/002/003/004/005/017/019/020/021 |
 | Acceptance criteria exist | READY | Phase 1 Requirements Register |
 | Requirements trace to workflow | READY | Phase 1 Workflow Map |
 | Requirements trace to architecture | READY | ADR-NOS-001/002/008/010/011 plus reconciliation |
@@ -171,6 +175,7 @@ REQ-NOS-P1-018 — Basic operational dashboards may be partially included only t
 | Acceptance criteria are testable | READY | Requirement-level criteria exist |
 | Requirement-to-test traceability | BLOCKED | Validation matrix not yet created |
 | Mobile usability validation | BLOCKED | Design artifact and test protocol needed |
+| Field closeout SLA validation | BLOCKED | Must prove ordinary complete closeout ≤3 minutes, including sent/queued next action and no duplicate cleanup |
 | Duplicate identity tests | BLOCKED | Depends on data model/uniqueness rules |
 | hierarchy integrity tests | BLOCKED | Depends on target schema |
 | Service Need lifecycle tests | BLOCKED | Depends on final state design |
@@ -236,7 +241,7 @@ At minimum, design authority should approve:
 4. Contact relationship treatment.
 5. Service Need list.
 6. Service Need detail/create/edit flow.
-7. Mobile property visit capture.
+7. Mobile property visit closeout, including communication state and next action.
 8. Search / command / navigation treatment appropriate to Slice 1.
 
 These screens are visual/interaction contracts, not disposable mockups.
@@ -251,6 +256,14 @@ After the remaining blocking ADRs and design gate, the implementation design mus
 - How are contextual contact roles represented?
 - How is relationship ownership/status stored?
 - How are visits/follow-ups modeled?
+- What transaction/outbox/idempotency boundary prevents a saved visit from
+  losing or duplicating its communication and next action?
+- Which outcomes permit automatic send versus one-tap approval, and how are
+  queued/failed states recovered?
+- How are promised actions assigned, scheduled, and resurfaced?
+- How are interrupted/offline drafts handled without falsely claiming closeout?
+- What voice-to-text permissions, correction flow, retention, and sensitive-data
+  controls apply?
 - What is the authoritative Service Need record?
 - How does Service Need link to customer hierarchy and Service Catalog?
 - How are Service Need lifecycle changes recorded?
@@ -268,6 +281,13 @@ The Slice 1 validation plan should include:
 - contact multi-context role behavior;
 - relationship owner/status/follow-up behavior;
 - one-minute mobile visit workflow usability;
+- 2–3 minute complete field-closeout usability, including communication and
+  next-action state;
+- no end-of-day duplicate CRM/email/calendar entry for the ordinary path;
+- sent/queued/failed communication truthfulness and retry behavior;
+- promised-action ownership/due-state behavior;
+- interrupted/offline draft recovery and idempotent resubmission;
+- TIS-independent native workflow proof;
 - visit → Service Need creation without duplicate context entry;
 - Service Need create/edit/status/reporting;
 - Service Catalog stable-reference behavior;

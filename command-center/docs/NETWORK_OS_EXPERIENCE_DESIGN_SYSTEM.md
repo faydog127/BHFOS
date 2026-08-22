@@ -3,13 +3,13 @@
 | Field | Value |
 | --- | --- |
 | Status | Active direction — founder ratified 2026-08-22; exact tokens and screen references pending |
-| Version | 0.2 |
+| Version | 0.3 |
 | Date | 2026-08-22 |
 | Product | Network OS |
 | Owner | Founder |
 | Design authority | Controlled product artifact |
 | Implementation authority | None — experience/design direction only |
-| Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md` |
+| Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md`; `NETWORK_OS_FIELD_VISIT_CLOSEOUT_FOUNDER_DIRECTION.md` |
 
 ## 1. Purpose
 
@@ -360,7 +360,14 @@ Requirements:
 - no unnecessary desktop side navigation;
 - no tiny table layouts;
 - clear save/success state;
-- basic visit target: approximately one minute.
+- basic factual capture target: approximately one minute;
+- complete closeout target: 2–3 minutes, including communication state and next
+  action;
+- voice-to-text-capable short notes where approved;
+- explicit sent / queued for approval / queued for delivery / failed states;
+- no successful closeout state until the next action is scheduled, queued,
+  assigned, or intentionally declined with a reason;
+- interrupted/offline drafts remain recoverable and visibly incomplete.
 
 ## 22. Loading, empty, error, and success states
 
@@ -505,20 +512,28 @@ Required regions:
 - activity history;
 - conversion-to-work area reserved for future active slice without exposing inactive controls prematurely.
 
-### 27.6 Mobile Property Visit Capture
+### 27.6 Mobile Property Visit Closeout
 
-Purpose: complete an ordinary property visit record in about one minute.
+Purpose: capture basic visit facts in about one minute and fully close an
+ordinary property visit in 2–3 minutes before leaving the property.
 
 Required flow:
 
 - property context;
 - person contacted;
 - outcome;
-- short notes;
-- optional need/follow-up/photo;
-- save.
+- service needs/pain points;
+- short voice-friendly notes;
+- promised actions;
+- next-touch/return timing or explicit no-follow-up reason;
+- optional photo/new contact/Service Need;
+- follow-up message preview/state;
+- one closeout action that saves authoritative history and sends/queues the
+  communication and next action.
 
-Secondary fields must not block basic completion.
+Secondary fields must not block basic capture. Closeout success must distinguish
+sent, queued, and failed work and must never imply delivery or scheduling that
+has not been confirmed. No separate office CRM cleanup should be necessary.
 
 ### 27.7 Search / Navigation Pattern
 

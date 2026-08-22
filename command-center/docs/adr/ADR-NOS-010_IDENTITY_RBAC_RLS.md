@@ -140,4 +140,4 @@ Privileged actions and material authorization changes must generate security/adm
 
 ## Implementation gate
 
-Before implementation, the active release must define a Slice 1 permission matrix, record/data scopes, restricted-field handling, RLS policies, service identities, authorization tests, and privileged-action audit requirements for REQ-NOS-P1-019 and applicable Slice 1 requirements.
+Before implementation, the active release must define a Slice 1 permission matrix, record/data scopes, restricted-field handling, RLS policies, service identities, authorization tests, and privileged-action audit requirements for REQ-NOS-P1-019 and applicable Slice 1 requirements. For REQ-NOS-P1-021, the matrix must explicitly define who may auto-send, approve, edit, retry, cancel, or view field follow-up communications and voice-derived notes.

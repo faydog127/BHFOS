@@ -2,12 +2,13 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft — founder ratification required |
-| Version | 0.1 |
+| Status | Active direction for Release 1 / Slice 1 — exact designs pending |
+| Version | 0.2 |
 | Date | 2026-08-22 |
 | Product | Network OS |
 | Initial operating company | Black Horse Integrated Services (BHIS) |
 | Implementation authority | None — architecture planning only |
+| Founder direction | `NETWORK_OS_FIELD_VISIT_CLOSEOUT_FOUNDER_DIRECTION.md` |
 
 ## 1. Purpose
 
@@ -47,8 +48,11 @@ Authoritative concepts:
 - Relationship owner.
 - Visit/contact event.
 - Follow-up.
+- Promised action / next action.
+- Communication dispatch state.
+- Due-follow-up attention state.
 
-Primary requirements: REQ-NOS-P1-001, 002, 003.
+Primary requirements: REQ-NOS-P1-001, 002, 003, 021.
 
 Legacy candidates for reuse/adaptation:
 
@@ -67,6 +71,14 @@ Recommended direction:
 - Preserve reusable organization/contact identity where semantics fit.
 - Introduce explicit property/facility relationships if the legacy model cannot represent them cleanly.
 - Do not require `lead` as the root customer object.
+- Treat visit closeout as one governed workflow commitment: authoritative visit
+  plus next-action state, with idempotent dispatch/outbox behavior so retries do
+  not duplicate email, reminders, status transitions, or events.
+- Separate communication intent, approval, delivery attempt, and confirmed
+  delivery states; never infer delivery from a saved visit.
+- Preserve interrupted/offline drafts without treating them as closed visits.
+- Keep TIS outside the runtime/authority boundary; mine only reusable patterns
+  that are deliberately adapted into native Network OS components.
 
 ### 3.2 Demand domain
 

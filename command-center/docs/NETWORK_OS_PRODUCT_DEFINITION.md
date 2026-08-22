@@ -3,12 +3,12 @@
 | Field | Value |
 | --- | --- |
 | Status | Active — founder ratified 2026-08-22 |
-| Version | 0.2 |
+| Version | 0.3 |
 | Date | 2026-08-22 |
 | Owner | Founder |
 | Initial operating company | Black Horse Integrated Services (BHIS; blackhorseintegrated.com) |
 | Implementation authority | None — product direction only |
-| Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md` |
+| Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md`; `NETWORK_OS_FIELD_VISIT_CLOSEOUT_FOUNDER_DIRECTION.md` |
 
 ## 1. Product identity
 
@@ -196,6 +196,19 @@ Relationship and territory personnel should be able to record a basic property v
 The product direction should support fast capture of property, person contacted, date/time, visit outcome, needs identified, notes, follow-up requirement/date, photos, new contacts, and service opportunities.
 
 Field adoption takes priority over excessive data-entry requirements.
+
+Basic capture is only a subset of field closeout. A property visit is not
+complete until the next action is already in motion. The ordinary full closeout
+must fit the 2–3 minute rule and include the contact, outcome, pain points/service
+needs, short voice-friendly notes, promised actions, and next-touch/return date.
+
+Network OS should then send an approved follow-up or queue it for one-tap
+approval, establish the next follow-up, update property/account history and
+applicable opportunity/relationship state, and resurface the account when due.
+No separate end-of-day CRM cleanup should be required for the ordinary path.
+
+TIS may supply reusable field-prospecting patterns, but the authoritative field
+workflow must be native to Network OS and must not depend on TIS at runtime.
 
 ## 11. Service Need and demand intelligence
 

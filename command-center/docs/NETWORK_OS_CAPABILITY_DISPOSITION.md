@@ -3,11 +3,12 @@
 | Field | Value |
 | --- | --- |
 | Status | Draft — planning evidence only |
-| Version | 0.1 |
+| Version | 0.2 |
 | Date | 2026-08-22 |
 | Product | Network OS |
 | Source baseline | Pre-product-split BHFOS foundation copied into `network-os/foundation` |
 | Implementation authority | None |
+| Founder direction incorporated | `NETWORK_OS_FIELD_VISIT_CLOSEOUT_FOUNDER_DIRECTION.md` |
 
 ## 1. Purpose
 
@@ -335,7 +336,8 @@ Extract generic Service Partner, qualification, portal, and performance patterns
 The copied foundation does not currently provide an adequate authoritative implementation for the following. These should be treated as **new Network OS domains**, not forced into legacy tables merely to save development effort:
 
 - portfolio/region/property/facility hierarchy with relationship intelligence;
-- one-minute property visit capture tied to relationship follow-up;
+- one-minute basic property visit capture within a complete 2–3 minute field
+  closeout that already sends/queues communication and schedules the next action;
 - authoritative Service Need / demand-intelligence object;
 - Service Partner capability-by-service and geography model;
 - modular qualification layers;
@@ -356,6 +358,16 @@ The copied foundation does not currently provide an adequate authoritative imple
 - agreement-backed recurring Service Programs;
 - portfolio-level managed-service customer reporting;
 - controlled Partner OS ↔ Network OS integration contracts.
+
+### TIS field-prospecting disposition
+
+**Disposition: Mine / adapt, no dependency.** TIS may be inspected for useful
+property lookup, geolocation/nearby-target, routing, quick-note, contact, and
+visit-history patterns. Any selected capability must be deliberately copied or
+adapted into native Network OS components and authoritative records.
+
+Do not introduce runtime coupling, TIS system-of-record authority, mandatory TIS
+adoption, or a TIS merge merely to satisfy the BHIS field closeout requirement.
 
 ## 6. Recommended Phase 1 reuse strategy
 

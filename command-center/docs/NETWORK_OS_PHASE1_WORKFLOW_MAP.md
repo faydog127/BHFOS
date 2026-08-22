@@ -2,12 +2,13 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft — founder ratification required |
-| Version | 0.1 |
+| Status | Active direction for Release 1 / Slice 1 stages — implementation not authorized |
+| Version | 0.2 |
 | Date | 2026-08-22 |
 | Product | Network OS |
 | Initial operating company | Black Horse Integrated Services (BHIS) |
 | Implementation authority | None — workflow definition only |
+| Founder direction | `NETWORK_OS_FIELD_VISIT_CLOSEOUT_FOUNDER_DIRECTION.md` |
 
 ## 1. Purpose
 
@@ -91,11 +92,16 @@ BHIS relationship manager / territory manager.
 ### Actions
 
 1. Select or create the customer/property context.
-2. Record the visit/contact outcome.
-3. Add/update contacts if needed.
-4. Record notes and relationship intelligence.
-5. Set next follow-up if needed.
+2. Select or add the person contacted.
+3. Record the visit/contact outcome, service needs/pain points, short notes, and
+   promised actions.
+4. Establish the next-touch/return date or explicit reasoned no-follow-up
+   disposition.
+5. Send the approved follow-up when policy permits, or queue it for one-tap
+   approval/delivery.
 6. Capture one or more Service Needs where discovered.
+7. Commit the closeout so Network OS updates history, applicable relationship /
+   opportunity / Service Need state, and the due-follow-up queue.
 
 ### Authoritative records affected
 
@@ -108,19 +114,30 @@ BHIS relationship manager / territory manager.
 
 ### Exit conditions
 
-- Visit/contact saved.
-- Follow-up recorded or intentionally absent.
+- Visit/contact saved with actor/source/time provenance.
+- Follow-up is sent, queued, assigned/scheduled, or intentionally absent with a
+  recorded reason.
+- Communication state is explicit; failed/unconfirmed delivery is not presented
+  as sent.
+- Account/property history and applicable status are updated.
+- The next action will resurface automatically when due.
 - Any identified Service Need is captured separately from the visit.
+
+The ordinary complete closeout must meet the 2–3 minute rule. Saving notes alone
+does not satisfy the exit condition, and the representative should not need
+separate end-of-day CRM cleanup.
 
 ### Exceptions
 
 - Property/contact not found.
 - Duplicate customer/property ambiguity.
 - Restricted customer/property record access.
+- Offline/interrupted submission or communication failure; draft and required
+  recovery action remain visible.
 
 ### Phase 1 requirements
 
-REQ-NOS-P1-001, 002, 003, 004, 017, 019, 020.
+REQ-NOS-P1-001, 002, 003, 004, 017, 019, 020, 021.
 
 ## 5. Workflow stage B — Service Need capture and qualification
 

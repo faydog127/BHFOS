@@ -3,11 +3,11 @@
 | Field | Value |
 | --- | --- |
 | Status | Active register — Slice 1-applicable decisions ratified 2026-08-22; remaining decisions Proposed |
-| Version | 0.2 |
+| Version | 0.3 |
 | Date | 2026-08-22 |
 | Owner | Founder |
 | Implementation authority | None |
-| Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md` |
+| Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md`; `NETWORK_OS_FIELD_VISIT_CLOSEOUT_FOUNDER_DIRECTION.md` |
 
 ## Decision control
 
@@ -171,3 +171,36 @@ Network OS should be automation-first and AI-assisted, with routine coordination
 Phase 1 product direction prioritizes customer/property hierarchy, relationship/visit capture, Service Needs, Service Partner prospecting/onboarding, capability/geography, qualification/compliance, Service Partner lifecycle, basic work orders, manual assignment, scheduling/status, offer/response event capture, completion evidence, basic exception visibility, and basic dashboards.
 
 This decision does not authorize an implementation release.
+
+## DEC-NOS-017 — Field activity closes with the next action in motion
+
+| Field | Value |
+| --- | --- |
+| Status | Active — founder directed 2026-08-22 |
+| Decision owner | Founder |
+
+A boots-on-the-ground property visit is not complete when notes are merely
+saved. The ordinary closeout must capture the outcome and cause an authorized
+follow-up, promised action, or explicit no-follow-up disposition to be recorded
+before the representative leaves the property.
+
+The full closeout target is 2–3 minutes. Network OS must carry the next action,
+update the authoritative account/property context, and resurface the account
+when follow-up becomes due. No separate end-of-day CRM cleanup should be needed
+for the ordinary path.
+
+## DEC-NOS-018 — TIS is reusable source material, not a Network OS dependency
+
+| Field | Value |
+| --- | --- |
+| Status | Active — founder directed 2026-08-22 |
+| Decision owner | Founder |
+
+Network OS may copy or adapt useful TIS field-prospecting patterns, including
+property lookup, nearby-target discovery, routing, quick capture, contacts, and
+visit history. The final BHIS field workflow must live natively inside Network
+OS.
+
+TIS is not a runtime dependency, system of record, required integration,
+required product adoption, or authority for BHIS field-sales state. Reuse does
+not authorize a TIS merge or implementation.

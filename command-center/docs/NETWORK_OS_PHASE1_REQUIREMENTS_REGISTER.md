@@ -3,13 +3,13 @@
 | Field | Value |
 | --- | --- |
 | Status | Active register — Release 1 / Slice 1 requirements approved 2026-08-22; remaining Phase 1 requirements Proposed |
-| Version | 0.2 |
+| Version | 0.3 |
 | Date | 2026-08-22 |
 | Owner | Founder |
 | Product | Network OS |
 | Initial operating company | Black Horse Integrated Services (BHIS) |
 | Implementation authority | None — requirements baseline only |
-| Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md` |
+| Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md`; `NETWORK_OS_FIELD_VISIT_CLOSEOUT_FOUNDER_DIRECTION.md` |
 
 ## 1. Purpose
 
@@ -127,6 +127,10 @@ Network OS shall allow BHIS to manage relationship state for customer organizati
 ### Requirement statement
 
 Network OS shall provide a mobile-first property visit capture workflow designed so a basic visit can be recorded in approximately one minute.
+
+The approximately one-minute target applies to basic factual capture. Complete
+field closeout is governed separately by REQ-NOS-P1-021 and must include the
+next-action/communication state within the 2–3 minute rule.
 
 ### Acceptance criteria
 
@@ -571,6 +575,73 @@ Phase 1 shall minimize operational friction for BHIS field staff, coordinators, 
 - Service Partners can respond to work through a low-friction authorized experience without purchasing or adopting Partner OS.
 - Customer-facing interactions require only the minimum necessary steps for request/status/approval/completion communication used in Phase 1.
 - Network OS does not expose legacy direct-service modules as primary navigation merely because code exists.
+
+---
+
+## REQ-NOS-P1-021 — Field visit closeout and next-action automation
+
+| Field | Value |
+| --- | --- |
+| Status | Active for Release 1 / Slice 1 — founder directed 2026-08-22 |
+| Product area | Field Relationship / Sales Automation |
+| Source | `NETWORK_OS_FIELD_VISIT_CLOSEOUT_FOUNDER_DIRECTION.md` |
+| Applicable decisions | DEC-NOS-005, DEC-NOS-012, DEC-NOS-015, DEC-NOS-016, DEC-NOS-017, DEC-NOS-018 |
+| Release | Release 1 / Slice 1 readiness scope — not activated |
+| Implementation authority | None |
+
+### Requirement statement
+
+Network OS shall allow a BHIS representative to fully close out an ordinary
+boots-on-the-ground property visit before leaving the property, with a target of
+2–3 minutes and a hard ordinary-path usability target of no more than three
+minutes. The visit is not complete until an authorized next action is already
+sent, queued, assigned, scheduled, or explicitly declined with a reason.
+
+### Required capture
+
+- property/account;
+- contact/person spoken with;
+- visit outcome;
+- service needs or pain points;
+- short notes, including voice-to-text support where approved;
+- promised actions;
+- next-touch timing or return date.
+
+### Acceptance criteria
+
+- An ordinary closeout can be completed from a phone-sized viewport in no more
+  than three minutes without returning to an office CRM workflow.
+- The representative does not re-enter property/contact context while creating
+  the visit, follow-up, or Service Need.
+- Saving the closeout creates the authoritative visit/activity history.
+- The system sends an approved follow-up automatically when policy permits, or
+  prepares/queues it for one-tap approval when human approval is required.
+- The system records the communication as sent, queued for approval, queued for
+  delivery, or failed; it never reports an unconfirmed send as delivered.
+- The system establishes the next follow-up/return date or requires an explicit
+  reasoned no-follow-up disposition.
+- The system updates applicable property/account history and relationship,
+  opportunity, Service Need, or account status through authorized transitions.
+- The account is placed into the appropriate follow-up queue and resurfaces
+  automatically when due.
+- Promised actions have an owner, due state/date, and provenance.
+- Failed or interrupted automation remains visible and recoverable rather than
+  silently closing the visit.
+- No separate end-of-day CRM cleanup, duplicate email drafting, calendar entry,
+  or reminder creation is required for the ordinary supported path.
+- Material events record actor/source/time and avoid unnecessary duplication of
+  sensitive note or contact content.
+- TIS-derived patterns, if reused, are implemented natively under Network OS
+  authority; TIS is not required at runtime and is not the system of record.
+
+### Dependencies / blockers
+
+- Exact visit/follow-up/communication/status transaction and idempotency design.
+- Role and approval policy for auto-send versus one-tap approval.
+- Email delivery-state, retry, failure, and audit contract.
+- Mobile interrupted/offline draft and recovery behavior.
+- Voice-to-text permission, privacy, retention, and correction behavior.
+- Exact event taxonomy and next-action ownership model.
 
 ---
 
