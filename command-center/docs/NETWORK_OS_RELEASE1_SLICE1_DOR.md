@@ -83,6 +83,7 @@ REQ-NOS-P1-018 — Basic operational dashboards may be partially included only t
 - ADR-NOS-011 — Legacy Tenant Compatibility — Active.
 - Network OS Experience & Design System Definition — Active direction; exact tokens and canonical references pending.
 - Release 1 / Slice 1 Founder Ratification & Readiness Reconciliation Packet — approved as written.
+- Release 1 / Slice 1 Legacy Dependency Inventory — SOURCE-ONLY inventory complete; hosted-schema verification required.
 
 ### Required before activation
 
@@ -125,7 +126,9 @@ REQ-NOS-P1-018 — Basic operational dashboards may be partially included only t
 | Domain boundaries defined | READY | Domain & Architecture Reconciliation |
 | Identity / RBAC / RLS direction | READY | ADR-NOS-010 Active; exact Slice 1 permission/RLS design remains blocked |
 | Operational event / audit direction | READY | ADR-NOS-008 Active; exact Slice 1 taxonomy/write design remains blocked |
-| Legacy `tenant_id` compatibility direction | READY | ADR-NOS-011 Active; dependency inventory and canonical BHIS scope remain blocked |
+| Legacy `tenant_id` compatibility direction | READY | ADR-NOS-011 Active; hosted dependency verification and canonical BHIS scope remain blocked |
+| Legacy source dependency inventory | READY — SOURCE-ONLY | Repository schema/RLS/function/application dependencies classified; hosted verification remains required |
+| Hosted schema/RLS/data-quality evidence | BLOCKED | Current hosted definitions, policies, grants, key types, scope values, and aggregate quality are unverified |
 | Exact target data model/schema | BLOCKED | Active direction exists; exact Slice 1 model not yet drafted |
 | Migration/cutover plan | BLOCKED | Must map reused/new structures after target model is drafted |
 
@@ -298,17 +301,18 @@ Release 1 / Slice 1 becomes **Ready** only when all of the following are true:
 
 The product, requirements, workflow, and core domain direction are mature enough that remaining blockers are now specific rather than conceptual.
 
-Founder ratification of product, requirements, architecture direction, and experience/design direction is complete. The shortest path to implementation readiness is now:
+Founder ratification of product, requirements, architecture direction, and experience/design direction is complete. The SOURCE-ONLY legacy dependency inventory is also complete. The shortest path to implementation readiness is now:
 
-1. Draft the exact Slice 1 domain/data model and migration/compatibility plan.
-2. Define the Slice 1 permission matrix, RLS design, restricted-field strategy, and security tests.
-3. Define the Slice 1 operational-event taxonomy, write ownership, retention/access, and provenance tests.
-4. Define the exact Service Need fields, lifecycle transitions, reasons, permissions, and event behavior.
-5. Approve exact design tokens, governed Tailgrids component adaptations, and canonical desktop/mobile screen references.
-6. Declare the authorized non-production environment and synthetic/training-data strategy.
-7. Create the requirement-to-test validation matrix and mobile usability protocol.
-8. Identify bounded work items and an implementation branch/worktree only after the preceding gates are reviewed.
-9. Perform a final Definition of Ready review.
-10. Return to the Founder for a separate Release 1 / Slice 1 activation decision.
+1. Collect authorized read-only hosted-schema/RLS/dependency evidence for the Slice 1 candidate objects.
+2. Draft the exact Slice 1 domain/data model and migration/compatibility plan from source plus hosted evidence.
+3. Define the Slice 1 permission matrix, RLS design, restricted-field strategy, and security tests.
+4. Define the Slice 1 operational-event taxonomy, write ownership, retention/access, and provenance tests.
+5. Define the exact Service Need fields, lifecycle transitions, reasons, permissions, and event behavior.
+6. Approve exact design tokens, governed Tailgrids component adaptations, and canonical desktop/mobile screen references.
+7. Declare the authorized non-production environment and synthetic/training-data strategy.
+8. Create the requirement-to-test validation matrix and mobile usability protocol.
+9. Identify bounded work items and an implementation branch/worktree only after the preceding gates are reviewed.
+10. Perform a final Definition of Ready review.
+11. Return to the Founder for a separate Release 1 / Slice 1 activation decision.
 
 No code should begin before those gates are satisfied.
