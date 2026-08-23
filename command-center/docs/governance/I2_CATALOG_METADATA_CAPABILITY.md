@@ -44,6 +44,23 @@ node tools/supabase-diagnostics-adapter/cli.mjs catalog catalog_quotes_s2_active
 - Predicate matches proposed `quotes_tenant_lead_active_unique` including `issued`.
 - Returns only `conflict_group_count` and `conflicting_row_count` (response sanitized).
 
+Slice 1 campaign Stage C aggregate-count templates (adapter-owned; no caller table/column/predicate/grouping/SQL/URL/project-ref input):
+
+```bash
+node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_organizations_count_all
+```
+
+- Applicable families: `count_all`, `count_by_boolean`, `count_by_category_with_other` for the Stage C schema manifest only.
+- Each operation returns exactly one sanitized row: fixed `operation_id` plus numeric counts.
+- `count_all` keys: `operation_id`, `row_count`.
+- `count_by_boolean` keys: `operation_id`, `true_count`, `false_count`, `null_count`.
+- `count_by_category_with_other` keys: `operation_id`, `null_or_blank_count`, `other_count`. The manifest does not list recognized category values, so all non-blank values contribute only to `other_count`. Category keys are never returned.
+- Missing required relation or column fails closed (query error or empty sanitized row → DENY). Unexpected response fields are stripped.
+- Omitted families: `count_by_name_or_identity`, `count_by_timestamp_bucket`, `group_by_uuid_fk`, `freeform_predicate`.
+- Omitted columns: `source_url`, `source_detail`, `utm_*`, `marketing_source_detail`, `home_image_source`, names, notes, UUID FK identities.
+- `services_catalog` has no category family. `events`, `crm_tasks`, `app_user_roles`, and `tenants` have no boolean family.
+- Stage C authorizes local templates and tests only. It does not authorize hosted aggregate execution, R1/S1 activation, or credential use.
+
 ## Audit
 
 Append-only JSONL via `I2_DIAGNOSTICS_AUDIT_LOG` or

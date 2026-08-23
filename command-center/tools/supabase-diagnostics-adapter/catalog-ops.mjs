@@ -103,8 +103,325 @@ export function assertNoAgentSql(maybeSql) {
  *   description: string,
  *   params: string[],
  *   buildSql: (p: Record<string, string>) => string,
+ *   family?: string,
  * }} CatalogOp
  */
+
+/**
+ * Stage C Slice 1 aggregate-count manifest (adapter-owned; never caller input).
+ * Families are only those the sanitized STAGE_C_SCHEMA_MANIFEST can support.
+ * Category values are not listed in the manifest, so non-blank values contribute
+ * only to other_count. UUID FKs, names, URLs, details, UTM, notes, and
+ * timestamps are not grouping or output columns.
+ */
+export const STAGE_C_RELATION_AGGREGATES = Object.freeze({
+  organizations: Object.freeze({
+    pk: 'id',
+    booleans: Object.freeze(['is_partner']),
+    categories: Object.freeze(['type']),
+  }),
+  accounts: Object.freeze({
+    pk: 'id',
+    booleans: Object.freeze(['is_test_data']),
+    categories: Object.freeze(['type', 'partner_status']),
+  }),
+  contacts: Object.freeze({
+    pk: 'id',
+    booleans: Object.freeze([
+      'marketing_opt_in',
+      'is_test_data',
+      'is_primary',
+      'is_customer',
+      'is_decision_maker',
+      'is_active',
+    ]),
+    categories: Object.freeze([
+      'role',
+      'role_type',
+      'source_type',
+      'source_confidence',
+      'contact_status',
+    ]),
+  }),
+  properties: Object.freeze({
+    pk: 'id',
+    booleans: Object.freeze(['in_ao', 'is_active']),
+    categories: Object.freeze([
+      'source_system',
+      'discovery_status',
+      'target_status',
+      'source_type',
+      'source_confidence',
+    ]),
+  }),
+  leads: Object.freeze({
+    pk: 'id',
+    booleans: Object.freeze([
+      'is_partner',
+      'consent_marketing',
+      'needs_ai_action',
+      'priority_flag',
+      'is_test_data',
+      'sms_consent',
+      'sms_opt_out',
+    ]),
+    categories: Object.freeze([
+      'status',
+      'source',
+      'pipeline_stage',
+      'source_kind',
+      'qualification_status',
+      'lead_source',
+      'job_type',
+      'lane_type',
+      'priority',
+      'quickbooks_sync_status',
+      'stage',
+    ]),
+  }),
+  services_catalog: Object.freeze({
+    pk: 'id',
+    booleans: Object.freeze(['is_active']),
+    categories: Object.freeze([]),
+  }),
+  price_book: Object.freeze({
+    pk: 'id',
+    booleans: Object.freeze([
+      'active',
+      'discount_eligible',
+      'taxable',
+      'online_booking_enabled',
+    ]),
+    categories: Object.freeze(['price_type', 'item_type', 'discount_type']),
+  }),
+  events: Object.freeze({
+    pk: 'id',
+    booleans: Object.freeze([]),
+    categories: Object.freeze(['entity_type', 'event_type', 'actor_type']),
+  }),
+  crm_tasks: Object.freeze({
+    pk: 'id',
+    booleans: Object.freeze([]),
+    categories: Object.freeze(['status', 'source_type', 'type', 'priority']),
+  }),
+  app_user_roles: Object.freeze({
+    pk: 'id',
+    booleans: Object.freeze([]),
+    categories: Object.freeze(['role']),
+  }),
+  tenants: Object.freeze({
+    pk: 'id',
+    booleans: Object.freeze([]),
+    categories: Object.freeze(['status']),
+  }),
+});
+
+/** Columns present on hosted objects but rejected as category/group inputs. */
+export const STAGE_C_OMITTED_COLUMNS = Object.freeze({
+  contacts: Object.freeze(['source_url']),
+  properties: Object.freeze(['source_url']),
+  leads: Object.freeze([
+    'source_detail',
+    'utm_source',
+    'marketing_source_detail',
+    'home_image_source',
+  ]),
+});
+
+/** Families the Stage C manifest cannot support without guessing or leaking values. */
+export const STAGE_C_UNSUPPORTED_FAMILIES = Object.freeze([
+  'count_by_name_or_identity',
+  'count_by_timestamp_bucket',
+  'group_by_uuid_fk',
+  'freeform_predicate',
+]);
+
+export const STAGE_C_COUNT_ALL_KEYS = Object.freeze(['operation_id', 'row_count']);
+export const STAGE_C_COUNT_BY_BOOLEAN_KEYS = Object.freeze([
+  'operation_id',
+  'true_count',
+  'false_count',
+  'null_count',
+]);
+export const STAGE_C_COUNT_BY_CATEGORY_KEYS = Object.freeze([
+  'operation_id',
+  'null_or_blank_count',
+  'other_count',
+]);
+
+const STAGE_C_PROHIBITED_CATEGORY_COLUMN =
+  /(_url|_detail|_name)$|^(utm_|name$|notes$|email$|phone$|address$)/i;
+
+/**
+ * @param {string} value
+ * @param {string} label
+ */
+function sqlQuotedIdent(value, label) {
+  return `"${assertSafeIdent(value, label)}"`;
+}
+
+/**
+ * @param {string} column
+ */
+function assertStageCCategoryColumn(column) {
+  const c = assertSafeIdent(column, 'column');
+  if (STAGE_C_PROHIBITED_CATEGORY_COLUMN.test(c)) {
+    throw new Error(`DENY: column "${c}" is not a permitted Stage C category column`);
+  }
+  return c;
+}
+
+/**
+ * @param {string} relation
+ * @param {string[]} columns
+ */
+function buildStageCPresencePredicate(relation, columns) {
+  const rel = assertSafeIdent(relation, 'table');
+  const unique = [...new Set(columns.map((c) => assertSafeIdent(c, 'column')))];
+  const listed = unique.map((c) => `'${c}'`).join(', ');
+  return `(
+  SELECT COUNT(*)::int
+  FROM pg_catalog.pg_attribute a
+  JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'public'
+    AND c.relname = '${rel}'
+    AND c.relkind IN ('r','p')
+    AND a.attname IN (${listed})
+    AND a.attnum > 0
+    AND NOT a.attisdropped
+) = ${unique.length}`;
+}
+
+/**
+ * @returns {Record<string, CatalogOp>}
+ */
+function buildStageCCatalogOperations() {
+  /** @type {Record<string, CatalogOp>} */
+  const ops = {};
+  const relations = Object.keys(STAGE_C_RELATION_AGGREGATES);
+  if (relations.length !== APPROVED_SLICE1_RELATIONS.length) {
+    throw new Error('DENY: Stage C aggregate relations must match approved Slice 1 objects');
+  }
+  for (const relation of APPROVED_SLICE1_RELATIONS) {
+    const spec = STAGE_C_RELATION_AGGREGATES[relation];
+    if (!spec) {
+      throw new Error(`DENY: missing Stage C aggregate spec for "${relation}"`);
+    }
+    const pk = assertSafeIdent(spec.pk, 'column');
+    const relSql = sqlQuotedIdent(relation, 'table');
+    const pkSql = sqlQuotedIdent(pk, 'column');
+
+    const countAllId = `catalog_${relation}_count_all`;
+    const countAllCols = [pk];
+    ops[countAllId] = {
+      id: countAllId,
+      family: 'count_all',
+      description: `Stage C aggregate: total row count for public.${relation} (numeric only)`,
+      params: [],
+      buildSql: () => `
+SELECT
+  '${countAllId}' AS operation_id,
+  q.row_count
+FROM (
+  SELECT COUNT(t.${pkSql})::bigint AS row_count
+  FROM public.${relSql} t
+) q
+WHERE ${buildStageCPresencePredicate(relation, countAllCols)};
+`.trim(),
+    };
+
+    for (const column of spec.booleans) {
+      const col = assertSafeIdent(column, 'column');
+      const colSql = sqlQuotedIdent(col, 'column');
+      const opId = `catalog_${relation}_count_by_boolean_${col}`;
+      ops[opId] = {
+        id: opId,
+        family: 'count_by_boolean',
+        description: `Stage C aggregate: boolean counts for public.${relation}.${col} (numeric only)`,
+        params: [],
+        buildSql: () => `
+SELECT
+  '${opId}' AS operation_id,
+  q.true_count,
+  q.false_count,
+  q.null_count
+FROM (
+  SELECT
+    COUNT(*) FILTER (WHERE t.${colSql} IS TRUE)::bigint AS true_count,
+    COUNT(*) FILTER (WHERE t.${colSql} IS FALSE)::bigint AS false_count,
+    COUNT(*) FILTER (WHERE t.${colSql} IS NULL)::bigint AS null_count
+  FROM public.${relSql} t
+) q
+WHERE ${buildStageCPresencePredicate(relation, [pk, col])};
+`.trim(),
+      };
+    }
+
+    for (const column of spec.categories) {
+      const col = assertStageCCategoryColumn(column);
+      const colSql = sqlQuotedIdent(col, 'column');
+      const opId = `catalog_${relation}_count_by_category_${col}_with_other`;
+      ops[opId] = {
+        id: opId,
+        family: 'count_by_category_with_other',
+        description:
+          `Stage C aggregate: null/blank plus combined other count for public.${relation}.${col} (no category keys)`,
+        params: [],
+        buildSql: () => `
+SELECT
+  '${opId}' AS operation_id,
+  q.null_or_blank_count,
+  q.other_count
+FROM (
+  SELECT
+    COUNT(*) FILTER (
+      WHERE t.${colSql} IS NULL OR btrim(t.${colSql}::text) = ''
+    )::bigint AS null_or_blank_count,
+    COUNT(*) FILTER (
+      WHERE t.${colSql} IS NOT NULL AND btrim(t.${colSql}::text) <> ''
+    )::bigint AS other_count
+  FROM public.${relSql} t
+) q
+WHERE ${buildStageCPresencePredicate(relation, [pk, col])};
+`.trim(),
+      };
+    }
+  }
+  return ops;
+}
+
+const STAGE_C_CATALOG_OPERATIONS = Object.freeze(buildStageCCatalogOperations());
+
+export const STAGE_C_AGGREGATE_OPERATION_IDS = Object.freeze(
+  Object.keys(STAGE_C_CATALOG_OPERATIONS)
+);
+
+/**
+ * @param {string} operationId
+ */
+export function isStageCAggregateOperation(operationId) {
+  return Object.prototype.hasOwnProperty.call(STAGE_C_CATALOG_OPERATIONS, operationId);
+}
+
+/**
+ * @param {string} operationId
+ */
+export function stageCFamilyOf(operationId) {
+  const op = STAGE_C_CATALOG_OPERATIONS[operationId];
+  return op?.family ?? null;
+}
+
+/**
+ * @param {string} operationId
+ */
+export function stageCAggregateKeys(operationId) {
+  const family = stageCFamilyOf(operationId);
+  if (family === 'count_all') return STAGE_C_COUNT_ALL_KEYS;
+  if (family === 'count_by_boolean') return STAGE_C_COUNT_BY_BOOLEAN_KEYS;
+  if (family === 'count_by_category_with_other') return STAGE_C_COUNT_BY_CATEGORY_KEYS;
+  return null;
+}
 
 /** @type {Record<string, CatalogOp>} */
 export const CATALOG_OPERATIONS = Object.freeze({
@@ -421,6 +738,8 @@ WHERE srcn.nspname = '${schema}'
 ORDER BY 3, 1, 2;
 `.trim(),
   },
+
+  ...STAGE_C_CATALOG_OPERATIONS,
 });
 
 /** Response keys allowed for aggregate uniqueness precheck (fail-closed strip). */
@@ -468,9 +787,43 @@ function sanitizeDependencyMetadataBody(body) {
   return out;
 }
 
+function coerceFiniteCount(value, operationId, key) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    throw new Error(`DENY: catalog operation "${operationId}" missing numeric "${key}"`);
+  }
+  return n;
+}
+
+function sanitizeStageCAggregateBody(operationId, body) {
+  const keys = stageCAggregateKeys(operationId);
+  if (!keys) {
+    throw new Error(`DENY: unknown Stage C aggregate "${operationId}"`);
+  }
+  if (!Array.isArray(body) || body.length === 0) {
+    throw new Error(
+      `DENY: catalog operation "${operationId}" returned no aggregate row (required relation or column may be absent)`
+    );
+  }
+  const row = body[0] && typeof body[0] === 'object' ? body[0] : null;
+  if (!row) {
+    throw new Error(`DENY: catalog operation "${operationId}" returned an invalid aggregate row`);
+  }
+  /** @type {Record<string, string | number>} */
+  const out = { operation_id: operationId };
+  for (const key of keys) {
+    if (key === 'operation_id') continue;
+    out[key] = coerceFiniteCount(row[key], operationId, key);
+  }
+  return [out];
+}
+
 export function sanitizeCatalogResponseBody(operationId, body) {
   if (operationId === 'catalog_object_dependencies') {
     return sanitizeDependencyMetadataBody(body);
+  }
+  if (isStageCAggregateOperation(operationId)) {
+    return sanitizeStageCAggregateBody(operationId, body);
   }
   if (operationId !== 'catalog_quotes_s2_active_unique_conflict_counts') {
     return body;

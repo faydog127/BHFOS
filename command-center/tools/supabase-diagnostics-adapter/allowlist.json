@@ -8,6 +8,7 @@
     "v3: bounded catalog-metadata via POST .../database/query/read-only with adapter-owned SQL templates only. Agent SQL prohibited.",
     "Live catalog / token-store require dual attestation: Projects Read (project_admin_read via project_status) AND Database Read (database_read via bounded catalog). NOS-I2-S1-EVIDENCE-01 campaign contract: ALLOWED_SCOPES = projects:read + database:read only.",
     "Stage A adds catalog_object_dependencies (identity + type only) for approved public Slice 1 objects. No Slice 1 aggregate templates in Stage A.",
+    "Stage C adds adapter-owned Slice 1 aggregate-count templates only (count_all, count_by_boolean, count_by_category_with_other). Each operation hard-codes relation, columns, and predicates; caller table/column/predicate/grouping/SQL/URL/project-ref input is DENY. Output is one row: fixed operation_id plus numeric counts. Unknown category values contribute only to other_count. Missing relation/column fails closed. No hosted execution in Stage C.",
     "Writable POST .../database/query remains prohibited. execute-sql Edge Function remains prohibited."
   ],
   "allowed_path_prefixes": [
