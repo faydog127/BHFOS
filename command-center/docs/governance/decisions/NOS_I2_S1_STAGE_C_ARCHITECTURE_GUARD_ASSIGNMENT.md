@@ -16,11 +16,11 @@ Repository: faydog127/BHFOS
 Branch: network-os/i2-s1-stage-c-aggregates
 Base / parent SHA: f5f0a14f004bb20be7ed1b069c67b16d832d6421
 Base branch: network-os/foundation
-Exact head SHA: the Stage C commit(s) on this branch whose ancestry is exactly
-f5f0a14f004bb20be7ed1b069c67b16d832d6421 (named in the Stage C evidence
-document and draft PR).
-Draft PR: the single draft PR from network-os/i2-s1-stage-c-aggregates into
-network-os/foundation (do not mark ready; do not merge).
+Exact head SHA: the tip of network-os/i2-s1-stage-c-aggregates whose ancestry
+is exactly f5f0a14f004bb20be7ed1b069c67b16d832d6421. Implementation commit:
+921b054d00ef4335cac63ee929331d75ee34b813.
+Draft PR: https://github.com/faydog127/BHFOS/pull/138
+(do not mark ready; do not merge).
 Control-plane release: NOS-I2-S1-EVIDENCE-01
 Action ID: NOS-I2-S1-STAGE-C-AGGREGATES-01
 Decision packet: command-center/docs/governance/decisions/NOS_R1_S1_I2_CAPABILITY_AND_AGGREGATE_TEMPLATE_DECISION_PACKET.md

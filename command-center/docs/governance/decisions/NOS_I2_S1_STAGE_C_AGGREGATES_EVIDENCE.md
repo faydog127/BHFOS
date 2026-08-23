@@ -9,6 +9,8 @@
 | Repository | `faydog127/BHFOS` |
 | Branch | `network-os/i2-s1-stage-c-aggregates` |
 | Base / parent SHA | `f5f0a14f004bb20be7ed1b069c67b16d832d6421` (`network-os/foundation`) |
+| Implementation SHA | `921b054d00ef4335cac63ee929331d75ee34b813` |
+| Draft PR | https://github.com/faydog127/BHFOS/pull/138 |
 | Role | Builder (diagnostics control-plane only) |
 | Evidence classification | LOCAL CONTROL-PLANE VERIFIED; NO HOSTED ACCESS |
 | Product / R1 / Slice 1 activation | **None** |
@@ -218,7 +220,15 @@ node command-center/tools/founder-run-readiness.mjs --self-test
 git diff --check
 ```
 
-Results are recorded after local execution (no hosted calls).
+Results (locally verified; no hosted calls):
+
+- `cli.mjs --self-test`: PASS (`ok: true`, `failed: []`; catalog ops registered = 81)
+- `catalog.self-test.mjs`: PASS (`ok: true`, `failed: []`)
+- `oauth-authorize.mjs --self-test`: PASS (`ok: true`)
+- `oauth-tunnel.self-test.mjs`: PASS (`ok: true`, `failed: []`)
+- `oauth-launcher-preflight.self-test.mjs`: PASS (`ok: true`, `failed: []`)
+- `founder-run-readiness.mjs --self-test`: PASS
+- `git diff --check`: PASS (no whitespace errors)
 
 ## 9. Explicit non-actions
 
