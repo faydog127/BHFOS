@@ -601,6 +601,37 @@ export function selfTest() {
     });
   }
 
+  try {
+    resolveCatalogSql('catalog_object_dependencies', { schema: 'public', table: 'estimates' });
+    results.push({ test: 'deny_dependency_non_slice1_table', pass: false });
+  } catch (e) {
+    results.push({
+      test: 'deny_dependency_non_slice1_table',
+      pass: /approved public Slice 1/i.test(String(e.message || e)),
+    });
+  }
+
+  try {
+    const r = resolveCatalogSql('catalog_object_dependencies', {
+      schema: 'public',
+      table: 'organizations',
+    });
+    results.push({
+      test: 'allow_dependency_slice1_template',
+      pass:
+        r.operation === 'catalog_object_dependencies' &&
+        r.sql.startsWith('SELECT') &&
+        r.params.table === 'organizations' &&
+        !/\bFROM\s+public\./i.test(r.sql),
+    });
+  } catch (e) {
+    results.push({
+      test: 'allow_dependency_slice1_template',
+      pass: false,
+      error: String(e.message || e),
+    });
+  }
+
   results.push({
     test: 'catalog_ops_registered',
     pass: listCatalogOperations().length >= 5,
