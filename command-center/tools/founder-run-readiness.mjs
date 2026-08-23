@@ -13,6 +13,30 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REPO_ROOT = path.resolve(__dirname, '..');
 
+/** Known readiness stages. Unknown or omitted stages fail closed. */
+export const READINESS_STAGE_PRE_PROVISIONING = 'pre_provisioning';
+export const READINESS_STAGE_OAUTH_EXECUTION = 'oauth_execution';
+export const KNOWN_READINESS_STAGES = Object.freeze([
+  READINESS_STAGE_PRE_PROVISIONING,
+  READINESS_STAGE_OAUTH_EXECUTION,
+]);
+
+export const VERDICT_FOUNDER_RUN_READY = 'FOUNDER_RUN_READY';
+export const VERDICT_PROVISIONING_ACTION_AUTHORIZED = 'FOUNDER_PROVISIONING_ACTION_AUTHORIZED';
+export const VERDICT_FOUNDER_RUN_BLOCKED = 'FOUNDER_RUN_BLOCKED';
+
+/** Authoritative NOS-I2-S1-EVIDENCE-01 campaign root (names/paths only). */
+export const DESIGNATED_CAMPAIGN_ROOT = 'F:\\BHFOS-Diagnostics\\NOS-I2-S1-EVIDENCE-01';
+export const EXPECTED_OAUTH_APP_NAME = 'BHFOS I2 Diagnostics';
+export const EXPECTED_OAUTH_SCOPES = Object.freeze(['projects:read', 'database:read']);
+export const EXPECTED_PROJECT_REF = 'wwyxohjnyqnegzbxtuxs';
+export const EXPECTED_PUBLIC_CALLBACK = 'https://oauth-diagnostics.bhfos.com/oauth/callback';
+export const EXPECTED_TUNNEL_CLASS = 'cloudflare_named';
+export const EXPECTED_TUNNEL_HOSTNAME = 'oauth-diagnostics.bhfos.com';
+
+const PRE_PROVISIONING_ACTION_DENY =
+  /\bconsent\b|authorization\s+url|authorize\s+url|oauth-authorize|authorize\.mjs|tunnel\s+start|start(?:ing)?\s+the\s+tunnel|cloudflared\s+tunnel\s+run|hosted\s+(?:metadata|call|supabase)|collect(?:ion)?\s+hosted|supabase\s+(?:get|post|select)/i;
+
 /** Basename patterns that are always treated as in-repo credential stores (fail-closed). */
 const ALWAYS_DENY_BASENAME = [
   /^\.env$/i,
@@ -222,6 +246,45 @@ export function pathIsOutsideRepo(candidate, repoRoot) {
   return rel.startsWith('..') || path.isAbsolute(rel);
 }
 
+export function normalizeCampaignPath(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/\//g, '\\')
+    .replace(/[\\/]+$/, '');
+}
+
+export function isHistoricalLocalAppDataCampaignStore(value) {
+  const n = normalizeCampaignPath(value).toLowerCase();
+  if (!n) return false;
+  if (n.includes('%localappdata%') || n.includes('localappdata')) return true;
+  return /(?:^|[\\/])appdata[\\/]local[\\/]bhfos[\\/]production-diagnostics(?:$|[\\/])/i.test(n);
+}
+
+export function isDesignatedCampaignRoot(value) {
+  return normalizeCampaignPath(value).toLowerCase() === DESIGNATED_CAMPAIGN_ROOT.toLowerCase();
+}
+
+export function isUnderDesignatedCampaignRoot(value) {
+  const n = normalizeCampaignPath(value).toLowerCase();
+  const root = DESIGNATED_CAMPAIGN_ROOT.toLowerCase();
+  return n === root || n.startsWith(`${root}\\`);
+}
+
+export function oauthScopesExact(scopes) {
+  if (!Array.isArray(scopes) || scopes.length !== EXPECTED_OAUTH_SCOPES.length) return false;
+  const unique = new Set(scopes.map((s) => String(s)));
+  return EXPECTED_OAUTH_SCOPES.every((s) => unique.has(s)) && unique.size === EXPECTED_OAUTH_SCOPES.length;
+}
+
+export function preProvisioningActionProhibited(action) {
+  return PRE_PROVISIONING_ACTION_DENY.test(String(action ?? ''));
+}
+
+function designatedExternalPathEntries(paths) {
+  if (!paths || typeof paths !== 'object' || Array.isArray(paths)) return [];
+  return Object.entries(paths).filter(([, value]) => value != null && String(value).trim() !== '');
+}
+
 /**
  * Evaluate a readiness packet. Returns { verdict, checks[], technical_result, governance_status, authorized_next_state }.
  */
@@ -231,6 +294,15 @@ export async function evaluateReadiness(packet, options = {}) {
   const add = (id, ok, detail) => {
     checks.push({ id, ok: Boolean(ok), detail: detail ? String(detail).slice(0, 240) : undefined });
   };
+
+  const stage = packet.readiness_stage;
+  const isPre = stage === READINESS_STAGE_PRE_PROVISIONING;
+  const isOauth = stage === READINESS_STAGE_OAUTH_EXECUTION;
+  add(
+    'readiness_stage_known',
+    isPre || isOauth,
+    stage == null || stage === '' ? 'omitted' : `stage=${stage}`
+  );
 
   // 1
   add('task_and_authorization_boundary', nonEmpty(packet.task_and_authorization_boundary), 'must be non-empty');
@@ -309,7 +381,28 @@ export async function evaluateReadiness(packet, options = {}) {
   // 9–10
   const secretStore = packet.external_secret_store_path;
   const secretNames = Array.isArray(packet.required_secret_names) ? packet.required_secret_names : [];
-  if (!secretStore && secretNames.length === 0) {
+  if (isPre) {
+    add('external_secret_store_path', true, 'not required before provisioning');
+    add('required_secret_names_present', true, 'not required before provisioning');
+  } else if (isOauth) {
+    const storeExists = nonEmpty(secretStore) && fs.existsSync(secretStore);
+    const outside = storeExists && pathIsOutsideRepo(secretStore, repoRoot);
+    add(
+      'external_secret_store_path',
+      storeExists && outside && !isHistoricalLocalAppDataCampaignStore(secretStore),
+      storeExists ? (outside ? 'outside repo' : 'inside repo') : 'missing'
+    );
+    const names = secretNamesPresent(secretStore || '', secretNames);
+    add(
+      'required_secret_names_present',
+      secretNames.length > 0 && names.ok,
+      secretNames.length === 0
+        ? 'secret names required at oauth_execution'
+        : names.missing.length
+          ? `missing_names=${names.missing.join(',')}`
+          : `present_count=${names.present.length}`
+    );
+  } else if (!secretStore && secretNames.length === 0) {
     add('external_secret_store_path', true, 'not required for this packet');
     add('required_secret_names_present', true, 'not required for this packet');
   } else {
@@ -336,7 +429,22 @@ export async function evaluateReadiness(packet, options = {}) {
   // 12
   const expectedRedirect = packet.callback_or_redirect_expected;
   const actualRedirect = packet.callback_or_redirect_actual;
-  if (!expectedRedirect && !actualRedirect) {
+  if (isPre || isOauth) {
+    add(
+      'expected_public_callback_contract',
+      expectedRedirect === EXPECTED_PUBLIC_CALLBACK,
+      expectedRedirect || 'missing expected callback'
+    );
+  }
+  if (isPre) {
+    add('callback_or_redirect_match', true, 'actual callback not required before provisioning');
+  } else if (isOauth) {
+    add(
+      'callback_or_redirect_match',
+      nonEmpty(expectedRedirect) && expectedRedirect === actualRedirect && expectedRedirect === EXPECTED_PUBLIC_CALLBACK,
+      'expected must equal actual and helper contract'
+    );
+  } else if (!expectedRedirect && !actualRedirect) {
     add('callback_or_redirect_match', true, 'not required for this packet');
   } else {
     add(
@@ -388,23 +496,124 @@ export async function evaluateReadiness(packet, options = {}) {
   add('explicit_stop_conditions', stops.length > 0 && stops.every((s) => nonEmpty(s)), 'need at least one');
   add('one_exact_founder_command_or_action', nonEmpty(packet.one_exact_founder_command_or_action), 'exactly one action string');
 
-  // 21–32 OAuth Named Tunnel (when tunnel.required)
+  if (isPre || isOauth) {
+    add(
+      'oauth_app_name_exact',
+      packet.oauth_app_name === EXPECTED_OAUTH_APP_NAME,
+      packet.oauth_app_name || 'missing'
+    );
+    add(
+      'oauth_scopes_exact',
+      oauthScopesExact(packet.oauth_scopes),
+      Array.isArray(packet.oauth_scopes) ? packet.oauth_scopes.join(',') : 'missing'
+    );
+    add(
+      'project_ref_locked',
+      packet.project_ref === EXPECTED_PROJECT_REF,
+      packet.project_ref || 'missing'
+    );
+    add(
+      'designated_campaign_root',
+      isDesignatedCampaignRoot(packet.designated_campaign_root) &&
+        !isHistoricalLocalAppDataCampaignStore(packet.designated_campaign_root),
+      packet.designated_campaign_root || 'missing'
+    );
+    const extPaths = designatedExternalPathEntries(packet.designated_external_paths);
+    const extOk =
+      extPaths.length > 0 &&
+      extPaths.every(
+        ([, value]) => isUnderDesignatedCampaignRoot(value) && !isHistoricalLocalAppDataCampaignStore(value)
+      );
+    add(
+      'designated_external_paths_under_campaign',
+      extOk,
+      extPaths.length ? 'paths declared' : 'missing designated external paths'
+    );
+    const acls = Array.isArray(packet.designated_acls) ? packet.designated_acls : [];
+    add(
+      'designated_acls_present',
+      acls.length > 0 && acls.every((a) => nonEmpty(a)),
+      acls.length ? `acl_count=${acls.length}` : 'missing ACLs'
+    );
+    add(
+      'localappdata_not_campaign_store',
+      !isHistoricalLocalAppDataCampaignStore(packet.designated_campaign_root) &&
+        !isHistoricalLocalAppDataCampaignStore(secretStore) &&
+        extPaths.every(([, value]) => !isHistoricalLocalAppDataCampaignStore(value)),
+      'LOCALAPPDATA is historical/generic only'
+    );
+  }
+
+  if (isPre) {
+    const prohibited = Array.isArray(packet.prohibited_actions) ? packet.prohibited_actions : [];
+    add(
+      'prohibited_actions_present',
+      prohibited.length > 0 && prohibited.every((s) => nonEmpty(s)),
+      'need at least one prohibited action'
+    );
+    add(
+      'pre_provisioning_action_not_execution',
+      nonEmpty(packet.one_exact_founder_command_or_action) &&
+        !preProvisioningActionProhibited(packet.one_exact_founder_command_or_action),
+      'pre-provisioning cannot authorize consent, tunnel start, or hosted calls'
+    );
+    add('oauth_app_verified', true, 'live app verification not required before provisioning');
+  } else if (isOauth) {
+    add(
+      'oauth_app_verified',
+      packet.oauth_app_verified === true && packet.oauth_app_name === EXPECTED_OAUTH_APP_NAME,
+      'verified app required at oauth_execution'
+    );
+  }
+
+  // 21–32 OAuth Named Tunnel (when tunnel.required, or class/hostname at pre-provisioning)
   const tunnel = packet.tunnel && typeof packet.tunnel === 'object' ? packet.tunnel : null;
-  if (!tunnel || tunnel.required !== true) {
-    add('tunnel_required_named_class', true, 'tunnel not required for this packet');
-    add('tunnel_stable_hostname_pinned', true, 'tunnel not required for this packet');
-    add('tunnel_public_redirect_uri_match', true, 'tunnel not required for this packet');
-    add('tunnel_credentials_outside_repo', true, 'tunnel not required for this packet');
-    add('tunnel_path_only_attested', true, 'tunnel not required for this packet');
-    add('tunnel_catch_all_deny_attested', true, 'tunnel not required for this packet');
-    add('tunnel_stop_and_closure_procedure', true, 'tunnel not required for this packet');
-    add('tunnel_executable_present', true, 'tunnel not required for this packet');
-    add('tunnel_config_present', true, 'tunnel not required for this packet');
-    add('tunnel_start_command_present', true, 'tunnel not required for this packet');
-    add('tunnel_stop_command_present', true, 'tunnel not required for this packet');
-    add('tunnel_closure_verification_command_present', true, 'tunnel not required for this packet');
-    add('tunnel_local_listener_loopback_only', true, 'tunnel not required for this packet');
-    add('tunnel_no_random_or_quick_hostname', true, 'tunnel not required for this packet');
+  if (isPre) {
+    add(
+      'tunnel_required_named_class',
+      Boolean(tunnel) && tunnel.class === EXPECTED_TUNNEL_CLASS,
+      `class=${tunnel?.class || 'missing'}`
+    );
+    add(
+      'tunnel_stable_hostname_pinned',
+      Boolean(tunnel) && tunnel.stable_hostname === EXPECTED_TUNNEL_HOSTNAME,
+      tunnel?.stable_hostname || 'missing'
+    );
+    add('tunnel_public_redirect_uri_match', true, 'not required before provisioning');
+    add('tunnel_credentials_outside_repo', true, 'not required before provisioning');
+    add('tunnel_path_only_attested', true, 'not required before provisioning');
+    add('tunnel_catch_all_deny_attested', true, 'not required before provisioning');
+    add('tunnel_stop_and_closure_procedure', true, 'not required before provisioning');
+    add('tunnel_executable_present', true, 'not required before provisioning');
+    add('tunnel_config_present', true, 'not required before provisioning');
+    add('tunnel_start_command_present', true, 'not required before provisioning');
+    add('tunnel_stop_command_present', true, 'not required before provisioning');
+    add('tunnel_closure_verification_command_present', true, 'not required before provisioning');
+    add('tunnel_local_listener_loopback_only', true, 'not required before provisioning');
+    add(
+      'tunnel_no_random_or_quick_hostname',
+      Boolean(tunnel) &&
+        tunnel.stable_hostname === EXPECTED_TUNNEL_HOSTNAME &&
+        !/trycloudflare\.com|cfargotunnel\.com/i.test(String(tunnel.stable_hostname || '')),
+      'no random or quick-tunnel hostname'
+    );
+  } else if (!tunnel || tunnel.required !== true) {
+    const skipDetail = isOauth ? 'tunnel required at oauth_execution' : 'tunnel not required for this packet';
+    const skipOk = !isOauth;
+    add('tunnel_required_named_class', skipOk, skipDetail);
+    add('tunnel_stable_hostname_pinned', skipOk, skipDetail);
+    add('tunnel_public_redirect_uri_match', skipOk, skipDetail);
+    add('tunnel_credentials_outside_repo', skipOk, skipDetail);
+    add('tunnel_path_only_attested', skipOk, skipDetail);
+    add('tunnel_catch_all_deny_attested', skipOk, skipDetail);
+    add('tunnel_stop_and_closure_procedure', skipOk, skipDetail);
+    add('tunnel_executable_present', skipOk, skipDetail);
+    add('tunnel_config_present', skipOk, skipDetail);
+    add('tunnel_start_command_present', skipOk, skipDetail);
+    add('tunnel_stop_command_present', skipOk, skipDetail);
+    add('tunnel_closure_verification_command_present', skipOk, skipDetail);
+    add('tunnel_local_listener_loopback_only', skipOk, skipDetail);
+    add('tunnel_no_random_or_quick_hostname', skipOk, skipDetail);
   } else {
     const expectedHost = 'oauth-diagnostics.bhfos.com';
     const expectedPublic = 'https://oauth-diagnostics.bhfos.com/oauth/callback';
@@ -434,7 +643,7 @@ export async function evaluateReadiness(packet, options = {}) {
     const credOutside = credExists && pathIsOutsideRepo(credPath, repoRoot);
     add(
       'tunnel_credentials_outside_repo',
-      credExists && credOutside,
+      credExists && credOutside && !isHistoricalLocalAppDataCampaignStore(credPath),
       credExists ? (credOutside ? 'outside repo' : 'inside repo') : 'missing'
     );
     add(
@@ -461,7 +670,10 @@ export async function evaluateReadiness(packet, options = {}) {
     const cfgPath = tunnel.config_path;
     add(
       'tunnel_config_present',
-      nonEmpty(cfgPath) && fs.existsSync(cfgPath) && pathIsOutsideRepo(cfgPath, repoRoot),
+      nonEmpty(cfgPath) &&
+        fs.existsSync(cfgPath) &&
+        pathIsOutsideRepo(cfgPath, repoRoot) &&
+        !isHistoricalLocalAppDataCampaignStore(cfgPath),
       cfgPath ? 'config outside repo' : 'missing config path'
     );
     add(
@@ -497,22 +709,37 @@ export async function evaluateReadiness(packet, options = {}) {
   }
 
   const failed = checks.filter((c) => !c.ok);
-  const ready = failed.length === 0;
-  const verdict = ready ? 'FOUNDER_RUN_READY' : 'FOUNDER_RUN_BLOCKED';
+  const allPassed = failed.length === 0;
+  let verdict = VERDICT_FOUNDER_RUN_BLOCKED;
+  if (allPassed && isOauth) {
+    verdict = VERDICT_FOUNDER_RUN_READY;
+  } else if (allPassed && isPre) {
+    verdict = VERDICT_PROVISIONING_ACTION_AUTHORIZED;
+  }
+
+  const ready = verdict === VERDICT_FOUNDER_RUN_READY;
+  const provisioningAuthorized = verdict === VERDICT_PROVISIONING_ACTION_AUTHORIZED;
 
   return {
     verdict,
+    readiness_stage: isPre || isOauth ? stage : stage == null || stage === '' ? null : stage,
     checks,
     failed: failed.map((c) => c.id),
     technical_result: ready
-      ? 'All FOUNDER_RUN_READINESS machine and declarative checks passed.'
-      : `Readiness blocked on: ${failed.map((c) => c.id).join(', ')}`,
+      ? 'All FOUNDER_RUN_READINESS machine and declarative checks passed for oauth_execution.'
+      : provisioningAuthorized
+        ? 'Pre-provisioning checks passed. One bounded Founder provisioning action is authorized. OAuth consent, tunnel start, and hosted collection remain unauthorized.'
+        : `Readiness blocked on: ${failed.map((c) => c.id).join(', ')}`,
     governance_status: ready
       ? 'Founder execution command may be issued for the single recorded action.'
-      : 'Founder execution is not authorized. Route correction; do not send the Founder the command.',
+      : provisioningAuthorized
+        ? 'Founder provisioning action is authorized. OAuth consent, tunnel start, and hosted metadata collection are not authorized. FOUNDER_RUN_READY is not declared.'
+        : 'Founder execution is not authorized. Route correction; do not send the Founder the command.',
     authorized_next_state: ready
       ? `Issue exactly one Founder action: ${packet.one_exact_founder_command_or_action}`
-      : 'Orchestrator classifies failure and routes to Builder/Architecture Guard/Diagnostics without Founder diagnosis.',
+      : provisioningAuthorized
+        ? `Issue exactly one Founder provisioning action: ${packet.one_exact_founder_command_or_action} Do not start the tunnel. Do not open OAuth consent. Do not collect hosted metadata.`
+        : 'Orchestrator classifies failure and routes to Builder/Architecture Guard/Diagnostics without Founder diagnosis.',
   };
 }
 
@@ -553,7 +780,11 @@ async function main(argv) {
   const repoRoot = repoRootIdx !== -1 ? path.resolve(argv[repoRootIdx + 1]) : DEFAULT_REPO_ROOT;
   const result = await evaluateReadiness(packet, { repoRoot });
   console.log(formatReport(result));
-  process.exit(result.verdict === 'FOUNDER_RUN_READY' ? 0 : 1);
+  process.exit(
+    result.verdict === VERDICT_FOUNDER_RUN_READY || result.verdict === VERDICT_PROVISIONING_ACTION_AUTHORIZED
+      ? 0
+      : 1
+  );
 }
 
 const isDirectRun =

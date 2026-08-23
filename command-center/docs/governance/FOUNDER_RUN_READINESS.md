@@ -10,20 +10,26 @@ Parent model: [`OPERATING_MODEL_v2.2.md`](./OPERATING_MODEL_v2.2.md).
 Prevent the Founder from becoming the integration tester. Before any agent asks
 the Founder to perform an environment-specific manual action, the Orchestrator
 (or assigned coordinating owner) must produce a machine-assisted readiness
-report that ends with exactly one of:
+report. Packets must declare exactly one known `readiness_stage`. Unknown or
+omitted stages fail closed. Legacy packets without a stage field must **not**
+silently become `FOUNDER_RUN_READY`.
 
-```
-FOUNDER_RUN_READY
-```
+Known stages:
 
-or
+| Stage | Authorizes | Success verdict |
+| --- | --- | --- |
+| `pre_provisioning` | Exactly one bounded human **provisioning** action (create/update the named OAuth app). Does **not** authorize OAuth consent, tunnel start, hosted calls, or `FOUNDER_RUN_READY`. | `FOUNDER_PROVISIONING_ACTION_AUTHORIZED` |
+| `oauth_execution` | OAuth consent / tunnel start / hosted metadata collection for the single recorded action, only after execution assets exist. | `FOUNDER_RUN_READY` |
+
+Any failed check, unknown stage, or omitted stage ends:
 
 ```
 FOUNDER_RUN_BLOCKED
 ```
 
-If any required field fails, the Founder must **not** receive the execution
-command.
+`pre_provisioning` success must never be labeled `FOUNDER_RUN_READY`. If any
+required field for the declared stage fails, the Founder must **not** receive
+the corresponding command.
 
 ## When the gate is mandatory
 
@@ -58,6 +64,7 @@ for routine metadata. Standing authority never authorizes unsafe bypass tools
 
 | # | Field | Machine-checkable |
 | --- | --- | --- |
+| 0 | `readiness_stage` is `pre_provisioning` or `oauth_execution` | Yes (unknown/omitted fail closed) |
 | 1 | Task and authorization boundary | Declarative (must be non-empty; Orchestrator attests) |
 | 2 | Exact repository | Yes (`git remote get-url origin`) |
 | 3 | Exact worktree path | Yes (path exists; matches assignment) |
@@ -90,12 +97,49 @@ for routine metadata. Standing authority never authorizes unsafe bypass tools
 | 30 | Tunnel start / stop / closure verification commands present | Yes (when `tunnel.required`) |
 | 31 | Local listener remains loopback-only (`127.0.0.1`) | Yes (when `tunnel.required`) |
 | 32 | No random or quick-tunnel hostname | Yes (when `tunnel.required`) |
+| 33 | OAuth app name is exactly `BHFOS I2 Diagnostics` | Yes (known stages) |
+| 34 | OAuth scopes are exactly `projects:read` + `database:read` | Yes (known stages; array only) |
+| 35 | Project ref is exactly `wwyxohjnyqnegzbxtuxs` | Yes (known stages) |
+| 36 | Expected public callback is the helper contract | Yes (known stages) |
+| 37 | Designated campaign root is `F:\BHFOS-Diagnostics\NOS-I2-S1-EVIDENCE-01` | Yes (known stages; path string only) |
+| 38 | Designated external paths sit under that campaign root; ACLs named | Yes (known stages; names/paths only) |
+| 39 | `%LOCALAPPDATA%\BHFOS\production-diagnostics` is **not** the campaign store | Yes (historical/generic only) |
+| 40 | Pre-provisioning action is not consent / tunnel start / hosted collection | Yes (`pre_provisioning` only) |
+| 41 | Live OAuth app verified | Yes (`oauth_execution` only; not required before provisioning) |
 
-### OAuth tunnel packet contract (G2.3B-B2D Option B)
+### Stage split (NOS-I2-S1-EVIDENCE-01)
 
-When authorizing Diagnostics Supabase OAuth under Option B, set:
+`pre_provisioning` **requires** exact repo / SHA / clean worktree, protected
+scripts, credential-free test attestations, designated external paths + named
+ACLs, OAuth app name `BHFOS I2 Diagnostics`, scopes `projects:read` +
+`database:read` only, project ref `wwyxohjnyqnegzbxtuxs`, expected public
+callback `https://oauth-diagnostics.bhfos.com/oauth/callback`, named-tunnel
+class + stable hostname `oauth-diagnostics.bhfos.com`, prohibited actions and
+stop conditions, exactly one bounded Founder provisioning action, and
+Architecture Guard approval of that provisioning execution design.
+
+`pre_provisioning` **must not** require provisioning outputs to already exist:
+no client ID values, no live OAuth app verification, no designated tunnel
+credential/config files on disk, and no secret-name presence as a blocker.
+
+`oauth_execution` **keeps** every existing fail-closed execution requirement:
+required secret names without values, verified app + actual callback match,
+tunnel credentials/config outside the repository, path-only + catch-all-deny
+attestations, start/stop/closure procedures, and exact-head Architecture Guard
+approval. The execution gate is not weakened.
+
+### OAuth tunnel packet contract (G2.3B-B2D Option B) — `oauth_execution`
+
+When authorizing Diagnostics Supabase OAuth under Option B, set
+`readiness_stage` to `oauth_execution` and:
 
 ```json
+"readiness_stage": "oauth_execution",
+"oauth_app_name": "BHFOS I2 Diagnostics",
+"oauth_scopes": ["projects:read", "database:read"],
+"project_ref": "wwyxohjnyqnegzbxtuxs",
+"oauth_app_verified": true,
+"designated_campaign_root": "F:\\BHFOS-Diagnostics\\NOS-I2-S1-EVIDENCE-01",
 "callback_or_redirect_expected": "https://oauth-diagnostics.bhfos.com/oauth/callback",
 "callback_or_redirect_actual": "https://oauth-diagnostics.bhfos.com/oauth/callback",
 "required_local_port": 8765,
@@ -105,9 +149,9 @@ When authorizing Diagnostics Supabase OAuth under Option B, set:
   "stable_hostname": "oauth-diagnostics.bhfos.com",
   "public_redirect_uri": "https://oauth-diagnostics.bhfos.com/oauth/callback",
   "local_listener_uri": "http://127.0.0.1:8765/oauth/callback",
-  "credentials_path": "%LOCALAPPDATA%/BHFOS/production-diagnostics/tunnel/<credentials>.json",
+  "credentials_path": "F:/BHFOS-Diagnostics/NOS-I2-S1-EVIDENCE-01/tunnel/<credentials>.json",
   "executable_path": "C:/Program Files/cloudflared/cloudflared.exe",
-  "config_path": "%LOCALAPPDATA%/BHFOS/production-diagnostics/tunnel/oauth-tunnel-config.yml",
+  "config_path": "F:/BHFOS-Diagnostics/NOS-I2-S1-EVIDENCE-01/tunnel/oauth-tunnel-config.yml",
   "path_only_config_attested": true,
   "catch_all_deny_attested": true,
   "start_command": "cloudflared tunnel --config <outside-repo-config> run",
@@ -117,11 +161,17 @@ When authorizing Diagnostics Supabase OAuth under Option B, set:
 }
 ```
 
+Older `%LOCALAPPDATA%\BHFOS\production-diagnostics` paths are historical /
+generic only. They are **not** the `NOS-I2-S1-EVIDENCE-01` campaign store.
+Do not inspect, migrate, copy, or reuse non-designated secret or tunnel
+material.
+
 Architecture Guard approval (`architecture_guard_approval`) must apply to the
 **exact execution design head SHA** (field 17). No in-repo tunnel credentials.
 
-Do **not** ask the Founder to run OAuth until the packet evaluates to exactly
-`FOUNDER_RUN_READY`. Tunnel credentials never enter the repository.
+Do **not** ask the Founder to run OAuth consent, start the tunnel, or collect
+hosted metadata until the packet evaluates to exactly `FOUNDER_RUN_READY`.
+Tunnel credentials never enter the repository.
 
 ## Machine tool
 
@@ -152,4 +202,6 @@ Every readiness report must include:
 - GOVERNANCE STATUS (whether Founder execution is authorized)
 - AUTHORIZED NEXT STATE (ready command **or** routed correction)
 
-And must end with exactly `FOUNDER_RUN_READY` or `FOUNDER_RUN_BLOCKED`.
+And must end with exactly one of `FOUNDER_RUN_READY`,
+`FOUNDER_PROVISIONING_ACTION_AUTHORIZED`, or `FOUNDER_RUN_BLOCKED`.
+`FOUNDER_RUN_READY` is reserved for `oauth_execution`.
