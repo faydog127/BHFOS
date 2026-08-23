@@ -15,7 +15,7 @@
 | --- | --- |
 | Authorization reference | B2A/B2C/B2C-App granted; B2C merge `9ba22c28…`; Supabase campaign governed by approved `NOS-R1-S1-I2-CAP-01`, execution gates pending |
 | Risk tier | Tier 3 |
-| Actor allowed to provision | Founder-authorized human credential provisioner under `NOS-R1-S1-I2-CAP-01`, after `FOUNDER_RUN_READY`; no agent reads secret values |
+| Actor allowed to provision | Founder-authorized human credential provisioner under `NOS-R1-S1-I2-CAP-01`. The one bounded Dashboard OAuth-app create/update action may proceed only after `pre_provisioning` → `FOUNDER_PROVISIONING_ACTION_AUTHORIZED`. OAuth consent, tunnel start, and hosted metadata collection remain blocked until `oauth_execution` → `FOUNDER_RUN_READY`. No agent reads secret values |
 | B1 prerequisite | G2.3B-B1 merged; `DIAGNOSTICS_ACCESS.md` accepted |
 | Live provisioning in B1 | **Not authorized / not performed** |
 
@@ -70,7 +70,7 @@ only in the approved secret-store category.
 | Exact identity | Dedicated campaign OAuth application + Founder authorization under `NOS-R1-S1-I2-CAP-01` |
 | Exact permissions | Dashboard **Projects Read + Database Read** only (wire scopes `projects:read` + `database:read`); adapter allowlist metadata/health/bounded catalog only |
 | Token project scope | **Not proven** at token layer; project isolation is adapter-enforced |
-| Issue time | _pending exact-head review, merge authorization, merge, and `FOUNDER_RUN_READY` under `NOS-R1-S1-I2-CAP-01`_ |
+| Issue time | _pending exact-head review of this Stage B readiness split, then `pre_provisioning` for the one Dashboard app-create action; consent / tunnel / hosted collection still wait for `oauth_execution` → `FOUNDER_RUN_READY` under `NOS-R1-S1-I2-CAP-01`_ |
 | Expiration | Short-lived access token; refresh until revoked (platform-controlled) |
 | Credential-storage category | Diagnostics adapter secret env only |
 | Inventory name rows | `I2_SUPABASE_OAUTH_CLIENT_ID`, `I2_SUPABASE_OAUTH_CLIENT_SECRET` (if issued), `I2_SUPABASE_OAUTH_ACCESS_TOKEN`, `I2_SUPABASE_OAUTH_REFRESH_TOKEN`, `I2_SUPABASE_OAUTH_TOKEN_EXPIRY`, `SUPABASE_DIAGNOSTICS_PROJECT_REF` |
@@ -101,6 +101,24 @@ only in the approved secret-store category.
 | Negative mutation test | No token/cookie in artifacts — _pending B3_ |
 
 ---
+
+## 2A. NOS-I2-S1-EVIDENCE-01 campaign store and readiness stages
+
+| Field | Value |
+| --- | --- |
+| Authoritative campaign root | `F:\BHFOS-Diagnostics\NOS-I2-S1-EVIDENCE-01` |
+| Historical / generic only | `%LOCALAPPDATA%\BHFOS\production-diagnostics` — **not** the campaign store |
+| OAuth app name | `BHFOS I2 Diagnostics` |
+| Scopes | `projects:read` + `database:read` only |
+| Project ref lock | `wwyxohjnyqnegzbxtuxs` |
+| Expected public callback | `https://oauth-diagnostics.bhfos.com/oauth/callback` |
+| Named-tunnel class / hostname | `cloudflare_named` / `oauth-diagnostics.bhfos.com` |
+| `pre_provisioning` | Authorizes only the one Dashboard app create/update action. Does **not** require client IDs, live app verification, tunnel credential/config files, or secret-name presence. Does **not** declare `FOUNDER_RUN_READY`. |
+| `oauth_execution` | Keeps the existing fail-closed execution gate (secret names, verified app + actual callback, tunnel assets outside repo, path-only + catch-all-deny, start/stop/closure, exact-head Architecture Guard). |
+
+Do not inspect, migrate, copy, or reuse any non-designated secret or tunnel
+material. Do not treat `pre_provisioning` as a path to OAuth consent, tunnel
+start, or hosted collection.
 
 ## 3. Post-provisioning checklist (B2 complete when all true)
 

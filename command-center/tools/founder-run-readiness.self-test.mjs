@@ -18,6 +18,20 @@ import {
   hasPopulatedSecretAssignment,
   hasPrivateKeyMaterial,
   isAlwaysDenyCredentialBasename,
+  DESIGNATED_CAMPAIGN_ROOT,
+  EXPECTED_OAUTH_APP_NAME,
+  EXPECTED_OAUTH_SCOPES,
+  EXPECTED_PROJECT_REF,
+  EXPECTED_PUBLIC_CALLBACK,
+  EXPECTED_TUNNEL_CLASS,
+  EXPECTED_TUNNEL_HOSTNAME,
+  VERDICT_FOUNDER_RUN_READY,
+  VERDICT_PROVISIONING_ACTION_AUTHORIZED,
+  VERDICT_FOUNDER_RUN_BLOCKED,
+  isHistoricalLocalAppDataCampaignStore,
+  isDesignatedCampaignRoot,
+  oauthScopesExact,
+  preProvisioningActionProhibited,
 } from './founder-run-readiness.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -60,6 +74,81 @@ function basePacket(overrides = {}) {
     fixture_ignore_worktree_dirtiness: true,
     ...overrides,
   };
+}
+
+function campaignContract(overrides = {}) {
+  return {
+    oauth_app_name: EXPECTED_OAUTH_APP_NAME,
+    oauth_scopes: [...EXPECTED_OAUTH_SCOPES],
+    project_ref: EXPECTED_PROJECT_REF,
+    callback_or_redirect_expected: EXPECTED_PUBLIC_CALLBACK,
+    designated_campaign_root: DESIGNATED_CAMPAIGN_ROOT,
+    designated_external_paths: {
+      secret_store: `${DESIGNATED_CAMPAIGN_ROOT}\\secrets\\diagnostics.env`,
+      tunnel_credentials: `${DESIGNATED_CAMPAIGN_ROOT}\\tunnel\\credentials.json`,
+      tunnel_config: `${DESIGNATED_CAMPAIGN_ROOT}\\tunnel\\oauth-tunnel-config.yml`,
+    },
+    designated_acls: [
+      'secret_store: Founder-only write; Diagnostics helper read; names only',
+      'tunnel_credentials: Founder-owned named-tunnel class; never in repo',
+      'tunnel_config: path-only /oauth/callback + catch-all deny',
+    ],
+    ...overrides,
+  };
+}
+
+function preProvisioningPacket(overrides = {}) {
+  return basePacket({
+    readiness_stage: 'pre_provisioning',
+    ...campaignContract(),
+    tunnel: {
+      class: EXPECTED_TUNNEL_CLASS,
+      stable_hostname: EXPECTED_TUNNEL_HOSTNAME,
+    },
+    prohibited_actions: [
+      'OAuth consent',
+      'tunnel start',
+      'hosted metadata collection',
+      'authorization URL construction',
+    ],
+    explicit_stop_conditions: [
+      'Any readiness field fails',
+      'Requested action is OAuth consent, tunnel start, or hosted collection',
+      'OAuth app name, scopes, project ref, or callback differs from contract',
+    ],
+    one_exact_founder_command_or_action:
+      'In the Supabase organization Dashboard, create or update the OAuth application named exactly BHFOS I2 Diagnostics; set redirect URI https://oauth-diagnostics.bhfos.com/oauth/callback; select Projects Read and Database Read only; save the application.',
+    ...overrides,
+  });
+}
+
+function oauthExecutionPacket(secretFile, tunnelAssets, overrides = {}) {
+  return basePacket({
+    readiness_stage: 'oauth_execution',
+    ...campaignContract(),
+    oauth_app_verified: true,
+    external_secret_store_path: secretFile,
+    required_secret_names: ['I2_EXAMPLE_NAME'],
+    callback_or_redirect_expected: EXPECTED_PUBLIC_CALLBACK,
+    callback_or_redirect_actual: EXPECTED_PUBLIC_CALLBACK,
+    tunnel: {
+      required: true,
+      class: EXPECTED_TUNNEL_CLASS,
+      stable_hostname: EXPECTED_TUNNEL_HOSTNAME,
+      public_redirect_uri: EXPECTED_PUBLIC_CALLBACK,
+      local_listener_uri: 'http://127.0.0.1:8765/oauth/callback',
+      credentials_path: tunnelAssets.creds,
+      executable_path: tunnelAssets.exe,
+      config_path: tunnelAssets.config,
+      path_only_config_attested: true,
+      catch_all_deny_attested: true,
+      start_command: 'cloudflared tunnel --config <outside> run',
+      stop_command: 'helper stop()',
+      closure_verification_command: 'GET public callback fail-closed after stop',
+      stop_after_run_and_closure_procedure_present: true,
+    },
+    ...overrides,
+  });
 }
 
 export async function runSelfTests() {
@@ -228,48 +317,203 @@ export async function runSelfTests() {
     credentialFilesInsideRepo(dirtyCredRepo).includes('.env')
   );
 
-  // happy path with external secret store — no credential-scan skip
-  const happy = await evaluateReadiness(
-    basePacket({
-      external_secret_store_path: secretFile,
-      required_secret_names: ['I2_EXAMPLE_NAME'],
-      callback_or_redirect_expected: 'https://oauth-diagnostics.bhfos.com/oauth/callback',
-      callback_or_redirect_actual: 'https://oauth-diagnostics.bhfos.com/oauth/callback',
-      required_dependencies: [{ kind: 'file', path: path.join(repoRoot, 'tools/founder-run-readiness.mjs') }],
-    }),
-    { repoRoot, allowFixtureSkip: true }
-  );
-  pass(results, 'ready_when_all_fields_pass', happy.verdict === 'FOUNDER_RUN_READY', happy.failed.join(','));
-  pass(results, 'ready_includes_credential_field', happy.checks.some((c) => c.id === 'no_credential_file_in_repo' && c.ok));
-
-  // OAuth tunnel packet — credentials outside repo + exact public redirect
   const tunnelCreds = path.join(tmp, 'named-tunnel-creds.json');
   const tunnelConfig = path.join(tmp, 'oauth-tunnel-config.yml');
   const tunnelExe = path.join(tmp, process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared');
   fs.writeFileSync(tunnelCreds, '{"TunnelID":"synthetic"}\n', 'utf8');
   fs.writeFileSync(tunnelConfig, 'tunnel: synthetic\ningress: []\n', 'utf8');
   fs.writeFileSync(tunnelExe, '', 'utf8');
-  const tunnelReady = await evaluateReadiness(
+  const tunnelAssets = { creds: tunnelCreds, config: tunnelConfig, exe: tunnelExe };
+
+  // 4. Legacy packets without a stage field fail closed (do not silently become READY)
+  const legacyNoStage = await evaluateReadiness(
     basePacket({
       external_secret_store_path: secretFile,
       required_secret_names: ['I2_EXAMPLE_NAME'],
-      callback_or_redirect_expected: 'https://oauth-diagnostics.bhfos.com/oauth/callback',
-      callback_or_redirect_actual: 'https://oauth-diagnostics.bhfos.com/oauth/callback',
-      required_local_port: undefined,
+      callback_or_redirect_expected: EXPECTED_PUBLIC_CALLBACK,
+      callback_or_redirect_actual: EXPECTED_PUBLIC_CALLBACK,
+      required_dependencies: [{ kind: 'file', path: path.join(repoRoot, 'tools/founder-run-readiness.mjs') }],
+    }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  pass(
+    results,
+    'legacy_packet_without_stage_fails_closed',
+    legacyNoStage.verdict === VERDICT_FOUNDER_RUN_BLOCKED &&
+      legacyNoStage.failed.includes('readiness_stage_known') &&
+      legacyNoStage.verdict !== VERDICT_FOUNDER_RUN_READY,
+    legacyNoStage.verdict
+  );
+
+  // 1. Unknown / omitted readiness stage fails closed
+  const omittedStage = await evaluateReadiness(basePacket({}), { repoRoot, allowFixtureSkip: true });
+  pass(
+    results,
+    'omitted_readiness_stage_fails_closed',
+    omittedStage.verdict === VERDICT_FOUNDER_RUN_BLOCKED && omittedStage.failed.includes('readiness_stage_known')
+  );
+  const unknownStage = await evaluateReadiness(basePacket({ readiness_stage: 'slice_1_activation' }), {
+    repoRoot,
+    allowFixtureSkip: true,
+  });
+  pass(
+    results,
+    'unknown_readiness_stage_fails_closed',
+    unknownStage.verdict === VERDICT_FOUNDER_RUN_BLOCKED && unknownStage.failed.includes('readiness_stage_known')
+  );
+
+  // 2 / 10. Pre-provisioning does not require outputs and cannot declare FOUNDER_RUN_READY
+  const preReady = await evaluateReadiness(preProvisioningPacket(), { repoRoot, allowFixtureSkip: true });
+  pass(
+    results,
+    'pre_provisioning_does_not_require_provisioning_outputs',
+    preReady.verdict === VERDICT_PROVISIONING_ACTION_AUTHORIZED &&
+      preReady.checks.some((c) => c.id === 'required_secret_names_present' && c.ok) &&
+      preReady.checks.some((c) => c.id === 'callback_or_redirect_match' && c.ok) &&
+      preReady.checks.some((c) => c.id === 'tunnel_credentials_outside_repo' && c.ok) &&
+      preReady.checks.some((c) => c.id === 'tunnel_config_present' && c.ok) &&
+      preReady.checks.some((c) => c.id === 'oauth_app_verified' && c.ok),
+    preReady.failed.join(',')
+  );
+  const preReport = formatReport(preReady);
+  pass(
+    results,
+    'pre_provisioning_cannot_declare_founder_run_ready',
+    preReady.verdict === VERDICT_PROVISIONING_ACTION_AUTHORIZED &&
+      preReady.verdict !== VERDICT_FOUNDER_RUN_READY &&
+      preReport.trimEnd().endsWith(VERDICT_PROVISIONING_ACTION_AUTHORIZED) &&
+      !preReport.trimEnd().endsWith(VERDICT_FOUNDER_RUN_READY)
+  );
+
+  // 9. No path from pre-provisioning to OAuth consent / tunnel start / hosted calls
+  const preConsent = await evaluateReadiness(
+    preProvisioningPacket({
+      one_exact_founder_command_or_action: 'Open the OAuth consent screen and start the tunnel',
+    }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  pass(
+    results,
+    'pre_provisioning_cannot_authorize_consent_or_tunnel_start',
+    preConsent.verdict === VERDICT_FOUNDER_RUN_BLOCKED &&
+      preConsent.failed.includes('pre_provisioning_action_not_execution')
+  );
+  pass(results, 'helper_flags_pre_provisioning_execution_action', preProvisioningActionProhibited('run oauth-authorize.mjs'));
+
+  const preNoAction = await evaluateReadiness(
+    preProvisioningPacket({ one_exact_founder_command_or_action: '' }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  const preNoProhibited = await evaluateReadiness(
+    preProvisioningPacket({ prohibited_actions: [] }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  const preNoStops = await evaluateReadiness(
+    preProvisioningPacket({ explicit_stop_conditions: [] }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  const preNoBoundary = await evaluateReadiness(
+    preProvisioningPacket({ task_and_authorization_boundary: '' }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  pass(
+    results,
+    'pre_provisioning_blocks_without_exact_action_boundaries',
+    preNoAction.verdict === VERDICT_FOUNDER_RUN_BLOCKED &&
+      preNoAction.failed.includes('one_exact_founder_command_or_action') &&
+      preNoProhibited.verdict === VERDICT_FOUNDER_RUN_BLOCKED &&
+      preNoProhibited.failed.includes('prohibited_actions_present') &&
+      preNoStops.verdict === VERDICT_FOUNDER_RUN_BLOCKED &&
+      preNoStops.failed.includes('explicit_stop_conditions') &&
+      preNoBoundary.verdict === VERDICT_FOUNDER_RUN_BLOCKED &&
+      preNoBoundary.failed.includes('task_and_authorization_boundary')
+  );
+
+  const preAgMissing = await evaluateReadiness(
+    preProvisioningPacket({ architecture_guard_approval: {} }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  const preAgMismatch = await evaluateReadiness(
+    preProvisioningPacket({
+      architecture_guard_approval: {
+        applies_to_execution_design: true,
+        head_sha: 'e'.repeat(40),
+        verdict: 'APPROVE_FOR_FOUNDER_EXECUTION_DESIGN',
+      },
+    }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  pass(
+    results,
+    'pre_provisioning_blocks_without_exact_head_ag',
+    preAgMissing.verdict === VERDICT_FOUNDER_RUN_BLOCKED &&
+      preAgMissing.failed.includes('architecture_guard_execution_design') &&
+      preAgMismatch.verdict === VERDICT_FOUNDER_RUN_BLOCKED &&
+      preAgMismatch.failed.includes('architecture_guard_execution_design')
+  );
+
+  const preAsExecution = await evaluateReadiness(
+    preProvisioningPacket({ readiness_stage: 'oauth_execution' }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  pass(
+    results,
+    'pre_provisioning_authority_cannot_be_oauth_execution',
+    preAsExecution.verdict === VERDICT_FOUNDER_RUN_BLOCKED &&
+      preAsExecution.verdict !== VERDICT_FOUNDER_RUN_READY &&
+      (preAsExecution.failed.includes('required_secret_names_present') ||
+        preAsExecution.failed.includes('oauth_app_verified') ||
+        preAsExecution.failed.includes('tunnel_credentials_outside_repo') ||
+        preAsExecution.failed.includes('callback_or_redirect_match'))
+  );
+
+  // 3. Execution stage still blocks on missing secret names, callback match, tunnel assets, attestations, exact-head AG
+  const execMissingSecrets = await evaluateReadiness(
+    oauthExecutionPacket(secretFile, tunnelAssets, { required_secret_names: [] }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  pass(
+    results,
+    'oauth_execution_blocks_missing_secret_names',
+    execMissingSecrets.verdict === VERDICT_FOUNDER_RUN_BLOCKED &&
+      execMissingSecrets.failed.includes('required_secret_names_present')
+  );
+
+  const execCallback = await evaluateReadiness(
+    oauthExecutionPacket(secretFile, tunnelAssets, {
+      callback_or_redirect_actual: 'https://example.invalid/oauth/callback',
+    }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  pass(
+    results,
+    'oauth_execution_blocks_callback_mismatch',
+    execCallback.verdict === VERDICT_FOUNDER_RUN_BLOCKED && execCallback.failed.includes('callback_or_redirect_match')
+  );
+  const execAbsentCallback = await evaluateReadiness(
+    oauthExecutionPacket(secretFile, tunnelAssets, { callback_or_redirect_actual: '' }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  pass(
+    results,
+    'oauth_execution_blocks_absent_callback',
+    execAbsentCallback.verdict === VERDICT_FOUNDER_RUN_BLOCKED &&
+      execAbsentCallback.failed.includes('callback_or_redirect_match')
+  );
+
+  const execMissingTunnel = await evaluateReadiness(
+    oauthExecutionPacket(secretFile, tunnelAssets, {
       tunnel: {
         required: true,
-        class: 'cloudflare_named',
-        stable_hostname: 'oauth-diagnostics.bhfos.com',
-        public_redirect_uri: 'https://oauth-diagnostics.bhfos.com/oauth/callback',
+        class: EXPECTED_TUNNEL_CLASS,
+        stable_hostname: EXPECTED_TUNNEL_HOSTNAME,
+        public_redirect_uri: EXPECTED_PUBLIC_CALLBACK,
         local_listener_uri: 'http://127.0.0.1:8765/oauth/callback',
-        credentials_path: tunnelCreds,
-        executable_path: tunnelExe,
-        config_path: tunnelConfig,
         path_only_config_attested: true,
         catch_all_deny_attested: true,
-        start_command: 'cloudflared tunnel --config <outside> run',
-        stop_command: 'helper stop()',
-        closure_verification_command: 'GET public callback fail-closed after stop',
+        start_command: 'cloudflared tunnel run',
+        stop_command: 'stop',
+        closure_verification_command: 'closure verify',
         stop_after_run_and_closure_procedure_present: true,
       },
     }),
@@ -277,8 +521,157 @@ export async function runSelfTests() {
   );
   pass(
     results,
+    'oauth_execution_blocks_missing_tunnel_assets',
+    execMissingTunnel.verdict === VERDICT_FOUNDER_RUN_BLOCKED &&
+      (execMissingTunnel.failed.includes('tunnel_credentials_outside_repo') ||
+        execMissingTunnel.failed.includes('tunnel_config_present') ||
+        execMissingTunnel.failed.includes('tunnel_executable_present'))
+  );
+
+  const execAttest = await evaluateReadiness(
+    oauthExecutionPacket(secretFile, tunnelAssets, {
+      tunnel: {
+        required: true,
+        class: EXPECTED_TUNNEL_CLASS,
+        stable_hostname: EXPECTED_TUNNEL_HOSTNAME,
+        public_redirect_uri: EXPECTED_PUBLIC_CALLBACK,
+        local_listener_uri: 'http://127.0.0.1:8765/oauth/callback',
+        credentials_path: tunnelCreds,
+        executable_path: tunnelExe,
+        config_path: tunnelConfig,
+        path_only_config_attested: false,
+        catch_all_deny_attested: false,
+        start_command: 'cloudflared tunnel run',
+        stop_command: 'stop',
+        closure_verification_command: 'closure verify',
+        stop_after_run_and_closure_procedure_present: true,
+      },
+    }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  pass(
+    results,
+    'oauth_execution_blocks_missing_attestations',
+    execAttest.verdict === VERDICT_FOUNDER_RUN_BLOCKED &&
+      (execAttest.failed.includes('tunnel_path_only_attested') ||
+        execAttest.failed.includes('tunnel_catch_all_deny_attested'))
+  );
+
+  const execAg = await evaluateReadiness(
+    oauthExecutionPacket(secretFile, tunnelAssets, {
+      architecture_guard_approval: {
+        applies_to_execution_design: true,
+        head_sha: 'd'.repeat(40),
+        verdict: 'APPROVE_FOR_INDEPENDENT_UAT',
+      },
+    }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  pass(
+    results,
+    'oauth_execution_blocks_ag_sha_mismatch',
+    execAg.verdict === VERDICT_FOUNDER_RUN_BLOCKED && execAg.failed.includes('architecture_guard_execution_design')
+  );
+
+  // 5. Designated campaign path is authoritative; LOCALAPPDATA is not accepted as campaign store
+  pass(results, 'designated_campaign_root_helper', isDesignatedCampaignRoot(DESIGNATED_CAMPAIGN_ROOT));
+  pass(
+    results,
+    'localappdata_helper_detects_historical_store',
+    isHistoricalLocalAppDataCampaignStore('%LOCALAPPDATA%\\BHFOS\\production-diagnostics')
+  );
+  const localAppDataPacket = await evaluateReadiness(
+    preProvisioningPacket({
+      designated_campaign_root: '%LOCALAPPDATA%\\BHFOS\\production-diagnostics',
+      designated_external_paths: {
+        secret_store: '%LOCALAPPDATA%\\BHFOS\\production-diagnostics\\diagnostics.env',
+      },
+    }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  pass(
+    results,
+    'localappdata_not_accepted_as_campaign_store',
+    localAppDataPacket.verdict === VERDICT_FOUNDER_RUN_BLOCKED &&
+      (localAppDataPacket.failed.includes('designated_campaign_root') ||
+        localAppDataPacket.failed.includes('localappdata_not_campaign_store'))
+  );
+  pass(
+    results,
+    'designated_campaign_path_authoritative',
+    preReady.checks.some((c) => c.id === 'designated_campaign_root' && c.ok) &&
+      preReady.checks.some((c) => c.id === 'localappdata_not_campaign_store' && c.ok)
+  );
+
+  // 6–8. Scopes, project ref, OAuth app name remain locked
+  pass(results, 'scopes_helper_exact_only', oauthScopesExact(['projects:read', 'database:read']));
+  pass(results, 'scopes_helper_rejects_extra', !oauthScopesExact(['projects:read', 'database:read', 'secrets:read']));
+  const badScopes = await evaluateReadiness(
+    preProvisioningPacket({ oauth_scopes: ['projects:read'] }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  pass(
+    results,
+    'scopes_remain_projects_read_database_read_only',
+    badScopes.verdict === VERDICT_FOUNDER_RUN_BLOCKED && badScopes.failed.includes('oauth_scopes_exact')
+  );
+  const execBroaderScopes = await evaluateReadiness(
+    oauthExecutionPacket(secretFile, tunnelAssets, {
+      oauth_scopes: ['projects:read', 'database:read', 'secrets:read'],
+    }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  const execAmbiguousScopes = await evaluateReadiness(
+    oauthExecutionPacket(secretFile, tunnelAssets, {
+      oauth_scopes: ['projects.read', 'database:read'],
+    }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  pass(
+    results,
+    'oauth_execution_blocks_broader_or_ambiguous_scopes',
+    execBroaderScopes.verdict === VERDICT_FOUNDER_RUN_BLOCKED &&
+      execBroaderScopes.failed.includes('oauth_scopes_exact') &&
+      execAmbiguousScopes.verdict === VERDICT_FOUNDER_RUN_BLOCKED &&
+      execAmbiguousScopes.failed.includes('oauth_scopes_exact')
+  );
+  const badRef = await evaluateReadiness(preProvisioningPacket({ project_ref: 'not-the-locked-ref' }), {
+    repoRoot,
+    allowFixtureSkip: true,
+  });
+  pass(
+    results,
+    'project_ref_remains_locked',
+    badRef.verdict === VERDICT_FOUNDER_RUN_BLOCKED && badRef.failed.includes('project_ref_locked')
+  );
+  const badApp = await evaluateReadiness(preProvisioningPacket({ oauth_app_name: 'BHFOS Diagnostics' }), {
+    repoRoot,
+    allowFixtureSkip: true,
+  });
+  pass(
+    results,
+    'oauth_app_name_remains_locked',
+    badApp.verdict === VERDICT_FOUNDER_RUN_BLOCKED && badApp.failed.includes('oauth_app_name_exact')
+  );
+
+  // oauth_execution happy path — gate not weakened when all execution fields pass
+  const happy = await evaluateReadiness(
+    oauthExecutionPacket(secretFile, tunnelAssets, {
+      required_dependencies: [{ kind: 'file', path: path.join(repoRoot, 'tools/founder-run-readiness.mjs') }],
+    }),
+    { repoRoot, allowFixtureSkip: true }
+  );
+  pass(results, 'ready_when_all_fields_pass', happy.verdict === VERDICT_FOUNDER_RUN_READY, happy.failed.join(','));
+  pass(results, 'ready_includes_credential_field', happy.checks.some((c) => c.id === 'no_credential_file_in_repo' && c.ok));
+
+  const tunnelReady = await evaluateReadiness(oauthExecutionPacket(secretFile, tunnelAssets), {
+    repoRoot,
+    allowFixtureSkip: true,
+  });
+  pass(
+    results,
     'tunnel_packet_ready',
-    tunnelReady.verdict === 'FOUNDER_RUN_READY',
+    tunnelReady.verdict === VERDICT_FOUNDER_RUN_READY,
     tunnelReady.failed.join(',')
   );
 

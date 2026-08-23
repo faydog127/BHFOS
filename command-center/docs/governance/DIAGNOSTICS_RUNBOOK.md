@@ -40,6 +40,18 @@ limited to local adapter denial tests, static allowlist/route proof,
 grants/permission metadata, and post-revocation denial on an approved read
 endpoint. Do not send a production write request even when denial is expected.
 
+The authoritative campaign evidence root is
+`F:\BHFOS-Diagnostics\NOS-I2-S1-EVIDENCE-01`. Older
+`%LOCALAPPDATA%\BHFOS\production-diagnostics` paths are historical / generic
+only and are not accepted as the campaign store. Do not inspect, migrate, copy,
+or reuse non-designated secret or tunnel material.
+
+Hosted metadata collection for this campaign waits for
+`readiness_stage=oauth_execution` ending exactly `FOUNDER_RUN_READY`. A
+`pre_provisioning` success (`FOUNDER_PROVISIONING_ACTION_AUTHORIZED`) authorizes
+only the one bounded Dashboard OAuth-app create/update action. It is not
+authorization for OAuth consent, tunnel start, or hosted calls.
+
 ---
 
 ## 3. Investigation sequence (read-only)

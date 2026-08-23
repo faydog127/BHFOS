@@ -1,4 +1,5 @@
 {
+  "readiness_stage": "pre_provisioning",
   "task_and_authorization_boundary": "Exact authorized task and what is out of scope",
   "exact_repository": "https://github.com/faydog127/BHFOS",
   "exact_worktree_path": "F:/Dev/BHFOS-<theme>",
@@ -8,9 +9,31 @@
   "required_files": [
     "command-center/tools/<file>"
   ],
-  "external_secret_store_path": "C:/path/outside/repo/secrets.env",
+  "oauth_app_name": "BHFOS I2 Diagnostics",
+  "oauth_scopes": ["projects:read", "database:read"],
+  "project_ref": "wwyxohjnyqnegzbxtuxs",
+  "oauth_app_verified": false,
+  "designated_campaign_root": "F:\\BHFOS-Diagnostics\\NOS-I2-S1-EVIDENCE-01",
+  "designated_external_paths": {
+    "secret_store": "F:\\BHFOS-Diagnostics\\NOS-I2-S1-EVIDENCE-01\\secrets\\diagnostics.env",
+    "tunnel_credentials": "F:\\BHFOS-Diagnostics\\NOS-I2-S1-EVIDENCE-01\\tunnel\\<credentials>.json",
+    "tunnel_config": "F:\\BHFOS-Diagnostics\\NOS-I2-S1-EVIDENCE-01\\tunnel\\oauth-tunnel-config.yml"
+  },
+  "designated_acls": [
+    "secret_store: Founder-only write; Diagnostics helper read; names only",
+    "tunnel_credentials: Founder-owned named-tunnel class; never in repo",
+    "tunnel_config: path-only /oauth/callback + catch-all deny"
+  ],
+  "prohibited_actions": [
+    "OAuth consent",
+    "tunnel start",
+    "hosted metadata collection",
+    "authorization URL construction"
+  ],
+  "external_secret_store_path": "F:/BHFOS-Diagnostics/NOS-I2-S1-EVIDENCE-01/secrets/diagnostics.env",
   "required_secret_names": [
-    "EXAMPLE_SECRET_NAME"
+    "I2_SUPABASE_OAUTH_CLIENT_ID",
+    "SUPABASE_DIAGNOSTICS_PROJECT_REF"
   ],
   "callback_or_redirect_expected": "https://oauth-diagnostics.bhfos.com/oauth/callback",
   "callback_or_redirect_actual": "https://oauth-diagnostics.bhfos.com/oauth/callback",
@@ -27,9 +50,9 @@
     "stable_hostname": "oauth-diagnostics.bhfos.com",
     "public_redirect_uri": "https://oauth-diagnostics.bhfos.com/oauth/callback",
     "local_listener_uri": "http://127.0.0.1:8765/oauth/callback",
-    "credentials_path": "C:/Users/<founder>/AppData/Local/BHFOS/production-diagnostics/tunnel/<credentials>.json",
+    "credentials_path": "F:/BHFOS-Diagnostics/NOS-I2-S1-EVIDENCE-01/tunnel/<credentials>.json",
     "executable_path": "C:/Program Files/cloudflared/cloudflared.exe",
-    "config_path": "C:/Users/<founder>/AppData/Local/BHFOS/production-diagnostics/tunnel/oauth-tunnel-config.yml",
+    "config_path": "F:/BHFOS-Diagnostics/NOS-I2-S1-EVIDENCE-01/tunnel/oauth-tunnel-config.yml",
     "path_only_config_attested": true,
     "catch_all_deny_attested": true,
     "start_command": "cloudflared tunnel --config <outside-repo-config> run",
