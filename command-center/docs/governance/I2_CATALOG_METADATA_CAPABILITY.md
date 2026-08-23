@@ -23,6 +23,17 @@ and without arbitrary SQL.
 
 See `catalog-ops.mjs` / CLI `catalog <op> …`.
 
+Slice 1 campaign (`NOS-I2-S1-EVIDENCE-01`) dependency-metadata (Stage A):
+
+```bash
+node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_object_dependencies --schema=public --table=organizations
+```
+
+- Input: `schema=public` plus one approved Slice 1 relation (`organizations`, `accounts`, `contacts`, `properties`, `leads`, `services_catalog`, `price_book`, `events`, `crm_tasks`, `app_user_roles`, `tenants`).
+- Output after sanitization: `dependency_identity` and `dependency_type` only.
+- Direct public catalog dependencies of that relation may appear as identity+type rows. No definitions, OIDs, or business-table rows.
+- Unknown operations, unexpected parameters, non-public schemas, and non-Slice-1 tables fail closed.
+
 Aggregate uniqueness precheck (S2 apply gate):
 
 ```bash

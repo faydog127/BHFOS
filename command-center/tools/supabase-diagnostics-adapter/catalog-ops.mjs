@@ -11,6 +11,49 @@ export const READ_ONLY_QUERY_PATH_SUFFIX = '/database/query/read-only';
 export const ALLOWED_SCHEMAS = Object.freeze(['public']);
 
 /**
+ * Approved public Slice 1 candidate relations for dependency-metadata only.
+ * Direct dependencies may appear in sanitized output; they are not query inputs.
+ */
+export const APPROVED_SLICE1_RELATIONS = Object.freeze([
+  'organizations',
+  'accounts',
+  'contacts',
+  'properties',
+  'leads',
+  'services_catalog',
+  'price_book',
+  'events',
+  'crm_tasks',
+  'app_user_roles',
+  'tenants',
+]);
+
+/** Permitted sanitized dependency-metadata output keys (identity + type only). */
+export const DEPENDENCY_METADATA_KEYS = Object.freeze([
+  'dependency_identity',
+  'dependency_type',
+]);
+
+/** Fail-closed dependency type labels returned by catalog_object_dependencies. */
+export const DEPENDENCY_TYPES = Object.freeze([
+  'table',
+  'partitioned_table',
+  'view',
+  'materialized_view',
+  'index',
+  'sequence',
+  'relation',
+  'function',
+  'trigger',
+  'foreign_key',
+  'primary_key',
+  'unique_constraint',
+  'check_constraint',
+  'constraint',
+  'policy',
+]);
+
+/**
  * @param {string} value
  * @param {string} label
  */
@@ -31,6 +74,17 @@ export function assertAllowedSchema(schema) {
     throw new Error(`DENY: schema "${s}" not in allowlist (${ALLOWED_SCHEMAS.join(', ')})`);
   }
   return s;
+}
+
+/**
+ * @param {string} table
+ */
+export function assertApprovedSlice1Relation(table) {
+  const t = assertSafeIdent(table, 'table');
+  if (!APPROVED_SLICE1_RELATIONS.includes(t)) {
+    throw new Error(`DENY: table "${t}" is not an approved public Slice 1 object`);
+  }
+  return t;
 }
 
 /**
@@ -256,6 +310,117 @@ FROM (
 ) grp;
 `.trim(),
   },
+
+  /**
+   * Slice 1 I2 Stage A — fixed dependency-metadata only.
+   * Returns object identity + dependency type. No definitions, no row data.
+   * Query input is an approved public Slice 1 relation; output may include
+   * that relation and its direct public catalog dependencies.
+   */
+  catalog_object_dependencies: {
+    id: 'catalog_object_dependencies',
+    description:
+      'Direct dependency object identity and type for an approved public Slice 1 relation (no row data)',
+    params: ['schema', 'table'],
+    buildSql: ({ schema, table }) => `
+SELECT DISTINCT
+  n.nspname AS object_schema,
+  cls.relname AS object_name,
+  CASE cls.relkind
+    WHEN 'r' THEN 'table'
+    WHEN 'p' THEN 'partitioned_table'
+    WHEN 'v' THEN 'view'
+    WHEN 'm' THEN 'materialized_view'
+    WHEN 'i' THEN 'index'
+    WHEN 'S' THEN 'sequence'
+    ELSE 'relation'
+  END AS dependency_type
+FROM pg_catalog.pg_class src
+JOIN pg_catalog.pg_namespace srcn ON srcn.oid = src.relnamespace
+JOIN pg_catalog.pg_depend d ON d.refobjid = src.oid OR d.objid = src.oid
+JOIN pg_catalog.pg_class cls ON cls.oid = CASE
+  WHEN d.refobjid = src.oid THEN d.objid
+  ELSE d.refobjid
+END
+JOIN pg_catalog.pg_namespace n ON n.oid = cls.relnamespace
+WHERE srcn.nspname = '${schema}'
+  AND src.relname = '${table}'
+  AND src.relkind IN ('r','p','v','m')
+  AND n.nspname = 'public'
+  AND cls.relname IS NOT NULL
+UNION
+SELECT
+  n.nspname,
+  p.proname,
+  'function'
+FROM pg_catalog.pg_class src
+JOIN pg_catalog.pg_namespace srcn ON srcn.oid = src.relnamespace
+JOIN pg_catalog.pg_depend d ON d.refobjid = src.oid
+JOIN pg_catalog.pg_proc p ON p.oid = d.objid
+JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE srcn.nspname = '${schema}'
+  AND src.relname = '${table}'
+  AND src.relkind IN ('r','p','v','m')
+  AND n.nspname = 'public'
+UNION
+SELECT
+  srcn.nspname,
+  t.tgname,
+  'trigger'
+FROM pg_catalog.pg_class src
+JOIN pg_catalog.pg_namespace srcn ON srcn.oid = src.relnamespace
+JOIN pg_catalog.pg_trigger t ON t.tgrelid = src.oid
+WHERE srcn.nspname = '${schema}'
+  AND src.relname = '${table}'
+  AND src.relkind IN ('r','p','v','m')
+  AND NOT t.tgisinternal
+UNION
+SELECT
+  srcn.nspname,
+  con.conname,
+  CASE con.contype
+    WHEN 'f' THEN 'foreign_key'
+    WHEN 'p' THEN 'primary_key'
+    WHEN 'u' THEN 'unique_constraint'
+    WHEN 'c' THEN 'check_constraint'
+    ELSE 'constraint'
+  END
+FROM pg_catalog.pg_class src
+JOIN pg_catalog.pg_namespace srcn ON srcn.oid = src.relnamespace
+JOIN pg_catalog.pg_constraint con ON con.conrelid = src.oid
+WHERE srcn.nspname = '${schema}'
+  AND src.relname = '${table}'
+  AND src.relkind IN ('r','p','v','m')
+UNION
+SELECT
+  srcn.nspname,
+  pol.polname,
+  'policy'
+FROM pg_catalog.pg_class src
+JOIN pg_catalog.pg_namespace srcn ON srcn.oid = src.relnamespace
+JOIN pg_catalog.pg_policy pol ON pol.polrelid = src.oid
+WHERE srcn.nspname = '${schema}'
+  AND src.relname = '${table}'
+  AND src.relkind IN ('r','p','v','m')
+UNION
+SELECT
+  srcn.nspname,
+  src.relname,
+  CASE src.relkind
+    WHEN 'r' THEN 'table'
+    WHEN 'p' THEN 'partitioned_table'
+    WHEN 'v' THEN 'view'
+    WHEN 'm' THEN 'materialized_view'
+    ELSE 'relation'
+  END
+FROM pg_catalog.pg_class src
+JOIN pg_catalog.pg_namespace srcn ON srcn.oid = src.relnamespace
+WHERE srcn.nspname = '${schema}'
+  AND src.relname = '${table}'
+  AND src.relkind IN ('r','p','v','m')
+ORDER BY 3, 1, 2;
+`.trim(),
+  },
 });
 
 /** Response keys allowed for aggregate uniqueness precheck (fail-closed strip). */
@@ -269,7 +434,44 @@ export const QUOTES_S2_ACTIVE_UNIQUE_AGGREGATE_KEYS = Object.freeze([
  * @param {string} operationId
  * @param {unknown} body
  */
+function sanitizeDependencyIdent(value) {
+  const v = String(value ?? '');
+  if (!/^[a-z_][a-z0-9_]*$/i.test(v) || v.length > 63) {
+    return null;
+  }
+  return v.toLowerCase();
+}
+
+function sanitizeDependencyMetadataBody(body) {
+  if (!Array.isArray(body)) {
+    return [];
+  }
+  const out = [];
+  const seen = new Set();
+  for (const row of body) {
+    if (!row || typeof row !== 'object') continue;
+    const schema = sanitizeDependencyIdent(row.object_schema);
+    const name = sanitizeDependencyIdent(row.object_name);
+    const type = sanitizeDependencyIdent(row.dependency_type);
+    if (!schema || !name || !type) continue;
+    if (schema !== 'public') continue;
+    if (!DEPENDENCY_TYPES.includes(type)) continue;
+    const identity = `${schema}.${name}`;
+    const key = `${identity}\0${type}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      dependency_identity: identity,
+      dependency_type: type,
+    });
+  }
+  return out;
+}
+
 export function sanitizeCatalogResponseBody(operationId, body) {
+  if (operationId === 'catalog_object_dependencies') {
+    return sanitizeDependencyMetadataBody(body);
+  }
   if (operationId !== 'catalog_quotes_s2_active_unique_conflict_counts') {
     return body;
   }
@@ -314,6 +516,8 @@ export function resolveCatalogSql(operationId, rawParams = {}, agentExtras = {})
     }
     if (key === 'schema') {
       params.schema = assertAllowedSchema(String(rawParams[key]));
+    } else if (key === 'table' && operationId === 'catalog_object_dependencies') {
+      params.table = assertApprovedSlice1Relation(String(rawParams[key]));
     } else if (key === 'table' || key === 'name') {
       params[key] = assertSafeIdent(String(rawParams[key]), key);
     } else {

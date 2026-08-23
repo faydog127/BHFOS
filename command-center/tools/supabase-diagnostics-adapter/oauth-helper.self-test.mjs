@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   PRODUCTION_PROJECT_REF,
   SECRET_NAMES,
@@ -241,10 +242,57 @@ export async function runSelfTests() {
       omitted.scopes.length === 0
   );
   const both = assertTokenScopes('projects:read database:read');
+  const bothCsv = assertTokenScopes('projects:read,database:read');
   pass(
     results,
     'allowed_scopes_projects_and_database_read',
-    both.scopes.includes('projects:read') && both.scopes.includes('database:read')
+    both.scopes.includes('projects:read') &&
+      both.scopes.includes('database:read') &&
+      both.omitted === false &&
+      bothCsv.scopes.includes('projects:read') &&
+      bothCsv.scopes.includes('database:read')
+  );
+  try {
+    assertTokenScopes('projects:write');
+    pass(results, 'projects_write_rejected', false);
+  } catch (e) {
+    pass(results, 'projects_write_rejected', e.code === 'UNEXPECTED_SCOPE');
+  }
+  try {
+    assertTokenScopes('projects:read database:read secrets:read');
+    pass(results, 'additional_secrets_scope_rejected', false);
+  } catch (e) {
+    pass(results, 'additional_secrets_scope_rejected', e.code === 'UNEXPECTED_SCOPE');
+  }
+  try {
+    assertTokenScopes('projects:read database:read analytics:read');
+    pass(results, 'additional_analytics_scope_rejected', false);
+  } catch (e) {
+    pass(results, 'additional_analytics_scope_rejected', e.code === 'UNEXPECTED_SCOPE');
+  }
+  try {
+    assertTokenScopes('projects.read database:read');
+    pass(results, 'ambiguous_dot_scope_rejected', false);
+  } catch (e) {
+    pass(results, 'ambiguous_dot_scope_rejected', e.code === 'UNEXPECTED_SCOPE');
+  }
+  try {
+    assertTokenScopes('PROJECTS:READ database:read');
+    pass(results, 'ambiguous_case_scope_rejected', false);
+  } catch (e) {
+    pass(results, 'ambiguous_case_scope_rejected', e.code === 'UNEXPECTED_SCOPE');
+  }
+  try {
+    assertTokenScopes('projects_read database_read');
+    pass(results, 'ambiguous_fga_label_scope_rejected', false);
+  } catch (e) {
+    pass(results, 'ambiguous_fga_label_scope_rejected', e.code === 'UNEXPECTED_SCOPE');
+  }
+  pass(
+    results,
+    'omitted_scope_requires_dual_attestation',
+    omitted.omitted === true &&
+      /pre-store capability attestation/i.test(String(omitted.reason || ''))
   );
   pass(
     results,
@@ -646,4 +694,13 @@ export async function runSelfTests() {
 
   const failed = results.filter((r) => !r.pass);
   return { ok: failed.length === 0, results, failed };
+}
+
+const isDirect =
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isDirect) {
+  runSelfTests().then((r) => {
+    console.log(JSON.stringify({ ok: r.ok, failed: r.failed.map((f) => f.test) }, null, 2));
+    process.exit(r.ok ? 0 : 1);
+  });
 }
