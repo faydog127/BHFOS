@@ -4,6 +4,7 @@
 **Implementation commit:** `a53ea7866b3e7729a0d7c8e0ab97c4a53a59411b`
 **Ancestry:** `87c69217b11ad612449461b2bee4b4d10a6cfcf2` (PR 141 hop, parked)
 **Base:** `network-os/foundation`
+**Draft PR:** https://github.com/faydog127/BHFOS/pull/142
 **Mission:** NOS-CONVENTION-WRITE-PATH-FOUNDER-GATE-01 v2 Option A
 **Product / R1 / Slice 1 activation:** **None**
 **PR 140 / PR 141:** parked / frozen / not pushed
