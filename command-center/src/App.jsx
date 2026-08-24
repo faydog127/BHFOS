@@ -69,6 +69,9 @@ const MediaQualityCleanup = React.lazy(() => import('@/pages/crm/media/MediaQual
 const MediaSettings = React.lazy(() => import('@/pages/crm/media/MediaSettings'));
 const CreatorRoutesPage = React.lazy(() => import('@/pages/creator/CreatorRoutes'));
 const TechRoutesPage = React.lazy(() => import('@/pages/tech/TechRoutes'));
+const NetworkOsConventionRoutes = React.lazy(() =>
+  import('@/pages/networkOs/convention/ConventionRoutes')
+);
 
 // Sub-module Lazy Loads
 const InvoiceBuilder = React.lazy(() => import('@/pages/crm/InvoiceBuilder'));
@@ -505,6 +508,17 @@ function App() {
                 </Suspense>
               </RouteErrorBoundary>
             </TenantGuard>
+          }
+        />
+        {/* Network OS convention demo — session-scoped; no tenant segment. */}
+        <Route
+          path="/network-os/convention/*"
+          element={
+            <RouteErrorBoundary>
+              <Suspense fallback={<LoadingFallback />}>
+                <NetworkOsConventionRoutes />
+              </Suspense>
+            </RouteErrorBoundary>
           }
         />
         {/* MIL product routes — single-company; no tenant segment. */}
