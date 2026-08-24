@@ -10,6 +10,7 @@
 | Branch | `network-os/i2-s1-stage-c-aggregates` |
 | Base / parent SHA | `f5f0a14f004bb20be7ed1b069c67b16d832d6421` (`network-os/foundation`) |
 | Prior Stage C SHA | `146839bbc50ad4a4517f2c51ae0b11d811d6f0d2` |
+| Completeness SHA | `5fdfa44ed0d93b24f055786458bd83d8af4d6605` |
 | Draft PR | https://github.com/faydog127/BHFOS/pull/138 |
 | Role | Builder (diagnostics control-plane only) |
 | Evidence classification | LOCAL CONTROL-PLANE VERIFIED; NO HOSTED ACCESS |
@@ -329,4 +330,12 @@ Omissions are justified as missing Stage B capability, not as optional polish.
 
 ### 10.4 Completeness tests
 
-Same local suite as §8. Results recorded after execution (no hosted calls).
+Same local suite as §8. Results (locally verified; no hosted calls):
+
+- `cli.mjs --self-test`: PASS (`ok: true`, `failed: []`; catalog ops registered = 112)
+- `catalog.self-test.mjs`: PASS (`ok: true`, `failed: []`)
+- `oauth-authorize.mjs --self-test`: PASS
+- `oauth-tunnel.self-test.mjs`: PASS
+- `oauth-launcher-preflight.self-test.mjs`: PASS
+- `founder-run-readiness.mjs --self-test`: PASS
+- `git diff --check`: PASS
