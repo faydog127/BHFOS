@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useConventionWorkspace } from './ConventionDemoLayout';
 import {
   ConventionBanner,
@@ -7,6 +7,8 @@ import {
   demoRecordLabel,
 } from './conventionUi';
 import { DEMO_WRITE_ISOLATION_BLOCKED } from '@/lib/networkOs/conventionDemoPolicy';
+import { CONVENTION_QR_PATH } from '@/lib/networkOs/conventionIntakePolicy';
+import { buildConventionQrDataUrl } from '@/lib/networkOs/conventionQr';
 
 function Section({ title, error, rows, empty, children }) {
   return (
@@ -48,6 +50,24 @@ function RecordTable({ headers, rows, renderRow }) {
 
 export function ConventionAttentionPage() {
   const { workspace } = useConventionWorkspace();
+  const [qrUrl, setQrUrl] = useState('');
+  const qrTarget =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}${CONVENTION_QR_PATH}`
+      : CONVENTION_QR_PATH;
+
+  useEffect(() => {
+    let mounted = true;
+    buildConventionQrDataUrl(
+      typeof window !== 'undefined' ? window.location.origin : '',
+    ).then((url) => {
+      if (mounted) setQrUrl(url);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const counts = [
     { label: 'Service needs', value: workspace.leads.rows.length },
     { label: 'Contacts', value: workspace.contacts.rows.length },
@@ -68,6 +88,21 @@ export function ConventionAttentionPage() {
           session scope.
         </p>
       </div>
+      <section className="flex flex-col gap-3 border border-slate-200 bg-white p-4 sm:flex-row sm:items-center">
+        {qrUrl ? (
+          <img src={qrUrl} alt="Convention provider-interest QR code" className="h-40 w-40" />
+        ) : (
+          <div className="h-40 w-40 bg-slate-100" />
+        )}
+        <div className="text-sm text-slate-600">
+          <p className="font-medium text-slate-900">QR destination</p>
+          <p className="break-all">{qrTarget}</p>
+          <p className="mt-2">
+            Public join collects interest only. Persistence stays blocked until an
+            isolated intake object and RLS are proven.
+          </p>
+        </div>
+      </section>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {counts.map((item) => (
           <div key={item.label} className="border border-slate-200 bg-white px-3 py-3">

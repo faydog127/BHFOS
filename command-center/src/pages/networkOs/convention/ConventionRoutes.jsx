@@ -8,6 +8,7 @@ import {
   ConventionContactsPage,
   ConventionNeedsPage,
 } from './ConventionScreens';
+import ConventionIntakeQueuePage from './ConventionIntakeQueuePage';
 
 export default function ConventionRoutes() {
   return (
@@ -18,6 +19,7 @@ export default function ConventionRoutes() {
           <Route path="needs" element={<ConventionNeedsPage />} />
           <Route path="contacts" element={<ConventionContactsPage />} />
           <Route path="catalog" element={<ConventionCatalogPage />} />
+          <Route path="intake" element={<ConventionIntakeQueuePage />} />
           <Route path="*" element={<Navigate to="/network-os/convention" replace />} />
         </Route>
       </Routes>

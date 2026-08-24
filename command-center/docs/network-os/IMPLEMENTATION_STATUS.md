@@ -1,62 +1,74 @@
 # Network OS — Implementation Status
 
-**Branch:** `network-os/convention-demo-fast-lane`  
-**Implementation HEAD:** `6f01afaf0a6fdad1e0c34be61ede89043c46c490`  
-**Parent / base:** `326e7a2941b9333f341716fff199d6ef6c913b53` (`network-os/foundation`)  
-**Draft PR:** https://github.com/faydog127/BHFOS/pull/141  
-**Mission:** `NOS-CONVENTION-DEMO-BUILDER-01` Fast Convention Lane  
+**Branch:** `network-os/convention-demo-fast-lane`
+**Status edit parent:** `28fe3897ee32f93a7eea3250fb67a4bd915b733b`
+**Base:** `326e7a2941b9333f341716fff199d6ef6c913b53` (`network-os/foundation`)
+**Draft PR:** https://github.com/faydog127/BHFOS/pull/141
+**Mission:** QR-to-onboarding hop on Fast Convention Lane
 **Product / R1 / Slice 1 activation:** **None**
+**PR 140:** frozen / not touched
 
-## Convention demo workflow (2026-08-24) — locally verified
+## Convention QR intake (2026-08-24) — WRITE PATH BLOCKED
+
+Command Center chose the QR-to-onboarding hop. The public destination, form contract, queue shell, and deterministic QR artifact are present. **Persistence is fail-closed.** Existing objects cannot isolate a public write from customer/partner operational records.
 
 | Field | Value |
 |---|---|
-| User workflow | Sign in → `/network-os/convention` attention shell → Service needs → Contacts → Catalog |
-| Data | Session tenant + query-level `is_test_data=true` on `leads` / `contacts`; related `organizations` / `accounts` / `properties` by those IDs only; `services_catalog` active rows; `crm_tasks` / `events` only when linked to loaded test IDs |
-| Writes | App-level insert/update returns `DEMO_WRITE_ISOLATION_BLOCKED` unless isolated demo tenant **and** `rlsEffectiveProven` |
-| Isolation proof | **Not proven on hosted.** No isolated demo tenant is declared. Hosted RLS is unproven except source-present leads JWT policies. Customer scopes (`tvg`, `default`, …) cannot authorize writes |
-| Evidence tier | **locally verified** (unit tests, lint, local build, identity guards). Automatic Vercel preview created. Not staging-verified, not production-verified, not merged |
+| QR target | `/network-os/convention/join` |
+| Form | name, company, email, phone, trades/services, service area, consent, honeypot |
+| Persistence | Never inserts/updates/selects `leads`, `contacts`, `partner_prospects`, `submissions`, or `events` |
+| Queue | `/network-os/convention/intake` — authenticated shell; grant unproven so rows stay empty |
+| Confirmation | `/network-os/convention/join/thanks` — no internal identifiers, no echoed PII |
+| Evidence tier | **locally verified** fail-closed tests. Not hosted-written, not deployed as command-center, not merged |
 
-## Database objects used (existing schema only)
+## Object / field mapping (not persisted)
 
-| Object | Operation | Scope |
+| Form field | Intended map | Why unused |
 |---|---|---|
-| `leads` | SELECT | `tenant_id` = session, `is_test_data` = true |
-| `contacts` | SELECT | `tenant_id` = session, `is_test_data` = true |
-| `organizations` | SELECT | `id` IN demo contact organization IDs |
-| `accounts` | SELECT | `id` IN demo IDs AND `is_test_data` = true |
-| `properties` | SELECT | `id` IN demo contact/lead property IDs; no address columns |
-| `services_catalog` | SELECT | `is_active` = true (`tenant_id` unproven on hosted) |
-| `crm_tasks` | SELECT | `tenant_id` = session AND `lead_id` IN demo IDs |
-| `events` | SELECT | `tenant_id` = session AND `entity_id` IN demo IDs; no `payload` |
-| `leads` insert/update | gated | Never called unless write gate passes |
+| name | `leads.first_name` / `partner_prospects` name | Customer or unscoped partner write |
+| company | `leads.company` | Customer-bearing `leads` |
+| email / phone | `leads.email` / `leads.phone` | PII into customer tenant |
+| trades | no proven allowlisted column | Would require guessed JSON/text |
+| service_area | no proven column | Not in Stage C lead/contact manifest as a safe write |
+| consent | `leads.consent_marketing` (boolean exists) | Still a customer-lead write |
+| source | `convention_qr` | Mapped in memory only |
+| status | `provider_interest_received` | Mapped in memory only |
 
-No SQL, DDL, migrations, or schema changes.
+## Exact missing schema / policy requirements
 
-## Local verification (this lane)
+1. **isolated_intake_object** — dedicated convention-intake relation or proven non-customer tenant. Not `leads`, `contacts`, `partner_prospects`, `submissions`, or `events`.
+2. **hosted_rls_public_read_deny** — hosted proof that anon/PUBLIC cannot SELECT intake or customer rows.
+3. **hosted_rls_public_table_write_deny** — hosted proof that anon cannot INSERT/UPDATE/DELETE those tables.
+4. **server_write_owner** — server function with field allowlist, no PII logs, no browser service_role, no write into customer `leads`/`contacts` or unscoped `partner_prospects`. Existing `leads/index.ts` logs full payloads and writes customer leads. `lead-intake` is not present in this functions tree.
+5. **duplicate_key** — proven unique key that does not require anonymous customer-table reads.
+6. **bhis_queue_grant** — proven BHIS intake-queue grant. `app_user_roles` tenant/RLS is unproven; unscoped fallback is prohibited.
 
-| Check | Result |
-|---|---|
-| `npm run test:network-os-convention` | 15 pass |
-| `npm run test:ml-p1-s1-helpers` | 15 pass |
-| `npm run test:identity-helpers` | 8 pass |
-| `npm run guard:identity` | PASSED (571 files) |
-| `npx eslint` on convention files | 0 errors |
-| `npm run lint` | 0 errors; 25 pre-existing warnings, none in convention files |
-| `npm run build:local` | pass; emits `ConventionRoutes-7c0f9d81.js` |
-| `git diff --check` | clean |
-| `npm run test:supabase-oauth-helper` | ok |
-| `npm run test:founder-run-readiness` | self-tests pass |
-| Hosted RLS negative test | **not run** — no isolated demo tenant / hosted proof |
+## Isolation evidence
 
-## Remaining blockers
+- Valid synthetic submit never calls `supabase.from`.
+- Anon queue read denied.
+- Authenticated session without a proven BHIS grant denied; no table query.
+- Customer scopes cannot authorize this write even if demo-write env flags are set.
+- Client intake sources contain no `service_role` and do not log email/phone payloads.
 
-- Isolated demo tenant is not independently proven
-- Effective hosted RLS is not independently proven for this lane
-- Writes remain `DEMO_WRITE_ISOLATION_BLOCKED`
-- Release 1 / Slice 1 remains inactive
-- Browser USABLE walkthrough of the preview is not claimed here
+## Residual risks
+
+- Automatic Vercel preview is Website/bhfos-site, not command-center.
+- Hosted RLS remains unproven.
+- Process-local duplicate/rate-limit maps are not durable (acceptable because nothing is stored).
+- Public form still accepts input in the browser; it must not be connected to a live writer without the missing proofs.
+
+## Deployment requirements (not authorized here)
+
+- Isolated intake object + hosted RLS proof
+- Server function deploy without PII logging
+- Command-center preview/host (not the marketing Vercel project)
+- No R1/S1 activation implied
+
+## Exact-head Guard assignment
+
+After this commit is published, assign Architecture/Contract Guard to draft PR #141 at the published HEAD. Review the fail-closed QR hop and the six missing requirements. Do not merge. Do not treat a marketing Vercel URL as the convention app. PR 140 stays frozen.
 
 ## Exact next action
 
-Architecture/Contract Guard review of draft PR #141. Do not merge, deploy production, or activate R1/S1 from this status.
+Guard review of draft PR #141. Founder is not required for this correction. No merge, hosted write, deploy, or R1/S1 activation.

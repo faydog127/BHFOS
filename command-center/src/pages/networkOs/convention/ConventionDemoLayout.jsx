@@ -31,6 +31,7 @@ const NAV = [
   { to: '/network-os/convention/needs', label: 'Service needs' },
   { to: '/network-os/convention/contacts', label: 'Contacts' },
   { to: '/network-os/convention/catalog', label: 'Catalog' },
+  { to: '/network-os/convention/intake', label: 'Intake' },
 ];
 
 export default function ConventionDemoLayout() {

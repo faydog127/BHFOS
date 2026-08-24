@@ -72,6 +72,9 @@ const TechRoutesPage = React.lazy(() => import('@/pages/tech/TechRoutes'));
 const NetworkOsConventionRoutes = React.lazy(() =>
   import('@/pages/networkOs/convention/ConventionRoutes')
 );
+const NetworkOsConventionJoinRoutes = React.lazy(() =>
+  import('@/pages/networkOs/convention/ConventionJoinRoutes')
+);
 
 // Sub-module Lazy Loads
 const InvoiceBuilder = React.lazy(() => import('@/pages/crm/InvoiceBuilder'));
@@ -508,6 +511,17 @@ function App() {
                 </Suspense>
               </RouteErrorBoundary>
             </TenantGuard>
+          }
+        />
+        {/* Public convention QR destination — no session and no table reads. */}
+        <Route
+          path="/network-os/convention/join/*"
+          element={
+            <RouteErrorBoundary>
+              <Suspense fallback={<LoadingFallback />}>
+                <NetworkOsConventionJoinRoutes />
+              </Suspense>
+            </RouteErrorBoundary>
           }
         />
         {/* Network OS convention demo — session-scoped; no tenant segment. */}
