@@ -22,7 +22,8 @@ is exactly f5f0a14f004bb20be7ed1b069c67b16d832d6421. Implementation commit:
 Draft PR: https://github.com/faydog127/BHFOS/pull/138
 (do not mark ready; do not merge).
 Control-plane release: NOS-I2-S1-EVIDENCE-01
-Action ID: NOS-I2-S1-STAGE-C-AGGREGATES-01
+Action IDs: NOS-I2-S1-STAGE-C-AGGREGATES-01 and
+NOS-I2-S1-STAGE-C-COMPLETENESS-01
 Decision packet: command-center/docs/governance/decisions/NOS_R1_S1_I2_CAPABILITY_AND_AGGREGATE_TEMPLATE_DECISION_PACKET.md
 Stage C evidence: command-center/docs/governance/decisions/NOS_I2_S1_STAGE_C_AGGREGATES_EVIDENCE.md
 
@@ -59,7 +60,13 @@ Mandatory focus:
    UUID FKs are not grouping columns. services_catalog has no category
    family; events, crm_tasks, app_user_roles, and tenants have no boolean
    family where the manifest lists none.
-6. No hosted calls, credentials, OAuth, production aggregates, product
+6. Completeness adds packet-quality templates only on Stage B-proven paths
+   (scope_quality tenant_id, required-present on proven NOT NULL text scope
+   columns, duplicate group/row counts for email/phone/slug/code, local FK
+   null-reference counts). Unproven orphan joins, hierarchy joins,
+   catalog/price-book reconciliation, events payload uniques, and missing
+   tenant columns are STAGE_C_METADATA_GAP — do not require guessed templates.
+7. No hosted calls, credentials, OAuth, production aggregates, product
    implementation, migration, deploy, or R1/S1 activation.
 
 Permitted verdicts ONLY:

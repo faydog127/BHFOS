@@ -236,6 +236,125 @@ export const STAGE_C_UNSUPPORTED_FAMILIES = Object.freeze([
   'freeform_predicate',
 ]);
 
+/**
+ * Packet-quality families proven by Stage B column/index evidence only.
+ * Do not add a path that is not listed here.
+ */
+export const STAGE_C_SCOPE_QUALITY = Object.freeze({
+  contacts: Object.freeze({ column: 'tenant_id', nullable: false }),
+  leads: Object.freeze({ column: 'tenant_id', nullable: false }),
+  price_book: Object.freeze({ column: 'tenant_id', nullable: true }),
+  events: Object.freeze({ column: 'tenant_id', nullable: true }),
+  crm_tasks: Object.freeze({ column: 'tenant_id', nullable: true }),
+});
+
+export const STAGE_C_REQUIRED_PRESENT = Object.freeze({
+  contacts: Object.freeze([Object.freeze({ column: 'tenant_id', kind: 'text' })]),
+  leads: Object.freeze([Object.freeze({ column: 'tenant_id', kind: 'text' })]),
+});
+
+export const STAGE_C_DUPLICATE_KEYS = Object.freeze({
+  contacts: Object.freeze([Object.freeze(['email']), Object.freeze(['phone'])]),
+  services_catalog: Object.freeze([Object.freeze(['slug'])]),
+  price_book: Object.freeze([Object.freeze(['code']), Object.freeze(['tenant_id', 'code'])]),
+});
+
+export const STAGE_C_NULL_REFERENCE_COLUMNS = Object.freeze({
+  contacts: Object.freeze([
+    'organization_id',
+    'account_id',
+    'property_id',
+    'lead_id',
+    'management_company_id',
+  ]),
+  properties: Object.freeze(['account_id', 'management_company_id', 'zone_id', 'verified_by']),
+  leads: Object.freeze([
+    'account_id',
+    'property_id',
+    'contact_id',
+    'owner_id',
+    'referrer_id',
+    'referring_partner_id',
+  ]),
+  crm_tasks: Object.freeze(['partner_id']),
+  app_user_roles: Object.freeze(['user_id']),
+  events: Object.freeze(['entity_id', 'actor_id']),
+});
+
+/** Unproven packet paths. Do not invent templates for these. */
+export const STAGE_C_METADATA_GAPS = Object.freeze([
+  Object.freeze({
+    id: 'STAGE_C_METADATA_GAP',
+    gap_id: 'scope_quality_no_tenant_column',
+    family: 'scope_quality',
+    objects: Object.freeze([
+      'organizations',
+      'accounts',
+      'services_catalog',
+      'app_user_roles',
+      'tenants',
+    ]),
+    missing_capability:
+      'Stage B proved no tenant/scope column on these relations. No alternate scope column was identified.',
+  }),
+  Object.freeze({
+    id: 'STAGE_C_METADATA_GAP',
+    gap_id: 'scope_quality_properties_unproven',
+    family: 'scope_quality',
+    objects: Object.freeze(['properties']),
+    missing_capability:
+      'Stage B did not prove a tenant/scope column on properties. Do not guess properties.tenant_id.',
+  }),
+  Object.freeze({
+    id: 'STAGE_C_METADATA_GAP',
+    gap_id: 'fk_target_paths_unproven',
+    family: 'relationship_coverage.orphan_reference',
+    objects: Object.freeze([...APPROVED_SLICE1_RELATIONS]),
+    missing_capability:
+      'catalog_constraints returned empty. Exact FK source-column → target-table.target-column paths are not proven. Orphan-reference counts that require joins are omitted.',
+  }),
+  Object.freeze({
+    id: 'STAGE_C_METADATA_GAP',
+    gap_id: 'hierarchy_join_paths_unproven',
+    family: 'hierarchy_coverage',
+    objects: Object.freeze(['organizations', 'accounts', 'properties', 'contacts', 'leads']),
+    missing_capability:
+      'Local organization/account/property FK columns exist on children, but target join paths are unproven. Joined hierarchy coverage is omitted. Numeric null/non-null on those local FK columns is implemented instead.',
+  }),
+  Object.freeze({
+    id: 'STAGE_C_METADATA_GAP',
+    gap_id: 'catalog_price_book_reconciliation_unproven',
+    family: 'catalog_reconciliation',
+    objects: Object.freeze(['services_catalog', 'price_book']),
+    missing_capability:
+      'Catalog/price-book overlap and missing stable-reference reconciliation require proven join keys. catalog_constraints did not prove those paths.',
+  }),
+  Object.freeze({
+    id: 'STAGE_C_METADATA_GAP',
+    gap_id: 'app_user_roles_tenant_binding_unproven',
+    family: 'identity_scope_integrity',
+    objects: Object.freeze(['app_user_roles']),
+    missing_capability:
+      'app_user_roles has no tenant_id. Tenant-binding and orphan role/tenant reference counts are omitted. user_id is NOT NULL; required-binding is count_all plus null_reference_user_id (expected null_count = 0).',
+  }),
+  Object.freeze({
+    id: 'STAGE_C_METADATA_GAP',
+    gap_id: 'events_payload_expression_uniques',
+    family: 'duplicate_quality',
+    objects: Object.freeze(['events']),
+    missing_capability:
+      'events unique indexes on payload JSON expressions are not typed columns. Using them would risk business literals. Payload unique duplicate counts are omitted.',
+  }),
+  Object.freeze({
+    id: 'STAGE_C_METADATA_GAP',
+    gap_id: 'required_field_nullability_incomplete',
+    family: 'required_field_quality',
+    objects: Object.freeze([...APPROVED_SLICE1_RELATIONS]),
+    missing_capability:
+      'Stage B completeness brief proved is_nullable=NO only for contacts.tenant_id, leads.tenant_id, and app_user_roles.user_id. Other required-present templates are omitted rather than guessed from unique indexes or names.',
+  }),
+]);
+
 export const STAGE_C_COUNT_ALL_KEYS = Object.freeze(['operation_id', 'row_count']);
 export const STAGE_C_COUNT_BY_BOOLEAN_KEYS = Object.freeze([
   'operation_id',
@@ -247,6 +366,28 @@ export const STAGE_C_COUNT_BY_CATEGORY_KEYS = Object.freeze([
   'operation_id',
   'null_or_blank_count',
   'other_count',
+]);
+export const STAGE_C_SCOPE_QUALITY_KEYS = Object.freeze([
+  'operation_id',
+  'null_count',
+  'tvg_count',
+  'default_count',
+  'other_count',
+]);
+export const STAGE_C_REQUIRED_PRESENT_KEYS = Object.freeze([
+  'operation_id',
+  'present_count',
+  'null_or_blank_count',
+]);
+export const STAGE_C_DUPLICATE_KEYS_OUTPUT = Object.freeze([
+  'operation_id',
+  'duplicate_group_count',
+  'duplicate_row_count',
+]);
+export const STAGE_C_NULL_REFERENCE_KEYS = Object.freeze([
+  'operation_id',
+  'null_count',
+  'non_null_count',
 ]);
 
 const STAGE_C_PROHIBITED_CATEGORY_COLUMN =
@@ -387,6 +528,136 @@ WHERE ${buildStageCPresencePredicate(relation, [pk, col])};
 `.trim(),
       };
     }
+
+    const scopeSpec = STAGE_C_SCOPE_QUALITY[relation];
+    if (scopeSpec) {
+      const col = assertSafeIdent(scopeSpec.column, 'column');
+      const colSql = sqlQuotedIdent(col, 'column');
+      const opId = `catalog_${relation}_count_scope_quality_${col}`;
+      ops[opId] = {
+        id: opId,
+        family: 'scope_quality',
+        description: `Stage C aggregate: scope-quality counts for public.${relation}.${col} (numeric only)`,
+        params: [],
+        buildSql: () => `
+SELECT
+  '${opId}' AS operation_id,
+  q.null_count,
+  q.tvg_count,
+  q.default_count,
+  q.other_count
+FROM (
+  SELECT
+    COUNT(*) FILTER (
+      WHERE t.${colSql} IS NULL OR btrim(t.${colSql}::text) = ''
+    )::bigint AS null_count,
+    COUNT(*) FILTER (WHERE t.${colSql} = 'tvg')::bigint AS tvg_count,
+    COUNT(*) FILTER (WHERE t.${colSql} = 'default')::bigint AS default_count,
+    COUNT(*) FILTER (
+      WHERE t.${colSql} IS NOT NULL
+        AND btrim(t.${colSql}::text) <> ''
+        AND t.${colSql} NOT IN ('tvg', 'default')
+    )::bigint AS other_count
+  FROM public.${relSql} t
+) q
+WHERE ${buildStageCPresencePredicate(relation, [pk, col])};
+`.trim(),
+      };
+    }
+
+    for (const required of STAGE_C_REQUIRED_PRESENT[relation] || []) {
+      const col = assertSafeIdent(required.column, 'column');
+      const colSql = sqlQuotedIdent(col, 'column');
+      const opId = `catalog_${relation}_count_required_present_${col}`;
+      const presentPred =
+        required.kind === 'text'
+          ? `t.${colSql} IS NOT NULL AND btrim(t.${colSql}::text) <> ''`
+          : `t.${colSql} IS NOT NULL`;
+      const absentPred =
+        required.kind === 'text'
+          ? `t.${colSql} IS NULL OR btrim(t.${colSql}::text) = ''`
+          : `t.${colSql} IS NULL`;
+      ops[opId] = {
+        id: opId,
+        family: 'required_field_quality',
+        description: `Stage C aggregate: required-present counts for public.${relation}.${col} (numeric only)`,
+        params: [],
+        buildSql: () => `
+SELECT
+  '${opId}' AS operation_id,
+  q.present_count,
+  q.null_or_blank_count
+FROM (
+  SELECT
+    COUNT(*) FILTER (WHERE ${presentPred})::bigint AS present_count,
+    COUNT(*) FILTER (WHERE ${absentPred})::bigint AS null_or_blank_count
+  FROM public.${relSql} t
+) q
+WHERE ${buildStageCPresencePredicate(relation, [pk, col])};
+`.trim(),
+      };
+    }
+
+    for (const keyCols of STAGE_C_DUPLICATE_KEYS[relation] || []) {
+      const cols = keyCols.map((c) => assertSafeIdent(c, 'column'));
+      const colSqls = cols.map((c) => sqlQuotedIdent(c, 'column'));
+      const suffix = cols.join('_');
+      const opId = `catalog_${relation}_count_duplicate_${suffix}`;
+      const groupList = colSqls.map((c) => `t.${c}`).join(', ');
+      const populatedPred = colSqls
+        .map((c) => `t.${c} IS NOT NULL AND btrim(t.${c}::text) <> ''`)
+        .join(' AND ');
+      ops[opId] = {
+        id: opId,
+        family: 'duplicate_quality',
+        description: `Stage C aggregate: duplicate group/row counts for public.${relation} (${cols.join(', ')}) — no key values`,
+        params: [],
+        buildSql: () => `
+SELECT
+  '${opId}' AS operation_id,
+  q.duplicate_group_count,
+  q.duplicate_row_count
+FROM (
+  SELECT
+    COUNT(*)::bigint AS duplicate_group_count,
+    COALESCE(SUM(grp.cnt), 0)::bigint AS duplicate_row_count
+  FROM (
+    SELECT ${groupList}, COUNT(*)::bigint AS cnt
+    FROM public.${relSql} t
+    WHERE ${populatedPred}
+    GROUP BY ${groupList}
+    HAVING COUNT(*) > 1
+  ) grp
+) q
+WHERE ${buildStageCPresencePredicate(relation, [pk, ...cols])};
+`.trim(),
+      };
+    }
+
+    for (const column of STAGE_C_NULL_REFERENCE_COLUMNS[relation] || []) {
+      const col = assertSafeIdent(column, 'column');
+      const colSql = sqlQuotedIdent(col, 'column');
+      const opId = `catalog_${relation}_count_null_reference_${col}`;
+      ops[opId] = {
+        id: opId,
+        family: 'relationship_null_reference',
+        description: `Stage C aggregate: local null-reference counts for public.${relation}.${col} (numeric only; no join)`,
+        params: [],
+        buildSql: () => `
+SELECT
+  '${opId}' AS operation_id,
+  q.null_count,
+  q.non_null_count
+FROM (
+  SELECT
+    COUNT(*) FILTER (WHERE t.${colSql} IS NULL)::bigint AS null_count,
+    COUNT(*) FILTER (WHERE t.${colSql} IS NOT NULL)::bigint AS non_null_count
+  FROM public.${relSql} t
+) q
+WHERE ${buildStageCPresencePredicate(relation, [pk, col])};
+`.trim(),
+      };
+    }
   }
   return ops;
 }
@@ -420,6 +691,10 @@ export function stageCAggregateKeys(operationId) {
   if (family === 'count_all') return STAGE_C_COUNT_ALL_KEYS;
   if (family === 'count_by_boolean') return STAGE_C_COUNT_BY_BOOLEAN_KEYS;
   if (family === 'count_by_category_with_other') return STAGE_C_COUNT_BY_CATEGORY_KEYS;
+  if (family === 'scope_quality') return STAGE_C_SCOPE_QUALITY_KEYS;
+  if (family === 'required_field_quality') return STAGE_C_REQUIRED_PRESENT_KEYS;
+  if (family === 'duplicate_quality') return STAGE_C_DUPLICATE_KEYS_OUTPUT;
+  if (family === 'relationship_null_reference') return STAGE_C_NULL_REFERENCE_KEYS;
   return null;
 }
 

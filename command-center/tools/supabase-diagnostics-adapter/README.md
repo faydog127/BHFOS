@@ -37,14 +37,18 @@ node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_object
 node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_organizations_count_all
 node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_organizations_count_by_boolean_is_partner
 node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_organizations_count_by_category_type_with_other
+node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_contacts_count_scope_quality_tenant_id
+node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_contacts_count_duplicate_email
+node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_contacts_count_null_reference_organization_id
 ```
 
 Stage C Slice 1 aggregates (local templates only; do not execute against production from this stage):
 
-- Families implemented: `count_all`, `count_by_boolean`, `count_by_category_with_other`
+- Families implemented: `count_all`, `count_by_boolean`, `count_by_category_with_other`, plus packet-quality families proven by Stage B: `scope_quality`, `required_field_quality`, `duplicate_quality`, `relationship_null_reference`
 - Each operation has zero caller params. Relation, columns, and predicates are hard-coded.
-- Response after sanitization: exactly one row with `operation_id` plus numeric counts. Category keys are never returned; non-blank unrecognized values contribute only to `other_count`.
-- Families omitted: `count_by_name_or_identity`, `count_by_timestamp_bucket`, `group_by_uuid_fk`, `freeform_predicate` (would require names/identities, timestamps, UUID FK grouping, or caller predicates).
+- Response after sanitization: exactly one row with `operation_id` plus numeric counts. Category keys, emails, phones, IDs, and JSON are never returned; non-blank unrecognized values contribute only to `other_count`.
+- Families omitted as `STAGE_C_METADATA_GAP` when Stage B did not prove the path: orphan-reference joins, hierarchy joins, catalog/price-book reconciliation, events payload-expression uniques, scope quality on objects with no tenant column, app_user_roles tenant binding.
+- Also omitted: `count_by_name_or_identity`, `count_by_timestamp_bucket`, `group_by_uuid_fk`, `freeform_predicate`.
 - URL/detail/UTM/name/notes columns are not treated as categories even if listed by mistake.
 - Project ref remains `wwyxohjnyqnegzbxtuxs`.
 

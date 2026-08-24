@@ -50,14 +50,20 @@ Slice 1 campaign Stage C aggregate-count templates (adapter-owned; no caller tab
 node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_organizations_count_all
 ```
 
-- Applicable families: `count_all`, `count_by_boolean`, `count_by_category_with_other` for the Stage C schema manifest only.
+- Applicable families from the Stage C schema manifest: `count_all`, `count_by_boolean`, `count_by_category_with_other`.
+- Packet-quality families added only where Stage B proved the path:
+  - `scope_quality` on proven `tenant_id` columns (`contacts`, `leads`, `price_book`, `events`, `crm_tasks`). Keys: `operation_id`, `null_count`, `tvg_count`, `default_count`, `other_count`.
+  - `required_field_quality` on proven `is_nullable=NO` text scope columns (`contacts.tenant_id`, `leads.tenant_id`). Keys: `operation_id`, `present_count`, `null_or_blank_count`.
+  - `duplicate_quality` for proven unique business keys `email`, `phone`, `slug`, `code`, and `(tenant_id, code)`. Keys: `operation_id`, `duplicate_group_count`, `duplicate_row_count`. Key values are never returned.
+  - `relationship_null_reference` for proven local FK columns (null/non-null only; no join). Keys: `operation_id`, `null_count`, `non_null_count`.
 - Each operation returns exactly one sanitized row: fixed `operation_id` plus numeric counts.
 - `count_all` keys: `operation_id`, `row_count`.
 - `count_by_boolean` keys: `operation_id`, `true_count`, `false_count`, `null_count`.
 - `count_by_category_with_other` keys: `operation_id`, `null_or_blank_count`, `other_count`. The manifest does not list recognized category values, so all non-blank values contribute only to `other_count`. Category keys are never returned.
 - Missing required relation or column fails closed (query error or empty sanitized row → DENY). Unexpected response fields are stripped.
-- Omitted families: `count_by_name_or_identity`, `count_by_timestamp_bucket`, `group_by_uuid_fk`, `freeform_predicate`.
-- Omitted columns: `source_url`, `source_detail`, `utm_*`, `marketing_source_detail`, `home_image_source`, names, notes, UUID FK identities.
+- Omitted as `STAGE_C_METADATA_GAP` (unproven Stage B path): orphan-reference joins; hierarchy joins; catalog/price-book reconciliation; events payload JSON uniques; scope quality on `organizations`, `accounts`, `services_catalog`, `app_user_roles`, `tenants`, and `properties`; `app_user_roles` tenant binding; required-present on columns whose `is_nullable=NO` was not proven.
+- Also omitted: `count_by_name_or_identity`, `count_by_timestamp_bucket`, `group_by_uuid_fk`, `freeform_predicate`.
+- Omitted columns: `source_url`, `source_detail`, `utm_*`, `marketing_source_detail`, `home_image_source`, names, notes, UUID FK identities as output.
 - `services_catalog` has no category family. `events`, `crm_tasks`, `app_user_roles`, and `tenants` have no boolean family.
 - Stage C authorizes local templates and tests only. It does not authorize hosted aggregate execution, R1/S1 activation, or credential use.
 

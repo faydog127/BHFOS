@@ -18,6 +18,15 @@ import {
   STAGE_C_COUNT_ALL_KEYS,
   STAGE_C_COUNT_BY_BOOLEAN_KEYS,
   STAGE_C_COUNT_BY_CATEGORY_KEYS,
+  STAGE_C_SCOPE_QUALITY,
+  STAGE_C_REQUIRED_PRESENT,
+  STAGE_C_DUPLICATE_KEYS,
+  STAGE_C_NULL_REFERENCE_COLUMNS,
+  STAGE_C_METADATA_GAPS,
+  STAGE_C_SCOPE_QUALITY_KEYS,
+  STAGE_C_REQUIRED_PRESENT_KEYS,
+  STAGE_C_DUPLICATE_KEYS_OUTPUT,
+  STAGE_C_NULL_REFERENCE_KEYS,
   isStageCAggregateOperation,
   stageCFamilyOf,
   stageCAggregateKeys,
@@ -340,6 +349,18 @@ function expectedStageCOperationIds() {
     for (const column of spec.categories) {
       ids.push(`catalog_${relation}_count_by_category_${column}_with_other`);
     }
+    if (STAGE_C_SCOPE_QUALITY[relation]) {
+      ids.push(`catalog_${relation}_count_scope_quality_${STAGE_C_SCOPE_QUALITY[relation].column}`);
+    }
+    for (const required of STAGE_C_REQUIRED_PRESENT[relation] || []) {
+      ids.push(`catalog_${relation}_count_required_present_${required.column}`);
+    }
+    for (const keyCols of STAGE_C_DUPLICATE_KEYS[relation] || []) {
+      ids.push(`catalog_${relation}_count_duplicate_${keyCols.join('_')}`);
+    }
+    for (const column of STAGE_C_NULL_REFERENCE_COLUMNS[relation] || []) {
+      ids.push(`catalog_${relation}_count_null_reference_${column}`);
+    }
   }
   return ids;
 }
@@ -349,21 +370,21 @@ check('stage_c_spec_covers_only_approved_slice1_relations', () => {
 });
 
 check('stage_c_operation_ids_match_frozen_spec', () => {
-  assert.deepEqual([...STAGE_C_AGGREGATE_OPERATION_IDS].sort(), expectedStageCOperationIds().sort());
-  assert.equal(STAGE_C_AGGREGATE_OPERATION_IDS.length, 69);
+  const expected = expectedStageCOperationIds();
+  assert.deepEqual([...STAGE_C_AGGREGATE_OPERATION_IDS].sort(), expected.sort());
+  assert.equal(STAGE_C_AGGREGATE_OPERATION_IDS.length, 100);
+  assert.equal(expected.length, 100);
 });
 
 check('stage_c_ops_are_paramless_select_only_and_hardcoded', () => {
-  const forbidden = [
+  const forbiddenAlways = [
     'source_url',
     'source_detail',
     'utm_source',
     'marketing_source_detail',
     'home_image_source',
-    'email',
-    'phone',
     'notes',
-    'GROUP BY',
+    'payload',
   ];
   for (const opId of STAGE_C_AGGREGATE_OPERATION_IDS) {
     const op = CATALOG_OPERATIONS[opId];
@@ -380,8 +401,16 @@ check('stage_c_ops_are_paramless_select_only_and_hardcoded', () => {
     assert.ok(relation, opId);
     assert.match(sql, new RegExp(`public\\."${relation}"`));
     assert.match(sql, new RegExp(`'${opId}' AS operation_id`));
-    for (const token of forbidden) {
+    for (const token of forbiddenAlways) {
       assert.equal(sql.includes(token), false, `${opId} contains ${token}`);
+    }
+    assert.equal(/\bJOIN\s+public\./i.test(sql), false, `${opId} joins another public relation`);
+    if (stageCFamilyOf(opId) !== 'duplicate_quality') {
+      assert.equal(/\bGROUP BY\b/i.test(sql), false, `${opId} groups unexpectedly`);
+      if (!/_duplicate_/.test(opId)) {
+        assert.equal(/"email"/.test(sql), false, `${opId} references email`);
+        assert.equal(/"phone"/.test(sql), false, `${opId} references phone`);
+      }
     }
     assert.equal(/\bINSERT\b|\bUPDATE\b|\bDELETE\b|\bTRUNCATE\b/i.test(sql.replace(/'(?:''|[^'])*'/g, "''")), false);
   }
@@ -539,7 +568,120 @@ check('stage_c_key_helper_matches_family', () => {
     stageCAggregateKeys('catalog_price_book_count_by_category_item_type_with_other'),
     STAGE_C_COUNT_BY_CATEGORY_KEYS,
   );
+  assert.deepEqual(
+    stageCAggregateKeys('catalog_contacts_count_scope_quality_tenant_id'),
+    STAGE_C_SCOPE_QUALITY_KEYS,
+  );
+  assert.deepEqual(
+    stageCAggregateKeys('catalog_leads_count_required_present_tenant_id'),
+    STAGE_C_REQUIRED_PRESENT_KEYS,
+  );
+  assert.deepEqual(
+    stageCAggregateKeys('catalog_contacts_count_duplicate_email'),
+    STAGE_C_DUPLICATE_KEYS_OUTPUT,
+  );
+  assert.deepEqual(
+    stageCAggregateKeys('catalog_events_count_null_reference_entity_id'),
+    STAGE_C_NULL_REFERENCE_KEYS,
+  );
   assert.equal(stageCAggregateKeys('catalog_object_dependencies'), null);
+});
+
+check('stage_c_scope_quality_uses_fixed_literals_only', () => {
+  const { sql, params } = resolveCatalogSql('catalog_contacts_count_scope_quality_tenant_id', {});
+  assert.deepEqual(params, {});
+  assert.match(sql, /t\."tenant_id" = 'tvg'/);
+  assert.match(sql, /t\."tenant_id" = 'default'/);
+  assert.match(sql, /other_count/);
+  assert.equal(/\bGROUP BY\b/i.test(sql), false);
+  assert.throws(() => resolveCatalogSql('catalog_organizations_count_scope_quality_tenant_id', {}), /unknown catalog/);
+  assert.throws(() => resolveCatalogSql('catalog_properties_count_scope_quality_tenant_id', {}), /unknown catalog/);
+  assert.throws(() => resolveCatalogSql('catalog_app_user_roles_count_scope_quality_tenant_id', {}), /unknown catalog/);
+});
+
+check('stage_c_required_present_only_for_proven_not_null', () => {
+  const { sql } = resolveCatalogSql('catalog_leads_count_required_present_tenant_id', {});
+  assert.match(sql, /present_count/);
+  assert.match(sql, /null_or_blank_count/);
+  assert.throws(() => resolveCatalogSql('catalog_contacts_count_required_present_email', {}), /unknown catalog/);
+  assert.throws(() => resolveCatalogSql('catalog_app_user_roles_count_required_present_user_id', {}), /unknown catalog/);
+});
+
+check('stage_c_duplicate_sql_does_not_emit_key_values', () => {
+  const { sql } = resolveCatalogSql('catalog_contacts_count_duplicate_email', {});
+  assert.match(sql, /duplicate_group_count/);
+  assert.match(sql, /duplicate_row_count/);
+  assert.match(sql, /GROUP BY t\."email"/);
+  assert.match(sql, /HAVING COUNT\(\*\) > 1/);
+  const outer = sql.slice(0, sql.indexOf('FROM ('));
+  assert.equal(/"email"/.test(outer), false);
+  const composite = resolveCatalogSql('catalog_price_book_count_duplicate_tenant_id_code', {}).sql;
+  assert.match(composite, /GROUP BY t\."tenant_id", t\."code"/);
+  const compositeOuter = composite.slice(0, composite.indexOf('FROM ('));
+  assert.equal(/"tenant_id"/.test(compositeOuter), false);
+  assert.equal(/"code"/.test(compositeOuter), false);
+  assert.throws(() => resolveCatalogSql('catalog_events_count_duplicate_payload', {}), /unknown catalog/);
+});
+
+check('stage_c_null_reference_has_no_join', () => {
+  const { sql } = resolveCatalogSql('catalog_contacts_count_null_reference_organization_id', {});
+  assert.match(sql, /null_count/);
+  assert.match(sql, /non_null_count/);
+  assert.equal(/\bJOIN\s+public\./i.test(sql), false);
+  assert.equal(/\bFROM\s+public\."organizations"/i.test(sql), false);
+  assert.throws(() => resolveCatalogSql('catalog_contacts_count_orphan_reference_organization_id', {}), /unknown catalog/);
+  assert.throws(() => resolveCatalogSql('catalog_leads_count_hierarchy_coverage', {}), /unknown catalog/);
+  assert.throws(() => resolveCatalogSql('catalog_services_catalog_count_price_book_overlap', {}), /unknown catalog/);
+});
+
+check('stage_c_packet_quality_sanitize_strips_business_values', () => {
+  const scope = sanitizeCatalogResponseBody('catalog_price_book_count_scope_quality_tenant_id', [
+    {
+      operation_id: 'forged',
+      null_count: 1,
+      tvg_count: 2,
+      default_count: 3,
+      other_count: 4,
+      tenant_id: 'secret-scope',
+    },
+  ]);
+  assert.deepEqual(Object.keys(scope[0]).sort(), [...STAGE_C_SCOPE_QUALITY_KEYS].sort());
+  assert.equal(scope[0].operation_id, 'catalog_price_book_count_scope_quality_tenant_id');
+  assert.equal(scope[0].tenant_id, undefined);
+  const dup = sanitizeCatalogResponseBody('catalog_contacts_count_duplicate_phone', [
+    {
+      operation_id: 'forged',
+      duplicate_group_count: 2,
+      duplicate_row_count: 5,
+      phone: '555-0100',
+      email: 'founder@example.com',
+    },
+  ]);
+  assert.deepEqual(Object.keys(dup[0]).sort(), [...STAGE_C_DUPLICATE_KEYS_OUTPUT].sort());
+  assert.equal(dup[0].phone, undefined);
+  assert.equal(dup[0].email, undefined);
+  const serialized = JSON.stringify(dup);
+  assert.equal(/555-0100/.test(serialized), false);
+  assert.equal(/founder@example\.com/.test(serialized), false);
+});
+
+check('stage_c_metadata_gaps_are_recorded_and_not_guessed', () => {
+  assert.ok(STAGE_C_METADATA_GAPS.length >= 7);
+  for (const gap of STAGE_C_METADATA_GAPS) {
+    assert.equal(gap.id, 'STAGE_C_METADATA_GAP');
+    assert.ok(gap.gap_id);
+    assert.ok(gap.missing_capability);
+    assert.ok(Array.isArray(gap.objects));
+  }
+  const ids = STAGE_C_METADATA_GAPS.map((g) => g.gap_id).sort();
+  assert.ok(ids.includes('scope_quality_no_tenant_column'));
+  assert.ok(ids.includes('scope_quality_properties_unproven'));
+  assert.ok(ids.includes('fk_target_paths_unproven'));
+  assert.ok(ids.includes('hierarchy_join_paths_unproven'));
+  assert.ok(ids.includes('catalog_price_book_reconciliation_unproven'));
+  assert.ok(ids.includes('app_user_roles_tenant_binding_unproven'));
+  assert.ok(ids.includes('events_payload_expression_uniques'));
+  assert.ok(ids.includes('required_field_nullability_incomplete'));
 });
 
 await checkAsync('dry_run_stage_c_families_ok', async () => {
@@ -554,6 +696,12 @@ await checkAsync('dry_run_stage_c_families_ok', async () => {
   const catOp = await invokeCatalog('catalog_app_user_roles_count_by_category_role_with_other', {}, { dryRun: true });
   assert.equal(catOp.operation, 'catalog_app_user_roles_count_by_category_role_with_other');
   assert.equal(catOp.sql, undefined);
+  const scopeOp = await invokeCatalog('catalog_contacts_count_scope_quality_tenant_id', {}, { dryRun: true });
+  assert.equal(scopeOp.operation, 'catalog_contacts_count_scope_quality_tenant_id');
+  assert.equal(scopeOp.sql, undefined);
+  const dupOp = await invokeCatalog('catalog_services_catalog_count_duplicate_slug', {}, { dryRun: true });
+  assert.equal(dupOp.operation, 'catalog_services_catalog_count_duplicate_slug');
+  assert.equal(dupOp.sql, undefined);
 });
 
 if (failures.length) {

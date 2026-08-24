@@ -2,14 +2,14 @@
 
 | Field | Value |
 | --- | --- |
-| Action ID | `NOS-I2-S1-STAGE-C-AGGREGATES-01` |
+| Action ID | `NOS-I2-S1-STAGE-C-AGGREGATES-01` then `NOS-I2-S1-STAGE-C-COMPLETENESS-01` |
 | Control-plane release | `NOS-I2-S1-EVIDENCE-01` |
 | Decision packet | `NOS-R1-S1-I2-CAP-01` Revision 1 |
-| Stage | C — metadata-derived aggregate-template implementation |
+| Stage | C — metadata-derived aggregate-template implementation + packet completeness |
 | Repository | `faydog127/BHFOS` |
 | Branch | `network-os/i2-s1-stage-c-aggregates` |
 | Base / parent SHA | `f5f0a14f004bb20be7ed1b069c67b16d832d6421` (`network-os/foundation`) |
-| Implementation SHA | `921b054d00ef4335cac63ee929331d75ee34b813` |
+| Prior Stage C SHA | `146839bbc50ad4a4517f2c51ae0b11d811d6f0d2` |
 | Draft PR | https://github.com/faydog127/BHFOS/pull/138 |
 | Role | Builder (diagnostics control-plane only) |
 | Evidence classification | LOCAL CONTROL-PLANE VERIFIED; NO HOSTED ACCESS |
@@ -78,7 +78,7 @@ Per-object applicability:
 | `count_by_timestamp_bucket` | Manifest does not authorize timestamp bucket columns; timestamps tied to records are prohibited |
 | `group_by_uuid_fk` | FK identities (`account`, `lead`, `organization`, `property`, `partner`, `user`, and other UUID FKs) must not be grouped or emitted |
 | `freeform_predicate` | Caller-supplied predicates are prohibited |
-| Decision-packet families not in the Stage C manifest (tenant/scope quality, required-field quality, duplicate quality, relationship/hierarchy coverage, catalog reconciliation, identity/scope integrity) | Required columns/paths were not verified in the sanitized manifest; guessing is prohibited |
+| Decision-packet families without a proven Stage B path | Recorded as `STAGE_C_METADATA_GAP` in §10. Do not guess. |
 | Named category-value counts | Manifest lists category columns, not recognized values; unknown values go only to `other_count` |
 | `contacts.source_url`, `properties.source_url` | URL columns are not category columns |
 | `leads.source_detail`, `leads.utm_source`, `leads.marketing_source_detail`, `leads.home_image_source` | Detail/UTM/source-url-like columns are not category columns |
@@ -242,3 +242,91 @@ Results (locally verified; no hosted calls):
 - no customer row extracted
 - no merge and no ready-for-review mark by this Builder
 - Release 1 / Slice 1 not activated
+
+## 10. Completeness (`NOS-I2-S1-STAGE-C-COMPLETENESS-01`)
+
+Command Center recorded `PREMERGE_CHANGES_REQUIRED`: Guard approved the narrowed
+69 ops, not completeness against the governing packet. This section adds only
+packet-quality templates whose columns or unique keys Stage B proved. Unproven
+paths remain `STAGE_C_METADATA_GAP`.
+
+### 10.1 Families now implemented from verified metadata
+
+| Family | Proven path | Sanitized keys |
+| --- | --- | --- |
+| `scope_quality` | `tenant_id` on `contacts` (NOT NULL), `leads` (NOT NULL), `price_book` (NULL), `events` (NULL), `crm_tasks` (NULL) | `operation_id`, `null_count`, `tvg_count`, `default_count`, `other_count` |
+| `required_field_quality` | `is_nullable=NO` text scope columns `contacts.tenant_id`, `leads.tenant_id` | `operation_id`, `present_count`, `null_or_blank_count` |
+| `duplicate_quality` | unique business keys `contacts.email`, `contacts.phone`, `services_catalog.slug`, `price_book.code`, `price_book(tenant_id,code)` | `operation_id`, `duplicate_group_count`, `duplicate_row_count` |
+| `relationship_null_reference` | local FK columns listed below; no join | `operation_id`, `null_count`, `non_null_count` |
+
+`app_user_roles.user_id` is NOT NULL. Required-binding is existing
+`catalog_app_user_roles_count_all` plus
+`catalog_app_user_roles_count_null_reference_user_id` (expected `null_count = 0`).
+No separate required-present template was added for that identity column.
+
+PK `id` uniqueness is already covered by `count_all` (`COUNT(id)`). Duplicate
+templates were not added for primary keys.
+
+### 10.2 New operation IDs (31; total Stage C ops = 100)
+
+Scope quality:
+
+- `catalog_contacts_count_scope_quality_tenant_id`
+- `catalog_leads_count_scope_quality_tenant_id`
+- `catalog_price_book_count_scope_quality_tenant_id`
+- `catalog_events_count_scope_quality_tenant_id`
+- `catalog_crm_tasks_count_scope_quality_tenant_id`
+
+Required-present:
+
+- `catalog_contacts_count_required_present_tenant_id`
+- `catalog_leads_count_required_present_tenant_id`
+
+Duplicate quality:
+
+- `catalog_contacts_count_duplicate_email`
+- `catalog_contacts_count_duplicate_phone`
+- `catalog_services_catalog_count_duplicate_slug`
+- `catalog_price_book_count_duplicate_code`
+- `catalog_price_book_count_duplicate_tenant_id_code`
+
+Null-reference (local FK only):
+
+- `catalog_contacts_count_null_reference_organization_id`
+- `catalog_contacts_count_null_reference_account_id`
+- `catalog_contacts_count_null_reference_property_id`
+- `catalog_contacts_count_null_reference_lead_id`
+- `catalog_contacts_count_null_reference_management_company_id`
+- `catalog_properties_count_null_reference_account_id`
+- `catalog_properties_count_null_reference_management_company_id`
+- `catalog_properties_count_null_reference_zone_id`
+- `catalog_properties_count_null_reference_verified_by`
+- `catalog_leads_count_null_reference_account_id`
+- `catalog_leads_count_null_reference_property_id`
+- `catalog_leads_count_null_reference_contact_id`
+- `catalog_leads_count_null_reference_owner_id`
+- `catalog_leads_count_null_reference_referrer_id`
+- `catalog_leads_count_null_reference_referring_partner_id`
+- `catalog_crm_tasks_count_null_reference_partner_id`
+- `catalog_app_user_roles_count_null_reference_user_id`
+- `catalog_events_count_null_reference_entity_id`
+- `catalog_events_count_null_reference_actor_id`
+
+### 10.3 `STAGE_C_METADATA_GAP` register
+
+Omissions are justified as missing Stage B capability, not as optional polish.
+
+| gap_id | Family | Objects | Missing capability |
+| --- | --- | --- | --- |
+| `scope_quality_no_tenant_column` | scope quality | `organizations`, `accounts`, `services_catalog`, `app_user_roles`, `tenants` | Stage B proved no tenant/scope column |
+| `scope_quality_properties_unproven` | scope quality | `properties` | Stage B did not prove a tenant/scope column; `properties.tenant_id` was not guessed |
+| `fk_target_paths_unproven` | orphan-reference | all Slice 1 objects | `catalog_constraints` returned empty; source-column → target-table.target-column paths are not proven |
+| `hierarchy_join_paths_unproven` | hierarchy coverage | `organizations`, `accounts`, `properties`, `contacts`, `leads` | Local FKs exist; target join paths are unproven. Joined hierarchy omitted. Local null/non-null counts are implemented instead |
+| `catalog_price_book_reconciliation_unproven` | catalog reconciliation | `services_catalog`, `price_book` | Overlap / missing stable-reference reconciliation requires proven join keys |
+| `app_user_roles_tenant_binding_unproven` | identity/scope integrity | `app_user_roles` | No `tenant_id`; tenant-binding and orphan role/tenant counts omitted |
+| `events_payload_expression_uniques` | duplicate quality | `events` | Payload JSON unique indexes are not typed columns; using them would risk business literals |
+| `required_field_nullability_incomplete` | required-field quality | all Slice 1 objects | Completeness brief proved `is_nullable=NO` only for `contacts.tenant_id`, `leads.tenant_id`, and `app_user_roles.user_id`. Other required-present templates were not guessed |
+
+### 10.4 Completeness tests
+
+Same local suite as §8. Results recorded after execution (no hosted calls).
