@@ -3,8 +3,8 @@
 | Field | Value |
 | --- | --- |
 | Status | Active readiness gate — not ready for implementation; release not activated |
-| Version | 0.3 |
-| Date | 2026-08-22 |
+| Version | 0.4 |
+| Date | 2026-08-24 |
 | Product | Network OS |
 | Release | R1 — proposed |
 | Slice | S1 — Customer Network + Service Need Foundation |
@@ -12,8 +12,9 @@
 | Network OS product implementation authority | None |
 | Founder direction ratified | 2026-08-22 |
 | Ratification evidence | `NETWORK_OS_RELEASE1_SLICE1_FOUNDER_RATIFICATION_PACKET.md`; `NETWORK_OS_FIELD_VISIT_CLOSEOUT_FOUNDER_DIRECTION.md` |
-| Diagnostics capability decision | `governance/decisions/NOS_R1_S1_I2_CAPABILITY_AND_AGGREGATE_TEMPLATE_DECISION_PACKET.md` Revision 1 — Founder approved, corrected staged gates pending |
-| Reconciled through source HEAD | `02b628b97b1b38f32fe7c8902fdbad34778cf3c4` plus ratification-record changes |
+| Diagnostics capability decision | `governance/decisions/NOS_R1_S1_I2_CAPABILITY_AND_AGGREGATE_TEMPLATE_DECISION_PACKET.md` Revision 1 — Founder approved; Stages A–D evidence collected; Founder closeout not recorded |
+| Reconciled through source HEAD | `2a7cca80c3333edc88151273c4ba1d779eb7d1b2` (`network-os/foundation`; PR #138 merged) plus this governance-reconciliation record |
+| Evidence-campaign closeout | `SLICE_1_EVIDENCE_READY_FOR_FOUNDER_CLOSEOUT` — evidence campaign only; Founder closeout not recorded |
 
 ## 1. Purpose
 
@@ -133,7 +134,7 @@ REQ-NOS-P1-018 — Basic operational dashboards may be partially included only t
 | Operational event / audit direction | READY | ADR-NOS-008 Active; exact Slice 1 taxonomy/write design remains blocked |
 | Legacy `tenant_id` compatibility direction | READY | ADR-NOS-011 Active; hosted dependency verification and canonical BHIS scope remain blocked |
 | Legacy source dependency inventory | READY — SOURCE-ONLY | Repository schema/RLS/function/application dependencies classified; hosted verification remains required |
-| Hosted schema/RLS/data-quality evidence | BLOCKED — CAPABILITY WORKSTREAM APPROVED | Founder authorized bounded collection and approved `NOS-R1-S1-I2-CAP-01`; exact-head review, `FOUNDER_RUN_READY`, provisioning, and collection remain incomplete |
+| Hosted schema/RLS/data-quality evidence | COLLECTED — FOUNDER CLOSEOUT NOT RECORDED | Collection blocker resolved. Stage B packet `STAGE_B_METADATA_COMPLETE`: 11 identified relations all PRESENT at `f5f0a14` — not 100 objects. `catalog_constraints` present count=0. Stage C aggregate capability merged through PR #138. Stage D packet `STAGE_D_AGGREGATES_COMPLETE`: 100/100 approved aggregate operations at `2a7cca80`. `OAUTH_REVOCATION_VERIFIED` via JSON POST `/v1/oauth/revoke` HTTP 204; campaign ACCESS/REFRESH/TOKEN_EXPIRY keys removed; CLIENT_ID/CLIENT_SECRET/PROJECT_REF retained. Constraint/FK and unexecuted `STAGE_C_METADATA_GAP` families remain unresolved. Closeout audit verdict `SLICE_1_EVIDENCE_READY_FOR_FOUNDER_CLOSEOUT` (evidence campaign only). Founder closeout has not been recorded. See §13. |
 | Exact target data model/schema | BLOCKED | Active direction exists; exact Slice 1 model not yet drafted |
 | Migration/cutover plan | BLOCKED | Must map reused/new structures after target model is drafted |
 
@@ -318,26 +319,58 @@ Release 1 / Slice 1 becomes **Ready** only when all of the following are true:
 
 ## 13. Current readiness assessment
 
-**Current state: NOT READY FOR IMPLEMENTATION.**
+**Current state: NOT READY FOR IMPLEMENTATION.** Release 1 / Slice 1 remains inactive and is not authorized for implementation.
 
 The product, requirements, workflow, and core domain direction are mature enough that remaining blockers are now specific rather than conceptual.
 
-Founder ratification of product, requirements, architecture direction, and experience/design direction is complete. The SOURCE-ONLY legacy dependency inventory is also complete. The shortest path to implementation readiness is now:
+Founder ratification of product, requirements, architecture direction, and experience/design direction is complete. The SOURCE-ONLY legacy dependency inventory is also complete. The diagnostics hosted-evidence collection blocker is resolved; Founder closeout of that evidence campaign has not been recorded.
 
-1. Complete local Stage A of `NOS-R1-S1-I2-CAP-01`: reconcile the two-scope OAuth contract and prepare only missing fixed metadata/dependency capability.
-2. Obtain separate push/PR authority, independent exact-head Architecture Guard review, exact merge authority, and merge.
-3. After `FOUNDER_RUN_READY`, provision the campaign-scoped I2 identity and collect the already-authorized hosted schema/RLS/dependency metadata.
-4. Derive, implement, review, and separately merge fixed aggregate templates from that verified metadata; run them through I2 and complete mandatory campaign revocation.
-5. Draft the exact Slice 1 domain/data model and migration/compatibility plan from source plus hosted evidence.
-6. Define the Slice 1 permission matrix, RLS design, restricted-field strategy, and security tests.
-7. Define the Slice 1 operational-event taxonomy, write ownership, retention/access, and provenance tests.
-8. Define the exact Service Need fields, lifecycle transitions, reasons, permissions, and event behavior.
-9. Approve exact design tokens, governed Tailgrids component adaptations, and canonical desktop/mobile screen references.
-10. Declare the authorized non-production environment and synthetic/training-data strategy.
-11. Create the requirement-to-test validation matrix and mobile usability protocol.
-12. Identify bounded work items and an implementation branch/worktree only after the preceding gates are reviewed.
-13. Perform a final Definition of Ready review.
-14. Return to the Founder for a separate Release 1 / Slice 1 activation decision.
+### 13.1 Diagnostics evidence campaign (cited; no secrets or raw hosted payloads)
+
+| Packet / event | Recorded result | Classification |
+| --- | --- | --- |
+| Stage B `STAGE_B_METADATA_COMPLETE` | 11 identified relations all PRESENT at `f5f0a14`. This is not 100 objects and is not treated as 100-object coverage. | HOSTED METADATA COLLECTED |
+| Stage B `catalog_constraints` | present count=0 | HOSTED METADATA COLLECTED; CONSTRAINT/FK UNRESOLVED |
+| Stage C aggregate capability | Merged through PR #138; foundation tip `2a7cca80c3333edc88151273c4ba1d779eb7d1b2` | MERGED |
+| Stage D `STAGE_D_AGGREGATES_COMPLETE` | 100/100 approved aggregate operations at `2a7cca80` | HOSTED AGGREGATES COLLECTED |
+| Unexecuted `STAGE_C_METADATA_GAP` families | Remain unresolved; 100/100 does not execute omitted families | UNRESOLVED |
+| `OAUTH_REVOCATION_VERIFIED` | JSON POST `/v1/oauth/revoke` returned HTTP 204 | REVOCATION VERIFIED |
+| Campaign token keys | ACCESS / REFRESH / TOKEN_EXPIRY removed; CLIENT_ID / CLIENT_SECRET / PROJECT_REF retained | NAMES/STATUS ONLY |
+| Closeout audit | `SLICE_1_EVIDENCE_READY_FOR_FOUNDER_CLOSEOUT` | EVIDENCE CAMPAIGN ONLY; NOT CLOSED |
+
+This table records cited campaign evidence. It does not add acceptance criteria, authorize product implementation, or close the Founder evidence-campaign closeout.
+
+### 13.2 Challenged conflicts (not silently reconciled)
+
+The following artifacts still describe the pre-collection or pre-revocation state. This reconciliation does not rewrite them, because they are historical authorization, attempt, or G2.3B inventory records — not a substitute for Founder closeout.
+
+| Artifact | Stale or conflicting claim | Why this DOR does not rewrite it |
+| --- | --- | --- |
+| `NETWORK_OS_RELEASE1_SLICE1_HOSTED_SCHEMA_EVIDENCE_ATTEMPT.md` | Dated 2026-08-22 attempt: live check unavailable; hosted environment not reached | Historical attempt record. Collection status is superseded here; the attempt itself is not rewritten. |
+| `NOS_R1_S1_I2_CAPABILITY_AND_AGGREGATE_TEMPLATE_DECISION_PACKET.md` | Revision 1 authorization text: not execution-ready; hosted environment has not been reached | Authorization packet. Later Stage A–D execution does not amend the original Founder-approved text. |
+| `NETWORK_OS_RELEASE1_SLICE1_LEGACY_DEPENDENCY_INVENTORY.md` §§11–13 | Hosted evidence missing; next action is still capability provisioning and first collection | SOURCE-ONLY inventory. Eleven PRESENT relations plus 100/100 approved aggregates do not close hosted inventory verification while `catalog_constraints` present count=0 and metadata-gap families remain unresolved. |
+| `governance/SECRET_INVENTORY.md` I2 OAuth rows | ACCESS / REFRESH / TOKEN_EXPIRY still labeled not issued | G2.3B names-only inventory. This session did not inspect secret values. Founder closeout should reconcile names/status against the revocation packet. |
+| `governance/I2_PROVISIONING_CHECKLIST.md` Supabase row | Issue time / campaign verification still pending Stage B readiness | Provisioning checklist predates collected Stage B/D evidence. Not rewritten from this DOR-only pass. |
+| `governance/I2_CATALOG_METADATA_CAPABILITY.md` | Stage C authorizes local templates only | Stage C authority statement remains true. Hosted aggregate execution was a later Stage D action, now complete and revoked. |
+
+Do not treat 11 PRESENT relations as 100 objects. Do not treat 100/100 approved Stage D operations as execution of omitted constraint/FK or `STAGE_C_METADATA_GAP` families. Do not treat `SLICE_1_EVIDENCE_READY_FOR_FOUNDER_CLOSEOUT` as Founder closeout, Release 1 / Slice 1 activation, or implementation authority.
+
+Product, design, RLS, validation, environment, implementation, activation, and other existing DOR gates are unchanged except the hosted-evidence collection row above. Hosted metadata collection is not Slice 1 permission/RLS design, not exact target-model drafting, and not ADR-NOS-011 hosted-dependency closeout.
+
+### 13.3 Remaining path to implementation readiness
+
+1. Founder records evidence-campaign closeout against the cited Stage B/D/revocation packets. This DOR does not perform that closeout.
+2. Keep constraint/FK and unexecuted `STAGE_C_METADATA_GAP` families unresolved until a later authorized diagnostics decision; do not guess join or constraint paths.
+3. Draft the exact Slice 1 domain/data model and migration/compatibility plan from source plus hosted evidence, without treating unresolved constraint/FK gaps as proven relationships.
+4. Define the Slice 1 permission matrix, RLS design, restricted-field strategy, and security tests.
+5. Define the Slice 1 operational-event taxonomy, write ownership, retention/access, and provenance tests.
+6. Define the exact Service Need fields, lifecycle transitions, reasons, permissions, and event behavior.
+7. Approve exact design tokens, governed Tailgrids component adaptations, and canonical desktop/mobile screen references.
+8. Declare the authorized non-production environment and synthetic/training-data strategy.
+9. Create the requirement-to-test validation matrix and mobile usability protocol.
+10. Identify bounded work items and an implementation branch/worktree only after the preceding gates are reviewed.
+11. Perform a final Definition of Ready review.
+12. Return to the Founder for a separate Release 1 / Slice 1 activation decision.
 
 No Network OS product code should begin before those gates are satisfied. The
 separately approved diagnostics control-plane workstream does not activate or
