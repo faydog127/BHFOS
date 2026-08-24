@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import {
   CATALOG_OPERATIONS,
   READ_ONLY_QUERY_PATH_SUFFIX,
+  isStageCAggregateOperation,
   listCatalogOperations,
   resolveCatalogSql,
   sanitizeCatalogResponseBody,
@@ -351,7 +352,20 @@ export async function invokeCatalog(operationId, rawParams = {}, { agentRef, dry
   }
 
   const masked = JSON.parse(maskPayload(typeof body === 'string' ? body : JSON.stringify(body)));
-  const sanitizedBody = sanitizeCatalogResponseBody(resolved.operation, masked);
+  let sanitizedBody;
+  try {
+    sanitizedBody = sanitizeCatalogResponseBody(resolved.operation, masked);
+  } catch (e) {
+    appendAuditLog({
+      operation: resolved.operation,
+      params: resolved.params,
+      result_class: 'deny',
+      error: String(e.message || e),
+      http_status: res.status,
+      path: apiPath,
+    });
+    throw e;
+  }
   const resultClass = res.ok ? 'ok' : 'error';
   appendAuditLog({
     operation: resolved.operation,
@@ -369,7 +383,8 @@ export async function invokeCatalog(operationId, rawParams = {}, { agentRef, dry
     params: resolved.params,
     description: resolved.description,
     classification:
-      resolved.operation === 'catalog_quotes_s2_active_unique_conflict_counts'
+      resolved.operation === 'catalog_quotes_s2_active_unique_conflict_counts' ||
+      isStageCAggregateOperation(resolved.operation)
         ? 'catalog_aggregate'
         : 'catalog_metadata',
     body: sanitizedBody,
@@ -602,6 +617,36 @@ export function selfTest() {
   }
 
   try {
+    const r = resolveCatalogSql('catalog_organizations_count_all', {});
+    results.push({
+      test: 'allow_stage_c_count_all_template',
+      pass:
+        r.operation === 'catalog_organizations_count_all' &&
+        r.params &&
+        Object.keys(r.params).length === 0 &&
+        r.sql.startsWith('SELECT') &&
+        /public\."organizations"/.test(r.sql) &&
+        /COUNT\(t\."id"\)/.test(r.sql),
+    });
+  } catch (e) {
+    results.push({
+      test: 'allow_stage_c_count_all_template',
+      pass: false,
+      error: String(e.message || e),
+    });
+  }
+
+  try {
+    resolveCatalogSql('catalog_organizations_count_all', { table: 'organizations' });
+    results.push({ test: 'deny_stage_c_table_param', pass: false });
+  } catch (e) {
+    results.push({
+      test: 'deny_stage_c_table_param',
+      pass: /unexpected catalog param/i.test(String(e.message || e)),
+    });
+  }
+
+  try {
     resolveCatalogSql('catalog_object_dependencies', { schema: 'public', table: 'estimates' });
     results.push({ test: 'deny_dependency_non_slice1_table', pass: false });
   } catch (e) {
@@ -679,25 +724,41 @@ export function selfTest() {
             catOut.method === 'POST' &&
             !('sql' in catOut),
         });
-        // deny mutation attempt via fake op name
-        return invokeCatalog('catalog_rls_flags', {
-          schema: 'public',
-          table: 'estimates',
-          query: 'DELETE FROM public.estimates',
-        }, { dryRun: true })
-          .then(() => {
-            results.push({ test: 'deny_catalog_query_param', pass: false });
-          })
-          .catch((e) => {
+        return invokeCatalog('catalog_organizations_count_all', {}, { dryRun: true }).then(
+          (stageCOut) => {
             results.push({
-              test: 'deny_catalog_query_param',
-              pass: /agent-supplied SQL|DENY/i.test(String(e.message || e)),
+              test: 'dry_run_stage_c_count_all',
+              pass:
+                stageCOut.dry_run === true &&
+                stageCOut.operation === 'catalog_organizations_count_all' &&
+                stageCOut.path === `/v1/projects/${goodRef}${READ_ONLY_QUERY_PATH_SUFFIX}` &&
+                stageCOut.method === 'POST' &&
+                !('sql' in stageCOut),
             });
-          })
-          .then(() => {
-            const failed = results.filter((r) => !r.pass);
-            return { ok: failed.length === 0, results, failed };
-          });
+            return invokeCatalog(
+              'catalog_rls_flags',
+              {
+                schema: 'public',
+                table: 'estimates',
+                query: 'DELETE FROM public.estimates',
+              },
+              { dryRun: true }
+            )
+              .then(() => {
+                results.push({ test: 'deny_catalog_query_param', pass: false });
+              })
+              .catch((e) => {
+                results.push({
+                  test: 'deny_catalog_query_param',
+                  pass: /agent-supplied SQL|DENY/i.test(String(e.message || e)),
+                });
+              })
+              .then(() => {
+                const failed = results.filter((r) => !r.pass);
+                return { ok: failed.length === 0, results, failed };
+              });
+          }
+        );
       });
     });
   });

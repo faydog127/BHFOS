@@ -34,9 +34,25 @@ node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_rls_fl
 node tools/supabase-diagnostics-adapter/cli.mjs catalog catalog_rls_flags --schema=public --table=estimates
 node tools/supabase-diagnostics-adapter/cli.mjs catalog catalog_quotes_s2_active_unique_conflict_counts
 node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_object_dependencies --schema=public --table=organizations
+node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_organizations_count_all
+node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_organizations_count_by_boolean_is_partner
+node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_organizations_count_by_category_type_with_other
+node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_contacts_count_scope_quality_tenant_id
+node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_contacts_count_duplicate_email
+node tools/supabase-diagnostics-adapter/cli.mjs --dry-run-catalog catalog_contacts_count_null_reference_organization_id
 ```
 
-See `docs/governance/I2_CATALOG_METADATA_CAPABILITY.md`.
+Stage C Slice 1 aggregates (local templates only; do not execute against production from this stage):
+
+- Families implemented: `count_all`, `count_by_boolean`, `count_by_category_with_other`, plus packet-quality families proven by Stage B: `scope_quality`, `required_field_quality`, `duplicate_quality`, `relationship_null_reference`
+- Each operation has zero caller params. Relation, columns, and predicates are hard-coded.
+- Response after sanitization: exactly one row with `operation_id` plus numeric counts. Category keys, emails, phones, IDs, and JSON are never returned; non-blank unrecognized values contribute only to `other_count`.
+- Families omitted as `STAGE_C_METADATA_GAP` when Stage B did not prove the path: orphan-reference joins, hierarchy joins, catalog/price-book reconciliation, events payload-expression uniques, scope quality on objects with no tenant column, app_user_roles tenant binding.
+- Also omitted: `count_by_name_or_identity`, `count_by_timestamp_bucket`, `group_by_uuid_fk`, `freeform_predicate`.
+- URL/detail/UTM/name/notes columns are not treated as categories even if listed by mistake.
+- Project ref remains `wwyxohjnyqnegzbxtuxs`.
+
+See `docs/governance/I2_CATALOG_METADATA_CAPABILITY.md` and `docs/governance/decisions/NOS_I2_S1_STAGE_C_AGGREGATES_EVIDENCE.md`.
 ## Credential issuance — Network OS Slice 1 campaign
 
 For control-plane release `NOS-I2-S1-EVIDENCE-01`, requires approved Founder
