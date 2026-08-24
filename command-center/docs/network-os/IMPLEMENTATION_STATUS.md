@@ -1,75 +1,72 @@
 # Network OS — Implementation Status
 
-**Branch:** `cursor/nos-convention-write-path-eb96`
-**Implementation commit:** `a53ea7866b3e7729a0d7c8e0ab97c4a53a59411b`
-**Ancestry:** `87c69217b11ad612449461b2bee4b4d10a6cfcf2` (PR 141 hop, parked)
-**Base:** `network-os/foundation`
-**Draft PR:** https://github.com/faydog127/BHFOS/pull/142
-**Mission:** NOS-CONVENTION-WRITE-PATH-FOUNDER-GATE-01 v2 Option A
+**Branch after merge:** `network-os/foundation`
+**Merged increment HEAD (PR 142 parent):** `03073f40499b5a3fa53054a3b0a26e3b8fbe5d96`
+**Merge commit:** `9087e814de088d93a6de863407dc702fa0530c86`
+**Merge parents:** `326e7a2941b9333f341716fff199d6ef6c913b53` + `03073f40499b5a3fa53054a3b0a26e3b8fbe5d96`
+**Base at merge:** `network-os/foundation` `326e7a2941b9333f341716fff199d6ef6c913b53`
+**PR:** https://github.com/faydog127/BHFOS/pull/142 (**merged**, ordinary merge, no squash, no force)
+**Mission recorded here:** NOS-CONVENTION-PR142-RELEASE-01
 **Product / R1 / Slice 1 activation:** **None**
-**PR 140 / PR 141:** parked / frozen / not pushed
+**PR 140 / PR 141:** parked / frozen / not this increment
 
-## Convention write path (2026-08-24) — LOCAL IMPLEMENTATION
+Do **not** equate: source-present · hosted-applied · merged · frontend-deployed · production-usable.
 
-Founder authorized v2 Option A. This increment adds the isolated intake table, the exact-role helper, and the public HTTP write owner. Queue access is only `app_user_roles.role = bhis_convention_intake`. No admin fallback. No role seed. No hosted apply.
+## Convention write path — verified state (2026-08-24)
 
-| Field | Value |
+| Surface | Evidence tier | Result |
+|---|---|---|
+| Isolated table + helper + HTTP owner @ pin `03073f4` | source-present + checksums | blobs match hosted-apply pin (comment 5399523492) |
+| Hosted apply on project-ref `wwyxohjnyqnegzbxtuxs` | hosted-applied + function-deployed | table + helper present; function `network-os-provider-interest-intake` ACTIVE, `verify_jwt=false`; origin secret **name** `CONVENTION_INTAKE_ALLOWED_ORIGINS` present |
+| PR 142 merge into `network-os/foundation` | **merged** | ordinary merge `9087e81`; pin is second parent |
+| Names-only durable bind (Erron Fayson → `bhis_convention_intake`) | hosted grant | match class **PRESENT**; one row inserted; durable role count **1**; no UUID/email/phone printed |
+| Frontend on `https://app.bhfos.com` | **not this increment** | live `build-info` is `environment=production`, `branch=hotfix/v1-crm-layout-hooks`, generated 2026-08-14. Join `/network-os/convention/join` redirects to `/select-tenant`. Provider interest form is **not** REACHABLE. |
+| Browser synth e2e | **not run** | stopped: convention routes not on the live CRM bundle |
+| Synth intake rows | hosted count | remaining **0** (none created this release chat) |
+| Customer tables | hosted counts unchanged | `leads` 73 / `contacts` 20 / `partner_prospects` 41 / `submissions` 2 / `events` 979 |
+
+## Release stop (scope mismatch)
+
+NOS-CONVENTION-PR142-RELEASE-01 authorized a controlled command-center convention-route deploy to `https://app.bhfos.com` only, with **no broader production change**.
+
+Independent browser proof showed the live Hostinger CRM is a **different** production bundle (`hotfix/v1-crm-layout-hooks`, 2026-08-14) whose `commitSha` is not the merged foundation tree (`9087e81` / pin `03073f4`). Replacing that live CRM with a `network-os/foundation` production build would be a broader frontend change than convention routes.
+
+**Stopped before Hostinger upload.** `HOSTINGER_API_TOKEN` was requested then unused. Marketing Vercel / Website/bhfos-site was not used.
+
+**Verdict: PR142_RELEASE_BLOCKED** (merge + durable bind completed; frontend deploy + browser e2e not executed).
+
+## Option A contract (unchanged)
+
+| Requirement | Status |
 |---|---|
-| QR target | `/network-os/convention/join` |
-| Form | name, company, email, phone, trades/services, service area, consent, honeypot |
-| Persistence | HTTP `network-os-provider-interest-intake` inserts into `public.network_os_provider_interest_intake` only |
-| Stamps | `campaign_id=HUGE_2026`, `source=HUGE_2026`, `intake_channel=convention_qr`, `onboarding_status=provider_interest_received` |
-| Uniques | campaign-scoped partial uniques on `email`, `phone_digits`, nonempty `client_request_id` |
-| Queue | `/network-os/convention/intake` — helper then RLS SELECT; status UPDATE only |
-| Confirmation | `/network-os/convention/join/thanks` — no internal identifiers, no echoed PII |
-| Evidence tier | **locally verified** M1 + T1–T11. Lint: `globalThis` replaced with `window.fetch` (eslint `no-undef`). Local `npm run lint` 0 errors; local `npm run build:local` pass. Not hosted-applied, not deployed, not merged. Hosted apply remains held. |
+| Isolated object | Only `public.network_os_provider_interest_intake`. No `tenant_id`. No `duplicate_key`. No FKs to `leads` / `contacts` / `partner_prospects` / `submissions` / `events`. |
+| Stamps | `campaign_id=HUGE_2026`, `source=HUGE_2026`, `intake_channel=convention_qr`, initial `onboarding_status=provider_interest_received` |
+| Helper | `public.network_os_actor_has_bhis_convention_intake()` exact role `bhis_convention_intake`. No admin/office fallback. |
+| HTTP owner | `network-os-provider-interest-intake` only. Exact-origin CORS. No `*`. |
+| Queue | helper RPC then RLS SELECT / status-only UPDATE. Client forbids `app_user_roles`. |
+| R1 / Slice 1 | **None** |
 
-## Created objects (source)
+## Checksums @ `03073f40499b5a3fa53054a3b0a26e3b8fbe5d96` (recomputed this release)
 
-1. `public.network_os_provider_interest_intake` — no `tenant_id`, no `duplicate_key`, no FKs to leads/contacts/partner_prospects/submissions/events
-2. `public.network_os_actor_has_bhis_convention_intake()` — SECURITY DEFINER, `SET search_path = public`, STABLE, zero args, no dynamic SQL, REVOKE PUBLIC, GRANT EXECUTE to `authenticated` and `service_role` only. Exact role `bhis_convention_intake`. Ignores `tenant_id`.
-3. HTTP function `network-os-provider-interest-intake` — public POST, 8KB ceiling, exact-origin CORS, 8s/10-per-hour limits, honeypot non-store, sanitized logs/errors, server-only privileged credential
+| Artifact | git blob | SHA-256 |
+|---|---|---|
+| Migration up | `942818e6a8b3bad628341cec6cc29bf131f48d51` | `8119c3e970c98fddcfe2cf3f2b63f2d4598c8f85b9ed71c7a56f3ed225cd5c14` |
+| Function `index.ts` | `f91e562982ded0a49385b0a291bea53efc9cd52e` | `2659f3f3da258a6c9313937899c641344eb740277b66e8e615e16cb4cb5215bd` |
+| Function `handler.mjs` | `2c1a01a1afcb32c1e4777225c9285d3d028c65cd` | `5fa93b7ceca0a64af09006449d32aa69e1dd2aad8434661f4a75b416153cf595` |
+| Rollback sibling | `b3749c364752f88909c9a36bbcc7ad1d777cf9b9` | `e5769ed4fca40b519ee59bc7b965026dfd6f169bcf3dfece8cb13b9b3d7fb093` |
 
-## Local proof
+Do **not** `supabase db push`. Do **not** re-apply SQL unless a later packet names a new artifact SHA.
 
-| Step | Result |
-|---|---|
-| M1 | Up applied on disposable local DB; customer tables unchanged |
-| T1 | HTTP synth stored one row; HUGE_2026 / convention_qr / provider_interest_received; timestamps set; `is_test_data` true |
-| T2 | Same email, new request-id → duplicate; still one original row |
-| T3 | Same phone, different email → duplicate |
-| T4 | Same `client_request_id` → duplicate |
-| T5 | Validation / honeypot / extra keys / client source or tenant → no unauthorized customer row; stamps remain server-owned |
-| T6 | Anon SELECT/INSERT/UPDATE/DELETE denied |
-| T7 | Authenticated `admin`/`office` without exact role: helper false; SELECT empty; no customer-table touch |
-| T8 | Authenticated + `bhis_convention_intake`: sees synth row; status → `reviewed`; PII unchanged |
-| T9 | Helper has no dynamic SQL; PUBLIC/anon cannot execute; same owner as table |
-| T10 | HTTP logs/errors have no email/phone/credential material; no `duplicate_key` column |
-| T11 | Down removes helper + table; operational tables/policies unchanged |
+## Explicit non-actions (this release chat)
 
-## Residual risks
-
-- Hosted RLS public-read/write deny is **unproven** until a later Founder apply packet names the host.
-- Role assignment is **unauthorized**. No `bhis_convention_intake` row is shipped. Queue stays empty on a host until a later grant.
-- Privileged insert uses the function’s server environment only. Not in `VITE_*`. FORCE RLS does not block service-class BYPASSRLS.
-- `app_user_roles` `SELECT USING (true)` remains a residual leak on that table. Queue client never reads it.
-- Automatic Vercel preview is Website/bhfos-site, not command-center.
-- Rate-limit maps are process-local (best-effort, not a new table).
-- Retention purge (180 days) is not this increment.
-- This is not R1/S1 activation.
-
-## Deployment requirements (not authorized here)
-
-- Founder apply packet that names the host
-- Hosted T6/T7 negatives (H*)
-- HTTP function deploy on the command-center host
-- One Founder-authorized role insert
-- Command-center preview/host (not the marketing Vercel project)
-
-## Exact-head Guard assignment
-
-After this lint correction is published, assign a **new independent** Architecture/Contract Guard to draft PR #142 at the published HEAD. Review the bounded lint fix plus unchanged Option A contract. Do not merge. Do not apply hosted SQL. Do not treat a marketing Vercel URL as the convention app. PR 140 and PR 141 stay parked.
+- No force-push. No squash of the pin. No unfreeze of PR 140 / 141.
+- No R1 / Slice 1 activation.
+- No customer-table writes. No `supabase db push`. No `SUPABASE_DB_PASSWORD`.
+- No Hostinger / Website/bhfos-site / other-host deploy.
+- No secret **values**, UUID, email, phone, or PAT printed.
+- Apply-runner token locally unset after bind; Cursor-environment removal requested.
+- `command-center/build-out.txt` untouched.
 
 ## Exact next action
 
-Independent Guard review of PR 142 at the published HEAD after CI lint + build are green. No merge, hosted write, deploy, role seed, or R1/S1 activation. Hosted apply remains held.
+Founder-authorized **surgical** convention-frontend deploy that does **not** replace the live `hotfix/v1-crm-layout-hooks` CRM bundle on `app.bhfos.com` — or an explicit authorization to replace that live bundle with merged `network-os/foundation` `9087e81`. Then browser synth e2e + synth cleanup. Keep the durable `bhis_convention_intake` bind unless Founder authorizes closeout.
