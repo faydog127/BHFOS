@@ -1,13 +1,31 @@
 # Network OS — Implementation Status
 
-**Branch:** `cursor/nos-convention-write-path-eb96`
-**Implementation commit:** `a53ea7866b3e7729a0d7c8e0ab97c4a53a59411b`
-**Ancestry:** `87c69217b11ad612449461b2bee4b4d10a6cfcf2` (PR 141 hop, parked)
-**Base:** `network-os/foundation`
-**Draft PR:** https://github.com/faydog127/BHFOS/pull/142
-**Mission:** NOS-CONVENTION-WRITE-PATH-FOUNDER-GATE-01 v2 Option A
-**Product / R1 / Slice 1 activation:** **None**
-**PR 140 / PR 141:** parked / frozen / not pushed
+**Docs branch (this increment):** `cursor/nos-live-baseline-recovery-blocked-140d`  
+**Foundation tip recorded:** `9087e814de088d93a6de863407dc702fa0530c86` (PR 142 merge)  
+**Mission recorded here:** NOS-CONVENTION-SURGICAL-INTEGRATION-BUILDER-01 (NEW agent after SURGICAL_INTEGRATION_BLOCKED)  
+**Product / R1 / Slice 1 activation:** **None**  
+**PR 140 / 141 / 142 / 143 / 144:** not used as a push target  
+
+Do **not** equate: source-present · locally verified · deployed · staging verified · merged · production verified.
+
+## LIVE_BASELINE_RECOVERY_BLOCKED (2026-08-24, independent re-verification)
+
+Live CRM identity on `https://app.bhfos.com/build-info.json` (re-read this mission) is `commitSha=0d6bcbb8aa14a43b16dafa5314e156d852785ff5`, `branch=hotfix/v1-crm-layout-hooks`, `environment=production`, generated `2026-08-14T01:20:52.219Z`, `releaseId=v2.5.0`.
+
+That exact SHA is **not** a git object on `origin` (`git fetch` → `not our ref`; GitHub commits API → no commit). Ref `hotfix/v1-crm-layout-hooks` is **not** on `origin` and is **not** an existing local/worktree branch. No Actions run, tag, release, or other `faydog127` repo contains the live source tree. `origin/main` `v2.5.0` Horizon labeling is **not** the live hotfix tree.
+
+Prior agent `bc-0e409231` / draft PR 144 reported origin-absent. Independently re-verified: **confirmed**. PR 144 stays draft as first-pass blocker documentation.
+
+**Stopped before creating an integration branch.** Convention join/thanks routes were not ported. Live CRM was not replaced. Full evidence: [`LIVE_BASELINE_RECOVERY_BLOCKED.md`](./LIVE_BASELINE_RECOVERY_BLOCKED.md).
+
+## Prior write-path record (unchanged by this increment)
+
+**Historical branch note:** `cursor/nos-convention-write-path-eb96`  
+**Implementation commit:** `a53ea7866b3e7729a0d7c8e0ab97c4a53a59411b`  
+**Ancestry:** `87c69217b11ad612449461b2bee4b4d10a6cfcf2` (PR 141 hop, parked)  
+**Base:** `network-os/foundation`  
+**PR 142:** merged at `9087e814de088d93a6de863407dc702fa0530c86`  
+**Original mission text below** is the write-path packet, not this surgical-integration hop.
 
 ## Convention write path (2026-08-24) — LOCAL IMPLEMENTATION
 
@@ -72,4 +90,4 @@ After this lint correction is published, assign a **new independent** Architectu
 
 ## Exact next action
 
-Independent Guard review of PR 142 at the published HEAD after CI lint + build are green. No merge, hosted write, deploy, role seed, or R1/S1 activation. Hosted apply remains held.
+Restore the live CRM source as a reachable git object on `origin` (`hotfix/v1-crm-layout-hooks` and/or commit `0d6bcbb8aa14a43b16dafa5314e156d852785ff5`) without inventing or rewriting it, or Founder-authorize a different proven CRM baseline. Then cut a surgical integration branch from that exact commit. Do not reconstruct from the compiled SPA. Do not replace live CRM until that proof exists. No R1/S1. No Hostinger upload from this blocked hop. Keep PR 144 draft.
