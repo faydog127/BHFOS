@@ -22,7 +22,7 @@ Founder authorized v2 Option A. This increment adds the isolated intake table, t
 | Uniques | campaign-scoped partial uniques on `email`, `phone_digits`, nonempty `client_request_id` |
 | Queue | `/network-os/convention/intake` — helper then RLS SELECT; status UPDATE only |
 | Confirmation | `/network-os/convention/join/thanks` — no internal identifiers, no echoed PII |
-| Evidence tier | **locally verified** M1 + T1–T11. Not hosted-applied, not deployed as command-center, not merged |
+| Evidence tier | **locally verified** M1 + T1–T11. Lint: `globalThis` replaced with `window.fetch` (eslint `no-undef`). Local `npm run lint` 0 errors; local `npm run build:local` pass. Not hosted-applied, not deployed, not merged. Hosted apply remains held. |
 
 ## Created objects (source)
 
@@ -68,8 +68,8 @@ Founder authorized v2 Option A. This increment adds the isolated intake table, t
 
 ## Exact-head Guard assignment
 
-After this commit is published, assign Architecture/Contract Guard to the **new draft PR** at the published HEAD. Review v2 Option A only: isolated table, helper hardening, HTTP owner, join/queue wiring, and local M1 + T1–T11. Do not merge. Do not apply hosted SQL. Do not treat a marketing Vercel URL as the convention app. PR 140 and PR 141 stay parked.
+After this lint correction is published, assign a **new independent** Architecture/Contract Guard to draft PR #142 at the published HEAD. Review the bounded lint fix plus unchanged Option A contract. Do not merge. Do not apply hosted SQL. Do not treat a marketing Vercel URL as the convention app. PR 140 and PR 141 stay parked.
 
 ## Exact next action
 
-Guard review of this new draft increment at the published HEAD. No merge, hosted write, deploy, role seed, or R1/S1 activation.
+Independent Guard review of PR 142 at the published HEAD after CI lint + build are green. No merge, hosted write, deploy, role seed, or R1/S1 activation. Hosted apply remains held.

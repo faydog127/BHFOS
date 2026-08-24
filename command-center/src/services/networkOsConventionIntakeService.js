@@ -60,7 +60,11 @@ function guardClient(supabase) {
  */
 export function createNetworkOsConventionIntakeService(deps = {}) {
   const supabase = guardClient(deps.supabase || null);
-  const fetchImpl = deps.fetch || globalThis.fetch;
+  const fetchImpl =
+    deps.fetch ||
+    (typeof window !== 'undefined' && typeof window.fetch === 'function'
+      ? window.fetch.bind(window)
+      : undefined);
   const functionsBase = String(deps.functionsBase || '').replace(/\/$/, '');
   const anonKey = deps.anonKey || '';
   const now = deps.clock?.now || (() => Date.now());
