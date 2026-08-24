@@ -25,6 +25,7 @@
     "test:ml-p1-s1-helpers": "node --test tests/unit/ml-p1-s1-foundation.test.mjs",
     "test:network-os-convention": "node --test tests/unit/network-os-convention-demo.test.mjs",
     "test:network-os-convention-intake": "node --test tests/unit/network-os-convention-intake.test.mjs",
+    "test:network-os-convention-write-path": "node --test tests/unit/network-os-convention-write-path.test.mjs",
     "test:ml-p1-s2-helpers": "node --test tests/unit/ml-p1-s2-lifecycle.test.mjs",
     "test:ux-refactor-helpers": "node --test tests/unit/ux-refactor-nav-ia.test.mjs",
     "test:media-intel-helpers": "node --test tests/unit/media-intel-core.test.mjs tests/unit/media-intel-access.test.mjs tests/unit/media-intel-security.test.mjs tests/unit/media-intel-contracts.test.mjs tests/unit/media-intel-upload-client.test.mjs tests/unit/media-intel-search.test.mjs tests/unit/media-intel-resilient-upload.test.mjs tests/unit/media-intel-lifecycle.test.mjs tests/unit/media-intel-contributor.test.mjs",

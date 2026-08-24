@@ -6,8 +6,7 @@ export default function ConventionJoinThanksPage() {
       <div className="mx-auto max-w-md space-y-3 border border-slate-200 bg-white p-6">
         <h1 className="text-xl font-semibold">Thank you</h1>
         <p className="text-sm text-slate-600">
-          Your interest was received on this device. It was not stored because the
-          convention write path is not isolated yet.
+          Your interest was received. BHIS will follow up if there is a next step.
         </p>
       </div>
     </div>

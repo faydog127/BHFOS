@@ -1,5 +1,5 @@
 /**
- * Network OS convention QR intake — fail-closed write path.
+ * Network OS convention QR intake — client contract.
  * Synthetic data only. Run: node --test tests/unit/network-os-convention-intake.test.mjs
  */
 import assert from 'node:assert/strict';
@@ -9,13 +9,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   CONVENTION_INTAKE_ANON_READ_DENIED,
+  CONVENTION_INTAKE_CHANNEL,
   CONVENTION_INTAKE_DUPLICATE,
   CONVENTION_INTAKE_SOURCE,
   CONVENTION_INTAKE_STATUS,
   CONVENTION_INTAKE_UNAUTHORIZED,
   CONVENTION_QR_PATH,
+  CONVENTION_WRITE_PATH_IMPLEMENTATION_READY_FOR_GUARD,
   CONVENTION_WRITE_PATH_MATERIAL_BLOCKED,
-  INTAKE_MISSING_REQUIREMENTS,
+  INTAKE_HOSTED_RESIDUALS,
   allowlistIntakeInput,
   evaluateConventionIntakeWrite,
   mapConventionIntakeSourceStatus,
@@ -59,14 +61,39 @@ function trackedSupabase() {
       calls.push(table);
       throw new Error(`unexpected table access: ${table}`);
     },
+    rpc(name) {
+      calls.push(`rpc:${name}`);
+      throw new Error(`unexpected rpc: ${name}`);
+    },
+  };
+}
+
+function mockFetch(handler) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    return handler(url, init);
+  };
+  fetchImpl.calls = calls;
+  return fetchImpl;
+}
+
+function jsonResponse(body, status = 200) {
+  return {
+    status,
+    async json() {
+      return body;
+    },
   };
 }
 
 describe('convention intake validation', () => {
-  it('accepts a valid synthetic payload and maps source/status', () => {
+  it('accepts a valid synthetic payload and maps campaign/source/channel/status', () => {
     const result = validateConventionIntake(SYNTH);
     assert.equal(result.ok, true);
+    assert.equal(result.normalized.campaign_id, 'HUGE_2026');
     assert.equal(result.normalized.source, CONVENTION_INTAKE_SOURCE);
+    assert.equal(result.normalized.intake_channel, CONVENTION_INTAKE_CHANNEL);
     assert.equal(result.normalized.status, CONVENTION_INTAKE_STATUS);
     assert.equal(result.normalized.phone, '3215550100');
   });
@@ -93,62 +120,96 @@ describe('convention intake validation', () => {
 });
 
 describe('convention intake persistence', () => {
-  it('never writes a valid submission and never opens a table', async () => {
+  it('submits through the HTTP owner and never opens a table', async () => {
     const supabase = trackedSupabase();
-    const service = createNetworkOsConventionIntakeService({ supabase });
+    const fetchImpl = mockFetch(() =>
+      jsonResponse({ ok: true, received: true, stored: true, duplicate: false }),
+    );
+    const service = createNetworkOsConventionIntakeService({
+      supabase,
+      fetch: fetchImpl,
+      functionsBase: 'https://functions.example.invalid/functions/v1',
+      anonKey: 'publishable-anon',
+    });
     const result = await service.submitProviderInterest(SYNTH);
-    assert.equal(result.ok, false);
-    assert.equal(result.persisted, false);
-    assert.equal(result.error.code, CONVENTION_WRITE_PATH_MATERIAL_BLOCKED);
-    assert.equal(result.mapping.source, CONVENTION_INTAKE_SOURCE);
+    assert.equal(result.ok, true);
+    assert.equal(result.persisted, true);
+    assert.equal(result.mapping.source, 'HUGE_2026');
+    assert.equal(result.mapping.intake_channel, 'convention_qr');
     assert.equal(result.mapping.status, CONVENTION_INTAKE_STATUS);
     assert.deepEqual(supabase.calls, []);
+    assert.equal(fetchImpl.calls.length, 1);
+    assert.match(fetchImpl.calls[0].url, /network-os-provider-interest-intake$/);
+    const body = JSON.parse(fetchImpl.calls[0].init.body);
+    assert.equal(body.extra_secret, undefined);
+    assert.equal(body.source, undefined);
+    assert.equal(body.tenant_id, undefined);
+    assert.equal(fetchImpl.calls[0].init.headers.apikey, 'publishable-anon');
   });
 
   it('returns required-field errors without persisting', async () => {
     const supabase = trackedSupabase();
-    const service = createNetworkOsConventionIntakeService({ supabase });
+    const fetchImpl = mockFetch(() => {
+      throw new Error('should not fetch');
+    });
+    const service = createNetworkOsConventionIntakeService({
+      supabase,
+      fetch: fetchImpl,
+      functionsBase: 'https://functions.example.invalid/functions/v1',
+    });
     const result = await service.submitProviderInterest({ name: 'Only' });
     assert.equal(result.error.code, 'CONVENTION_INTAKE_VALIDATION');
     assert.equal(result.persisted, false);
     assert.deepEqual(supabase.calls, []);
+    assert.equal(fetchImpl.calls.length, 0);
   });
 
-  it('treats a repeated client_request_id as a duplicate after the rate window', async () => {
+  it('treats an HTTP duplicate as a non-store confirmation', async () => {
     const clock = createClock();
-    const service = createNetworkOsConventionIntakeService({ clock });
-    const first = await service.submitProviderInterest(SYNTH);
-    assert.equal(first.error.code, CONVENTION_WRITE_PATH_MATERIAL_BLOCKED);
-    clock.advance(10_000);
-    const second = await service.submitProviderInterest(SYNTH);
-    assert.equal(second.error.code, CONVENTION_INTAKE_DUPLICATE);
-    assert.equal(second.persisted, false);
+    const fetchImpl = mockFetch(() =>
+      jsonResponse({ ok: true, received: true, stored: false, duplicate: true }),
+    );
+    const service = createNetworkOsConventionIntakeService({
+      clock,
+      fetch: fetchImpl,
+      functionsBase: 'https://functions.example.invalid/functions/v1',
+    });
+    const result = await service.submitProviderInterest(SYNTH);
+    assert.equal(result.error.code, CONVENTION_INTAKE_DUPLICATE);
+    assert.equal(result.persisted, false);
+    assert.equal(result.confirmation.received, true);
   });
 
   it('rate-limits rapid resubmits from the same form', async () => {
     const clock = createClock();
-    const service = createNetworkOsConventionIntakeService({ clock });
+    const fetchImpl = mockFetch(() =>
+      jsonResponse({ ok: true, received: true, stored: true, duplicate: false }),
+    );
+    const service = createNetworkOsConventionIntakeService({
+      clock,
+      fetch: fetchImpl,
+      functionsBase: 'https://functions.example.invalid/functions/v1',
+    });
     await service.submitProviderInterest({ ...SYNTH, client_request_id: 'a' });
     const second = await service.submitProviderInterest({ ...SYNTH, client_request_id: 'b' });
     assert.equal(second.error.code, 'CONVENTION_INTAKE_RATE_LIMITED');
+    assert.equal(fetchImpl.calls.length, 1);
   });
 
-  it('honeypot submissions do not persist and do not expose a distinct success payload', async () => {
-    const service = createNetworkOsConventionIntakeService();
+  it('honeypot submissions do not persist and do not expose a distinct honeypot code', async () => {
+    const fetchImpl = mockFetch(() => {
+      throw new Error('should not fetch');
+    });
+    const service = createNetworkOsConventionIntakeService({
+      fetch: fetchImpl,
+      functionsBase: 'https://functions.example.invalid/functions/v1',
+    });
     const result = await service.submitProviderInterest({ ...SYNTH, honeypot: 'http://spam.test' });
     assert.equal(result.persisted, false);
-    assert.equal(result.error.code, CONVENTION_WRITE_PATH_MATERIAL_BLOCKED);
-  });
-
-  it('maps refresh/back of the same request to a non-write confirmation', async () => {
-    const clock = createClock();
-    const service = createNetworkOsConventionIntakeService({ clock });
-    await service.submitProviderInterest(SYNTH);
-    clock.advance(10_000);
-    const replay = await service.submitProviderInterest(SYNTH);
-    assert.equal(replay.confirmation.received, true);
-    assert.equal(replay.confirmation.stored, false);
-    assert.equal(replay.persisted, false);
+    assert.equal(result.confirmation.received, true);
+    assert.equal(result.confirmation.stored, false);
+    assert.equal(result.error, undefined);
+    assert.equal(fetchImpl.calls.length, 0);
   });
 
   it('sanitizes network failure without echoing PII', () => {
@@ -166,32 +227,28 @@ describe('convention intake persistence', () => {
 });
 
 describe('convention intake isolation', () => {
-  it('records the exact missing schema and policy requirements', () => {
+  it('records hosted residuals only; local write path is implemented', () => {
     const decision = evaluateConventionIntakeWrite();
-    assert.equal(decision.allowed, false);
-    assert.equal(decision.code, CONVENTION_WRITE_PATH_MATERIAL_BLOCKED);
-    const ids = decision.missing.map((item) => item.id);
-    assert.ok(ids.includes('isolated_intake_object'));
+    assert.equal(decision.allowed, true);
+    assert.equal(decision.code, CONVENTION_WRITE_PATH_IMPLEMENTATION_READY_FOR_GUARD);
+    const ids = decision.hostedResiduals.map((item) => item.id);
     assert.ok(ids.includes('hosted_rls_public_read_deny'));
     assert.ok(ids.includes('hosted_rls_public_table_write_deny'));
-    assert.ok(ids.includes('server_write_owner'));
-    assert.ok(ids.includes('duplicate_key'));
-    assert.ok(ids.includes('bhis_queue_grant'));
-    assert.equal(INTAKE_MISSING_REQUIREMENTS.length, 6);
+    assert.equal(INTAKE_HOSTED_RESIDUALS.length, 2);
   });
 
-  it('denies anonymous queue reads', () => {
+  it('denies anonymous queue reads', async () => {
     const service = createNetworkOsConventionIntakeService();
-    const queue = service.listIntakeQueue({ session: null, bhisIntakeGrant: true });
+    const queue = await service.listIntakeQueue({ session: null, bhisIntakeGrant: true });
     assert.equal(queue.ok, false);
     assert.equal(queue.rows.length, 0);
     assert.equal(queue.error.code, CONVENTION_INTAKE_ANON_READ_DENIED);
   });
 
-  it('denies unauthorized admin queue reads and does not query tables', () => {
+  it('denies unauthorized admin queue reads and does not query tables', async () => {
     const supabase = trackedSupabase();
     const service = createNetworkOsConventionIntakeService({ supabase });
-    const queue = service.listIntakeQueue({
+    const queue = await service.listIntakeQueue({
       session: { tenantId: 'tvg' },
       bhisIntakeGrant: false,
     });
@@ -200,9 +257,11 @@ describe('convention intake isolation', () => {
     assert.deepEqual(supabase.calls, []);
   });
 
-  it('source/status mapping stays convention-scoped', () => {
+  it('source/status mapping stays campaign-scoped', () => {
     assert.deepEqual(mapConventionIntakeSourceStatus(), {
-      source: 'convention_qr',
+      campaign_id: 'HUGE_2026',
+      source: 'HUGE_2026',
+      intake_channel: 'convention_qr',
       status: 'provider_interest_received',
     });
   });
@@ -230,7 +289,7 @@ describe('convention QR and secret hygiene', () => {
     assert.doesNotMatch(joinBlock, /ConventionSessionGuard/);
   });
 
-  it('keeps service-role secrets and submitted PII out of intake sources and sanitized errors', () => {
+  it('keeps privileged credentials and submitted PII out of intake sources and sanitized errors', () => {
     const files = [
       'src/lib/networkOs/conventionIntakePolicy.js',
       'src/services/networkOsConventionIntakeService.js',
@@ -243,6 +302,7 @@ describe('convention QR and secret hygiene', () => {
       assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY|service_role key|createClient\(/);
       assert.doesNotMatch(source, /console\.(log|info|debug|error|warn)\([^)]*(email|phone|payload)/i);
       assert.doesNotMatch(source, /from\('leads'\)|from\('contacts'\)|from\('partner_prospects'\)/);
+      assert.doesNotMatch(source, /from\('app_user_roles'\)/);
     }
     const leaked = sanitizeIntakeError({
       code: '42501',

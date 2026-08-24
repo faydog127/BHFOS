@@ -1,14 +1,15 @@
 /**
  * Network OS convention QR → provider-interest intake.
  *
- * Persistence is fail-closed. Existing hosted objects cannot isolate a
- * public write from customer/partner operational records, and no safe
- * server function + RLS proof exists. Do not invent schema or weaken
- * grants to make this path appear writable.
+ * Isolated write path: HTTP owner stamps HUGE_2026 / convention_qr and
+ * inserts only into public.network_os_provider_interest_intake.
+ * Hosted RLS apply remains a later packet.
  */
 
 export const CONVENTION_WRITE_PATH_MATERIAL_BLOCKED =
   'CONVENTION_WRITE_PATH_MATERIAL_BLOCKED';
+export const CONVENTION_WRITE_PATH_IMPLEMENTATION_READY_FOR_GUARD =
+  'CONVENTION_WRITE_PATH_IMPLEMENTATION_READY_FOR_GUARD';
 export const CONVENTION_INTAKE_VALIDATION = 'CONVENTION_INTAKE_VALIDATION';
 export const CONVENTION_INTAKE_DUPLICATE = 'CONVENTION_INTAKE_DUPLICATE';
 export const CONVENTION_INTAKE_RATE_LIMITED = 'CONVENTION_INTAKE_RATE_LIMITED';
@@ -16,8 +17,48 @@ export const CONVENTION_INTAKE_UNAUTHORIZED = 'CONVENTION_INTAKE_UNAUTHORIZED';
 export const CONVENTION_INTAKE_ANON_READ_DENIED = 'CONVENTION_INTAKE_ANON_READ_DENIED';
 
 export const CONVENTION_QR_PATH = '/network-os/convention/join';
-export const CONVENTION_INTAKE_SOURCE = 'convention_qr';
+export const CONVENTION_INTAKE_CAMPAIGN_ID = 'HUGE_2026';
+export const CONVENTION_INTAKE_SOURCE = 'HUGE_2026';
+export const CONVENTION_INTAKE_CHANNEL = 'convention_qr';
 export const CONVENTION_INTAKE_STATUS = 'provider_interest_received';
+export const CONVENTION_INTAKE_TABLE = 'network_os_provider_interest_intake';
+export const CONVENTION_INTAKE_HELPER = 'network_os_actor_has_bhis_convention_intake';
+export const CONVENTION_INTAKE_HTTP_FUNCTION = 'network-os-provider-interest-intake';
+export const CONVENTION_INTAKE_ROLE = 'bhis_convention_intake';
+
+export const INTAKE_QUEUE_SELECT_COLUMNS = Object.freeze([
+  'id',
+  'campaign_id',
+  'source',
+  'intake_channel',
+  'onboarding_status',
+  'display_name',
+  'company_name',
+  'email',
+  'phone_digits',
+  'trades',
+  'service_area',
+  'consent_contact',
+  'consented_at',
+  'submitted_at',
+  'client_request_id',
+  'is_test_data',
+  'created_at',
+  'updated_at',
+].join(','));
+
+export const INTAKE_ALLOWED_STATUSES = Object.freeze([
+  'provider_interest_received',
+  'reviewed',
+  'contacted',
+  'declined',
+]);
+
+export const INTAKE_QUEUE_STATUSES = Object.freeze([
+  'reviewed',
+  'contacted',
+  'declined',
+]);
 
 export const INTAKE_ALLOWED_FIELDS = Object.freeze([
   'name',
@@ -42,12 +83,7 @@ export const INTAKE_FIELD_LIMITS = Object.freeze({
   tradesItemLen: 40,
 });
 
-export const INTAKE_MISSING_REQUIREMENTS = Object.freeze([
-  {
-    id: 'isolated_intake_object',
-    need:
-      'A dedicated convention-intake relation (or a proven non-customer tenant) that is not leads, contacts, partner_prospects, submissions, or events.',
-  },
+export const INTAKE_HOSTED_RESIDUALS = Object.freeze([
   {
     id: 'hosted_rls_public_read_deny',
     need: 'Hosted RLS/grants proving anon and PUBLIC cannot SELECT intake or customer rows.',
@@ -55,20 +91,6 @@ export const INTAKE_MISSING_REQUIREMENTS = Object.freeze([
   {
     id: 'hosted_rls_public_table_write_deny',
     need: 'Hosted RLS/grants proving anon cannot INSERT/UPDATE/DELETE those tables directly.',
-  },
-  {
-    id: 'server_write_owner',
-    need:
-      'A server function that allowlists fields, never logs PII, never ships service_role to the browser, and does not write into customer-bearing leads/contacts or unscoped partner_prospects.',
-  },
-  {
-    id: 'duplicate_key',
-    need: 'A proven unique business key for convention intake idempotency that does not require anonymous reads of customer tables.',
-  },
-  {
-    id: 'bhis_queue_grant',
-    need:
-      'A proven BHIS intake-queue grant. app_user_roles tenant/RLS is unproven; unscoped role fallback is prohibited.',
   },
 ]);
 
@@ -92,7 +114,9 @@ export function resolveConventionQrTarget(origin = '') {
 
 export function mapConventionIntakeSourceStatus() {
   return {
+    campaign_id: CONVENTION_INTAKE_CAMPAIGN_ID,
     source: CONVENTION_INTAKE_SOURCE,
+    intake_channel: CONVENTION_INTAKE_CHANNEL,
     status: CONVENTION_INTAKE_STATUS,
   };
 }
@@ -165,18 +189,10 @@ export function validateConventionIntake(input = {}) {
 
 export function evaluateConventionIntakeWrite() {
   return {
-    allowed: false,
-    code: CONVENTION_WRITE_PATH_MATERIAL_BLOCKED,
-    missing: INTAKE_MISSING_REQUIREMENTS,
+    allowed: true,
+    code: CONVENTION_WRITE_PATH_IMPLEMENTATION_READY_FOR_GUARD,
+    hostedResiduals: INTAKE_HOSTED_RESIDUALS,
   };
-}
-
-export function assertConventionIntakeWriteAllowed() {
-  const decision = evaluateConventionIntakeWrite();
-  const err = new Error(decision.code);
-  err.code = decision.code;
-  err.missing = decision.missing;
-  throw err;
 }
 
 export function assertIntakeQueueAccess({ session = null, bhisIntakeGrant = false } = {}) {
@@ -213,6 +229,12 @@ export function sanitizeIntakeError(error) {
   }
   if (code === CONVENTION_INTAKE_UNAUTHORIZED) {
     return { code, message: 'This queue is limited to authorized BHIS intake operators.' };
+  }
+  if (code === CONVENTION_WRITE_PATH_IMPLEMENTATION_READY_FOR_GUARD) {
+    return {
+      code,
+      message: 'Convention intake write path is implemented locally. Hosted apply is not authorized.',
+    };
   }
   return {
     code: CONVENTION_WRITE_PATH_MATERIAL_BLOCKED,

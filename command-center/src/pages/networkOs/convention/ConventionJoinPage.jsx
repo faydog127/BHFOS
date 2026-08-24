@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
+import { supabaseAnonKey, supabaseUrl } from '@/lib/customSupabaseClient';
 import { createNetworkOsConventionIntakeService } from '@/services/networkOsConventionIntakeService';
 import { CONVENTION_INTAKE_DUPLICATE } from '@/lib/networkOs/conventionIntakePolicy';
 import { ConventionBanner } from './conventionUi';
@@ -41,7 +42,14 @@ function markSubmitted() {
 
 export default function ConventionJoinPage() {
   const navigate = useNavigate();
-  const service = useMemo(() => createNetworkOsConventionIntakeService(), []);
+  const service = useMemo(
+    () =>
+      createNetworkOsConventionIntakeService({
+        functionsBase: `${String(supabaseUrl || '').replace(/\/$/, '')}/functions/v1`,
+        anonKey: supabaseAnonKey,
+      }),
+    [],
+  );
   const [form, setForm] = useState({
     name: '',
     company: '',
@@ -86,7 +94,7 @@ export default function ConventionJoinPage() {
     }
     if (result.error?.code === CONVENTION_INTAKE_DUPLICATE || result.confirmation?.received) {
       markSubmitted();
-      navigate('/network-os/convention/join/thanks', { replace: true, state: { blocked: true } });
+      navigate('/network-os/convention/join/thanks', { replace: true });
       return;
     }
     setBanner(result.error?.message || 'The request could not be completed.');
@@ -99,8 +107,7 @@ export default function ConventionJoinPage() {
           <p className="text-xs uppercase tracking-wide text-slate-500">Network OS</p>
           <h1 className="text-xl font-semibold">Provider interest</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Convention QR destination. Submissions are not stored until an isolated
-            intake object and RLS are proven.
+            Convention QR destination. BHIS will contact you about network participation.
           </p>
         </div>
         {banner ? <ConventionBanner tone="blocked">{banner}</ConventionBanner> : null}
@@ -205,7 +212,7 @@ export default function ConventionJoinPage() {
             disabled={submitting}
             className="border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white"
           >
-            {submitting ? 'Checking…' : 'Submit interest'}
+            {submitting ? 'Submitting…' : 'Submit interest'}
           </button>
         </form>
       </div>
