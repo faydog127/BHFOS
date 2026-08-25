@@ -22,6 +22,8 @@
     "test:identity-helpers": "node --test tests/unit/r1c-helper-contracts.test.mjs",
     "test:identity-contracts": "npm run guard:identity && npm run test:identity-helpers && playwright test tests/smoke/r1a-property-relationship-safety.spec.js tests/smoke/r1b-technician-identity-contract.spec.js tests/smoke/r1c-identity-relationship-guards.spec.js tests/smoke/inspection-field-address-schema.spec.js",
     "test:intake-helpers": "node --test tests/unit/r2-lead-intake-contract.test.mjs",
+    "test:network-os-convention-intake": "node --test tests/unit/network-os-convention-intake.test.mjs",
+    "test:network-os-convention-write-path": "node --test tests/unit/network-os-convention-write-path.test.mjs",
     "test:ml-p1-s1-helpers": "node --test tests/unit/ml-p1-s1-foundation.test.mjs",
     "test:ml-p1-s2-helpers": "node --test tests/unit/ml-p1-s2-lifecycle.test.mjs",
     "test:ux-refactor-helpers": "node --test tests/unit/ux-refactor-nav-ia.test.mjs tests/unit/crm-layout-hooks.test.mjs tests/unit/mil-record-host.test.mjs",
