@@ -14,11 +14,11 @@ Fast Lane archive stays immutable.
 | ledger_id | `NOS-T0-EVIDENCE-LEDGER-01` |
 | ledger_version | `1` |
 | ledger_path | `command-center/docs/network-os/T0_EVIDENCE_LEDGER.md` |
-| frozen_sha | `PENDING_WRITEBACK` |
-| freeze_status | `EVIDENCE_CAPTURED` |
+| frozen_sha | `61acc48683ebd761d23d1a2b450130ce3b0819f6` |
+| freeze_status | `FROZEN` |
 | evidence_class | `SOURCE-ONLY` |
 | created_at | `2026-08-25T21:45:00Z` |
-| updated_at | `2026-08-25T21:45:00Z` |
+| updated_at | `2026-08-25T21:50:00Z` |
 | authority_owner | Founder |
 | record_owner | Human/docs (n8n Coordinator thread; not n8n) |
 
@@ -54,7 +54,7 @@ Starting ref (exists): `1518e9f92c43e72bb0b294f2ecc5afec2446ea60` on `hotfix/v1-
 | USABLE | **Not claimed** |
 | STABLE | **Not claimed** |
 | COMPLETE | **Not claimed** |
-| READY_FOR_INIT_PACKET | **Not claimed** (SHA write-back has not landed on this revision) |
+| READY_FOR_INIT_PACKET | **Not claimed** (SHA is written back; this hop lands at `FROZEN`, not init-packet ready) |
 | n8n activated | **Not this hop** |
 | FAST_LANE_COMPLETE | **Not declared** |
 
@@ -65,18 +65,18 @@ Starting ref (exists): `1518e9f92c43e72bb0b294f2ecc5afec2446ea60` on `hotfix/v1-
 | action_id | `NOS-LEDGER-ON-SHA-01` |
 | action_name | Land canonical T0 evidence ledger on a frozen SHA |
 | action_description | Docs-only hop: add this single ledger file on a new branch from starting ref `1518e9f92c43e72bb0b294f2ecc5afec2446ea60`, commit it, write the ledger-addition SHA back into `frozen_sha`, and open a PR. Human/docs action id (not invented by n8n). |
-| state | `EVIDENCE_CAPTURED` |
-| sha | `PENDING_WRITEBACK` |
+| state | `FROZEN` |
+| sha | `61acc48683ebd761d23d1a2b450130ce3b0819f6` |
 | authority | Founder 2026-08-25 17:43 ET, n8n Coordinator thread: continue in proper order; this hop is the ledger gate only |
 | owner | Human/docs |
 | evidence_links | this file; parent SHA `1518e9f92c43e72bb0b294f2ecc5afec2446ea60`; `hotfix/v1-crm-layout-hooks` |
 | blocker | none |
-| next_transition | Write `frozen_sha` back to the ledger-addition commit and set `freeze_status` / action `state` to `FROZEN`. Do not mark `READY_FOR_INIT_PACKET` until that write-back exists. Do not activate n8n. |
+| next_transition | Human/docs review of the open PR that carries this freeze. A later hop may consider an init packet only after this SOURCE-ONLY ledger is accepted. Do not activate n8n from this record. |
 | teardown_status | `NOT_REQUIRED` |
 
 `state` enum: `DRAFT` \| `PROPOSED` \| `AUTHORIZED` \| `IN_PROGRESS` \| `EVIDENCE_CAPTURED` \| `VALIDATED` \| `FROZEN` \| `READY_FOR_INIT_PACKET` \| `BLOCKED` \| `FAILED` \| `SUPERSEDED` \| `ABANDONED`.
 
-This hop lands at `EVIDENCE_CAPTURED` on the ledger-addition commit, then `FROZEN` after SHA write-back. It does not land at `READY_FOR_INIT_PACKET` on this revision.
+This hop lands at `FROZEN` after the ledger-addition SHA is written back. `frozen_sha` is the commit that first added this file (`61acc48683ebd761d23d1a2b450130ce3b0819f6`). Branch HEAD may be the write-back commit. It does not land at `READY_FOR_INIT_PACKET`.
 
 ## Authorization
 
