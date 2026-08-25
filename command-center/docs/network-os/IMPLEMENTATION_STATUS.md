@@ -2,6 +2,7 @@
 
 **Branch:** `cursor/nos-convention-queue-closeout-f5df`  
 **Verified product commit (tests/build):** `495093fb7ec95f577cccb500f20149fab240864f`  
+**Draft PR:** https://github.com/faydog127/BHFOS/pull/148  
 **Mission:** `NOS-CONVENTION-QUEUE-CLOSEOUT-01` / BUILDER  
 **Parent / production merge SHA:** `c4d344b13715914f0a452222fdb0a0417061d0bb` (`hotfix/v1-crm-layout-hooks` tip)  
 **Rollback identity (frontend redeploy):** `0d6bcbb8aa14a43b16dafa5314e156d852785ff5`  
