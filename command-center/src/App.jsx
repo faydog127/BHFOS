@@ -75,6 +75,9 @@ const MediaQualityCleanup = React.lazy(() => import('@/pages/crm/media/MediaQual
 const MediaSettings = React.lazy(() => import('@/pages/crm/media/MediaSettings'));
 const CreatorRoutesPage = React.lazy(() => import('@/pages/creator/CreatorRoutes'));
 const TechRoutesPage = React.lazy(() => import('@/pages/tech/TechRoutes'));
+const NetworkOsConventionJoinRoutes = React.lazy(() =>
+  import('@/pages/networkOs/convention/ConventionJoinRoutes')
+);
 
 // Sub-module Lazy Loads
 const InvoiceBuilder = React.lazy(() => import('@/pages/crm/InvoiceBuilder'));
@@ -550,6 +553,18 @@ function App() {
             </TenantGuard>
           }
         />
+        {/* Public convention QR destination — no session and no table reads. */}
+        <Route
+          path="/network-os/convention/join/*"
+          element={
+            <RouteErrorBoundary>
+              <Suspense fallback={<LoadingFallback />}>
+                <NetworkOsConventionJoinRoutes />
+              </Suspense>
+            </RouteErrorBoundary>
+          }
+        />
+        {/* End public convention join/confirmation — demo /network-os/convention/* not ported. */}
         {/* MIL product routes — on app.bhfos.com these offload to mil.bhfos.com. */}
         <Route
           path="/media/*"
