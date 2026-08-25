@@ -1,6 +1,7 @@
 # Network OS — Implementation Status
 
 **Branch:** `cursor/nos-convention-queue-closeout-f5df`  
+**Verified product commit (tests/build):** `495093fb7ec95f577cccb500f20149fab240864f`  
 **Mission:** `NOS-CONVENTION-QUEUE-CLOSEOUT-01` / BUILDER  
 **Parent / production merge SHA:** `c4d344b13715914f0a452222fdb0a0417061d0bb` (`hotfix/v1-crm-layout-hooks` tip)  
 **Rollback identity (frontend redeploy):** `0d6bcbb8aa14a43b16dafa5314e156d852785ff5`  
@@ -54,7 +55,7 @@ Queue client never `from('app_user_roles')` and never reads customer tables (`le
 | Claim | Tier |
 |---|---|
 | Production merge SHA resolve | Git verified this session |
-| Queue + CRM/join preservation | **locally verified** after this hop's tests |
+| Queue + CRM/join preservation | **locally verified** at `495093fb7ec95f577cccb500f20149fab240864f` |
 | Hosted `https://app.bhfos.com` replace | **Not done** |
 | Hosted SQL / function deploy | **Not done** |
 | R1 / Slice 1 | **Inactive** |
