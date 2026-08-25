@@ -11,15 +11,20 @@ import {
   CONVENTION_INTAKE_ANON_READ_DENIED,
   CONVENTION_INTAKE_CHANNEL,
   CONVENTION_INTAKE_DUPLICATE,
+  CONVENTION_INTAKE_HELPER,
+  CONVENTION_INTAKE_QUEUE_PATH,
   CONVENTION_INTAKE_SOURCE,
   CONVENTION_INTAKE_STATUS,
+  CONVENTION_INTAKE_TABLE,
   CONVENTION_INTAKE_UNAUTHORIZED,
   CONVENTION_QR_PATH,
   CONVENTION_WRITE_PATH_IMPLEMENTATION_READY_FOR_GUARD,
   CONVENTION_WRITE_PATH_MATERIAL_BLOCKED,
   INTAKE_HOSTED_RESIDUALS,
+  INTAKE_QUEUE_SELECT_COLUMNS,
   allowlistIntakeInput,
   evaluateConventionIntakeWrite,
+  isSafeConventionIntakeNext,
   mapConventionIntakeSourceStatus,
   resolveConventionQrTarget,
   sanitizeIntakeError,
@@ -83,6 +88,42 @@ function jsonResponse(body, status = 200) {
     status,
     async json() {
       return body;
+    },
+  };
+}
+
+function grantedQueueSupabase({ rows = [], updateError = null } = {}) {
+  const calls = [];
+  const selectBuilder = {
+    order(column, opts) {
+      calls.push({ type: 'order', column, opts });
+      return Promise.resolve({ data: rows, error: null });
+    },
+  };
+  const updateBuilder = {
+    eq(column, value) {
+      calls.push({ type: 'eq', column, value });
+      return Promise.resolve({ error: updateError });
+    },
+  };
+  return {
+    calls,
+    rpc(name) {
+      calls.push({ type: 'rpc', name });
+      return Promise.resolve({ data: true, error: null });
+    },
+    from(table) {
+      calls.push({ type: 'from', table });
+      return {
+        select(columns) {
+          calls.push({ type: 'select', columns });
+          return selectBuilder;
+        },
+        update(payload) {
+          calls.push({ type: 'update', payload });
+          return updateBuilder;
+        },
+      };
     },
   };
 }
@@ -257,6 +298,62 @@ describe('convention intake isolation', () => {
     assert.deepEqual(supabase.calls, []);
   });
 
+  it('calls the BHIS helper first, then SELECT only the intake table', async () => {
+    const rows = [
+      {
+        id: 'synth-row',
+        company_name: 'Rivera Mechanical',
+        display_name: 'Alex Rivera',
+        onboarding_status: CONVENTION_INTAKE_STATUS,
+      },
+    ];
+    const supabase = grantedQueueSupabase({ rows });
+    const service = createNetworkOsConventionIntakeService({ supabase });
+    const queue = await service.listIntakeQueue({ session: { access: true } });
+    assert.equal(queue.ok, true);
+    assert.equal(queue.rows.length, 1);
+    assert.equal(supabase.calls[0].type, 'rpc');
+    assert.equal(supabase.calls[0].name, CONVENTION_INTAKE_HELPER);
+    assert.equal(supabase.calls[1].type, 'from');
+    assert.equal(supabase.calls[1].table, CONVENTION_INTAKE_TABLE);
+    assert.equal(supabase.calls[2].type, 'select');
+    assert.equal(supabase.calls[2].columns, INTAKE_QUEUE_SELECT_COLUMNS);
+    assert.equal(
+      supabase.calls.some((call) => call.table === 'app_user_roles' || call.name === 'app_user_roles'),
+      false,
+    );
+  });
+
+  it('status-only UPDATE follows the helper and rejects unknown statuses', async () => {
+    const supabase = grantedQueueSupabase();
+    const service = createNetworkOsConventionIntakeService({ supabase });
+    const denied = await service.updateIntakeStatus(
+      { session: { access: true } },
+      'synth-row',
+      'converted_to_lead',
+    );
+    assert.equal(denied.ok, false);
+    assert.equal(
+      supabase.calls.some((call) => call.type === 'update'),
+      false,
+    );
+
+    const updated = await service.updateIntakeStatus(
+      { session: { access: true } },
+      'synth-row',
+      'reviewed',
+    );
+    assert.equal(updated.ok, true);
+    const updateCall = supabase.calls.find((call) => call.type === 'update');
+    assert.equal(updateCall.payload.onboarding_status, 'reviewed');
+    assert.equal(Object.keys(updateCall.payload).sort().join(','), 'onboarding_status,updated_at');
+    assert.equal(supabase.calls.filter((call) => call.type === 'rpc').length >= 1, true);
+    assert.equal(
+      supabase.calls.some((call) => call.table === 'leads' || call.table === 'contacts'),
+      false,
+    );
+  });
+
   it('source/status mapping stays campaign-scoped', () => {
     assert.deepEqual(mapConventionIntakeSourceStatus(), {
       campaign_id: 'HUGE_2026',
@@ -296,12 +393,40 @@ describe('convention QR and secret hygiene', () => {
     assert.match(app, /path="\/quote-confirmation"/);
   });
 
+  it('registers a protected intake queue without replacing CRM or join routes', () => {
+    const app = fs.readFileSync(path.join(root, 'src/App.jsx'), 'utf8');
+    const intakeRoutes = fs.readFileSync(
+      path.join(root, 'src/pages/networkOs/convention/ConventionIntakeRoutes.jsx'),
+      'utf8',
+    );
+    const login = fs.readFileSync(path.join(root, 'src/pages/Login.jsx'), 'utf8');
+    assert.match(app, /path="\/network-os\/convention\/intake"/);
+    assert.doesNotMatch(app, /path="\/network-os\/convention\/\*"/);
+    const intakeStart = app.indexOf('path="/network-os/convention/intake"');
+    const intakeBlock = app.slice(intakeStart, intakeStart + 420);
+    assert.doesNotMatch(intakeBlock, /TenantGuard/);
+    assert.match(intakeRoutes, /ConventionSessionGuard/);
+    assert.match(intakeRoutes, /ConventionIntakeQueuePage/);
+    assert.match(login, /isSafeConventionIntakeNext/);
+    assert.equal(isSafeConventionIntakeNext(CONVENTION_INTAKE_QUEUE_PATH), true);
+    assert.equal(isSafeConventionIntakeNext(`${CONVENTION_INTAKE_QUEUE_PATH}?x=1`), true);
+    assert.equal(isSafeConventionIntakeNext('/network-os/convention/join'), false);
+    assert.equal(isSafeConventionIntakeNext('/network-os/convention'), false);
+    assert.match(app, /path="\/select-tenant"/);
+    assert.match(app, /path="\/:tenantId\/login"/);
+    assert.match(app, /path="\/:tenantId\/crm\/\*"/);
+    assert.match(app, /path="\/network-os\/convention\/join\/\*"/);
+  });
+
   it('keeps privileged credentials and submitted PII out of intake sources and sanitized errors', () => {
     const files = [
       'src/lib/networkOs/conventionIntakePolicy.js',
       'src/services/networkOsConventionIntakeService.js',
       'src/pages/networkOs/convention/ConventionJoinPage.jsx',
       'src/pages/networkOs/convention/ConventionJoinThanksPage.jsx',
+      'src/pages/networkOs/convention/ConventionIntakeQueuePage.jsx',
+      'src/pages/networkOs/convention/ConventionIntakeRoutes.jsx',
+      'src/pages/networkOs/convention/ConventionSessionGuard.jsx',
     ];
     for (const rel of files) {
       const source = fs.readFileSync(path.join(root, rel), 'utf8');

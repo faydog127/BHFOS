@@ -78,6 +78,9 @@ const TechRoutesPage = React.lazy(() => import('@/pages/tech/TechRoutes'));
 const NetworkOsConventionJoinRoutes = React.lazy(() =>
   import('@/pages/networkOs/convention/ConventionJoinRoutes')
 );
+const NetworkOsConventionIntakeRoutes = React.lazy(() =>
+  import('@/pages/networkOs/convention/ConventionIntakeRoutes')
+);
 
 // Sub-module Lazy Loads
 const InvoiceBuilder = React.lazy(() => import('@/pages/crm/InvoiceBuilder'));
@@ -565,6 +568,17 @@ function App() {
           }
         />
         {/* End public convention join/confirmation — demo /network-os/convention/* not ported. */}
+        {/* Protected operator queue — session + helper RPC; CRM tenant/login unchanged. */}
+        <Route
+          path="/network-os/convention/intake"
+          element={
+            <RouteErrorBoundary>
+              <Suspense fallback={<LoadingFallback />}>
+                <NetworkOsConventionIntakeRoutes />
+              </Suspense>
+            </RouteErrorBoundary>
+          }
+        />
         {/* MIL product routes — on app.bhfos.com these offload to mil.bhfos.com. */}
         <Route
           path="/media/*"
