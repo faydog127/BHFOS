@@ -17,6 +17,7 @@ export const CONVENTION_INTAKE_UNAUTHORIZED = 'CONVENTION_INTAKE_UNAUTHORIZED';
 export const CONVENTION_INTAKE_ANON_READ_DENIED = 'CONVENTION_INTAKE_ANON_READ_DENIED';
 
 export const CONVENTION_QR_PATH = '/network-os/convention/join';
+export const CONVENTION_INTAKE_QUEUE_PATH = '/network-os/convention/intake';
 export const CONVENTION_INTAKE_CAMPAIGN_ID = 'HUGE_2026';
 export const CONVENTION_INTAKE_SOURCE = 'HUGE_2026';
 export const CONVENTION_INTAKE_CHANNEL = 'convention_qr';
@@ -110,6 +111,14 @@ function clip(value, max) {
 export function resolveConventionQrTarget(origin = '') {
   const base = asText(origin).replace(/\/$/, '');
   return `${base}${CONVENTION_QR_PATH}`;
+}
+
+export function isSafeConventionIntakeNext(next) {
+  const path = asText(next);
+  return (
+    path === CONVENTION_INTAKE_QUEUE_PATH ||
+    path.startsWith(`${CONVENTION_INTAKE_QUEUE_PATH}?`)
+  );
 }
 
 export function mapConventionIntakeSourceStatus() {

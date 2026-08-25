@@ -11,6 +11,7 @@ import { tenantPath, getUrlTenant } from '@/lib/tenantUtils';
 import {
   hostedLocalSupabaseErrorMessage,
 } from '@/lib/supabaseEnv';
+import { isSafeConventionIntakeNext } from '@/lib/networkOs/conventionIntakePolicy';
 
 const Login = () => {
   const {
@@ -51,6 +52,7 @@ const Login = () => {
       // 2. Safe internal destinations only:
       //    - same-tenant CRM paths /:tenant/...
       //    - MIL product paths (/media/*, /creator/*, /contributor/*, short aliases)
+      //    - protected convention intake queue (exact path; not the public join form)
       const isSafeMilNext =
         typeof next === 'string' &&
         (next.startsWith('/media') ||
@@ -65,7 +67,7 @@ const Login = () => {
       const isSafeTenantNext =
         typeof next === 'string' && next.startsWith(`/${urlTenant}/`);
 
-      if (isSafeTenantNext || isSafeMilNext) {
+      if (isSafeTenantNext || isSafeMilNext || isSafeConventionIntakeNext(next)) {
         navigate(next, { replace: true });
         return;
       }
