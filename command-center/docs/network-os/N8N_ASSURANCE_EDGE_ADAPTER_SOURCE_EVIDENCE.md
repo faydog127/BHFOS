@@ -1,7 +1,7 @@
 # Network OS n8n Assurance — Edge Adapter Source Evidence
 
 **Evidence date:** 2026-08-28 UTC  
-**State:** **SOURCE-PRESENT · LOCALLY VERIFIED HANDLER · DATABASE UNAPPLIED · UNDEPLOYED**  
+**State:** **SOURCE-PRESENT · LOCALLY VERIFIED HANDLER · DISPOSABLE DATABASE PROOF COMPLETE · HOSTED DATABASE UNAPPLIED · UNDEPLOYED**  
 **Requirement / release / work item:** `NOS-N8N-ASSURANCE-REQ-001` / `NOS-N8N-ASSURANCE-PHASE-A-01` / `NOS-N8N-EDGE-INGRESS-SPIKE-01`
 
 ## Implemented source
@@ -52,7 +52,7 @@ The delivery table uses `delivery_id text PRIMARY KEY`. The claim function perfo
 
 It returns true only when `ROW_COUNT = 1`. Table access is revoked from PUBLIC, anon, authenticated, and service_role; service_role receives EXECUTE only on the two fixed SECURITY DEFINER functions. Both functions set `search_path = public, pg_temp`.
 
-This is source evidence, not database evidence. The migration was not applied, so database concurrency and grants remain unproved.
+The SQL contract was first reviewed as source and was later applied and rolled back on a disposable local PostgreSQL instance. Hosted database behavior remains untested and no hosted migration was applied.
 
 ## Local verification
 
@@ -81,12 +81,39 @@ Covered:
 
 GitHub CI tested implementation head `0088c9a0a80fdd96359d9b3fedc729c94089bff3` on Node 20.19.1. The dedicated `network_os_assurance_ingress` job passed, as did repository lint, build, Ledger Lock, identity contracts, Supabase OAuth helpers, Founder-run readiness, and control-plane lane checks.
 
-The 25-request result proves the handler honors a single-winner claim dependency. It does **not** prove the PostgreSQL function until a later authorization permits a disposable/local migration apply and concurrent database test.
+The handler test proves the JavaScript dependency contract. The separate database proof below verifies the PostgreSQL implementation with independent concurrent connections.
+
+## Disposable local PostgreSQL proof
+
+**Founder authorization:** disposable local apply, concurrent claim test, and rollback only.  
+**Frozen implementation source head:** `0ec7867f03ca412a83b764b98a18fc695ad57986`  
+**Environment:** PostgreSQL 16.15 on a disposable local runtime.  
+**Migration Git blob:** `1afa8281583b01f2fc189f3b0eaf9a80834f5462`  
+**Rollback Git blob:** `739cc7530c544da67fa0c65812b62aa1f6113c06`
+
+The local copies matched the exact Git blobs from PR #154 before execution.
+
+Results:
+
+- exact migration applied successfully;
+- table primary key, forced RLS, SECURITY DEFINER, and fixed `search_path` were present;
+- `service_role` could execute the claim and mark functions but could not directly read or mutate the table;
+- `anon` and `authenticated` lacked function execution and table privileges;
+- 25 independent concurrent `service_role` claims for one delivery ID produced exactly one `true` winner and 24 `false` duplicates;
+- the stored winner row preserved the repository ID, installation ID, PR number, exact head SHA, event name, and initial `claimed` state;
+- an invalid forward state returned `false`, the first valid `forwarded` transition returned `true`, and a second terminal transition returned `false`;
+- the exact rollback applied successfully;
+- the table and both functions were absent after rollback;
+- PostgreSQL stopped and the disposable cluster was deleted.
+
+The runtime prohibited Unix-domain sockets, so the server listened only on `127.0.0.1:55432` during the test. It was never externally reachable and used no credentials. No hosted database was contacted.
+
+GitHub had already completed CI run `33188398029` and Ledger Lock run `33188398103` successfully for the frozen source head. This evidence-only documentation commit necessarily advances the PR head without changing the handler, Edge Function binding, migration, rollback, tests, package scripts, or CI workflow. Exact-head CI and independent review must therefore run again after this commit.
 
 ## Boundary confirmation
 
-No secret was created or accessed. No migration or rollback was applied. No Edge Function was deployed. No GitHub App or webhook was changed. No n8n workflow was published. No AI model was called. No merge or production action occurred.
+No secret was created or accessed. The migration and rollback were applied only to the disposable local PostgreSQL instance described above; the cluster was then deleted. No hosted migration was applied. No Edge Function was deployed. No GitHub App or webhook was changed. No n8n workflow was published. No merge or production action occurred.
 
 ## Exact next gate
 
-Independent source review at the exact implementation head. After review findings are resolved, the Founder may separately authorize a disposable/local migration apply and database concurrency proof. That later permission would still not authorize hosted apply, deployment, webhook activation, workflow publication, merge, or production.
+Run exact-head CI and independent Gemini/Grok review of this evidence-only update, followed by ChatGPT adjudication. Hosted apply, deployment, webhook activation, workflow publication, merge, and production remain separately prohibited.
