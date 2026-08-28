@@ -62,11 +62,11 @@ Command:
 
 Environment: Node `v24.19.0`.
 
-Result: **11 tests passed, 0 failed**.
+Result: **13 tests passed, 0 failed**.
 
 Covered:
 
-- inert configuration gate;
+- approved-action intersection and inert configuration gate;
 - exact-byte signature success;
 - normalized-envelope allowlist;
 - 25 concurrent identical handler requests → one accepted forward and 24 duplicate responses;
@@ -76,7 +76,7 @@ Covered:
 - invalid delivery headers, JSON, content type, and oversized body;
 - unavailable claim store;
 - failed n8n forward with retained claim;
-- sanitized logs;
+- sanitized logs and explicit state-mark failure evidence;
 - static primary-key, conflict, privilege, SECURITY DEFINER, search-path, and rollback contracts.
 
 GitHub CI tested implementation head `0088c9a0a80fdd96359d9b3fedc729c94089bff3` on Node 20.19.1. The dedicated `network_os_assurance_ingress` job passed, as did repository lint, build, Ledger Lock, identity contracts, Supabase OAuth helpers, Founder-run readiness, and control-plane lane checks.
