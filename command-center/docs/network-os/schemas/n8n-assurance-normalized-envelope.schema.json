@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bhfos.example/schemas/n8n-assurance-normalized-envelope.schema.json",
+  "title": "Network OS n8n Assurance Normalized Envelope",
+  "description": "Test-only normalized envelope proposed for verified GitHub pull-request ingress. This schema grants no runtime authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "delivery_id",
+    "event_name",
+    "action",
+    "received_at",
+    "repository",
+    "installation_id",
+    "pull_request"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "delivery_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "event_name": {
+      "const": "pull_request"
+    },
+    "action": {
+      "type": "string",
+      "enum": ["opened", "reopened", "synchronize", "ready_for_review"]
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "full_name"],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "full_name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        }
+      }
+    },
+    "installation_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "pull_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number", "head_sha", "base_ref", "draft"],
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "head_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "base_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "draft": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}
