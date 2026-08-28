@@ -102,7 +102,7 @@ Draft envelope schema: `command-center/docs/network-os/schemas/n8n-assurance-nor
 
 Implemented an isolated Supabase Edge Function source with an explicit `preview-test` mode lock, exact-byte Web Crypto HMAC verification, deterministic event/target validation, database-first delivery claim, normalized-envelope forwarding, bounded timeouts, and sanitized logs. Added a source-only PostgreSQL primary-key claim table, fixed SECURITY DEFINER claim/mark functions, rollback source, and deterministic tests.
 
-Local Node `v24.19.0` result: `node --test tests/unit/network-os-assurance-ingress.test.mjs` → **11 passed, 0 failed**. The suite includes 25 concurrent identical handler requests producing one accepted forward and 24 duplicate responses.
+Local Node `v24.19.0` result: `node --test tests/unit/network-os-assurance-ingress.test.mjs` → **13 passed, 0 failed**. The suite includes 25 concurrent identical handler requests producing one accepted forward and 24 duplicate responses.
 
 No secret, migration apply, database binding, deploy, GitHub App/webhook change, n8n publication, AI call, merge, or production action occurred.
 
