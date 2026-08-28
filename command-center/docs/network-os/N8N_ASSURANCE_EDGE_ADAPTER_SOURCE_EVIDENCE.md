@@ -79,6 +79,8 @@ Covered:
 - sanitized logs;
 - static primary-key, conflict, privilege, SECURITY DEFINER, search-path, and rollback contracts.
 
+GitHub CI tested implementation head `0088c9a0a80fdd96359d9b3fedc729c94089bff3` on Node 20.19.1. The dedicated `network_os_assurance_ingress` job passed, as did repository lint, build, Ledger Lock, identity contracts, Supabase OAuth helpers, Founder-run readiness, and control-plane lane checks.
+
 The 25-request result proves the handler honors a single-winner claim dependency. It does **not** prove the PostgreSQL function until a later authorization permits a disposable/local migration apply and concurrent database test.
 
 ## Boundary confirmation
