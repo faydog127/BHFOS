@@ -17,6 +17,18 @@ function positiveInteger(value: string): number {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 0;
 }
 
+function isHttpsUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:'
+      && !parsed.username
+      && !parsed.password
+      && !parsed.hash;
+  } catch {
+    return false;
+  }
+}
+
 const mode = readServerEnv('NOS_ASSURANCE_MODE');
 const webhookSecret = readServerEnv('NOS_ASSURANCE_GITHUB_WEBHOOK_SECRET');
 const supabaseUrl = readServerEnv('SUPABASE_URL');
@@ -83,7 +95,7 @@ const configurationReady = Boolean(
     && webhookSecret
     && supabaseUrl
     && serviceRoleKey
-    && n8nIngressUrl
+    && isHttpsUrl(n8nIngressUrl)
     && n8nIngressToken
     && target.repositoryId
     && target.repositoryFullName
