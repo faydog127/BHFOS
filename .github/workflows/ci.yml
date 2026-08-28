@@ -82,6 +82,28 @@ jobs:
       - name: Supabase OAuth launcher preflight self-tests
         run: npm run test:supabase-oauth-launcher-preflight
 
+  network_os_assurance_ingress:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: command-center
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.1
+          cache: npm
+          cache-dependency-path: command-center/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Network OS assurance ingress source tests
+        run: npm run test:network-os-assurance-ingress
+
   founder_run_readiness:
     runs-on: ubuntu-latest
     defaults:
