@@ -12,6 +12,7 @@ import { describe, it } from 'node:test';
 import {
   createAssuranceIngressHandler,
   DEFAULT_BODY_LIMIT_BYTES,
+  parseAllowedActions,
 } from '../../supabase/functions/network-os-assurance-ingress/handler.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -123,6 +124,13 @@ async function jsonOf(response) {
 }
 
 describe('Network OS assurance edge ingress', () => {
+  it('intersects configured actions with the approved action set', () => {
+    assert.deepEqual(
+      [...parseAllowedActions('opened,closed,synchronize,deleted')],
+      ['opened', 'synchronize'],
+    );
+  });
+
   it('fails closed while preview-test configuration is absent', async () => {
     let claims = 0;
     const { handle } = harness({
@@ -262,6 +270,18 @@ describe('Network OS assurance edge ingress', () => {
     assert.equal(response.status, 502);
     assert.equal((await jsonOf(response)).code, 'N8N_FORWARD_FAILED');
     assert.deepEqual(marked, [{ deliveryId: 'phase-a-valid-001', state: 'forward_failed' }]);
+  });
+
+  it('records a sanitized operational event when state marking returns false', async () => {
+    const logs = [];
+    const { handle } = harness({
+      markDelivery: async () => false,
+      log: (event) => logs.push(event),
+    });
+    const response = await handle(await requestFor());
+    assert.equal(response.status, 202);
+    assert.ok(logs.some((event) => event.code === 'STATE_MARK_FAILED'));
+    assert.doesNotMatch(JSON.stringify(logs), /phase-a-public-fixture-secret|must-not-forward/);
   });
 
   it('logs only bounded status, code, and validated delivery ID', async () => {
