@@ -3,6 +3,7 @@ const DEFAULT_FORWARD_TIMEOUT_MS = 4_000;
 const DELIVERY_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 const SHA256_PATTERN = /^[0-9a-f]{40}$/;
 const SIGNATURE_PATTERN = /^sha256=([0-9a-f]{64})$/;
+const SUPPORTED_ACTIONS = new Set(['opened', 'reopened', 'synchronize', 'ready_for_review']);
 
 const encoder = new TextEncoder();
 
@@ -130,7 +131,7 @@ export function parseAllowedActions(value) {
     String(value || '')
       .split(',')
       .map((item) => item.trim())
-      .filter(Boolean),
+      .filter((item) => SUPPORTED_ACTIONS.has(item)),
   );
 }
 
@@ -261,7 +262,10 @@ export function createAssuranceIngressHandler({
     }
 
     try {
-      await markDelivery(deliveryId, forwarded ? 'forwarded' : 'forward_failed');
+      const marked = await markDelivery(deliveryId, forwarded ? 'forwarded' : 'forward_failed');
+      if (marked !== true) {
+        safeLog(log, { status: 500, code: 'STATE_MARK_FAILED', delivery_id: deliveryId });
+      }
     } catch {
       safeLog(log, { status: 500, code: 'STATE_MARK_FAILED', delivery_id: deliveryId });
     }
