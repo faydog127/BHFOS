@@ -143,6 +143,12 @@ port = 25434
 [functions.network-os-provider-interest-intake]
   verify_jwt = false
 
+# GitHub authenticates this endpoint with an exact-byte HMAC, not a Supabase JWT.
+# The function also remains inert unless NOS_ASSURANCE_MODE=preview-test and every
+# required server-side value is present. Source configuration is not deployment authority.
+[functions.network-os-assurance-ingress]
+  verify_jwt = false
+
 # Media Intelligence functions keep the default verify_jwt = true. The reconciler
 # is listed explicitly because it also demands the x-mil-reconcile-key secret;
 # neither control may be relaxed without an authorized decision.
