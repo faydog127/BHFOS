@@ -166,6 +166,7 @@ The edge endpoint must use an explicit response path. It must not return success
 | Invalid repository or installation | `403` | Reject; no handoff |
 | Claim store unavailable or indeterminate | `503` | No forward |
 | n8n handoff fails after claim | `502` | Retain the claim, mark `forward_failed`, and do not retry automatically in the first proof |
+| n8n accepts but the final state mark fails | `202` | Do not invite duplicate forwarding; emit a sanitized reconciliation signal and leave the claim non-terminal |
 
 GitHub must receive the response within ten seconds. The edge-to-n8n call is bounded to four seconds in the current source. The receiving n8n ingress may validate and durably accept/enqueue the normalized envelope, but slow AI, CI polling, or substantive coordinator work must never occur before the GitHub response.
 
@@ -594,6 +595,9 @@ A separately authorized `MANUAL_REVIEW` coordinator trial may call advisory work
 - SHA change produces `STALE` and invalidates the run for current-action purposes.
 - n8n outage pauses automated assurance; it does not transfer authority to workers.
 - GitHub failed-delivery recovery is an explicit operational procedure; no success is inferred from missing events.
+- A `forward_failed` claim is not made retryable by deleting it. The first proof has no automated retry; it must produce visible bounded evidence for authorized reconciliation.
+- If n8n accepts the envelope but the final state update fails, ingress returns `202` to avoid a second forward and emits `STATE_MARK_FAILED`. Before production design, a reconciler must be able to distinguish accepted, failed, and indeterminate handoffs without creating duplicate model work.
+- Claim, forward, and state-mark operations must share an enforced end-to-end deadline that preserves GitHub's response limit; a timeout value on only the n8n fetch is insufficient production evidence.
 - A partial worker panel cannot be described as a completed panel.
 - Any uncertainty about authority, target identity, environment, or evidence fails closed and routes to ChatGPT.
 
@@ -611,7 +615,8 @@ Source presence, local proof, exact-head CI, and a manual worker trial are neces
 - authenticated edge-to-n8n handoff design using a credential distinct from the GitHub webhook secret;
 - test URL versus production URL handling and explicit response-node behavior;
 - redaction, payload size, model-output, and log-retention rules;
-- timeout, retry, cost, concurrency, and circuit-breaker limits;
+- timeout, retry, cost, concurrency, and circuit-breaker limits, including an enforced edge total deadline and claim/state-mark bounds;
+- forward-failure and state-mark-failure observability plus the authorized first-proof reconciliation procedure;
 - exact full-PR and cycle-delta evidence-package schema;
 - synthetic fixture plan and one authorized real-delivery plan;
 - rollback owner, execution window, disable order, and evidence-retention plan;
@@ -624,14 +629,17 @@ The preview trial must test at least:
 3. irrelevant event/action and repository/installation/PR/SHA mismatches;
 4. 25 concurrent identical deliveries with exactly one database claim and one n8n handoff;
 5. sequential redelivery as an acknowledged no-op;
-6. stale event SHA after the PR advances;
-7. draft handling differences between `MANUAL_REVIEW` and `EVENT_DRIVEN_PREVIEW`;
-8. first-cycle evidence where full and delta scopes match;
-9. evidence-only follow-up where the cycle delta is narrow and protected blobs are unchanged;
-10. implementation follow-up where changed protected blobs invalidate prior executed evidence as applicable;
-11. provider timeout, malformed reviewer output, partial fan-in, and cost/retry circuit breaking;
-12. ChatGPT supplemental-evidence recording without modification of worker verdicts;
-13. complete rollback: webhook disabled, edge preview disabled, n8n unpublished, preview credential revoked, and database rollback or retained-claim disposition executed as authorized.
+6. n8n timeout/failure after claim, with retained `forward_failed` state, no duplicate forward, and visible reconciliation evidence;
+7. state-mark timeout/failure after accepted handoff, with `202`, no duplicate forward, and visible `STATE_MARK_FAILED` evidence;
+8. enforced end-to-end ingress deadline under slow claim, forward, and state-mark conditions;
+9. stale event SHA after the PR advances;
+10. draft handling differences between `MANUAL_REVIEW` and `EVENT_DRIVEN_PREVIEW`;
+11. first-cycle evidence where full and delta scopes match;
+12. evidence-only follow-up where the cycle delta is narrow and protected blobs are unchanged;
+13. implementation follow-up where changed protected blobs invalidate prior executed evidence as applicable;
+14. provider timeout, malformed reviewer output, partial fan-in, and cost/retry circuit breaking;
+15. ChatGPT supplemental-evidence recording without modification of worker verdicts;
+16. complete rollback: webhook disabled, edge preview disabled, n8n unpublished, preview credential revoked, and database rollback or retained-claim disposition executed as authorized.
 
 ## 15. Decision summary
 
