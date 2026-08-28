@@ -73,3 +73,20 @@ After this lint correction is published, assign a **new independent** Architectu
 ## Exact next action
 
 Independent Guard review of PR 142 at the published HEAD after CI lint + build are green. No merge, hosted write, deploy, role seed, or R1/S1 activation. Hosted apply remains held.
+
+
+## n8n assurance Phase A capability evidence (2026-08-28) — TEST-ONLY
+
+**Architecture dependency:** draft PR #152 at `d5d61dc93e86fdc1f7498b55cd2ad7428be2f76a`  
+**Requirement / release / work item:** `NOS-N8N-ASSURANCE-REQ-001` / `NOS-N8N-ASSURANCE-PHASE-A-01` / `NOS-N8N-INGRESS-CAPABILITY-SPIKE-01`  
+**Outcome:** **PHASE A COMPLETE — INGRESS_CAPABILITY_BLOCKED**
+
+Unpublished n8n Cloud tests proved raw-body receipt, exact-byte SHA-256 HMAC, constant-time digest comparison, deterministic allowlist/target validation, explicit response classification, and 11/11 positive/negative matrix cases. Exercised webhook/HMAC paths completed in 89 ms and 330 ms. No AI, GitHub write, merge, deploy, production webhook, Hostinger action, or production mutation occurred.
+
+The required atomic durable single-winner delivery claim remains unproved. Native n8n Data Table column creation exposes no unique constraint; row-not-exists is a read/check; the upsert node is filter-based. Phase A therefore fails closed and requires the architecture's minimal edge verifier plus transactional claim fallback.
+
+Evidence: `command-center/docs/network-os/N8N_ASSURANCE_PHASE_A_EVIDENCE.md`  
+Draft next-step packet: `command-center/docs/network-os/N8N_ASSURANCE_PHASE_A_IMPLEMENTATION_PACKET_DRAFT.md`  
+Draft envelope schema: `command-center/docs/network-os/schemas/n8n-assurance-normalized-envelope.schema.json`
+
+**Exact next action:** Founder approves, rejects, or revises the draft edge-adapter packet. Until then, do not implement the adapter, choose/apply a transactional store, create preview secrets, deploy, enable a GitHub webhook, publish n8n workflows, merge, or activate production.
