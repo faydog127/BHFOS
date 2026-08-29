@@ -4,7 +4,6 @@
 **Branch:** `cursor/n8n-command-courier-42f0`  
 **Baseline (origin/main at branch cut):** `17f9228951d74824d9b6fb0eb704832befed2afc`  
 **Verified implementation HEAD:** `ce74cc9c6b99ace7a62f110ce9585ed848d5ecf3`  
-**Branch tip at this status edit:** `384977cf9c72e299f546d7d9db44532d2f672b9e`  
 **Draft PR:** https://github.com/faydog127/BHFOS/pull/156  
 **Evidence tier:** **locally verified** (unit tests). Not deployed. Not staging-verified. Not merged. Not production.
 
