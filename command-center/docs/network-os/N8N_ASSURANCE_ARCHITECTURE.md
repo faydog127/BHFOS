@@ -1,13 +1,15 @@
 # Network OS — Command–Event–Workflow–Worker Assurance Architecture
 
 **Document ID:** `NOS-N8N-ASSURANCE-ARCHITECTURE-01`  
-**Status:** Founder-approved architecture direction; implementation and activation blocked  
+**Status:** Founder-approved architecture direction; source/local proof recorded; preview activation blocked  
 **Decision date:** 2026-08-28  
+**Reconciliation date:** 2026-08-28  
 **Decision owner:** Founder  
 **Repository scope:** `faydog127/BHFOS` / Network OS development assurance  
-**Target base:** `network-os/foundation@9087e814de088d93a6de863407dc702fa0530c86`  
-**Change class:** Governance and technical specification only  
-**Implementation authority:** None. This document does not authorize workflow activation, GitHub App webhook activation, AI API calls, merge, deployment, migration, production mutation, or Network OS mutation.
+**Architecture baseline:** `network-os/foundation@9087e814de088d93a6de863407dc702fa0530c86`  
+**Current implementation trial:** draft PR #154; exact implementation and evidence heads are recorded in the PR evidence  
+**Change class:** Canonical architecture reconciliation draft; promotion and activation remain separately gated  
+**Implementation authority:** This document grants none. Existing source-only implementation and disposable-local PostgreSQL proof were separately authorized and are recorded in PR #154. It does not authorize secrets, hosted migration apply, edge deployment, GitHub App or webhook changes, n8n workflow publication/activation, merge, production use, or Network OS mutation.
 
 ## 1. Purpose
 
@@ -40,12 +42,12 @@ ADR-DEC-V2-014 remains controlling for the broader Review Board boundary: BHFOS 
 This document adds a narrower rule for development assurance:
 
 1. ChatGPT and the Founder own command authority.
-2. Cursor implements only an authorized packet.
-3. GitHub emits authenticated change events.
+2. One bounded Builder owns implementation for a work item. Cursor is the current PR implementation environment; this is the same implementation lane called Builder/Codex in `AI_ROLES.md`, not a new authority class.
+3. GitHub emits authenticated change events and remains authoritative for PR state, comparisons, blob identities, and checks.
 4. A minimal event listener verifies and normalizes those events.
-5. n8n runs mechanical assurance against one frozen SHA.
-6. Independent workers return evidence-bound findings.
-7. ChatGPT adjudicates the findings.
+5. n8n runs mechanical assurance against one frozen SHA and one explicit review cycle.
+6. Independent workers return evidence-bound findings. Gemini and Grok are advisory worker assignments for this workflow; they do not displace the canonical governance roles or acquire decision authority.
+7. ChatGPT adjudicates the unchanged worker outputs plus clearly identified supplemental evidence.
 8. A separately authorized actor performs any consequential action.
 
 Where any document appears ambiguous, the stricter no-self-authorization, no-direct-authoritative-write boundary controls until the Founder records a superseding decision.
@@ -64,19 +66,17 @@ Where any document appears ambiguous, the stricter no-self-authorization, no-dir
 - A changed PR SHA invalidates prior assurance for the superseded SHA.
 - Merge, migration, deployment, and activation are distinct authority boundaries.
 
-### 3.2 Proposed next implementation step
+### 3.2 Current proof state and next boundary
 
-A bounded, unpublished n8n Cloud capability spike may be prepared under a separately issued implementation packet to prove:
+The evidence now records three distinct proofs:
 
-- original-body availability;
-- GitHub HMAC-SHA256 verification;
-- explicit HTTP responses;
-- repository and installation allowlisting;
-- atomic delivery deduplication;
-- asynchronous internal handoff;
-- no AI calls in ingress.
+1. **n8n ingress capability spike:** exact raw-body access, fixture HMAC verification, allowlists, and deterministic responses passed; n8n Data Tables could not prove an atomic delivery claim.
+2. **Edge-adapter source and disposable-local database proof:** PR #154 contains the fail-closed adapter, database-enforced claim, rollback, deterministic handler tests, and one-winner concurrent PostgreSQL proof. The hosted database and edge runtime remain untouched.
+3. **Manual coordinator assurance trial:** the unpublished coordinator collected exact-head CI and independent Gemini/Grok results for a frozen PR head. This exercised the review lane, not GitHub ingress and not preview activation.
 
-The capability spike is not authorized by this document alone.
+Until the BHFOS authoritative request/run records required by ADR-DEC-V2-014 exist, n8n execution history and manually assembled review artifacts are capability evidence only. They are not authoritative Network OS run state, business disposition, or reusable action authority.
+
+The next boundary is a separately authorized preview-only activation packet. That packet must bind an approved preview host, preview database, secret locations, unpublished n8n test ingress, exact source head, rollback owner, and test window. This architecture document does not authorize that packet or any action under it.
 
 ### 3.3 Not authorized
 
@@ -123,6 +123,15 @@ Founder + ChatGPT
 
 No layer below Command may create new work, expand scope, or grant itself the next layer's authority.
 
+Two execution modes share this control model:
+
+| Mode | Trigger and eligibility | Permitted purpose | Authority limit |
+| --- | --- | --- | --- |
+| `MANUAL_REVIEW` | Explicit Command instruction; may target an open draft PR | Validate the coordinator, evidence package, and reviewers before event activation | No ingress proof, check write, merge, deploy, migration, publication, or production authority |
+| `EVENT_DRIVEN_PREVIEW` | Authenticated, claimed GitHub event; open non-draft PR; verified protected authority | Preview-only end-to-end assurance trial | No production use or consequential action; every preview resource and secret requires separate authorization |
+
+A manual run may not be represented as proof that webhook ingress works. An event-driven run may not infer authority merely from event authenticity.
+
 ## 6. Workflow 1 — GitHub event listener / ingress
 
 ### 6.1 Purpose
@@ -139,24 +148,27 @@ Webhook receive
 → validate event, action, repository, repository ID, and installation ID
 → atomically claim X-GitHub-Delivery
 → generate normalized envelope
-→ start coordinator asynchronously
-→ respond 202
+→ forward to the authenticated n8n ingress within a bounded timeout
+→ durably record forwarded or forward_failed
+→ respond deterministically
 ```
 
-The Webhook node must use an explicit response path. It must not return success before verification and durable acceptance.
+The edge endpoint must use an explicit response path. It must not return success before verification, durable claim, and bounded n8n ingress acceptance.
 
 ### 6.3 Response contract
 
 | Condition | HTTP response | Downstream behavior |
 | --- | ---: | --- |
-| Valid and durably accepted | `202` | Start coordinator asynchronously |
+| Valid, claimed, and accepted by n8n ingress | `202` | n8n acknowledges/enqueues; coordinator work continues outside the GitHub response path |
 | Valid duplicate delivery | `200` | No-op unless a separately authorized replay exists |
 | Authentic but irrelevant event | `204` | No-op |
 | Missing or invalid signature | `401` or `403` | Reject; no handoff |
 | Invalid repository or installation | `403` | Reject; no handoff |
-| Acceptance or enqueue failure | `500` | Do not claim downstream success |
+| Claim store unavailable or indeterminate | `503` | No forward |
+| n8n handoff fails after claim | `502` | Retain the claim, mark `forward_failed`, and do not retry automatically in the first proof |
+| n8n accepts but the final state mark fails | `202` | Do not invite duplicate forwarding; emit a sanitized reconciliation signal and leave the claim non-terminal |
 
-GitHub must receive the response within ten seconds. Slow AI or CI work must never occur before the response.
+GitHub must receive the response within ten seconds. The edge-to-n8n call is bounded to four seconds in the current source. The receiving n8n ingress may validate and durably accept/enqueue the normalized envelope, but slow AI, CI polling, or substantive coordinator work must never occur before the GitHub response.
 
 ### 6.4 Signature verification requirements
 
@@ -165,8 +177,8 @@ GitHub must receive the response within ten seconds. Slow AI or CI work must nev
 - Reject a missing or malformed signature before constant-time comparison.
 - Require the format `^sha256=[0-9a-f]{64}$`.
 - Confirm supplied and expected signature buffers have equal length before `timingSafeEqual` or an equivalent constant-time comparison.
-- Store the webhook secret in an approved secret/credential facility; never in workflow JSON, source control, URLs, logs, or review packets.
-- Prove raw-body fidelity and cryptographic capability on the actual n8n Cloud plan before choosing the final implementation node.
+- Store the webhook secret in an approved edge-environment secret facility; never in workflow JSON, source control, URLs, logs, or review packets.
+- Do not forward the GitHub signature, webhook secret, or arbitrary raw payload fields to n8n.
 
 The following is behavioral pseudocode, not approved copy-paste n8n Code-node implementation:
 
@@ -179,13 +191,13 @@ assert(equalByteLength(receivedSignature, expectedSignature));
 assert(constantTimeEqual(receivedSignature, expectedSignature));
 ```
 
-If n8n Cloud cannot prove access to the exact original body or safe secret/crypto handling, the approved design fallback is:
+Phase A found that n8n Cloud could verify exact-body HMAC but could not prove a database-enforced atomic delivery claim through Data Tables. The selected preview design is therefore:
 
 ```text
-GitHub App → minimal edge verifier/queue → authenticated n8n ingress
+GitHub App → minimal edge verifier + transactional claim → authenticated n8n ingress
 ```
 
-Moving HMAC verification to a minimal edge adapter does not promote that adapter into command or workflow authority.
+Moving HMAC verification and delivery claiming to the minimal edge adapter does not promote that adapter into command or workflow authority.
 
 ### 6.5 Event and repository allowlist
 
@@ -195,7 +207,7 @@ Initial event type:
 X-GitHub-Event == pull_request
 ```
 
-Initial actions:
+Lifecycle target actions:
 
 | Action | Ingress/coordinator result |
 | --- | --- |
@@ -206,6 +218,8 @@ Initial actions:
 | `converted_to_draft` | Pause/cancel outstanding assurance work |
 | `closed` | Close outstanding work |
 | `merged` | Record evidence only; never auto-deploy |
+
+The Phase A edge-adapter source currently admits only `opened`, `reopened`, `synchronize`, and `ready_for_review`. The pause/close/merged lifecycle actions are future coordinator behavior and are not implemented or authorized by the current source. Any expansion of the source allowlist requires a reviewed source change and a new exact-head proof.
 
 The listener must validate all of:
 
@@ -235,24 +249,26 @@ When Workflow 1 invokes Workflow 2 through an internal n8n sub-workflow boundary
 
 ```json
 {
-  "event_version": "1.0",
-  "source": "github_app",
+  "schema_version": "1.0",
   "delivery_id": "github-supplied-guid",
-  "event_type": "pull_request",
+  "event_name": "pull_request",
   "action": "synchronize",
-  "repository_id": 123456789,
-  "repository": "faydog127/BHFOS",
-  "installation_id": 12345678,
-  "pull_request": 152,
-  "event_head_sha": "40-character-git-sha",
   "received_at": "server-generated-rfc3339-timestamp",
-  "signature_verified": true,
-  "installation_verified": true,
-  "delivery_claimed": true
+  "repository": {
+    "id": 123456789,
+    "full_name": "faydog127/BHFOS"
+  },
+  "installation_id": 12345678,
+  "pull_request": {
+    "number": 154,
+    "head_sha": "40-character-git-sha",
+    "base_ref": "authorized-base-branch",
+    "draft": false
+  }
 }
 ```
 
-The coordinator must re-fetch current GitHub state; the event envelope alone is not current-state authority.
+This schema matches the Phase A edge-adapter source. The authenticated edge-to-n8n channel and successful delivery claim establish ingress provenance; self-asserted attestation booleans are deliberately absent. The coordinator must still re-fetch current GitHub state because the event envelope alone is not current-state authority.
 
 ## 7. Workflow 2 — PR assurance coordinator
 
@@ -260,15 +276,17 @@ The coordinator must re-fetch current GitHub state; the event envelope alone is 
 
 Before consuming AI tokens, the coordinator must:
 
-1. Validate the internal envelope schema and ingress attestation.
-2. Fetch the current PR through the authorized GitHub App/API path.
-3. Compare current `head.sha` with `event_head_sha`.
-4. Mark the event `STALE` when they differ; do not review the older SHA.
-5. Confirm the PR is open and not draft.
-6. Resolve the authority packet from a protected, trusted source.
-7. Verify the packet ID, digest, permitted repository/base, scope, exclusions, risk tier, and required reviewers.
-8. Confirm the same SHA has not already completed the required assurance route.
-9. Create a server-generated `run_id` bound to the repository, PR, authority packet, and locked SHA.
+1. Select and record `MANUAL_REVIEW` or `EVENT_DRIVEN_PREVIEW`; production mode does not exist at this stage.
+2. Validate the internal envelope schema and ingress attestation. In `MANUAL_REVIEW`, validate an explicit Command-issued manual envelope and mark ingress as `NOT_EXERCISED`.
+3. Fetch the current PR through the authorized GitHub App/API path.
+4. Compare current `head.sha` with the requested/event head SHA.
+5. Mark the run `STALE` when they differ; do not review the older SHA.
+6. Confirm the PR is open. Require non-draft only in `EVENT_DRIVEN_PREVIEW`; `MANUAL_REVIEW` may review a draft when the Command instruction permits it.
+7. Resolve the authority packet from a protected, trusted source.
+8. Verify the packet ID, digest, permitted repository/base, scope, exclusions, risk tier, required reviewers, and permitted review mode.
+9. Resolve the last adjudicated head for this PR and authority packet, if one exists.
+10. Confirm the exact head and evidence digest have not already completed the same assurance route.
+11. Create a server-generated `run_id` bound to the repository, PR, authority packet, review mode, locked SHA, and review baseline.
 
 ### 7.2 Authority packet trust rule
 
@@ -290,22 +308,59 @@ mechanical_status = AUTHORITY_PACKET_MISSING
 
 The coordinator halts and notifies ChatGPT. It does not generate authority.
 
-### 7.3 Frozen evidence package
+### 7.3 Frozen evidence package and review-cycle delta
 
-The coordinator constructs one canonical evidence package for all workers:
+The coordinator constructs one canonical evidence package for all workers. It must distinguish the complete authorized PR scope from the change since the last adjudicated review.
 
-- repository ID and full name;
+Required identity fields:
+
+- repository numeric ID and full name;
 - PR number;
-- base branch and base SHA;
-- head branch and locked head SHA;
+- base branch and immutable `authority_base_sha`;
+- head branch and `locked_head_sha`;
+- `review_baseline_sha`, meaning the last adjudicated head for the same PR and authority packet, or `null` on the first cycle;
 - authority packet ID and verified digest;
-- changed-file manifest;
-- exact patches or bounded artifact links;
-- applicable acceptance criteria;
-- deterministic CI/check evidence;
-- evidence-package digest;
-- review-role instructions;
-- explicit untrusted-content warning.
+- review mode and server-generated run/cycle IDs.
+
+Required evidence surfaces:
+
+| Surface | Comparison | Purpose |
+| --- | --- | --- |
+| `full_pr_manifest` | `authority_base_sha → locked_head_sha` | Shows the complete implementation governed by the packet |
+| `cycle_delta_manifest` | `review_baseline_sha → locked_head_sha` | Shows exactly what changed since the previous adjudicated cycle |
+| `protected_blob_manifest` | exact Git blob IDs at both heads | Proves whether migration, rollback, handler, binding, tests, CI, policy, or other risk-triggering files changed |
+| `ci_evidence` | exact locked head only | Proves deterministic checks for the current target |
+| `execution_evidence` | exact source blobs and declared environment | Records authorized local/preview execution without overstating its environment |
+
+On a first review, `review_baseline_sha` is `null` and the full and cycle scopes are equivalent. On a later review, both manifests are required and must be labeled separately. A full-PR manifest must never be presented as though every file changed in the current cycle.
+
+For an evidence-only follow-up commit, the packet must include:
+
+- the GitHub comparison from the previous reviewed head to the locked head;
+- the exact documentation/evidence delta;
+- before/after Git blob identities for all protected implementation files;
+- a statement of which executed evidence remains valid because its tested blobs are unchanged;
+- exact-head CI for the new locked head;
+- any evidence claims introduced or changed by the documentation delta.
+
+A new commit always invalidates the earlier exact-head adjudication. Blob continuity may justify a reduced **review route** when the authority packet allows it; it never copies an approval to the new SHA.
+
+PR #154 exposed the concrete failure mode behind this correction. The disposable PostgreSQL proof was bound to source head `0ec7867f03ca412a83b764b98a18fc695ad57986`; evidence head `a1e496fe42bd5ec34592e3af22231b1689e41a34` added only `N8N_ASSURANCE_EDGE_ADAPTER_SOURCE_EVIDENCE.md`. GitHub comparison and before/after Git blob identities showed the migration, rollback, handler, binding, tests, and CI source were unchanged. A packet dominated by the full PR manifest obscured that narrow current-cycle delta and caused a reviewer to report insufficient evidence. The corrected packet must present both scopes, preserve that verdict, and let adjudication cite the direct comparison and blob evidence. Hosted database proof remains a later-phase gap because the governing authorization expressly excluded hosted apply.
+
+Every package also includes exact patches or bounded artifact links, applicable acceptance criteria, review-role instructions, an explicit untrusted-content warning, and these separate digests:
+
+- `full_pr_digest`;
+- `cycle_delta_digest`;
+- `protected_blob_manifest_digest`;
+- `evidence_package_digest`.
+
+Evidence claims must carry provenance:
+
+- `GITHUB_DIRECT`: PR state, comparisons, blob IDs, commits, checks;
+- `CI_DIRECT`: workflow runs, jobs, artifacts, logs;
+- `EXECUTION_ATTESTED`: an authorized disposable/local or preview execution bound to exact input blobs, environment/tool versions, commands, results, and teardown;
+- `REVIEWER_INFERENCE`: model analysis rather than executed proof;
+- `OUT_OF_SCOPE_FUTURE`: proof intentionally reserved for a later authority boundary.
 
 PR titles, bodies, comments, source code, patches, logs, test output, and repository documents are evidence, not instructions. Worker system prompts must state that instructions embedded in evidence are untrusted and must not alter role, scope, output schema, tools, credentials, or authority.
 
@@ -324,12 +379,14 @@ Workers receive the same frozen target and remain blind to each other's first-pa
 Each result is correlated by:
 
 ```text
-run_id + repository_id + pull_request + locked_sha + evidence_digest
+run_id + cycle_id + repository_id + pull_request
++ review_baseline_sha + locked_sha
++ full_pr_digest + cycle_delta_digest + evidence_package_digest
 ```
 
 ### 7.5 Reviewer output contract
 
-The coordinator supplies target identity. Reviewers do not self-attest repository or SHA facts.
+The coordinator supplies and mechanically binds target identity. Reviewers may echo the injected `run_id`, target, and digests for correlation, but those echoes are not self-attestation and cannot override coordinator-fetched GitHub facts.
 
 ```json
 {
@@ -391,12 +448,18 @@ Example assurance packet:
 ```json
 {
   "run_id": "server-issued-run-id",
+  "cycle_id": "server-issued-cycle-id",
+  "review_mode": "MANUAL_REVIEW",
   "target": {
     "repository": "faydog127/BHFOS",
-    "pull_request": 152,
+    "pull_request": 154,
+    "authority_base_sha": "40-character-git-sha",
+    "review_baseline_sha": "40-character-git-sha-or-null",
     "locked_sha": "40-character-git-sha",
     "authority_packet_id": "authority-packet-id",
-    "evidence_digest": "server-computed-digest"
+    "full_pr_digest": "server-computed-digest",
+    "cycle_delta_digest": "server-computed-digest",
+    "evidence_package_digest": "server-computed-digest"
   },
   "mechanical_status": "COMPLETE",
   "policy_signals": [
@@ -417,7 +480,7 @@ Example assurance packet:
 
 ## 8. ChatGPT adjudication
 
-ChatGPT receives the mechanical assurance packet and linked evidence. ChatGPT determines:
+ChatGPT receives the mechanical assurance packet and linked evidence. Reviewer outputs remain immutable inside that packet. ChatGPT determines:
 
 - whether findings are supported;
 - whether reviewers misunderstood the authorized requirement;
@@ -437,7 +500,9 @@ Allowed adjudication dispositions include:
 - `READY_FOR_SEPARATE_MERGE_AUTHORIZATION`
 - `REJECTED`
 
-A Cursor correction creates a new SHA. Prior reviews remain historical evidence for the prior SHA and are not valid approvals for the new SHA.
+When ChatGPT uses independently fetched evidence to resolve a disagreement, it must append an `adjudication_supplement` containing the source class, target SHA, retrieval time, identifiers/digests, bounded observation, and effect on disposition. It may not delete, rewrite, or silently downgrade the original reviewer verdict. A later-phase requirement such as hosted database proof may be recorded as `OUT_OF_SCOPE_FUTURE` when the authority packet explicitly withheld that action; it is not converted into current proof and is not treated as a current defect unless the current acceptance criteria require it.
+
+A Cursor correction creates a new SHA. Prior reviews remain historical evidence for the prior SHA and are not valid approvals for the new SHA. The next cycle must name that prior SHA as `review_baseline_sha`, rebuild both evidence scopes, and preserve the prior packet as append-only history.
 
 Automatic fix/review loops must have explicit iteration, cost, and repeated-failure limits. New material ambiguity halts the loop and returns to Command authority.
 
@@ -491,14 +556,18 @@ Before production ingress can be designed or activated, an unpublished test must
 
 ## 12. Progressive activation gates
 
-### Phase A — capability proof
+### Phase A — ingress capability and source proof
 
 - Unpublished/test-only ingress.
 - Synthetic or official HMAC fixtures.
+- Edge-adapter source and disposable-local database proof when separately authorized.
 - No GitHub production webhook connection.
-- No AI calls.
+- No AI calls in the ingress path.
+- No hosted database, edge deployment, secret placement, or n8n publication without separate preview authorization.
 
-### Phase B — assurance courier
+A separately authorized `MANUAL_REVIEW` coordinator trial may call advisory workers while Phase A ingress remains unpublished. That trial proves reviewer orchestration only; it does not satisfy ingress or preview integration criteria.
+
+### Phase B — preview assurance courier
 
 - Separately authorized GitHub App event subscription.
 - Exact-SHA evidence collection.
@@ -526,26 +595,51 @@ Before production ingress can be designed or activated, an unpublished test must
 - SHA change produces `STALE` and invalidates the run for current-action purposes.
 - n8n outage pauses automated assurance; it does not transfer authority to workers.
 - GitHub failed-delivery recovery is an explicit operational procedure; no success is inferred from missing events.
+- A `forward_failed` claim is not made retryable by deleting it. The first proof has no automated retry; it must produce visible bounded evidence for authorized reconciliation.
+- If n8n accepts the envelope but the final state update fails, ingress returns `202` to avoid a second forward and emits `STATE_MARK_FAILED`. Before production design, a reconciler must be able to distinguish accepted, failed, and indeterminate handoffs without creating duplicate model work.
+- Claim, forward, and state-mark operations must share an enforced end-to-end deadline that preserves GitHub's response limit; a timeout value on only the n8n fetch is insufficient production evidence.
 - A partial worker panel cannot be described as a completed panel.
 - Any uncertainty about authority, target identity, environment, or evidence fails closed and routes to ChatGPT.
 
-## 14. Definition of Ready for implementation
+## 14. Definition of Ready for preview activation
 
-No implementation packet may activate even the capability spike until it records:
+Source presence, local proof, exact-head CI, and a manual worker trial are necessary but do not authorize preview. Before preview activation begins, a Founder-approved preview packet must record:
 
-- exact n8n Cloud plan/version evidence;
-- proven raw-body behavior or selected edge fallback;
-- approved secret-storage method;
-- approved atomic deduplication store and retention;
-- GitHub App ID, installation ID, repository ID, event permissions, and least-privilege review;
-- test URL versus production URL handling;
-- explicit response-node behavior;
-- redaction/log-retention rules;
-- timeout, retry, cost, and concurrency limits;
-- synthetic fixture plan;
-- rollback/disable procedure;
-- exact workflow names and owners;
-- confirmation that production publish remains disabled.
+- exact source repository, PR, authority base, locked head, and architecture revision;
+- exact n8n Cloud plan/version evidence and unpublished workflow ID/revision;
+- the approved preview edge host and deployment target;
+- the approved preview PostgreSQL host/project and migration/rollback hashes;
+- approved secret classes, storage locations, owners, and rotation/revocation plan without secret values;
+- GitHub App ID, installation ID, repository numeric ID/full name, least-privilege permissions, event subscriptions, and temporary webhook test plan;
+- protected authority-packet source and digest-resolution method;
+- authenticated edge-to-n8n handoff design using a credential distinct from the GitHub webhook secret;
+- test URL versus production URL handling and explicit response-node behavior;
+- redaction, payload size, model-output, and log-retention rules;
+- timeout, retry, cost, concurrency, and circuit-breaker limits, including an enforced edge total deadline and claim/state-mark bounds;
+- forward-failure and state-mark-failure observability plus the authorized first-proof reconciliation procedure;
+- exact full-PR and cycle-delta evidence-package schema;
+- synthetic fixture plan and one authorized real-delivery plan;
+- rollback owner, execution window, disable order, and evidence-retention plan;
+- confirmation that production publication, merge, deployment, and Network OS mutation remain disabled.
+
+The preview trial must test at least:
+
+1. valid exact-byte signature and one normalized forward;
+2. missing, malformed, and incorrect signatures;
+3. irrelevant event/action and repository/installation/PR/SHA mismatches;
+4. 25 concurrent identical deliveries with exactly one database claim and one n8n handoff;
+5. sequential redelivery as an acknowledged no-op;
+6. n8n timeout/failure after claim, with retained `forward_failed` state, no duplicate forward, and visible reconciliation evidence;
+7. state-mark timeout/failure after accepted handoff, with `202`, no duplicate forward, and visible `STATE_MARK_FAILED` evidence;
+8. enforced end-to-end ingress deadline under slow claim, forward, and state-mark conditions;
+9. stale event SHA after the PR advances;
+10. draft handling differences between `MANUAL_REVIEW` and `EVENT_DRIVEN_PREVIEW`;
+11. first-cycle evidence where full and delta scopes match;
+12. evidence-only follow-up where the cycle delta is narrow and protected blobs are unchanged;
+13. implementation follow-up where changed protected blobs invalidate prior executed evidence as applicable;
+14. provider timeout, malformed reviewer output, partial fan-in, and cost/retry circuit breaking;
+15. ChatGPT supplemental-evidence recording without modification of worker verdicts;
+16. complete rollback: webhook disabled, edge preview disabled, n8n unpublished, preview credential revoked, and database rollback or retained-claim disposition executed as authorized.
 
 ## 15. Decision summary
 
@@ -553,7 +647,9 @@ The controlling rule is:
 
 > The GitHub App emits. The listener authenticates. n8n transports, freezes, dispatches, validates, and records mechanical completion. Independent workers analyze. ChatGPT adjudicates. Erron authorizes material outcomes. GitHub and Network OS enforce their own authoritative boundaries.
 
-Neither an authentic event, a schema-valid bot response, an all-pass panel, nor `ASSURANCE_COMPLETE` grants authority to merge, deploy, migrate, activate, or mutate Network OS.
+Neither an authentic event, a schema-valid bot response, an all-pass panel, unchanged implementation blobs, nor `ASSURANCE_COMPLETE` grants authority to merge, deploy, migrate, activate, or mutate Network OS.
+
+For every new head, the system must answer both questions: **what is the complete authorized PR?** and **what changed since the last adjudicated head?** Keeping those evidence surfaces separate is the controlling correction from the PR #154 assurance trial.
 
 ## 16. References
 

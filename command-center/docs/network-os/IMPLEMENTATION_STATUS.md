@@ -90,3 +90,24 @@ Draft next-step packet: `command-center/docs/network-os/N8N_ASSURANCE_PHASE_A_IM
 Draft envelope schema: `command-center/docs/network-os/schemas/n8n-assurance-normalized-envelope.schema.json`
 
 **Exact next action:** Founder approves, rejects, or revises the draft edge-adapter packet. Until then, do not implement the adapter, choose/apply a transactional store, create preview secrets, deploy, enable a GitHub webhook, publish n8n workflows, merge, or activate production.
+
+
+## n8n assurance edge adapter (2026-08-28) — SOURCE-ONLY IMPLEMENTATION
+
+**Founder authorization:** `N8N_ASSURANCE_PHASE_A_SOURCE_AUTHORIZATION.md`  
+**Requirement / release / work item:** `NOS-N8N-ASSURANCE-REQ-001` / `NOS-N8N-ASSURANCE-PHASE-A-01` / `NOS-N8N-EDGE-INGRESS-SPIKE-01`  
+**Branch:** `implement/nos-n8n-ingress-edge-adapter-0828`  
+**Baseline:** `e36e18c0603b22397097b6d358153d713354ce6b`  
+**State:** **SOURCE-PRESENT · LOCALLY VERIFIED HANDLER · DATABASE UNAPPLIED · UNDEPLOYED**
+
+Implemented an isolated Supabase Edge Function source with an explicit `preview-test` mode lock, exact-byte Web Crypto HMAC verification, deterministic event/target validation, database-first delivery claim, normalized-envelope forwarding, bounded timeouts, and sanitized logs. Added a source-only PostgreSQL primary-key claim table, fixed SECURITY DEFINER claim/mark functions, rollback source, and deterministic tests.
+
+Local Node `v24.19.0` result: `node --test tests/unit/network-os-assurance-ingress.test.mjs` → **13 passed, 0 failed**. The suite includes 25 concurrent identical handler requests producing one accepted forward and 24 duplicate responses.
+
+No secret, migration apply, database binding, deploy, GitHub App/webhook change, n8n publication, AI call, merge, or production action occurred.
+
+**CI-tested implementation head:** `0088c9a0a80fdd96359d9b3fedc729c94089bff3` — dedicated assurance test job, lint, build, Ledger Lock, identity contracts, OAuth helpers, Founder-run readiness, and control-plane checks passed.
+
+**Remaining uncertainty:** database-enforced concurrency, function grants, and rollback are source-inspected but unproved because the Founder explicitly withheld migration apply.
+
+**Exact next action:** independent source review at the exact implementation head. A later Founder command is required for any disposable/local migration apply or database concurrency proof; hosted apply, deployment, webhook activation, workflow publication, merge, and production remain separately prohibited.

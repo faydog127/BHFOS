@@ -49,7 +49,8 @@
     "test:supabase-oauth-helper": "node tools/supabase-diagnostics-adapter/oauth-authorize.mjs --self-test",
     "test:supabase-oauth-tunnel": "node tools/supabase-diagnostics-adapter/oauth-tunnel.self-test.mjs",
     "test:supabase-oauth-launcher-preflight": "node tools/supabase-diagnostics-adapter/oauth-launcher-preflight.self-test.mjs",
-    "test:github-diagnostics-launcher": "node tools/github-diagnostics-launcher/launch-mcp.mjs --self-test"
+    "test:github-diagnostics-launcher": "node tools/github-diagnostics-launcher/launch-mcp.mjs --self-test",
+    "test:network-os-assurance-ingress": "node --test tests/unit/network-os-assurance-ingress.test.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
