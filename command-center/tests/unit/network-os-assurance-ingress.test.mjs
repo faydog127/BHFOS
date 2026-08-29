@@ -260,6 +260,23 @@ describe('Network OS assurance edge ingress', () => {
     assert.equal(forwarded.length, 0);
   });
 
+  it('bounds the n8n forward before the total deadline and retains failure state', async () => {
+    const marked = [];
+    const { handle } = harness({
+      totalTimeoutMs: 250,
+      forwardTimeoutMs: 25,
+      forwardEnvelope: async () => new Promise(() => {}),
+      markDelivery: async (deliveryId, state) => {
+        marked.push({ deliveryId, state });
+        return true;
+      },
+    });
+    const response = await handle(await requestFor({ deliveryId: 'forward-timeout-001' }));
+    assert.equal(response.status, 502);
+    assert.equal((await jsonOf(response)).code, 'N8N_FORWARD_FAILED');
+    assert.deepEqual(marked, [{ deliveryId: 'forward-timeout-001', state: 'forward_failed' }]);
+  });
+
   it('enforces the total deadline while forwarding is slow', async () => {
     const { handle, forwarded } = harness({
       totalTimeoutMs: 25,
