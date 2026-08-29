@@ -3,7 +3,7 @@
 **Packet:** `NOS-COMMAND-CENTER-N8N-COURIER-01`  
 **Branch:** `cursor/n8n-command-courier-42f0`  
 **Baseline (origin/main at branch cut):** `17f9228951d74824d9b6fb0eb704832befed2afc`  
-**Verified HEAD at this status edit:** pending first branch commit  
+**Verified HEAD at this status edit:** `ce74cc9c6b99ace7a62f110ce9585ed848d5ecf3`  
 **Evidence tier:** **locally verified** (unit tests). Not deployed. Not staging-verified. Not merged. Not production.
 
 Destination identity (comments/docs only): unpublished n8n ingress workflow `VaeN89dWkLYoyWyh`  
