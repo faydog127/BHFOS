@@ -1,11 +1,37 @@
 const DEFAULT_BODY_LIMIT_BYTES = 1024 * 1024;
 const DEFAULT_FORWARD_TIMEOUT_MS = 4_000;
+const DEFAULT_TOTAL_TIMEOUT_MS = 8_000;
 const DELIVERY_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 const SHA256_PATTERN = /^[0-9a-f]{40}$/;
 const SIGNATURE_PATTERN = /^sha256=([0-9a-f]{64})$/;
 const SUPPORTED_ACTIONS = new Set(['opened', 'reopened', 'synchronize', 'ready_for_review']);
 
 const encoder = new TextEncoder();
+
+class IngressDeadlineExceeded extends Error {
+  constructor() {
+    super('Ingress deadline exceeded');
+    this.name = 'IngressDeadlineExceeded';
+  }
+}
+
+function withinDeadline(promise, signal) {
+  if (signal.aborted) return Promise.reject(new IngressDeadlineExceeded());
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(new IngressDeadlineExceeded());
+    signal.addEventListener('abort', onAbort, { once: true });
+    Promise.resolve(promise).then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+}
 
 function jsonResponse(status, body, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
@@ -147,17 +173,26 @@ export function createAssuranceIngressHandler({
   log = () => {},
   bodyLimitBytes = DEFAULT_BODY_LIMIT_BYTES,
   forwardTimeoutMs = DEFAULT_FORWARD_TIMEOUT_MS,
+  totalTimeoutMs = DEFAULT_TOTAL_TIMEOUT_MS,
 }) {
   return async function handle(request) {
     let deliveryId = '';
+    const totalController = new AbortController();
+    const totalTimeout = setTimeout(() => totalController.abort(), totalTimeoutMs);
+    let responseFinished = false;
 
-    const finish = (status, code, body = { ok: false, code }) => {
+    const finish = (status, code, body = { ok: false, code }, extraHeaders = {}) => {
+      if (!responseFinished) {
+        responseFinished = true;
+        clearTimeout(totalTimeout);
+      }
       safeLog(log, { status, code, delivery_id: deliveryId });
-      return body === null ? emptyResponse(status) : jsonResponse(status, body);
+      if (body === null) return emptyResponse(status);
+      return jsonResponse(status, body, extraHeaders);
     };
 
     if (request.method !== 'POST') {
-      return jsonResponse(405, { ok: false, code: 'METHOD_NOT_ALLOWED' }, { allow: 'POST' });
+      return finish(405, 'METHOD_NOT_ALLOWED', { ok: false, code: 'METHOD_NOT_ALLOWED' }, { allow: 'POST' });
     }
 
     if (
@@ -168,6 +203,8 @@ export function createAssuranceIngressHandler({
       || typeof claimDelivery !== 'function'
       || typeof forwardEnvelope !== 'function'
       || !cryptoImpl?.subtle
+      || !Number.isFinite(totalTimeoutMs)
+      || totalTimeoutMs < 1
     ) {
       return finish(503, 'INGRESS_NOT_CONFIGURED');
     }
@@ -184,8 +221,13 @@ export function createAssuranceIngressHandler({
 
     let rawBody;
     try {
-      rawBody = new Uint8Array(await request.arrayBuffer());
-    } catch {
+      rawBody = new Uint8Array(
+        await withinDeadline(request.arrayBuffer(), totalController.signal),
+      );
+    } catch (error) {
+      if (error instanceof IngressDeadlineExceeded) {
+        return finish(504, 'INGRESS_DEADLINE_EXCEEDED');
+      }
       return finish(400, 'BODY_UNREADABLE');
     }
     if (rawBody.byteLength > bodyLimitBytes) {
@@ -234,8 +276,14 @@ export function createAssuranceIngressHandler({
 
     let claim;
     try {
-      claim = await claimDelivery(envelope);
-    } catch {
+      claim = await withinDeadline(
+        claimDelivery(envelope, { signal: totalController.signal }),
+        totalController.signal,
+      );
+    } catch (error) {
+      if (error instanceof IngressDeadlineExceeded) {
+        return finish(504, 'INGRESS_DEADLINE_EXCEEDED');
+      }
       claim = 'error';
     }
     if (claim === 'duplicate') {
@@ -250,19 +298,32 @@ export function createAssuranceIngressHandler({
     }
 
     const controller = new AbortController();
+    const abortForwardForTotalDeadline = () => controller.abort();
+    totalController.signal.addEventListener('abort', abortForwardForTotalDeadline, { once: true });
     const timeout = setTimeout(() => controller.abort(), forwardTimeoutMs);
     let forwarded = false;
     try {
-      const result = await forwardEnvelope(envelope, { signal: controller.signal });
+      const result = await withinDeadline(
+        forwardEnvelope(envelope, { signal: controller.signal }),
+        controller.signal,
+      );
       forwarded = result?.ok === true;
     } catch {
       forwarded = false;
     } finally {
       clearTimeout(timeout);
+      totalController.signal.removeEventListener('abort', abortForwardForTotalDeadline);
     }
 
     try {
-      const marked = await markDelivery(deliveryId, forwarded ? 'forwarded' : 'forward_failed');
+      const marked = await withinDeadline(
+        markDelivery(
+          deliveryId,
+          forwarded ? 'forwarded' : 'forward_failed',
+          { signal: totalController.signal },
+        ),
+        totalController.signal,
+      );
       if (marked !== true) {
         safeLog(log, { status: 500, code: 'STATE_MARK_FAILED', delivery_id: deliveryId });
       }
@@ -271,7 +332,9 @@ export function createAssuranceIngressHandler({
     }
 
     if (!forwarded) {
-      return finish(502, 'N8N_FORWARD_FAILED');
+      return totalController.signal.aborted
+        ? finish(504, 'INGRESS_DEADLINE_EXCEEDED')
+        : finish(502, 'N8N_FORWARD_FAILED');
     }
 
     return finish(202, 'ACCEPTED', {
@@ -285,5 +348,6 @@ export function createAssuranceIngressHandler({
 export {
   DEFAULT_BODY_LIMIT_BYTES,
   DEFAULT_FORWARD_TIMEOUT_MS,
+  DEFAULT_TOTAL_TIMEOUT_MS,
   DELIVERY_ID_PATTERN,
 };

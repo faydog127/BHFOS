@@ -249,6 +249,45 @@ describe('Network OS assurance edge ingress', () => {
     assert.equal(oversized.status, 413);
   });
 
+  it('enforces the total deadline while a database claim is slow', async () => {
+    const { handle, forwarded } = harness({
+      totalTimeoutMs: 25,
+      claimDelivery: async () => new Promise(() => {}),
+    });
+    const response = await handle(await requestFor({ deliveryId: 'slow-claim-001' }));
+    assert.equal(response.status, 504);
+    assert.equal((await jsonOf(response)).code, 'INGRESS_DEADLINE_EXCEEDED');
+    assert.equal(forwarded.length, 0);
+  });
+
+  it('enforces the total deadline while forwarding is slow', async () => {
+    const { handle, forwarded } = harness({
+      totalTimeoutMs: 25,
+      forwardTimeoutMs: 1_000,
+      forwardEnvelope: async (envelope) => {
+        forwarded.push(envelope);
+        return new Promise(() => {});
+      },
+    });
+    const response = await handle(await requestFor({ deliveryId: 'slow-forward-001' }));
+    assert.equal(response.status, 504);
+    assert.equal((await jsonOf(response)).code, 'INGRESS_DEADLINE_EXCEEDED');
+    assert.equal(forwarded.length, 1);
+  });
+
+  it('bounds a slow state mark after an accepted handoff without inviting a duplicate', async () => {
+    const logs = [];
+    const { handle } = harness({
+      totalTimeoutMs: 25,
+      markDelivery: async () => new Promise(() => {}),
+      log: (event) => logs.push(event),
+    });
+    const response = await handle(await requestFor({ deliveryId: 'slow-mark-001' }));
+    assert.equal(response.status, 202);
+    assert.equal((await jsonOf(response)).code, 'ACCEPTED');
+    assert.ok(logs.some((event) => event.code === 'STATE_MARK_FAILED'));
+  });
+
   it('returns 503 without forwarding when the delivery claim is unavailable', async () => {
     const { handle, forwarded } = harness({ claimDelivery: async () => 'error' });
     const response = await handle(await requestFor());

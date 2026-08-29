@@ -49,7 +49,7 @@ const database = supabaseUrl && serviceRoleKey
     })
   : null;
 
-async function claimDelivery(envelope: Record<string, unknown>) {
+async function claimDelivery(envelope: Record<string, unknown>, { signal }: { signal: AbortSignal }) {
   if (!database) return 'error';
   const repository = envelope.repository as { id: number };
   const pullRequest = envelope.pull_request as { number: number; head_sha: string };
@@ -60,17 +60,17 @@ async function claimDelivery(envelope: Record<string, unknown>) {
     p_installation_id: envelope.installation_id,
     p_pr_number: pullRequest.number,
     p_head_sha: pullRequest.head_sha,
-  });
+  }).abortSignal(signal);
   if (error) return 'error';
   return data === true ? 'claimed' : 'duplicate';
 }
 
-async function markDelivery(deliveryId: string, state: string) {
+async function markDelivery(deliveryId: string, state: string, { signal }: { signal: AbortSignal }) {
   if (!database) return false;
   const { data, error } = await database.rpc('network_os_mark_assurance_delivery_forward_result', {
     p_delivery_id: deliveryId,
     p_forward_state: state,
-  });
+  }).abortSignal(signal);
   return !error && data === true;
 }
 
