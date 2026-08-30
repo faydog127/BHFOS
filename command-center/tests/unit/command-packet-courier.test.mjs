@@ -8,10 +8,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  ATOMIC_CLAIM_REQUIRED,
+  ATOMIC_CLAIM_INTERFACE_MISMATCH,
   EVENT_TYPE,
   INGRESS_TOKEN_HEADER,
   PERMITTED_REPOSITORY_CONTEXT,
+  PR154_PINNED_CLAIM_INTERFACE,
   SOURCE,
   constructCommandPacketEnvelope,
   defaultProductionClaimAdapter,
@@ -54,33 +55,53 @@ const claimOnce = () => {
 };
 
 describe('atomic claim investigation', () => {
-  it('reports ATOMIC_CLAIM_REQUIRED because no approved claim interface exists on this HEAD', () => {
+  it('reports ATOMIC_CLAIM_INTERFACE_MISMATCH for PR 154 @ 0ec7867', () => {
     const inspection = inspectApprovedAtomicClaimInterface();
     assert.equal(inspection.found, false);
-    assert.equal(inspection.status, ATOMIC_CLAIM_REQUIRED);
-    assert.ok(inspection.searched.length >= 6);
-    assert.ok(inspection.rejected.some((row) => row.candidate.includes('idempotency_keys')));
+    assert.equal(inspection.status, ATOMIC_CLAIM_INTERFACE_MISMATCH);
+    assert.equal(PR154_PINNED_CLAIM_INTERFACE.rpc, 'public.network_os_claim_assurance_delivery');
+    assert.equal(PR154_PINNED_CLAIM_INTERFACE.sha, '0ec7867f03ca412a83b764b98a18fc695ad57986');
+    assert.ok(PR154_PINNED_CLAIM_INTERFACE.hardConstraints.includes("event_name = 'pull_request'"));
+    assert.ok(inspection.rejected.some((row) => row.candidate.includes('network_os_claim_assurance_delivery')));
     assert.ok(inspection.rejected.some((row) => row.candidate.includes('process-local')));
+  });
+
+  it('does not call or copy the GitHub assurance claim RPC', () => {
+    const courier = fs.readFileSync(
+      path.join(root, 'supabase/functions/_shared/commandPacketCourier.mjs'),
+      'utf8',
+    );
+    const edge = fs.readFileSync(
+      path.join(root, 'supabase/functions/command-packet-courier/index.ts'),
+      'utf8',
+    );
+    assert.equal(courier.includes('rpc('), false);
+    assert.equal(edge.includes('network_os_claim_assurance_delivery'), false);
+    assert.equal(fs.existsSync(path.join(root, 'supabase/migrations/20260828170000_network_os_assurance_delivery_claims.sql')), false);
   });
 
   it('production claim adapter never grants a claim', async () => {
     const claim = defaultProductionClaimAdapter();
     const result = await claim('pkt-1');
     assert.equal(result.ok, false);
-    assert.equal(result.status, ATOMIC_CLAIM_REQUIRED);
+    assert.equal(result.status, ATOMIC_CLAIM_INTERFACE_MISMATCH);
     assert.equal(result.duplicate, false);
   });
 });
 
 describe('1. unauthorized request produces no outbound call', () => {
-  it('rejects missing auth before fetch or secret read', async () => {
+  it('rejects missing auth before claim or fetch', async () => {
     let secretsRead = 0;
     let fetchCalls = 0;
+    let claimCalls = 0;
     const result = await submitCommandPacket(
       { request: {}, packetId: 'pkt-unauth', packetText: PACKET_TEXT },
       {
         authorize: authorizeNo,
-        claimPacket: claimOnce(),
+        claimPacket: async () => {
+          claimCalls += 1;
+          return { ok: true, status: 'claimed', duplicate: false };
+        },
         getIngressSecrets: () => {
           secretsRead += 1;
           return { url: SECRET_URL, token: SECRET_TOKEN };
@@ -95,6 +116,7 @@ describe('1. unauthorized request produces no outbound call', () => {
     assert.equal(result.status, 'unauthorized');
     assert.equal(result.delivered, false);
     assert.equal(result.httpStatus, 401);
+    assert.equal(claimCalls, 0);
     assert.equal(fetchCalls, 0);
     assert.equal(secretsRead, 0);
     assert.equal(result.outboundCalls.length, 0);
@@ -129,9 +151,10 @@ describe('1. unauthorized request produces no outbound call', () => {
 });
 
 describe('2. duplicate packet_id produces no second outbound call', () => {
-  it('is skipped when no approved atomic claim interface exists', () => {
+  it('is not runnable: PR 154 claim interface is incompatible with packet_id', () => {
     const inspection = inspectApprovedAtomicClaimInterface();
-    assert.equal(inspection.found, false, 'duplicate-outbound proof requires an approved claim interface');
+    assert.equal(inspection.found, false);
+    assert.equal(inspection.status, ATOMIC_CLAIM_INTERFACE_MISMATCH);
   });
 });
 
@@ -175,7 +198,7 @@ describe('3. valid authorized request constructs the required envelope', () => {
         },
       },
     );
-    assert.equal(result.status, ATOMIC_CLAIM_REQUIRED);
+    assert.equal(result.status, ATOMIC_CLAIM_INTERFACE_MISMATCH);
     assert.equal(result.delivered, false);
     assert.equal(fetchCalls, 0);
     assert.deepEqual(result.constructed, envelopePublicPreview({
@@ -259,6 +282,32 @@ describe('4. secrets are absent from client code and logs', () => {
       if (webhookPattern.test(text)) hits.push(path.relative(root, file));
     }
     assert.deepEqual(hits, []);
+  });
+});
+
+describe('claim failure and concurrency (PR 154 mismatch)', () => {
+  it('claim mismatch / failure produces no n8n request', async () => {
+    let fetchCalls = 0;
+    const result = await submitCommandPacket(
+      { request: {}, packetId: 'pkt-claim-fail', packetText: PACKET_TEXT },
+      {
+        authorize: authorizeOk,
+        claimPacket: defaultProductionClaimAdapter(),
+        getIngressSecrets: () => ({ url: SECRET_URL, token: SECRET_TOKEN }),
+        fetch: async () => {
+          fetchCalls += 1;
+          return { ok: true, status: 200 };
+        },
+      },
+    );
+    assert.equal(result.status, ATOMIC_CLAIM_INTERFACE_MISMATCH);
+    assert.equal(result.delivered, false);
+    assert.equal(fetchCalls, 0);
+    assert.equal(result.outboundCalls.length, 0);
+  });
+
+  it('does not invent a 25-way packet_id race against an incompatible GitHub PR claim', () => {
+    assert.equal(inspectApprovedAtomicClaimInterface().status, ATOMIC_CLAIM_INTERFACE_MISMATCH);
   });
 });
 

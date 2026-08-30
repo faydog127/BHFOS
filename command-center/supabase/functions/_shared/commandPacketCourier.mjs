@@ -9,6 +9,7 @@
  */
 
 export const ATOMIC_CLAIM_REQUIRED = 'ATOMIC_CLAIM_REQUIRED';
+export const ATOMIC_CLAIM_INTERFACE_MISMATCH = 'ATOMIC_CLAIM_INTERFACE_MISMATCH';
 export const EVENT_TYPE = 'command.packet.submitted';
 export const SOURCE = 'bhfos-command-center';
 export const INGRESS_TOKEN_HEADER = 'X-BHFOS-Ingress-Token';
@@ -29,10 +30,33 @@ const SENSITIVE_KEY_RE =
  * Domain-specific money/MIL/ops tables are not an approved packet-delivery claim.
  * Review Board claim/lease design is out of scope and unimplemented.
  */
+export const PR154_PINNED_CLAIM_INTERFACE = Object.freeze({
+  pr: 154,
+  sha: '0ec7867f03ca412a83b764b98a18fc695ad57986',
+  rpc: 'public.network_os_claim_assurance_delivery',
+  arguments: Object.freeze([
+    'p_delivery_id text',
+    'p_event_name text',
+    'p_repository_id bigint',
+    'p_installation_id bigint',
+    'p_pr_number bigint',
+    'p_head_sha text',
+  ]),
+  hardConstraints: Object.freeze([
+    "event_name = 'pull_request'",
+    'repository_id > 0',
+    'installation_id > 0',
+    'pr_number > 0',
+    "head_sha ~ '^[0-9a-f]{40}$'",
+  ]),
+  purpose: 'Isolated delivery claims for preview/test GitHub assurance ingress.',
+});
+
 export const ATOMIC_CLAIM_INVESTIGATION = Object.freeze({
   found: false,
-  status: ATOMIC_CLAIM_REQUIRED,
+  status: ATOMIC_CLAIM_INTERFACE_MISMATCH,
   searched: Object.freeze([
+    'PR 154 exact SHA 0ec7867f03ca412a83b764b98a18fc695ad57986 network_os_claim_assurance_delivery',
     'CREATE TABLE / RPC matching idempotency_keys (ARCHITECTURE.md mentions it; no migration or caller exists)',
     'generic claimOnce / tryClaim / acquire_claim / outbox_claim helpers under command-center/',
     'event_jobs / messages (ops visibility queues: optional idempotency_key, no unique constraint, no claim RPC)',
@@ -43,6 +67,11 @@ export const ATOMIC_CLAIM_INVESTIGATION = Object.freeze({
     'N8N_COMMAND_INGRESS_* / command.packet / delivery_id courier tables or RPCs',
   ]),
   rejected: Object.freeze([
+    {
+      candidate: 'PR 154 public.network_os_claim_assurance_delivery @ 0ec7867',
+      reason:
+        'GitHub assurance pull_request claim, not a packet_id reserve. Requires event_name=pull_request, installation_id, pr_number, and a 40-char head SHA. Consuming it for command.packet.submitted would fabricate PR fields.',
+    },
     {
       candidate: 'public.idempotency_keys',
       reason: 'Named in ARCHITECTURE.md only. No CREATE TABLE, no callers.',
@@ -310,13 +339,14 @@ export async function submitCommandPacket(input, deps = {}) {
   log({ event: 'envelope_constructed', constructed });
 
   const claim = await claimPacketOrStop(envelope.delivery_id, deps);
-  if (!claim || claim.status === ATOMIC_CLAIM_REQUIRED || (claim.ok === false && !claim.duplicate)) {
-    const status = claim && claim.status ? claim.status : ATOMIC_CLAIM_REQUIRED;
+  if (!claim || claim.status === ATOMIC_CLAIM_REQUIRED || claim.status === ATOMIC_CLAIM_INTERFACE_MISMATCH || (claim.ok === false && !claim.duplicate)) {
+    const status = claim && claim.status ? claim.status : ATOMIC_CLAIM_INTERFACE_MISMATCH;
     log({ event: 'claim_stop', status });
     return {
       ...publicFailureResponse({
         status,
-        httpStatus: status === ATOMIC_CLAIM_REQUIRED ? 503 : 409,
+        httpStatus:
+          status === ATOMIC_CLAIM_REQUIRED || status === ATOMIC_CLAIM_INTERFACE_MISMATCH ? 503 : 409,
         deliveryId: envelope.delivery_id,
         constructed,
       }),
