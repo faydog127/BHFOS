@@ -6,7 +6,10 @@
 **Requirement:** `NOS-N8N-REQ-COMMAND-PACKET-CLAIM-01`  
 **Branch:** `cursor/n8n-command-packet-claim-01`  
 **Stacked on:** `cursor/n8n-command-courier-42f0` @ `e198f01829a61ab2c65da0fcaa54431386bd657b` (PR 156 head)  
-**Evidence tier:** **SOURCE-PRESENT** plus disposable-local PostgreSQL proof when the proof script is run. Not deployed. Not staging-verified. Not merged. Not production. This chat does **not** claim `VERIFICATION_PASS`.
+**Implementation SHA:** `ab5b5e74fa39aafc00608b9db1d35daadae70128`  
+**Draft PR:** https://github.com/faydog127/BHFOS/pull/157  
+**Evidence:** `docs/network-os/N8N_COMMAND_PACKET_CLAIM_EVIDENCE.md`  
+**Evidence tier:** **SOURCE-PRESENT** + disposable-local PostgreSQL apply/concurrency/rollback executed. Not deployed. Not staging-verified. Not merged. Not production. This chat does **not** claim `VERIFICATION_PASS`.
 
 Destination identity (comments/docs only): unpublished n8n ingress workflow `VaeN89dWkLYoyWyh`.  
 No live webhook URL is hardcoded. Production authority: **NONE**.
