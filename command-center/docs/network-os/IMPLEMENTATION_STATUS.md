@@ -4,6 +4,7 @@
 **Branch:** `cursor/n8n-command-courier-42f0`  
 **Baseline (origin/main at branch cut):** `17f9228951d74824d9b6fb0eb704832befed2afc`  
 **Courier implementation SHA (inspected):** `ce74cc9c6b99ace7a62f110ce9585ed848d5ecf3`  
+**Reconciliation SHA:** `d022a198973a61a6568c0fa402c0e683084e18e4`  
 **PR 154 inspected SHA:** `0ec7867f03ca412a83b764b98a18fc695ad57986`  
 **Draft PR:** https://github.com/faydog127/BHFOS/pull/156  
 **Evidence tier:** **SOURCE-ONLY** inspection of PR 154 + **locally verified** courier unit tests. Not deployed. Not staging-verified. Not merged. Not production.
