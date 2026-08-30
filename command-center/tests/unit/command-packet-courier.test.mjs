@@ -150,6 +150,153 @@ describe('1. unauthorized request produces no outbound call', () => {
   });
 });
 
+describe('NOS-N8N-REQ-COURIER-AUTHZ-PROTECTED-CLAIMS-01', () => {
+  const authorizeFromProtectedClaims = (claims, durableRoles = []) => async () => {
+    if (!claims) {
+      return { ok: false, status: 'unauthorized', httpStatus: 401 };
+    }
+    if (isAuthorizedFromClaims(claims) || isAuthorizedFromRoles(durableRoles)) {
+      return { ok: true, actorId: 'actor-1' };
+    }
+    return { ok: false, status: 'forbidden', httpStatus: 403 };
+  };
+
+  const submitWithAuthz = async ({ claims = null, durableRoles = [], packetId = 'pkt-authz' }) => {
+    let claimCalls = 0;
+    let fetchCalls = 0;
+    let secretsRead = 0;
+    const result = await submitCommandPacket(
+      { request: {}, packetId, packetText: PACKET_TEXT },
+      {
+        authorize: authorizeFromProtectedClaims(claims, durableRoles),
+        claimPacket: async () => {
+          claimCalls += 1;
+          return { ok: true, status: 'claimed', duplicate: false };
+        },
+        getIngressSecrets: () => {
+          secretsRead += 1;
+          return { url: SECRET_URL, token: SECRET_TOKEN };
+        },
+        fetch: async () => {
+          fetchCalls += 1;
+          return { ok: true, status: 200 };
+        },
+      },
+    );
+    return { result, claimCalls, fetchCalls, secretsRead };
+  };
+
+  it('AC-1 user_metadata.is_superuser === true does not authorize', () => {
+    assert.equal(
+      isAuthorizedFromClaims({
+        role: 'authenticated',
+        user_metadata: { is_superuser: true },
+      }),
+      false,
+    );
+  });
+
+  it('AC-2 user_metadata.superuser === true does not authorize', () => {
+    assert.equal(
+      isAuthorizedFromClaims({
+        role: 'authenticated',
+        user_metadata: { superuser: true },
+      }),
+      false,
+    );
+  });
+
+  it('AC-3 user_metadata admin/owner/role strings do not authorize', () => {
+    for (const user_metadata of [
+      { role: 'admin' },
+      { role: 'super_admin' },
+      { role: 'owner' },
+      { admin: true },
+      { owner: true },
+      { is_admin: true },
+    ]) {
+      assert.equal(
+        isAuthorizedFromClaims({ role: 'authenticated', user_metadata }),
+        false,
+        `user_metadata ${JSON.stringify(user_metadata)} must not authorize`,
+      );
+    }
+  });
+
+  it('AC-4 service_role still authorizes', () => {
+    assert.equal(isAuthorizedFromClaims({ role: 'service_role' }), true);
+  });
+
+  it('AC-5 app_metadata.is_superuser === true still authorizes', () => {
+    assert.equal(isAuthorizedFromClaims({ app_metadata: { is_superuser: true } }), true);
+    assert.equal(isAuthorizedFromClaims({ app_metadata: { superuser: true } }), true);
+  });
+
+  it('AC-6 app_metadata.role in COMMAND_CENTER_ADMIN_ROLES still authorizes', () => {
+    assert.equal(isAuthorizedFromClaims({ app_metadata: { role: 'admin' } }), true);
+    assert.equal(isAuthorizedFromClaims({ app_metadata: { role: 'super_admin' } }), true);
+    assert.equal(isAuthorizedFromClaims({ app_metadata: { role: 'owner' } }), true);
+    assert.equal(isAuthorizedFromClaims({ app_metadata: { role: 'technician' } }), false);
+  });
+
+  it('AC-7 app_user_roles durable admin/super_admin/owner still authorizes', () => {
+    assert.equal(isAuthorizedFromRoles(['admin']), true);
+    assert.equal(isAuthorizedFromRoles(['super_admin']), true);
+    assert.equal(isAuthorizedFromRoles(['owner']), true);
+    assert.equal(isAuthorizedFromRoles(['technician']), false);
+    assert.equal(isAuthorizedFromRoles([]), false);
+  });
+
+  it('AC-8 missing Bearer is 401; unprotected verified JWT is 403; no claim RPC; no outbound n8n', async () => {
+    const missingBearer = await submitWithAuthz({ claims: null, packetId: 'pkt-authz-missing' });
+    assert.equal(missingBearer.result.ok, false);
+    assert.equal(missingBearer.result.status, 'unauthorized');
+    assert.equal(missingBearer.result.httpStatus, 401);
+    assert.equal(missingBearer.result.delivered, false);
+    assert.equal(missingBearer.claimCalls, 0);
+    assert.equal(missingBearer.fetchCalls, 0);
+    assert.equal(missingBearer.secretsRead, 0);
+    assert.equal(missingBearer.result.outboundCalls.length, 0);
+
+    const unprotectedJwt = await submitWithAuthz({
+      claims: {
+        role: 'authenticated',
+        user_metadata: { is_superuser: true, superuser: true, role: 'admin' },
+      },
+      durableRoles: ['technician'],
+      packetId: 'pkt-authz-forbidden',
+    });
+    assert.equal(unprotectedJwt.result.ok, false);
+    assert.equal(unprotectedJwt.result.status, 'forbidden');
+    assert.equal(unprotectedJwt.result.httpStatus, 403);
+    assert.equal(unprotectedJwt.result.delivered, false);
+    assert.equal(unprotectedJwt.claimCalls, 0);
+    assert.equal(unprotectedJwt.fetchCalls, 0);
+    assert.equal(unprotectedJwt.secretsRead, 0);
+    assert.equal(unprotectedJwt.result.outboundCalls.length, 0);
+  });
+
+  it('AC-10 courier auth path has no user_metadata authorization branch', () => {
+    const courier = fs.readFileSync(
+      path.join(root, 'supabase/functions/_shared/commandPacketCourier.mjs'),
+      'utf8',
+    );
+    const edge = fs.readFileSync(
+      path.join(root, 'supabase/functions/command-packet-courier/index.ts'),
+      'utf8',
+    );
+    const start = courier.indexOf('export function isAuthorizedFromClaims');
+    const end = courier.indexOf('export function isAuthorizedFromRoles');
+    assert.ok(start >= 0 && end > start);
+    const authFn = courier.slice(start, end);
+    assert.equal(authFn.includes('user_metadata'), false);
+    assert.equal(/\buser_metadata\b/.test(courier), false);
+    assert.equal(/\buser_metadata\b/.test(edge), false);
+    assert.match(authFn, /app_metadata/);
+    assert.match(authFn, /service_role/);
+  });
+});
+
 describe('2. duplicate packet_id produces no second outbound call', () => {
   it('is not runnable: PR 154 claim interface is incompatible with packet_id', () => {
     const inspection = inspectApprovedAtomicClaimInterface();
