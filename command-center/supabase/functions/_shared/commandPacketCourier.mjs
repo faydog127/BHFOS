@@ -201,9 +201,7 @@ export function isAuthorizedFromClaims(claims) {
   if (COMMAND_CENTER_ADMIN_ROLES.includes(role)) return true;
 
   const app = claims.app_metadata && typeof claims.app_metadata === 'object' ? claims.app_metadata : {};
-  const user = claims.user_metadata && typeof claims.user_metadata === 'object' ? claims.user_metadata : {};
   if (app.is_superuser === true || app.superuser === true) return true;
-  if (user.is_superuser === true || user.superuser === true) return true;
 
   const appRole = String(app.role || '').trim().toLowerCase();
   if (COMMAND_CENTER_ADMIN_ROLES.includes(appRole)) return true;
