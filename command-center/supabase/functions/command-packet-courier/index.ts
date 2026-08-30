@@ -5,7 +5,8 @@ import { getVerifiedClaims } from '../_shared/auth.ts';
 import { buildCorsHeaders, readJson } from '../_shared/publicUtils.ts';
 import {
   COMMAND_CENTER_ADMIN_ROLES,
-  defaultProductionClaimAdapter,
+  COMMAND_PACKET_CLAIM_FUNCTION,
+  createCommandPacketClaimAdapter,
   isAuthorizedFromClaims,
   isAuthorizedFromRoles,
   redactSensitive,
@@ -89,7 +90,11 @@ Deno.serve(async (req) => {
     },
     {
       authorize: () => authorizeCommandCenterRequest(req),
-      claimPacket: defaultProductionClaimAdapter(),
+      claimPacket: createCommandPacketClaimAdapter(async (args) => {
+        const { data, error } = await supabaseAdmin.rpc(COMMAND_PACKET_CLAIM_FUNCTION, args);
+        if (error) throw error;
+        return data;
+      }),
       getIngressSecrets: () => ({
         url: (Deno.env.get('N8N_COMMAND_INGRESS_URL') ?? '').trim(),
         token: (Deno.env.get('N8N_COMMAND_INGRESS_TOKEN') ?? '').trim(),

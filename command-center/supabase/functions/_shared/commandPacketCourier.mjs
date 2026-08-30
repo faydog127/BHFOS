@@ -13,6 +13,9 @@ export const ATOMIC_CLAIM_INTERFACE_MISMATCH = 'ATOMIC_CLAIM_INTERFACE_MISMATCH'
 export const EVENT_TYPE = 'command.packet.submitted';
 export const SOURCE = 'bhfos-command-center';
 export const INGRESS_TOKEN_HEADER = 'X-BHFOS-Ingress-Token';
+export const PACKET_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+export const PACKET_DIGEST_PATTERN = /^[0-9a-f]{64}$/;
+export const COMMAND_PACKET_CLAIM_FUNCTION = 'network_os_claim_command_packet';
 
 export const PERMITTED_REPOSITORY_CONTEXT = Object.freeze({
   owner: 'faydog127',
@@ -105,6 +108,89 @@ export function inspectApprovedAtomicClaimInterface() {
     status: ATOMIC_CLAIM_INVESTIGATION.status,
     searched: [...ATOMIC_CLAIM_INVESTIGATION.searched],
     rejected: ATOMIC_CLAIM_INVESTIGATION.rejected.map((row) => ({ ...row })),
+  };
+}
+
+export function validateCommandPacketInput({ packetId, packetText }) {
+  const id = String(packetId || '').trim();
+  if (!PACKET_ID_PATTERN.test(id)) {
+    return { ok: false, reason: 'invalid_packet_id' };
+  }
+  if (typeof packetText !== 'string' || !packetText.trim()) {
+    return { ok: false, reason: 'invalid_packet_text' };
+  }
+  return { ok: true, packetId: id, packetText };
+}
+
+function bytesToHex(bytes) {
+  let hex = '';
+  for (const byte of bytes) {
+    hex += byte.toString(16).padStart(2, '0');
+  }
+  return hex;
+}
+
+/**
+ * Server-side SHA-256 of packet identity. packet_text is hashed in memory only
+ * and is not returned, logged, or persisted.
+ */
+export async function digestCommandPacketEnvelope(envelope) {
+  const packetId = envelope && envelope.delivery_id != null ? String(envelope.delivery_id) : '';
+  const eventType = envelope && envelope.event_type != null ? String(envelope.event_type) : '';
+  const source = envelope && envelope.source != null ? String(envelope.source) : '';
+  const packetText =
+    envelope && envelope.payload && typeof envelope.payload.packet_text === 'string'
+      ? envelope.payload.packet_text
+      : '';
+  const canonical = `${packetId}\n${eventType}\n${source}\n${packetText}`;
+  const digestBuffer = await globalThis.crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(canonical),
+  );
+  return bytesToHex(new Uint8Array(digestBuffer));
+}
+
+/**
+ * Courier-side adapter. `invokeClaim` is injected by the server identity.
+ * This module does not open a database client.
+ */
+export function createCommandPacketClaimAdapter(invokeClaim) {
+  return async function claimPacket(packetId, details = {}) {
+    if (typeof invokeClaim !== 'function') {
+      return { ok: false, status: 'claim_failed', duplicate: false };
+    }
+
+    const p_packet_id = details.packetId || packetId;
+    const p_packet_digest = details.packetDigest;
+    const p_event_type = details.eventType || EVENT_TYPE;
+    const p_source = details.source || SOURCE;
+
+    if (!PACKET_ID_PATTERN.test(String(p_packet_id || '')) || !PACKET_DIGEST_PATTERN.test(String(p_packet_digest || ''))) {
+      return { ok: false, status: 'claim_failed', duplicate: false };
+    }
+
+    let outcome;
+    try {
+      outcome = await invokeClaim({
+        p_packet_id,
+        p_packet_digest,
+        p_event_type,
+        p_source,
+      });
+    } catch {
+      return { ok: false, status: 'claim_failed', duplicate: false };
+    }
+
+    if (outcome === 'claimed') {
+      return { ok: true, status: 'claimed', duplicate: false };
+    }
+    if (outcome === 'duplicate') {
+      return { ok: false, status: 'duplicate', duplicate: true };
+    }
+    if (outcome === 'conflict') {
+      return { ok: false, status: 'conflict', duplicate: false, conflict: true };
+    }
+    return { ok: false, status: 'claim_failed', duplicate: false };
   };
 }
 
@@ -232,9 +318,12 @@ export async function resolveCommandCenterAuthorization(requestLike, deps) {
   return authorize(requestLike);
 }
 
-export async function claimPacketOrStop(packetId, deps) {
+export async function claimPacketOrStop(claimInput, deps) {
   if (typeof deps.claimPacket === 'function') {
-    return deps.claimPacket(packetId);
+    if (claimInput && typeof claimInput === 'object') {
+      return deps.claimPacket(claimInput.packetId, claimInput);
+    }
+    return deps.claimPacket(claimInput);
   }
   const inspection = inspectApprovedAtomicClaimInterface();
   return {
@@ -313,15 +402,11 @@ export async function submitCommandPacket(input, deps = {}) {
     };
   }
 
-  let envelope;
-  try {
-    envelope = constructCommandPacketEnvelope({
-      packetId: input.packetId,
-      packetText: input.packetText,
-      occurredAt: input.occurredAt || (deps.now ? deps.now() : new Date().toISOString()),
-      repositoryContext: input.repositoryContext || PERMITTED_REPOSITORY_CONTEXT,
-    });
-  } catch (error) {
+  const validated = validateCommandPacketInput({
+    packetId: input.packetId,
+    packetText: input.packetText,
+  });
+  if (!validated.ok) {
     log({ event: 'envelope_invalid' });
     return {
       ...publicFailureResponse({
@@ -335,10 +420,57 @@ export async function submitCommandPacket(input, deps = {}) {
     };
   }
 
+  let envelope;
+  try {
+    envelope = constructCommandPacketEnvelope({
+      packetId: validated.packetId,
+      packetText: validated.packetText,
+      occurredAt: input.occurredAt || (deps.now ? deps.now() : new Date().toISOString()),
+      repositoryContext: input.repositoryContext || PERMITTED_REPOSITORY_CONTEXT,
+    });
+  } catch (error) {
+    log({ event: 'envelope_invalid' });
+    return {
+      ...publicFailureResponse({
+        status: 'invalid_request',
+        httpStatus: 400,
+        deliveryId: validated.packetId,
+      }),
+      outboundCalls,
+      logs,
+      error: 'invalid_request',
+    };
+  }
+
   const constructed = envelopePublicPreview(envelope);
   log({ event: 'envelope_constructed', constructed });
 
-  const claim = await claimPacketOrStop(envelope.delivery_id, deps);
+  let packetDigest;
+  try {
+    packetDigest = await digestCommandPacketEnvelope(envelope);
+  } catch {
+    log({ event: 'claim_stop', status: 'claim_failed' });
+    return {
+      ...publicFailureResponse({
+        status: 'claim_failed',
+        httpStatus: 503,
+        deliveryId: envelope.delivery_id,
+        constructed,
+      }),
+      outboundCalls,
+      logs,
+    };
+  }
+
+  const claim = await claimPacketOrStop(
+    {
+      packetId: envelope.delivery_id,
+      packetDigest,
+      eventType: envelope.event_type,
+      source: envelope.source,
+    },
+    deps,
+  );
   if (!claim || claim.status === ATOMIC_CLAIM_REQUIRED || claim.status === ATOMIC_CLAIM_INTERFACE_MISMATCH || (claim.ok === false && !claim.duplicate)) {
     const status = claim && claim.status ? claim.status : ATOMIC_CLAIM_INTERFACE_MISMATCH;
     log({ event: 'claim_stop', status });
