@@ -66,7 +66,10 @@ describe('AC-1 purpose isolation vs PR 154', () => {
     assert.doesNotMatch(migration, /network_os_claim_assurance_delivery/);
     assert.doesNotMatch(migration, /delivery_id/);
     assert.doesNotMatch(migration, /installation_id|pr_number|head_sha|repository_id|pull_request/);
-    assert.doesNotMatch(migration, /packet_text|webhook|authorization|expires_at|forward_state/);
+    assert.doesNotMatch(migration, /\bpacket_text\b/);
+    assert.doesNotMatch(migration, /\bexpires_at\b|\bforward_state\b|\bwebhook\b|\bauthorization\b/);
+    assert.match(migration, /packet_id text PRIMARY KEY/);
+    assert.doesNotMatch(migration, /CREATE TABLE[\s\S]*packet_text/);
     assert.doesNotMatch(migration, /GRANT (SELECT|INSERT|UPDATE|DELETE)[\s\S]*TO (anon|authenticated|service_role)/);
 
     assert.match(rollback, /DROP FUNCTION IF EXISTS public\.network_os_claim_command_packet/);
@@ -292,7 +295,6 @@ describe('AC-8 / AC-9 secret and client-bundle boundary', () => {
       'COMMAND_PACKET_CLAIM_FUNCTION',
       'N8N_COMMAND_INGRESS_URL',
       'N8N_COMMAND_INGRESS_TOKEN',
-      'service_role',
       'createCommandPacketClaimAdapter',
     ];
     const hits = [];

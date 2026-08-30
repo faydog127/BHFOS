@@ -21,7 +21,7 @@ CREATE TABLE public.network_os_command_packet_claims (
 );
 
 COMMENT ON TABLE public.network_os_command_packet_claims IS
-  'Command Center command.packet.submitted courier claim. packet_id unique. No packet_text, URLs, tokens, or credentials.';
+  'Command Center command.packet.submitted courier claim. Unique packet_id; digest only; no payload body or secret material.';
 
 ALTER TABLE public.network_os_command_packet_claims ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.network_os_command_packet_claims FORCE ROW LEVEL SECURITY;

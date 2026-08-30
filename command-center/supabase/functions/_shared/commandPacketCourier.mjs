@@ -474,18 +474,23 @@ export async function submitCommandPacket(input, deps = {}) {
   if (!claim || claim.status === ATOMIC_CLAIM_REQUIRED || claim.status === ATOMIC_CLAIM_INTERFACE_MISMATCH || (claim.ok === false && !claim.duplicate)) {
     const status = claim && claim.status ? claim.status : ATOMIC_CLAIM_INTERFACE_MISMATCH;
     log({ event: 'claim_stop', status });
-    return {
+    const mismatch =
+      status === ATOMIC_CLAIM_REQUIRED || status === ATOMIC_CLAIM_INTERFACE_MISMATCH;
+    const unavailable = status === 'claim_failed';
+    const failure = {
       ...publicFailureResponse({
         status,
-        httpStatus:
-          status === ATOMIC_CLAIM_REQUIRED || status === ATOMIC_CLAIM_INTERFACE_MISMATCH ? 503 : 409,
+        httpStatus: mismatch || unavailable ? 503 : 409,
         deliveryId: envelope.delivery_id,
         constructed,
       }),
       outboundCalls,
       logs,
-      inspection: claim && claim.inspection ? claim.inspection : inspectApprovedAtomicClaimInterface(),
     };
+    if (mismatch) {
+      failure.inspection = claim && claim.inspection ? claim.inspection : inspectApprovedAtomicClaimInterface();
+    }
+    return failure;
   }
 
   if (claim.duplicate) {

@@ -46,6 +46,14 @@ function run(cmd, args, options = {}) {
   });
 }
 
+function lastLine(text) {
+  return String(text || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .at(-1) || '';
+}
+
 async function psql(sql, extraArgs = []) {
   const result = await run(`${pgBin}/psql`, [
     '-h',
@@ -63,7 +71,7 @@ async function psql(sql, extraArgs = []) {
   ], {
     env: { ...process.env, PGUSER: process.env.USER || 'ubuntu', PGHOST: HOST, PGPORT: PORT },
   });
-  return result.stdout.trim();
+  return lastLine(result.stdout);
 }
 
 async function waitForReady(attempts = 40) {
