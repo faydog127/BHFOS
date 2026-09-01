@@ -5,7 +5,7 @@
  * Unpublished n8n destination identity is documented outside this runtime module.
  *
  * Secrets (names only): N8N_COMMAND_INGRESS_URL, N8N_COMMAND_INGRESS_TOKEN.
- * Token is sent only as header X-BHFOS-Ingress-Token after an approved atomic claim.
+ * Secrets are loaded before lease. Token is sent only as header X-BHFOS-Ingress-Token.
  */
 
 export const ATOMIC_CLAIM_REQUIRED = 'ATOMIC_CLAIM_REQUIRED';
@@ -16,6 +16,20 @@ export const INGRESS_TOKEN_HEADER = 'X-BHFOS-Ingress-Token';
 export const PACKET_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 export const PACKET_DIGEST_PATTERN = /^[0-9a-f]{64}$/;
 export const COMMAND_PACKET_CLAIM_FUNCTION = 'network_os_claim_command_packet';
+export const COMMAND_PACKET_LEASE_FUNCTION = 'network_os_lease_command_packet';
+export const COMMAND_PACKET_DISPATCH_STARTED_FUNCTION = 'network_os_mark_command_packet_dispatch_started';
+export const COMMAND_PACKET_FINALIZE_FUNCTION = 'network_os_finalize_command_packet_delivery';
+export const COMMAND_PACKET_LEASE_OWNER = 'command-packet-courier';
+export const HTTP_DISPATCH_TIMEOUT_MS = 15000;
+export const DB_FINALIZATION_MARGIN_MS = 2000;
+export const RUNTIME_MARGIN_MS = 3000;
+export const LEASE_TTL_SECONDS = 20;
+export const POST_DISPATCH_FINALIZE_WINDOW_SECONDS = 20;
+export const HTTP_DISPATCH_TIMEOUT = HTTP_DISPATCH_TIMEOUT_MS / 1000;
+export const DB_FINALIZATION_MARGIN = DB_FINALIZATION_MARGIN_MS / 1000;
+export const RUNTIME_MARGIN = RUNTIME_MARGIN_MS / 1000;
+export const LEASE_TTL = LEASE_TTL_SECONDS;
+export const POST_DISPATCH_FINALIZE_WINDOW = POST_DISPATCH_FINALIZE_WINDOW_SECONDS;
 
 export const PERMITTED_REPOSITORY_CONTEXT = Object.freeze({
   owner: 'faydog127',
@@ -194,6 +208,155 @@ export function createCommandPacketClaimAdapter(invokeClaim) {
   };
 }
 
+function firstRow(result) {
+  if (Array.isArray(result)) return result[0] || null;
+  return result && typeof result === 'object' ? result : null;
+}
+
+function outcomeOf(result) {
+  if (typeof result === 'string') return result;
+  const row = firstRow(result);
+  if (row && typeof row.outcome === 'string') return row.outcome;
+  return null;
+}
+
+export function createCommandPacketLeaseAdapter(invokeLease) {
+  return async function leasePacket(packetId, details = {}) {
+    if (typeof invokeLease !== 'function') {
+      return { ok: false, status: 'lease_failed', duplicate: false };
+    }
+
+    const p_packet_id = details.packetId || packetId;
+    const p_packet_digest = details.packetDigest;
+    const p_event_type = details.eventType || EVENT_TYPE;
+    const p_source = details.source || SOURCE;
+
+    if (!PACKET_ID_PATTERN.test(String(p_packet_id || '')) || !PACKET_DIGEST_PATTERN.test(String(p_packet_digest || ''))) {
+      return { ok: false, status: 'lease_failed', duplicate: false };
+    }
+
+    let result;
+    try {
+      result = await invokeLease({
+        p_packet_id,
+        p_packet_digest,
+        p_event_type,
+        p_source,
+        p_lease_owner: COMMAND_PACKET_LEASE_OWNER,
+        p_lease_ttl: `${LEASE_TTL_SECONDS} seconds`,
+      });
+    } catch {
+      return { ok: false, status: 'lease_failed', duplicate: false };
+    }
+
+    const row = firstRow(result) || (typeof result === 'string' ? { outcome: result } : null);
+    const outcome = row && row.outcome;
+    if (outcome === 'leased') {
+      return {
+        ok: true,
+        status: 'leased',
+        duplicate: false,
+        leaseToken: row.lease_token || row.leaseToken || details.leaseToken || null,
+        attemptNo: row.attempt_no != null ? row.attempt_no : row.attemptNo,
+        deliveryState: row.delivery_state || row.deliveryState || 'leased',
+      };
+    }
+    if (outcome === 'in_flight') {
+      return { ok: false, status: 'in_flight', duplicate: true };
+    }
+    if (outcome === 'conflict') {
+      return { ok: false, status: 'conflict', duplicate: false, conflict: true };
+    }
+    if (outcome === 'delivered') {
+      return { ok: false, status: 'delivered', duplicate: true, alreadyDelivered: true };
+    }
+    if (outcome === 'reconciliation_required') {
+      return { ok: false, status: 'reconciliation_required', duplicate: false };
+    }
+    return { ok: false, status: 'lease_failed', duplicate: false };
+  };
+}
+
+export function createCommandPacketDispatchStartedAdapter(invokeMark) {
+  return async function markDispatchStarted({ packetId, leaseToken }) {
+    if (typeof invokeMark !== 'function') {
+      return { ok: false, status: 'lease_lost' };
+    }
+    let result;
+    try {
+      result = await invokeMark({
+        p_packet_id: packetId,
+        p_lease_token: leaseToken,
+      });
+    } catch {
+      return { ok: false, status: 'lease_lost' };
+    }
+    const outcome = outcomeOf(result);
+    if (outcome === 'ok') return { ok: true, status: 'ok' };
+    if (outcome === 'lease_lost') return { ok: false, status: 'lease_lost' };
+    return { ok: false, status: 'lease_lost' };
+  };
+}
+
+export function createCommandPacketFinalizeAdapter(invokeFinalize) {
+  return async function finalizeDelivery({ packetId, leaseToken, deliveryState, dispatchOutcome }) {
+    if (typeof invokeFinalize !== 'function') {
+      return { ok: false, status: 'finalize_failed' };
+    }
+    let result;
+    try {
+      result = await invokeFinalize({
+        p_packet_id: packetId,
+        p_lease_token: leaseToken,
+        p_delivery_state: deliveryState,
+        p_dispatch_outcome: dispatchOutcome,
+      });
+    } catch {
+      return { ok: false, status: 'finalize_failed' };
+    }
+    const outcome = outcomeOf(result);
+    if (outcome === 'ok') return { ok: true, status: 'ok' };
+    if (outcome === 'lease_lost') return { ok: false, status: 'lease_lost' };
+    return { ok: false, status: 'finalize_failed' };
+  };
+}
+
+export function mapHttpDispatchOutcome(response, error) {
+  if (error) {
+    const name = error && error.name ? String(error.name) : '';
+    if (name === 'TimeoutError' || name === 'AbortError') {
+      return { ok: false, status: 'timeout', dispatchOutcome: 'timeout', delivered: false };
+    }
+    return { ok: false, status: 'transport', dispatchOutcome: 'transport', delivered: false };
+  }
+  const httpStatus = response && typeof response.status === 'number' ? response.status : null;
+  if (httpStatus != null && httpStatus >= 200 && httpStatus <= 299) {
+    return { ok: true, status: 'http_2xx', dispatchOutcome: 'http_2xx', delivered: false, httpStatus };
+  }
+  if (httpStatus != null && httpStatus >= 400 && httpStatus <= 499) {
+    return { ok: false, status: 'http_4xx', dispatchOutcome: 'http_4xx', delivered: false, httpStatus };
+  }
+  if (httpStatus != null && httpStatus >= 500 && httpStatus <= 599) {
+    return { ok: false, status: 'http_5xx', dispatchOutcome: 'http_5xx', delivered: false, httpStatus };
+  }
+  return { ok: false, status: 'transport', dispatchOutcome: 'transport', delivered: false, httpStatus };
+}
+
+export function finalizePairForDispatchOutcome(dispatchOutcome) {
+  if (dispatchOutcome === 'http_2xx') {
+    return { deliveryState: 'delivered', dispatchOutcome: 'http_2xx' };
+  }
+  if (
+    dispatchOutcome === 'http_4xx'
+    || dispatchOutcome === 'http_5xx'
+    || dispatchOutcome === 'timeout'
+    || dispatchOutcome === 'transport'
+  ) {
+    return { deliveryState: 'reconciliation_required', dispatchOutcome };
+  }
+  return null;
+}
+
 export function isAuthorizedFromClaims(claims) {
   if (!claims || typeof claims !== 'object') return false;
   const role = String(claims.role || '').trim().toLowerCase();
@@ -317,6 +480,12 @@ export async function resolveCommandCenterAuthorization(requestLike, deps) {
 }
 
 export async function claimPacketOrStop(claimInput, deps) {
+  if (typeof deps.leasePacket === 'function') {
+    if (claimInput && typeof claimInput === 'object') {
+      return deps.leasePacket(claimInput.packetId, claimInput);
+    }
+    return deps.leasePacket(claimInput);
+  }
   if (typeof deps.claimPacket === 'function') {
     if (claimInput && typeof claimInput === 'object') {
       return deps.claimPacket(claimInput.packetId, claimInput);
@@ -332,9 +501,15 @@ export async function claimPacketOrStop(claimInput, deps) {
   };
 }
 
-export async function postIngressEnvelope({ envelope, url, token, fetchImpl }) {
+export async function postIngressEnvelope({
+  envelope,
+  url,
+  token,
+  fetchImpl,
+  timeoutMs = HTTP_DISPATCH_TIMEOUT_MS,
+}) {
   if (typeof fetchImpl !== 'function') {
-    return { ok: false, status: 'ingress_failed', delivered: false, reason: 'missing_fetch' };
+    return { ok: false, status: 'transport', dispatchOutcome: 'transport', delivered: false, reason: 'missing_fetch' };
   }
   if (!url || !token) {
     return { ok: false, status: 'ingress_misconfigured', delivered: false };
@@ -349,28 +524,19 @@ export async function postIngressEnvelope({ envelope, url, token, fetchImpl }) {
         [INGRESS_TOKEN_HEADER]: token,
       },
       body: JSON.stringify(envelope),
+      signal: AbortSignal.timeout(timeoutMs),
     });
-  } catch {
-    return { ok: false, status: 'ingress_failed', delivered: false, reason: 'network_error' };
+  } catch (error) {
+    return mapHttpDispatchOutcome(null, error);
   }
 
-  const ok = Boolean(response && response.ok);
-  if (!ok) {
-    return {
-      ok: false,
-      status: 'ingress_failed',
-      delivered: false,
-      reason: 'http_error',
-      httpStatus: response && typeof response.status === 'number' ? response.status : null,
-    };
-  }
-
-  return { ok: true, status: 'submitted', delivered: true };
+  return mapHttpDispatchOutcome(response, null);
 }
 
 /**
- * Orchestrates auth → envelope → atomic claim → outbound ingress.
- * Never marks delivered unless claim succeeded and ingress returned 2xx.
+ * Orchestrates auth → envelope → secrets → lease → dispatch → finalize.
+ * Secrets are read before lease. Delivered is true only after http_2xx and
+ * successful finalize. finalize_failed is local only.
  */
 export async function submitCommandPacket(input, deps = {}) {
   const logs = [];
@@ -460,6 +626,27 @@ export async function submitCommandPacket(input, deps = {}) {
     };
   }
 
+  const secrets =
+    typeof deps.getIngressSecrets === 'function'
+      ? deps.getIngressSecrets()
+      : deps.secrets || {};
+  secretsForRedaction.token = secrets.token;
+  secretsForRedaction.url = secrets.url;
+
+  if (!secrets.url || !secrets.token) {
+    log({ event: 'secrets_missing_before_lease', status: 'ingress_misconfigured' });
+    return {
+      ...publicFailureResponse({
+        status: 'ingress_misconfigured',
+        httpStatus: 503,
+        deliveryId: envelope.delivery_id,
+        constructed,
+      }),
+      outboundCalls,
+      logs,
+    };
+  }
+
   const claim = await claimPacketOrStop(
     {
       packetId: envelope.delivery_id,
@@ -469,12 +656,13 @@ export async function submitCommandPacket(input, deps = {}) {
     },
     deps,
   );
-  if (!claim || claim.status === ATOMIC_CLAIM_REQUIRED || claim.status === ATOMIC_CLAIM_INTERFACE_MISMATCH || (claim.ok === false && !claim.duplicate)) {
+  const leased = Boolean(claim && claim.ok && (claim.status === 'leased' || claim.status === 'claimed'));
+  if (!leased) {
     const status = claim && claim.status ? claim.status : ATOMIC_CLAIM_INTERFACE_MISMATCH;
-    log({ event: 'claim_stop', status });
+    log({ event: 'lease_stop', status });
     const mismatch =
       status === ATOMIC_CLAIM_REQUIRED || status === ATOMIC_CLAIM_INTERFACE_MISMATCH;
-    const unavailable = status === 'claim_failed';
+    const unavailable = status === 'claim_failed' || status === 'lease_failed';
     const failure = {
       ...publicFailureResponse({
         status,
@@ -491,26 +679,30 @@ export async function submitCommandPacket(input, deps = {}) {
     return failure;
   }
 
-  if (claim.duplicate) {
-    log({ event: 'claim_duplicate', delivery_id: envelope.delivery_id });
-    return {
-      ...publicFailureResponse({
-        status: 'duplicate',
-        httpStatus: 409,
-        deliveryId: envelope.delivery_id,
-        constructed,
-      }),
-      outboundCalls,
-      logs,
-    };
+  if (typeof deps.markDispatchStarted === 'function') {
+    let marked;
+    try {
+      marked = await deps.markDispatchStarted({
+        packetId: envelope.delivery_id,
+        leaseToken: claim.leaseToken,
+      });
+    } catch {
+      marked = { ok: false, status: 'lease_lost' };
+    }
+    if (!marked || marked.ok !== true) {
+      log({ event: 'lease_lost', status: marked && marked.status ? marked.status : 'lease_lost' });
+      return {
+        ...publicFailureResponse({
+          status: 'lease_lost',
+          httpStatus: 409,
+          deliveryId: envelope.delivery_id,
+          constructed,
+        }),
+        outboundCalls,
+        logs,
+      };
+    }
   }
-
-  const secrets =
-    typeof deps.getIngressSecrets === 'function'
-      ? deps.getIngressSecrets()
-      : deps.secrets || {};
-  secretsForRedaction.token = secrets.token;
-  secretsForRedaction.url = secrets.url;
 
   const fetchImpl = deps.fetch;
   const trackedFetch = async (url, init) => {
@@ -527,13 +719,82 @@ export async function submitCommandPacket(input, deps = {}) {
     url: secrets.url,
     token: secrets.token,
     fetchImpl: trackedFetch,
+    timeoutMs: HTTP_DISPATCH_TIMEOUT_MS,
   });
 
-  if (!delivery.ok) {
-    log({ event: 'ingress_failed', status: delivery.status, delivered: false });
+  const dispatchOutcome = delivery.dispatchOutcome || delivery.status;
+  const pair = finalizePairForDispatchOutcome(dispatchOutcome);
+
+  if (typeof deps.finalizeDelivery === 'function') {
+    if (!pair) {
+      log({ event: 'finalize_failed', status: 'finalize_failed', delivered: false });
+      return {
+        ...publicFailureResponse({
+          status: 'finalize_failed',
+          httpStatus: 502,
+          deliveryId: envelope.delivery_id,
+          constructed,
+        }),
+        outboundCalls,
+        logs,
+      };
+    }
+    let finalized;
+    try {
+      finalized = await deps.finalizeDelivery({
+        packetId: envelope.delivery_id,
+        leaseToken: claim.leaseToken,
+        deliveryState: pair.deliveryState,
+        dispatchOutcome: pair.dispatchOutcome,
+      });
+    } catch {
+      finalized = { ok: false, status: 'finalize_failed' };
+    }
+    if (!finalized || finalized.ok !== true) {
+      const status = finalized && finalized.status === 'lease_lost' ? 'lease_lost' : 'finalize_failed';
+      log({ event: status, delivered: false });
+      return {
+        ...publicFailureResponse({
+          status,
+          httpStatus: status === 'lease_lost' ? 409 : 502,
+          deliveryId: envelope.delivery_id,
+          constructed,
+        }),
+        outboundCalls,
+        logs,
+      };
+    }
+    if (pair.dispatchOutcome !== 'http_2xx') {
+      log({ event: 'dispatch_finalized', status: pair.dispatchOutcome, delivered: false });
+      return {
+        ...publicFailureResponse({
+          status: pair.dispatchOutcome,
+          httpStatus: 502,
+          deliveryId: envelope.delivery_id,
+          constructed,
+        }),
+        outboundCalls,
+        logs,
+      };
+    }
+    log({ event: 'submitted', delivery_id: envelope.delivery_id, delivered: true });
+    return {
+      ok: true,
+      status: 'submitted',
+      delivered: true,
+      delivery_id: envelope.delivery_id,
+      constructed,
+      httpStatus: 202,
+      outboundCalls,
+      logs,
+    };
+  }
+
+  if (!delivery.ok || dispatchOutcome !== 'http_2xx') {
+    log({ event: 'ingress_failed', status: dispatchOutcome, delivered: false });
     return {
       ...publicFailureResponse({
-        status: delivery.status,
+        status: dispatchOutcome,
         httpStatus: 502,
         deliveryId: envelope.delivery_id,
         constructed,

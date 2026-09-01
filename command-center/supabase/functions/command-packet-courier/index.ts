@@ -1,12 +1,16 @@
 // Destination identity for unpublished n8n ingress (comments/docs only): VaeN89dWkLYoyWyh
-// Do not hardcode a live webhook URL. Read N8N_COMMAND_INGRESS_URL only after an approved claim.
+// Do not hardcode a live webhook URL. Read ingress secrets before lease; never log them.
 import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
 import { getVerifiedClaims } from '../_shared/auth.ts';
 import { buildCorsHeaders, readJson } from '../_shared/publicUtils.ts';
 import {
   COMMAND_CENTER_ADMIN_ROLES,
-  COMMAND_PACKET_CLAIM_FUNCTION,
-  createCommandPacketClaimAdapter,
+  COMMAND_PACKET_DISPATCH_STARTED_FUNCTION,
+  COMMAND_PACKET_FINALIZE_FUNCTION,
+  COMMAND_PACKET_LEASE_FUNCTION,
+  createCommandPacketDispatchStartedAdapter,
+  createCommandPacketFinalizeAdapter,
+  createCommandPacketLeaseAdapter,
   isAuthorizedFromClaims,
   isAuthorizedFromRoles,
   redactSensitive,
@@ -90,14 +94,24 @@ Deno.serve(async (req) => {
     },
     {
       authorize: () => authorizeCommandCenterRequest(req),
-      claimPacket: createCommandPacketClaimAdapter(async (args) => {
-        const { data, error } = await supabaseAdmin.rpc(COMMAND_PACKET_CLAIM_FUNCTION, args);
-        if (error) throw error;
-        return data;
-      }),
       getIngressSecrets: () => ({
         url: (Deno.env.get('N8N_COMMAND_INGRESS_URL') ?? '').trim(),
         token: (Deno.env.get('N8N_COMMAND_INGRESS_TOKEN') ?? '').trim(),
+      }),
+      leasePacket: createCommandPacketLeaseAdapter(async (args) => {
+        const { data, error } = await supabaseAdmin.rpc(COMMAND_PACKET_LEASE_FUNCTION, args);
+        if (error) throw error;
+        return data;
+      }),
+      markDispatchStarted: createCommandPacketDispatchStartedAdapter(async (args) => {
+        const { data, error } = await supabaseAdmin.rpc(COMMAND_PACKET_DISPATCH_STARTED_FUNCTION, args);
+        if (error) throw error;
+        return data;
+      }),
+      finalizeDelivery: createCommandPacketFinalizeAdapter(async (args) => {
+        const { data, error } = await supabaseAdmin.rpc(COMMAND_PACKET_FINALIZE_FUNCTION, args);
+        if (error) throw error;
+        return data;
       }),
       fetch: globalThis.fetch.bind(globalThis),
     },
