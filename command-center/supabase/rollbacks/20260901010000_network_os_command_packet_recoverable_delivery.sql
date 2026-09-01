@@ -1,4 +1,5 @@
 -- NOS-N8N-RECOVERABLE-DELIVERY-IMPLEMENTATION-01 local rollback.
+-- Remediation: NOS-N8N-RECOVERABLE-DELIVERY-REMEDIATION-01
 -- ACCESS EXCLUSIVE lock order: claims then attempts.
 -- Raises if attempt rows exist. Drops new RPCs/table/columns only.
 -- Does not drop claims. Does not delete AC-3. Does not recreate the old claim RPC.
@@ -20,8 +21,8 @@ BEGIN
 END
 $$;
 
-DROP FUNCTION IF EXISTS public.network_os_finalize_command_packet_delivery(text, text, text, text);
-DROP FUNCTION IF EXISTS public.network_os_mark_command_packet_dispatch_started(text, text);
+DROP FUNCTION IF EXISTS public.network_os_finalize_command_packet_delivery(text, text, uuid, text, text, integer);
+DROP FUNCTION IF EXISTS public.network_os_mark_command_packet_dispatch_started(text, text, uuid, text);
 DROP FUNCTION IF EXISTS public.network_os_lease_command_packet(text, text, text, text, text, interval);
 
 DROP TABLE IF EXISTS public.network_os_command_packet_delivery_attempts;

@@ -472,7 +472,7 @@ describe('5. n8n/network failure returns controlled failure and does not mark de
       },
     );
     assert.equal(result.ok, false);
-    assert.equal(result.status, 'transport');
+    assert.equal(result.status, 'transport_error');
     assert.equal(result.delivered, false);
     assert.equal(result.httpStatus, 502);
     assert.equal(result.outboundCalls.length, 1);
@@ -511,6 +511,6 @@ describe('5. n8n/network failure returns controlled failure and does not mark de
     });
     assert.equal(failed.ok, false);
     assert.equal(failed.delivered, false);
-    assert.equal(failed.status, 'transport');
+    assert.equal(failed.status, 'transport_error');
   });
 });

@@ -1,9 +1,10 @@
 -- NOS-N8N-RECOVERABLE-DELIVERY-IMPLEMENTATION-01
+-- Remediation: NOS-N8N-RECOVERABLE-DELIVERY-REMEDIATION-01
 -- Additive recoverable delivery on public.network_os_command_packet_claims.
 -- Durations: HTTP 15s / DB finalize 2s / runtime 3s / lease TTL 20s / post-dispatch finalize 20s.
 -- delivery_state is ALWAYS SET NOT NULL after AC-3 backfill.
 -- INSERT-winner then SELECT FOR UPDATE; current_attempt_no+1 (never MAX).
--- Durable attempt phases: lease_acquired | dispatch_started | finalize_ok only.
+-- Durable attempt phases: lease_acquired | lease_expired | dispatch_started | finalize_ok.
 -- p_lease_owner = command-packet-courier. No packet_text. Old claim RPC is dropped, not recreated.
 -- Do not apply to hosted/preview/production from this packet.
 
@@ -11,7 +12,7 @@ BEGIN;
 
 ALTER TABLE public.network_os_command_packet_claims
   ADD COLUMN delivery_state text,
-  ADD COLUMN lease_token text,
+  ADD COLUMN lease_token uuid,
   ADD COLUMN lease_owner text,
   ADD COLUMN lease_acquired_at timestamptz,
   ADD COLUMN lease_expires_at timestamptz,
@@ -58,8 +59,8 @@ ALTER TABLE public.network_os_command_packet_claims
           'http_2xx',
           'http_4xx',
           'http_5xx',
-          'timeout',
-          'transport',
+          'http_timeout',
+          'transport_error',
           'historical_delivery_unknown'
         )
       )
@@ -103,38 +104,47 @@ CREATE TABLE public.network_os_command_packet_delivery_attempts (
   attempt_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   packet_id text NOT NULL
     REFERENCES public.network_os_command_packet_claims (packet_id),
+  packet_digest text NOT NULL
+    CHECK (packet_digest ~ '^[0-9a-f]{64}$'),
+  lease_token uuid NOT NULL,
   attempt_no integer NOT NULL
     CHECK (attempt_no >= 1),
+  attempted_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   phase text NOT NULL
-    CHECK (phase IN ('lease_acquired', 'dispatch_started', 'finalize_ok')),
-  lease_token text NOT NULL,
-  outcome text,
-  status text,
-  recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (phase IN ('lease_acquired', 'lease_expired', 'dispatch_started', 'finalize_ok')),
+  observable_outcome text,
+  receiver_http_status integer,
   CONSTRAINT network_os_command_packet_attempt_outcome_status_chk CHECK (
     (
-      phase = 'lease_acquired'
-      AND outcome IS NULL
-      AND status = 'leased'
+      phase IN ('lease_acquired', 'dispatch_started')
+      AND observable_outcome IS NULL
+      AND receiver_http_status IS NULL
     ) OR (
-      phase = 'dispatch_started'
-      AND outcome IS NULL
-      AND status = 'dispatch_started'
+      phase = 'lease_expired'
+      AND observable_outcome = 'lease_expired_before_dispatch'
+      AND receiver_http_status IS NULL
     ) OR (
       phase = 'finalize_ok'
-      AND (
-        (status = 'delivered' AND outcome = 'http_2xx')
-        OR (
-          status = 'reconciliation_required'
-          AND outcome IN ('http_4xx', 'http_5xx', 'timeout', 'transport')
-        )
-      )
+      AND observable_outcome = 'http_2xx'
+      AND receiver_http_status BETWEEN 200 AND 299
+    ) OR (
+      phase = 'finalize_ok'
+      AND observable_outcome = 'http_4xx'
+      AND receiver_http_status BETWEEN 400 AND 499
+    ) OR (
+      phase = 'finalize_ok'
+      AND observable_outcome = 'http_5xx'
+      AND receiver_http_status BETWEEN 500 AND 599
+    ) OR (
+      phase = 'finalize_ok'
+      AND observable_outcome IN ('http_timeout', 'transport_error')
+      AND receiver_http_status IS NULL
     )
   )
 );
 
 COMMENT ON TABLE public.network_os_command_packet_delivery_attempts IS
-  'Committed-facts-only command-packet delivery phases. Phases lease_acquired|dispatch_started|finalize_ok only. No payload body or secret material.';
+  'Committed-facts-only command-packet delivery phases. Phases lease_acquired|lease_expired|dispatch_started|finalize_ok only. No payload body or secret material.';
 
 CREATE UNIQUE INDEX network_os_command_packet_attempt_lease_uq
   ON public.network_os_command_packet_delivery_attempts (packet_id, attempt_no)
@@ -159,10 +169,10 @@ CREATE FUNCTION public.network_os_lease_command_packet(
   p_lease_ttl interval
 )
 RETURNS TABLE (
-  outcome text,
-  lease_token text,
-  attempt_no integer,
-  delivery_state text
+  result text,
+  lease_token uuid,
+  delivery_state text,
+  attempt_no integer
 )
 LANGUAGE plpgsql
 VOLATILE
@@ -172,7 +182,7 @@ AS $$
 DECLARE
   inserted_rows integer := 0;
   v_now timestamptz;
-  v_lease_token text;
+  v_lease_token uuid;
   v_attempt_no integer;
   v_row public.network_os_command_packet_claims%ROWTYPE;
 BEGIN
@@ -190,19 +200,17 @@ BEGIN
   END IF;
 
   IF p_lease_ttl IS DISTINCT FROM interval '20 seconds' THEN
-    RAISE EXCEPTION 'network_os_lease_command_packet_invalid_ttl'
+    RAISE EXCEPTION 'network_os_lease_ttl_out_of_bounds'
       USING ERRCODE = 'check_violation';
   END IF;
 
   IF p_lease_owner IS DISTINCT FROM 'command-packet-courier' THEN
-    RAISE EXCEPTION 'network_os_lease_command_packet_invalid_owner'
+    RAISE EXCEPTION 'network_os_lease_owner_rejected'
       USING ERRCODE = 'check_violation';
   END IF;
 
   v_now := clock_timestamp();
-  v_lease_token := md5(
-    p_packet_id || v_now::text || random()::text || pg_backend_pid()::text
-  ) || md5(random()::text || v_now::text);
+  v_lease_token := gen_random_uuid();
 
   INSERT INTO public.network_os_command_packet_claims (
     packet_id,
@@ -228,7 +236,7 @@ BEGIN
     v_lease_token,
     p_lease_owner,
     v_now,
-    v_now + p_lease_ttl,
+    v_now + interval '20 seconds',
     NULL,
     NULL,
     NULL,
@@ -246,20 +254,22 @@ BEGIN
   IF inserted_rows = 1 THEN
     INSERT INTO public.network_os_command_packet_delivery_attempts (
       packet_id,
+      packet_digest,
+      lease_token,
       attempt_no,
       phase,
-      lease_token,
-      outcome,
-      status
+      observable_outcome,
+      receiver_http_status
     ) VALUES (
       p_packet_id,
+      p_packet_digest,
+      v_lease_token,
       1,
       'lease_acquired',
-      v_lease_token,
       NULL,
-      'leased'
+      NULL
     );
-    outcome := 'leased';
+    result := 'leased';
     lease_token := v_lease_token;
     attempt_no := 1;
     RETURN NEXT;
@@ -281,7 +291,7 @@ BEGIN
      OR v_row.event_type IS DISTINCT FROM p_event_type
      OR v_row.source IS DISTINCT FROM p_source
   THEN
-    outcome := 'conflict';
+    result := 'conflict';
     lease_token := NULL;
     attempt_no := v_row.current_attempt_no;
     delivery_state := v_row.delivery_state;
@@ -290,7 +300,7 @@ BEGIN
   END IF;
 
   IF v_row.delivery_state = 'delivered' THEN
-    outcome := 'delivered';
+    result := 'duplicate';
     lease_token := NULL;
     attempt_no := v_row.current_attempt_no;
     delivery_state := v_row.delivery_state;
@@ -302,7 +312,7 @@ BEGIN
     IF v_row.post_dispatch_finalize_deadline_at IS NOT NULL
        AND clock_timestamp() < v_row.post_dispatch_finalize_deadline_at
     THEN
-      outcome := 'in_flight';
+      result := 'in_flight';
       lease_token := NULL;
       attempt_no := v_row.current_attempt_no;
       delivery_state := v_row.delivery_state;
@@ -315,7 +325,7 @@ BEGIN
      WHERE c.packet_id = p_packet_id
        AND c.delivery_state IS DISTINCT FROM 'reconciliation_required';
 
-    outcome := 'reconciliation_required';
+    result := 'held_for_reconciliation';
     lease_token := NULL;
     attempt_no := v_row.current_attempt_no;
     delivery_state := 'reconciliation_required';
@@ -324,7 +334,7 @@ BEGIN
   END IF;
 
   IF v_row.delivery_state = 'reconciliation_required' THEN
-    outcome := 'reconciliation_required';
+    result := 'held_for_reconciliation';
     lease_token := NULL;
     attempt_no := v_row.current_attempt_no;
     delivery_state := v_row.delivery_state;
@@ -334,9 +344,9 @@ BEGIN
 
   IF v_row.delivery_state = 'leased'
      AND v_row.lease_expires_at IS NOT NULL
-     AND v_row.lease_expires_at > clock_timestamp()
+     AND v_row.lease_expires_at >= clock_timestamp()
   THEN
-    outcome := 'in_flight';
+    result := 'in_flight';
     lease_token := NULL;
     attempt_no := v_row.current_attempt_no;
     delivery_state := v_row.delivery_state;
@@ -348,9 +358,27 @@ BEGIN
      AND v_row.dispatch_started_at IS NULL
      AND (
        v_row.lease_expires_at IS NULL
-       OR v_row.lease_expires_at <= clock_timestamp()
+       OR v_row.lease_expires_at < clock_timestamp()
      )
   THEN
+    INSERT INTO public.network_os_command_packet_delivery_attempts (
+      packet_id,
+      packet_digest,
+      lease_token,
+      attempt_no,
+      phase,
+      observable_outcome,
+      receiver_http_status
+    ) VALUES (
+      p_packet_id,
+      v_row.packet_digest,
+      v_row.lease_token,
+      v_row.current_attempt_no,
+      'lease_expired',
+      'lease_expired_before_dispatch',
+      NULL
+    );
+
     UPDATE public.network_os_command_packet_claims AS c
        SET delivery_state = 'retryable',
            lease_token = NULL,
@@ -363,9 +391,7 @@ BEGIN
 
   IF v_row.delivery_state = 'retryable' THEN
     v_now := clock_timestamp();
-    v_lease_token := md5(
-      p_packet_id || v_now::text || random()::text || pg_backend_pid()::text
-    ) || md5(random()::text || v_now::text);
+    v_lease_token := gen_random_uuid();
     v_attempt_no := COALESCE(v_row.current_attempt_no, 0) + 1;
 
     UPDATE public.network_os_command_packet_claims AS c
@@ -373,7 +399,7 @@ BEGIN
            lease_token = v_lease_token,
            lease_owner = p_lease_owner,
            lease_acquired_at = v_now,
-           lease_expires_at = v_now + p_lease_ttl,
+           lease_expires_at = v_now + interval '20 seconds',
            dispatch_started_at = NULL,
            post_dispatch_finalize_deadline_at = NULL,
            dispatch_outcome = NULL,
@@ -383,21 +409,23 @@ BEGIN
 
     INSERT INTO public.network_os_command_packet_delivery_attempts (
       packet_id,
+      packet_digest,
+      lease_token,
       attempt_no,
       phase,
-      lease_token,
-      outcome,
-      status
+      observable_outcome,
+      receiver_http_status
     ) VALUES (
       p_packet_id,
+      p_packet_digest,
+      v_lease_token,
       v_attempt_no,
       'lease_acquired',
-      v_lease_token,
       NULL,
-      'leased'
+      NULL
     );
 
-    outcome := 'leased';
+    result := 'leased';
     lease_token := v_lease_token;
     attempt_no := v_attempt_no;
     delivery_state := 'leased';
@@ -405,7 +433,7 @@ BEGIN
     RETURN;
   END IF;
 
-  outcome := 'in_flight';
+  result := 'in_flight';
   lease_token := NULL;
   attempt_no := v_row.current_attempt_no;
   delivery_state := v_row.delivery_state;
@@ -415,49 +443,26 @@ $$;
 
 CREATE FUNCTION public.network_os_mark_command_packet_dispatch_started(
   p_packet_id text,
-  p_lease_token text
+  p_packet_digest text,
+  p_lease_token uuid,
+  p_expected_state text
 )
-RETURNS TABLE (
-  outcome text
-)
+RETURNS text
 LANGUAGE plpgsql
 VOLATILE
 SECURITY DEFINER
 SET search_path = pg_temp
 AS $$
 DECLARE
-  v_row public.network_os_command_packet_claims%ROWTYPE;
   v_now timestamptz;
+  v_attempt_no integer;
 BEGIN
   IF p_packet_id IS NULL
+     OR p_packet_digest IS NULL
      OR p_lease_token IS NULL
-     OR char_length(p_lease_token) < 1
+     OR p_expected_state IS DISTINCT FROM 'leased'
   THEN
-    RAISE EXCEPTION 'network_os_mark_command_packet_dispatch_started_invalid_input'
-      USING ERRCODE = 'check_violation';
-  END IF;
-
-  SELECT *
-    INTO v_row
-    FROM public.network_os_command_packet_claims
-   WHERE public.network_os_command_packet_claims.packet_id = p_packet_id
-   FOR UPDATE;
-
-  IF NOT FOUND
-     OR v_row.lease_token IS DISTINCT FROM p_lease_token
-     OR v_row.delivery_state IS DISTINCT FROM 'leased'
-     OR v_row.lease_expires_at IS NULL
-     OR v_row.lease_expires_at <= clock_timestamp()
-  THEN
-    outcome := 'lease_lost';
-    RETURN NEXT;
-    RETURN;
-  END IF;
-
-  IF v_row.dispatch_started_at IS NOT NULL THEN
-    outcome := 'ok';
-    RETURN NEXT;
-    RETURN;
+    RETURN 'lease_lost';
   END IF;
 
   v_now := clock_timestamp();
@@ -465,134 +470,135 @@ BEGIN
   UPDATE public.network_os_command_packet_claims AS c
      SET dispatch_started_at = v_now,
          post_dispatch_finalize_deadline_at = v_now + interval '20 seconds'
-   WHERE c.packet_id = p_packet_id;
+   WHERE c.packet_id = p_packet_id
+     AND c.packet_digest = p_packet_digest
+     AND c.lease_token = p_lease_token
+     AND c.delivery_state = 'leased'
+     AND c.lease_expires_at >= clock_timestamp()
+     AND c.dispatch_started_at IS NULL
+  RETURNING c.current_attempt_no
+    INTO v_attempt_no;
+
+  IF NOT FOUND THEN
+    RETURN 'lease_lost';
+  END IF;
 
   INSERT INTO public.network_os_command_packet_delivery_attempts (
     packet_id,
+    packet_digest,
+    lease_token,
     attempt_no,
     phase,
-    lease_token,
-    outcome,
-    status
+    observable_outcome,
+    receiver_http_status
   ) VALUES (
     p_packet_id,
-    v_row.current_attempt_no,
-    'dispatch_started',
+    p_packet_digest,
     p_lease_token,
+    v_attempt_no,
+    'dispatch_started',
     NULL,
-    'dispatch_started'
+    NULL
   );
 
-  outcome := 'ok';
-  RETURN NEXT;
+  RETURN 'ok';
 END;
 $$;
 
 CREATE FUNCTION public.network_os_finalize_command_packet_delivery(
   p_packet_id text,
-  p_lease_token text,
-  p_delivery_state text,
-  p_dispatch_outcome text
+  p_packet_digest text,
+  p_lease_token uuid,
+  p_expected_state text,
+  p_dispatch_outcome text,
+  p_receiver_http_status integer
 )
-RETURNS TABLE (
-  outcome text
-)
+RETURNS text
 LANGUAGE plpgsql
 VOLATILE
 SECURITY DEFINER
 SET search_path = pg_temp
 AS $$
 DECLARE
-  v_row public.network_os_command_packet_claims%ROWTYPE;
-  v_pair_ok boolean := false;
+  v_derived_state text;
   v_now timestamptz;
+  v_attempt_no integer;
 BEGIN
   IF p_packet_id IS NULL
+     OR p_packet_digest IS NULL
      OR p_lease_token IS NULL
-     OR char_length(p_lease_token) < 1
+     OR p_expected_state IS DISTINCT FROM 'leased'
   THEN
-    RAISE EXCEPTION 'network_os_finalize_command_packet_delivery_invalid_input'
-      USING ERRCODE = 'check_violation';
+    RETURN 'lease_lost';
   END IF;
 
-  v_pair_ok :=
-    (p_delivery_state = 'delivered' AND p_dispatch_outcome = 'http_2xx')
-    OR (
-      p_delivery_state = 'reconciliation_required'
-      AND p_dispatch_outcome IN ('http_4xx', 'http_5xx', 'timeout', 'transport')
-    );
-
-  IF NOT v_pair_ok THEN
+  IF p_dispatch_outcome = 'http_2xx'
+     AND p_receiver_http_status BETWEEN 200 AND 299
+  THEN
+    v_derived_state := 'delivered';
+  ELSIF p_dispatch_outcome = 'http_4xx'
+     AND p_receiver_http_status BETWEEN 400 AND 499
+  THEN
+    v_derived_state := 'reconciliation_required';
+  ELSIF p_dispatch_outcome = 'http_5xx'
+     AND p_receiver_http_status BETWEEN 500 AND 599
+  THEN
+    v_derived_state := 'reconciliation_required';
+  ELSIF p_dispatch_outcome = 'http_timeout'
+     AND p_receiver_http_status IS NULL
+  THEN
+    v_derived_state := 'reconciliation_required';
+  ELSIF p_dispatch_outcome = 'transport_error'
+     AND p_receiver_http_status IS NULL
+  THEN
+    v_derived_state := 'reconciliation_required';
+  ELSE
     RAISE EXCEPTION 'network_os_finalize_command_packet_delivery_invalid_pair'
-      USING ERRCODE = 'check_violation';
-  END IF;
-
-  SELECT *
-    INTO v_row
-    FROM public.network_os_command_packet_claims
-   WHERE public.network_os_command_packet_claims.packet_id = p_packet_id
-   FOR UPDATE;
-
-  IF NOT FOUND
-     OR v_row.lease_token IS DISTINCT FROM p_lease_token
-  THEN
-    outcome := 'lease_lost';
-    RETURN NEXT;
-    RETURN;
-  END IF;
-
-  IF v_row.delivery_state = 'delivered'
-     AND p_delivery_state = 'delivered'
-     AND v_row.dispatch_outcome = 'http_2xx'
-  THEN
-    outcome := 'ok';
-    RETURN NEXT;
-    RETURN;
-  END IF;
-
-  IF v_row.delivery_state = 'reconciliation_required'
-     AND p_delivery_state = 'reconciliation_required'
-     AND v_row.dispatch_outcome IS NOT DISTINCT FROM p_dispatch_outcome
-  THEN
-    outcome := 'ok';
-    RETURN NEXT;
-    RETURN;
-  END IF;
-
-  IF v_row.dispatch_started_at IS NULL THEN
-    RAISE EXCEPTION 'network_os_finalize_command_packet_delivery_dispatch_required'
       USING ERRCODE = 'check_violation';
   END IF;
 
   v_now := clock_timestamp();
 
   UPDATE public.network_os_command_packet_claims AS c
-     SET delivery_state = p_delivery_state,
+     SET delivery_state = v_derived_state,
          dispatch_outcome = p_dispatch_outcome,
          delivered_at = CASE
-           WHEN p_delivery_state = 'delivered' THEN v_now
+           WHEN v_derived_state = 'delivered' THEN v_now
            ELSE c.delivered_at
          END
-   WHERE c.packet_id = p_packet_id;
+   WHERE c.packet_id = p_packet_id
+     AND c.packet_digest = p_packet_digest
+     AND c.lease_token = p_lease_token
+     AND c.delivery_state = 'leased'
+     AND c.dispatch_started_at IS NOT NULL
+     AND c.post_dispatch_finalize_deadline_at IS NOT NULL
+     AND clock_timestamp() < c.post_dispatch_finalize_deadline_at
+  RETURNING c.current_attempt_no
+    INTO v_attempt_no;
+
+  IF NOT FOUND THEN
+    RETURN 'lease_lost';
+  END IF;
 
   INSERT INTO public.network_os_command_packet_delivery_attempts (
     packet_id,
+    packet_digest,
+    lease_token,
     attempt_no,
     phase,
-    lease_token,
-    outcome,
-    status
+    observable_outcome,
+    receiver_http_status
   ) VALUES (
     p_packet_id,
-    v_row.current_attempt_no,
-    'finalize_ok',
+    p_packet_digest,
     p_lease_token,
+    v_attempt_no,
+    'finalize_ok',
     p_dispatch_outcome,
-    p_delivery_state
+    p_receiver_http_status
   );
 
-  outcome := 'ok';
-  RETURN NEXT;
+  RETURN 'ok';
 END;
 $$;
 
@@ -601,14 +607,14 @@ REVOKE ALL ON FUNCTION public.network_os_lease_command_packet(text, text, text, 
 REVOKE ALL ON FUNCTION public.network_os_lease_command_packet(text, text, text, text, text, interval) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.network_os_lease_command_packet(text, text, text, text, text, interval) TO service_role;
 
-REVOKE ALL ON FUNCTION public.network_os_mark_command_packet_dispatch_started(text, text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.network_os_mark_command_packet_dispatch_started(text, text) FROM anon;
-REVOKE ALL ON FUNCTION public.network_os_mark_command_packet_dispatch_started(text, text) FROM authenticated;
-GRANT EXECUTE ON FUNCTION public.network_os_mark_command_packet_dispatch_started(text, text) TO service_role;
+REVOKE ALL ON FUNCTION public.network_os_mark_command_packet_dispatch_started(text, text, uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.network_os_mark_command_packet_dispatch_started(text, text, uuid, text) FROM anon;
+REVOKE ALL ON FUNCTION public.network_os_mark_command_packet_dispatch_started(text, text, uuid, text) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.network_os_mark_command_packet_dispatch_started(text, text, uuid, text) TO service_role;
 
-REVOKE ALL ON FUNCTION public.network_os_finalize_command_packet_delivery(text, text, text, text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.network_os_finalize_command_packet_delivery(text, text, text, text) FROM anon;
-REVOKE ALL ON FUNCTION public.network_os_finalize_command_packet_delivery(text, text, text, text) FROM authenticated;
-GRANT EXECUTE ON FUNCTION public.network_os_finalize_command_packet_delivery(text, text, text, text) TO service_role;
+REVOKE ALL ON FUNCTION public.network_os_finalize_command_packet_delivery(text, text, uuid, text, text, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.network_os_finalize_command_packet_delivery(text, text, uuid, text, text, integer) FROM anon;
+REVOKE ALL ON FUNCTION public.network_os_finalize_command_packet_delivery(text, text, uuid, text, text, integer) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.network_os_finalize_command_packet_delivery(text, text, uuid, text, text, integer) TO service_role;
 
 COMMIT;

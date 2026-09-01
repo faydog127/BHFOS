@@ -20,6 +20,7 @@ export const COMMAND_PACKET_LEASE_FUNCTION = 'network_os_lease_command_packet';
 export const COMMAND_PACKET_DISPATCH_STARTED_FUNCTION = 'network_os_mark_command_packet_dispatch_started';
 export const COMMAND_PACKET_FINALIZE_FUNCTION = 'network_os_finalize_command_packet_delivery';
 export const COMMAND_PACKET_LEASE_OWNER = 'command-packet-courier';
+export const COMMAND_PACKET_EXPECTED_STATE = 'leased';
 export const HTTP_DISPATCH_TIMEOUT_MS = 15000;
 export const DB_FINALIZATION_MARGIN_MS = 2000;
 export const RUNTIME_MARGIN_MS = 3000;
@@ -216,6 +217,7 @@ function firstRow(result) {
 function outcomeOf(result) {
   if (typeof result === 'string') return result;
   const row = firstRow(result);
+  if (row && typeof row.result === 'string') return row.result;
   if (row && typeof row.outcome === 'string') return row.outcome;
   return null;
 }
@@ -249,36 +251,52 @@ export function createCommandPacketLeaseAdapter(invokeLease) {
       return { ok: false, status: 'lease_failed', duplicate: false };
     }
 
-    const row = firstRow(result) || (typeof result === 'string' ? { outcome: result } : null);
-    const outcome = row && row.outcome;
-    if (outcome === 'leased') {
+    const row = firstRow(result) || (typeof result === 'string' ? { result } : null);
+    const producer = row && (row.result || row.outcome);
+    if (producer === 'leased') {
       return {
         ok: true,
         status: 'leased',
         duplicate: false,
-        leaseToken: row.lease_token || row.leaseToken || details.leaseToken || null,
+        leaseToken: row.lease_token != null ? String(row.lease_token) : (row.leaseToken != null ? String(row.leaseToken) : null),
         attemptNo: row.attempt_no != null ? row.attempt_no : row.attemptNo,
         deliveryState: row.delivery_state || row.deliveryState || 'leased',
       };
     }
-    if (outcome === 'in_flight') {
-      return { ok: false, status: 'in_flight', duplicate: true };
+    if (producer === 'in_flight') {
+      return { ok: false, status: 'in_flight', duplicate: false, outboundAttempted: false };
     }
-    if (outcome === 'conflict') {
+    if (producer === 'conflict') {
       return { ok: false, status: 'conflict', duplicate: false, conflict: true };
     }
-    if (outcome === 'delivered') {
-      return { ok: false, status: 'delivered', duplicate: true, alreadyDelivered: true };
+    if (producer === 'duplicate') {
+      return {
+        ok: false,
+        status: 'duplicate',
+        duplicate: true,
+        alreadyDelivered: true,
+        already_delivered: true,
+        deliveryState: 'delivered',
+        delivery_state: 'delivered',
+        outboundAttempted: false,
+      };
     }
-    if (outcome === 'reconciliation_required') {
-      return { ok: false, status: 'reconciliation_required', duplicate: false };
+    if (producer === 'held_for_reconciliation') {
+      return {
+        ok: false,
+        status: 'held_for_reconciliation',
+        duplicate: false,
+        deliveryState: 'reconciliation_required',
+        delivery_state: 'reconciliation_required',
+        outboundAttempted: false,
+      };
     }
     return { ok: false, status: 'lease_failed', duplicate: false };
   };
 }
 
 export function createCommandPacketDispatchStartedAdapter(invokeMark) {
-  return async function markDispatchStarted({ packetId, leaseToken }) {
+  return async function markDispatchStarted({ packetId, packetDigest, leaseToken }) {
     if (typeof invokeMark !== 'function') {
       return { ok: false, status: 'lease_lost' };
     }
@@ -286,7 +304,9 @@ export function createCommandPacketDispatchStartedAdapter(invokeMark) {
     try {
       result = await invokeMark({
         p_packet_id: packetId,
+        p_packet_digest: packetDigest,
         p_lease_token: leaseToken,
+        p_expected_state: COMMAND_PACKET_EXPECTED_STATE,
       });
     } catch {
       return { ok: false, status: 'lease_lost' };
@@ -299,7 +319,13 @@ export function createCommandPacketDispatchStartedAdapter(invokeMark) {
 }
 
 export function createCommandPacketFinalizeAdapter(invokeFinalize) {
-  return async function finalizeDelivery({ packetId, leaseToken, deliveryState, dispatchOutcome }) {
+  return async function finalizeDelivery({
+    packetId,
+    packetDigest,
+    leaseToken,
+    dispatchOutcome,
+    receiverHttpStatus,
+  }) {
     if (typeof invokeFinalize !== 'function') {
       return { ok: false, status: 'finalize_failed' };
     }
@@ -307,9 +333,11 @@ export function createCommandPacketFinalizeAdapter(invokeFinalize) {
     try {
       result = await invokeFinalize({
         p_packet_id: packetId,
+        p_packet_digest: packetDigest,
         p_lease_token: leaseToken,
-        p_delivery_state: deliveryState,
+        p_expected_state: COMMAND_PACKET_EXPECTED_STATE,
         p_dispatch_outcome: dispatchOutcome,
+        p_receiver_http_status: receiverHttpStatus == null ? null : receiverHttpStatus,
       });
     } catch {
       return { ok: false, status: 'finalize_failed' };
@@ -325,9 +353,9 @@ export function mapHttpDispatchOutcome(response, error) {
   if (error) {
     const name = error && error.name ? String(error.name) : '';
     if (name === 'TimeoutError' || name === 'AbortError') {
-      return { ok: false, status: 'timeout', dispatchOutcome: 'timeout', delivered: false };
+      return { ok: false, status: 'http_timeout', dispatchOutcome: 'http_timeout', delivered: false, httpStatus: null };
     }
-    return { ok: false, status: 'transport', dispatchOutcome: 'transport', delivered: false };
+    return { ok: false, status: 'transport_error', dispatchOutcome: 'transport_error', delivered: false, httpStatus: null };
   }
   const httpStatus = response && typeof response.status === 'number' ? response.status : null;
   if (httpStatus != null && httpStatus >= 200 && httpStatus <= 299) {
@@ -339,22 +367,17 @@ export function mapHttpDispatchOutcome(response, error) {
   if (httpStatus != null && httpStatus >= 500 && httpStatus <= 599) {
     return { ok: false, status: 'http_5xx', dispatchOutcome: 'http_5xx', delivered: false, httpStatus };
   }
-  return { ok: false, status: 'transport', dispatchOutcome: 'transport', delivered: false, httpStatus };
+  return { ok: false, status: 'transport_error', dispatchOutcome: 'transport_error', delivered: false, httpStatus: null };
 }
 
-export function finalizePairForDispatchOutcome(dispatchOutcome) {
-  if (dispatchOutcome === 'http_2xx') {
-    return { deliveryState: 'delivered', dispatchOutcome: 'http_2xx' };
-  }
-  if (
-    dispatchOutcome === 'http_4xx'
+export function isCanonicalDispatchOutcome(dispatchOutcome) {
+  return (
+    dispatchOutcome === 'http_2xx'
+    || dispatchOutcome === 'http_4xx'
     || dispatchOutcome === 'http_5xx'
-    || dispatchOutcome === 'timeout'
-    || dispatchOutcome === 'transport'
-  ) {
-    return { deliveryState: 'reconciliation_required', dispatchOutcome };
-  }
-  return null;
+    || dispatchOutcome === 'http_timeout'
+    || dispatchOutcome === 'transport_error'
+  );
 }
 
 export function isAuthorizedFromClaims(claims) {
@@ -460,7 +483,15 @@ export function redactSensitive(value, secrets = {}) {
   return walk(value, null);
 }
 
-export function publicFailureResponse({ status, httpStatus, deliveryId = null, constructed = null }) {
+export function publicFailureResponse({
+  status,
+  httpStatus,
+  deliveryId = null,
+  constructed = null,
+  alreadyDelivered = false,
+  deliveryState = null,
+  outboundAttempted = false,
+}) {
   return {
     ok: false,
     status,
@@ -468,6 +499,9 @@ export function publicFailureResponse({ status, httpStatus, deliveryId = null, c
     delivery_id: deliveryId,
     constructed,
     httpStatus,
+    already_delivered: alreadyDelivered === true,
+    delivery_state: deliveryState ?? null,
+    outbound_attempted: outboundAttempted === true,
   };
 }
 
@@ -509,7 +543,7 @@ export async function postIngressEnvelope({
   timeoutMs = HTTP_DISPATCH_TIMEOUT_MS,
 }) {
   if (typeof fetchImpl !== 'function') {
-    return { ok: false, status: 'transport', dispatchOutcome: 'transport', delivered: false, reason: 'missing_fetch' };
+    return { ok: false, status: 'transport_error', dispatchOutcome: 'transport_error', delivered: false, reason: 'missing_fetch' };
   }
   if (!url || !token) {
     return { ok: false, status: 'ingress_misconfigured', delivered: false };
@@ -669,6 +703,9 @@ export async function submitCommandPacket(input, deps = {}) {
         httpStatus: mismatch || unavailable ? 503 : 409,
         deliveryId: envelope.delivery_id,
         constructed,
+        alreadyDelivered: Boolean(claim && (claim.already_delivered === true || claim.alreadyDelivered === true)),
+        deliveryState: (claim && (claim.delivery_state || claim.deliveryState)) || (status === 'duplicate' ? 'delivered' : null),
+        outboundAttempted: false,
       }),
       outboundCalls,
       logs,
@@ -684,6 +721,7 @@ export async function submitCommandPacket(input, deps = {}) {
     try {
       marked = await deps.markDispatchStarted({
         packetId: envelope.delivery_id,
+        packetDigest,
         leaseToken: claim.leaseToken,
       });
     } catch {
@@ -697,6 +735,7 @@ export async function submitCommandPacket(input, deps = {}) {
           httpStatus: 409,
           deliveryId: envelope.delivery_id,
           constructed,
+          outboundAttempted: false,
         }),
         outboundCalls,
         logs,
@@ -723,10 +762,9 @@ export async function submitCommandPacket(input, deps = {}) {
   });
 
   const dispatchOutcome = delivery.dispatchOutcome || delivery.status;
-  const pair = finalizePairForDispatchOutcome(dispatchOutcome);
 
   if (typeof deps.finalizeDelivery === 'function') {
-    if (!pair) {
+    if (!isCanonicalDispatchOutcome(dispatchOutcome)) {
       log({ event: 'finalize_failed', status: 'finalize_failed', delivered: false });
       return {
         ...publicFailureResponse({
@@ -734,6 +772,7 @@ export async function submitCommandPacket(input, deps = {}) {
           httpStatus: 502,
           deliveryId: envelope.delivery_id,
           constructed,
+          outboundAttempted: true,
         }),
         outboundCalls,
         logs,
@@ -743,9 +782,10 @@ export async function submitCommandPacket(input, deps = {}) {
     try {
       finalized = await deps.finalizeDelivery({
         packetId: envelope.delivery_id,
+        packetDigest,
         leaseToken: claim.leaseToken,
-        deliveryState: pair.deliveryState,
-        dispatchOutcome: pair.dispatchOutcome,
+        dispatchOutcome,
+        receiverHttpStatus: delivery.httpStatus == null ? null : delivery.httpStatus,
       });
     } catch {
       finalized = { ok: false, status: 'finalize_failed' };
@@ -759,19 +799,23 @@ export async function submitCommandPacket(input, deps = {}) {
           httpStatus: status === 'lease_lost' ? 409 : 502,
           deliveryId: envelope.delivery_id,
           constructed,
+          outboundAttempted: true,
+          deliveryState: null,
         }),
         outboundCalls,
         logs,
       };
     }
-    if (pair.dispatchOutcome !== 'http_2xx') {
-      log({ event: 'dispatch_finalized', status: pair.dispatchOutcome, delivered: false });
+    if (dispatchOutcome !== 'http_2xx') {
+      log({ event: 'dispatch_finalized', status: dispatchOutcome, delivered: false });
       return {
         ...publicFailureResponse({
-          status: pair.dispatchOutcome,
+          status: dispatchOutcome,
           httpStatus: 502,
           deliveryId: envelope.delivery_id,
           constructed,
+          outboundAttempted: true,
+          deliveryState: 'reconciliation_required',
         }),
         outboundCalls,
         logs,
@@ -782,6 +826,9 @@ export async function submitCommandPacket(input, deps = {}) {
       ok: true,
       status: 'submitted',
       delivered: true,
+      already_delivered: false,
+      delivery_state: 'delivered',
+      outbound_attempted: true,
       delivery_id: envelope.delivery_id,
       constructed,
       httpStatus: 202,
@@ -798,6 +845,7 @@ export async function submitCommandPacket(input, deps = {}) {
         httpStatus: 502,
         deliveryId: envelope.delivery_id,
         constructed,
+        outboundAttempted: true,
       }),
       outboundCalls,
       logs,
@@ -809,6 +857,9 @@ export async function submitCommandPacket(input, deps = {}) {
     ok: true,
     status: 'submitted',
     delivered: true,
+    already_delivered: false,
+    delivery_state: 'delivered',
+    outbound_attempted: true,
     delivery_id: envelope.delivery_id,
     constructed,
     httpStatus: 202,

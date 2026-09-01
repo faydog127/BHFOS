@@ -65,6 +65,9 @@ const publicBody = (result: Record<string, unknown>) =>
     ok: result.ok === true,
     status: result.status,
     delivered: result.delivered === true,
+    already_delivered: result.already_delivered === true,
+    delivery_state: result.delivery_state ?? null,
+    outbound_attempted: result.outbound_attempted === true,
     delivery_id: result.delivery_id ?? null,
     constructed: result.constructed ?? null,
   });
