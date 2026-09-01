@@ -308,8 +308,18 @@ BEGIN
     RETURN;
   END IF;
 
+  IF v_row.delivery_state = 'reconciliation_required' THEN
+    result := 'held_for_reconciliation';
+    lease_token := NULL;
+    attempt_no := v_row.current_attempt_no;
+    delivery_state := v_row.delivery_state;
+    RETURN NEXT;
+    RETURN;
+  END IF;
+
   IF v_row.dispatch_started_at IS NOT NULL THEN
-    IF v_row.post_dispatch_finalize_deadline_at IS NOT NULL
+    IF v_row.delivery_state = 'leased'
+       AND v_row.post_dispatch_finalize_deadline_at IS NOT NULL
        AND clock_timestamp() < v_row.post_dispatch_finalize_deadline_at
     THEN
       result := 'in_flight';
@@ -329,15 +339,6 @@ BEGIN
     lease_token := NULL;
     attempt_no := v_row.current_attempt_no;
     delivery_state := 'reconciliation_required';
-    RETURN NEXT;
-    RETURN;
-  END IF;
-
-  IF v_row.delivery_state = 'reconciliation_required' THEN
-    result := 'held_for_reconciliation';
-    lease_token := NULL;
-    attempt_no := v_row.current_attempt_no;
-    delivery_state := v_row.delivery_state;
     RETURN NEXT;
     RETURN;
   END IF;

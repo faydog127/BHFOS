@@ -175,6 +175,9 @@ describe('T1-T16 source contract', () => {
     assert.match(leaseSql, /result := 'leased'/);
     assert.doesNotMatch(leaseSql, /result := 'delivered'/);
     assert.doesNotMatch(leaseSql, /result := 'reconciliation_required'/);
+    const reconIdx = leaseSql.indexOf("IF v_row.delivery_state = 'reconciliation_required'");
+    const dispatchObserverIdx = leaseSql.indexOf('IF v_row.dispatch_started_at IS NOT NULL THEN');
+    assert.ok(reconIdx >= 0 && dispatchObserverIdx > reconIdx);
   });
 
   it('T7 mark_dispatch_started requires unexpired leased fence and sets +20s deadline', () => {
