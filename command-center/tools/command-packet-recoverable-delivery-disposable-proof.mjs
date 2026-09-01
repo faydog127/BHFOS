@@ -172,19 +172,23 @@ try {
   await psql(bootstrapRoles, [], DB_UNEXPECTED);
 
   await psql('SELECT 1;', ['-f', CLAIMS]);
-  const ac3ClaimedAtBefore = await psql(`
+  await psql(`
     INSERT INTO public.network_os_command_packet_claims (packet_id, packet_digest, event_type, source)
-    VALUES ('NOS-AC3-AUTH-SYNTH-01', '${DIGEST_A}', '${EVENT_TYPE}', '${SOURCE}')
-    RETURNING EXTRACT(EPOCH FROM claimed_at)::text;
+    VALUES ('NOS-AC3-AUTH-SYNTH-01', '${DIGEST_A}', '${EVENT_TYPE}', '${SOURCE}');
+    CREATE TABLE public.ac3_claimed_at_probe AS
+    SELECT claimed_at FROM public.network_os_command_packet_claims
+     WHERE packet_id = 'NOS-AC3-AUTH-SYNTH-01';
   `);
   await psql('SELECT 1;', ['-f', MIGRATION]);
   report.steps.push({ step: 'apply', result: 'ok', claims: CLAIMS, migration: MIGRATION });
 
   const ac3 = await psql(`
-    SELECT delivery_state || ',' || dispatch_outcome || ',' || (dispatch_started_at IS NULL) || ',' ||
-           (EXTRACT(EPOCH FROM claimed_at)::text = '${ac3ClaimedAtBefore}')
-      FROM public.network_os_command_packet_claims
-     WHERE packet_id = 'NOS-AC3-AUTH-SYNTH-01';
+    SELECT c.delivery_state || ',' || c.dispatch_outcome || ',' ||
+           CASE WHEN c.dispatch_started_at IS NULL THEN 't' ELSE 'f' END || ',' ||
+           CASE WHEN c.claimed_at = p.claimed_at THEN 't' ELSE 'f' END
+      FROM public.network_os_command_packet_claims AS c
+      CROSS JOIN public.ac3_claimed_at_probe AS p
+     WHERE c.packet_id = 'NOS-AC3-AUTH-SYNTH-01';
   `);
   const deliveryStateNotNull = await psql(`
     SELECT is_nullable FROM information_schema.columns
@@ -272,8 +276,8 @@ try {
     SELECT outcome FROM public.network_os_mark_command_packet_dispatch_started('pkt-t7', '${t7Token}');
   `);
   const t7Row = await psql(`
-    SELECT (dispatch_started_at IS NOT NULL) || ',' ||
-           (post_dispatch_finalize_deadline_at = dispatch_started_at + interval '20 seconds')
+    SELECT CASE WHEN dispatch_started_at IS NOT NULL THEN 't' ELSE 'f' END || ',' ||
+           CASE WHEN post_dispatch_finalize_deadline_at = dispatch_started_at + interval '20 seconds' THEN 't' ELSE 'f' END
       FROM public.network_os_command_packet_claims
      WHERE packet_id = 'pkt-t7';
   `);
@@ -291,7 +295,8 @@ try {
     SELECT outcome FROM public.network_os_finalize_command_packet_delivery('pkt-t8', '${t8Token}', 'delivered', 'http_2xx');
   `);
   const t8State = await psql(`
-    SELECT delivery_state || ',' || dispatch_outcome || ',' || (delivered_at IS NOT NULL)
+    SELECT delivery_state || ',' || dispatch_outcome || ',' ||
+           CASE WHEN delivered_at IS NOT NULL THEN 't' ELSE 'f' END
       FROM public.network_os_command_packet_claims
      WHERE packet_id = 'pkt-t8';
   `);
@@ -334,7 +339,9 @@ try {
   const t10Re = await psql(leaseFullSql('pkt-t10', DIGEST_A));
   const [t10Outcome, , t10Attempt] = t10Re.split(',');
   const t10State = await psql(`
-    SELECT delivery_state || ',' || (dispatch_started_at IS NULL) || ',' || current_attempt_no::text
+    SELECT delivery_state || ',' ||
+           CASE WHEN dispatch_started_at IS NULL THEN 't' ELSE 'f' END || ',' ||
+           current_attempt_no::text
       FROM public.network_os_command_packet_claims
      WHERE packet_id = 'pkt-t10';
   `);
@@ -502,7 +509,7 @@ try {
     SELECT has_function_privilege('service_role', 'public.network_os_finalize_command_packet_delivery(text,text,text,text)', 'EXECUTE');
   `);
   const rlsForced = await psql(`
-    SELECT relforcerowsecurity::text FROM pg_class
+    SELECT CASE WHEN relforcerowsecurity THEN 't' ELSE 'f' END FROM pg_class
      WHERE oid = 'public.network_os_command_packet_delivery_attempts'::regclass;
   `);
   const policyCount = await psql(`

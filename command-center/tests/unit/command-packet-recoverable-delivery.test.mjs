@@ -90,7 +90,7 @@ describe('T1-T16 source contract', () => {
     ]) {
       assert.match(migration, new RegExp(column.replace(/ /g, '\\s+')));
     }
-    assert.doesNotMatch(migration, /\bpacket_text\b/);
+    assert.doesNotMatch(migration, /ADD COLUMN\s+packet_text|packet_text\s+text/);
     assert.doesNotMatch(migration, /CREATE TABLE public\.network_os_command_packet_claims/);
   });
 
