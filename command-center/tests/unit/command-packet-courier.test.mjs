@@ -472,7 +472,7 @@ describe('5. n8n/network failure returns controlled failure and does not mark de
       },
     );
     assert.equal(result.ok, false);
-    assert.equal(result.status, 'ingress_failed');
+    assert.equal(result.status, 'transport_error');
     assert.equal(result.delivered, false);
     assert.equal(result.httpStatus, 502);
     assert.equal(result.outboundCalls.length, 1);
@@ -493,7 +493,7 @@ describe('5. n8n/network failure returns controlled failure and does not mark de
       },
     );
     assert.equal(result.delivered, false);
-    assert.equal(result.status, 'ingress_failed');
+    assert.equal(result.status, 'http_5xx');
     assert.equal(posted[0].headerNames.includes(INGRESS_TOKEN_HEADER), true);
     assert.equal(posted[0].body.event_type, EVENT_TYPE);
     assert.equal(posted[0].body.delivery_id, 'pkt-502');
@@ -511,6 +511,6 @@ describe('5. n8n/network failure returns controlled failure and does not mark de
     });
     assert.equal(failed.ok, false);
     assert.equal(failed.delivered, false);
-    assert.equal(failed.status, 'ingress_failed');
+    assert.equal(failed.status, 'transport_error');
   });
 });

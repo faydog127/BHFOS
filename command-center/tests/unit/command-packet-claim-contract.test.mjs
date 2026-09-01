@@ -10,6 +10,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   COMMAND_PACKET_CLAIM_FUNCTION,
+  COMMAND_PACKET_DISPATCH_STARTED_FUNCTION,
+  COMMAND_PACKET_FINALIZE_FUNCTION,
+  COMMAND_PACKET_LEASE_FUNCTION,
   EVENT_TYPE,
   PACKET_DIGEST_PATTERN,
   PACKET_ID_PATTERN,
@@ -80,8 +83,14 @@ describe('AC-1 purpose isolation vs PR 154', () => {
     assert.equal(fs.existsSync(path.join(root, 'supabase/rollbacks/20260828170000_network_os_assurance_delivery_claims.sql')), false);
     assert.equal(courier.includes('rpc('), false);
     assert.equal(edge.includes('network_os_claim_assurance_delivery'), false);
-    assert.match(edge, /COMMAND_PACKET_CLAIM_FUNCTION/);
+    assert.equal(edge.includes('COMMAND_PACKET_CLAIM_FUNCTION'), false);
+    assert.match(edge, /COMMAND_PACKET_LEASE_FUNCTION/);
+    assert.match(edge, /COMMAND_PACKET_DISPATCH_STARTED_FUNCTION/);
+    assert.match(edge, /COMMAND_PACKET_FINALIZE_FUNCTION/);
     assert.equal(COMMAND_PACKET_CLAIM_FUNCTION, 'network_os_claim_command_packet');
+    assert.equal(COMMAND_PACKET_LEASE_FUNCTION, 'network_os_lease_command_packet');
+    assert.equal(COMMAND_PACKET_DISPATCH_STARTED_FUNCTION, 'network_os_mark_command_packet_dispatch_started');
+    assert.equal(COMMAND_PACKET_FINALIZE_FUNCTION, 'network_os_finalize_command_packet_delivery');
 
     const inspection = inspectApprovedAtomicClaimInterface();
     assert.equal(inspection.status, 'ATOMIC_CLAIM_INTERFACE_MISMATCH');
@@ -292,6 +301,10 @@ describe('AC-8 / AC-9 secret and client-bundle boundary', () => {
     const banned = [
       'network_os_claim_command_packet',
       'network_os_command_packet_claims',
+      'network_os_lease_command_packet',
+      'network_os_mark_command_packet_dispatch_started',
+      'network_os_finalize_command_packet_delivery',
+      'network_os_command_packet_delivery_attempts',
       'COMMAND_PACKET_CLAIM_FUNCTION',
       'N8N_COMMAND_INGRESS_URL',
       'N8N_COMMAND_INGRESS_TOKEN',
