@@ -4,13 +4,13 @@
 
 Section B of `design/09-staging-safety-gate.md` is not passed. Do not point Hostinger `message.received` at n8n. Do not enable n8n schedules. Do not send customer notifications. Do not attach a live internal SMS credential. Do not mutate `wwyxohjnyqnegzbxtuxs`.
 
-The consolidated 2026-09-24 directive keeps this gate CLOSED. It does not pass Section B. Command Center left three items open. The Founder-locked internal SMS amendment adds carrier readiness and credential approval as further Pre-webhook blockers. This build documents them and does not close them.
+The consolidated 2026-09-24 directive keeps this gate CLOSED. It does not pass Section B. Command Center left three items open. Form-filter ordering and open-lead production evidence stay on this gate. They are not staging blockers. The Founder-locked internal SMS amendment adds carrier readiness and credential approval as further Pre-webhook blockers. This build documents them and does not close them.
 
 SMS transport is not the system of record. `email_automation.notification_log` is the record. The path is notification event → notification service → delivery channel. Pass 1 channel is `internal_sms`. A later `crm_push` channel can be added without rewriting intake, identity, HOLD, or dedup.
 
-## 1. Form-recognition / filter field lock
+## 1. Form-filter ordering
 
-Not locked.
+Not locked. Pre-webhook owns this item. It is not a staging blocker.
 
 The staging worker uses this implement default, which is narrower than the design's "otherwise identified form path":
 
@@ -27,9 +27,9 @@ The staging worker uses this implement default, which is narrower than the desig
 
 Header rules (DSN, Auto-Submitted, Precedence bulk/list/junk, List-Id, From equal to the mailbox) apply only when From is not on the allowlist. Founder/CC still need to sign this field lock before any live mail.
 
-## 2. Production open-lead statuses
+## 2. Open-lead production evidence
 
-Not replaced.
+Not replaced. Pre-webhook owns this item. It is not a staging blocker.
 
 The seed allowlist remains the design proposal: `new`, `contacted`, `qualified`, `escalated`. `Customer` is excluded. This build did not census production `wwyxohjnyqnegzbxtuxs`.
 
@@ -74,7 +74,8 @@ The consolidated directive adds these constraints and does not open the gate:
 
 - SMS is one-way. The dispatcher has no inbound command node.
 - `live_notification_started_at` stays null until the Founder sets it. Null means ingest may continue and per-message SMS does not.
-- `health_alerts_enabled` stays false. A quiet inbox is not a fault.
+- `health_alerts_enabled` stays false. A quiet inbox is not a fault. Hostinger newer-mail and intake-lag checks stay mock and dormant. They are not a live Hostinger API health probe.
+- The `n8n_email_automation` password was not set at apply. The approved path is the staging SQL editor and the n8n credential `TVG Staging n8n_email_automation` only.
 - Timing targets are 120 seconds on the primary path and 900 seconds for reconcile. There are no application quiet hours.
 - Ordinary alert wording is `review`, and the closing line is `No reply sent by automation.`
 - The backlog summary sentence and excerpt/attachment retention are `DECISION_REQUIRED` in [`TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md).

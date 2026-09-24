@@ -710,11 +710,9 @@ SELECT
     FROM email_automation.intake_queue q
     WHERE q.tenant_id = 'tvg' AND q.status = 'pending'
   ) AS pending_count,
-  (
-    SELECT extract(epoch FROM (now() - min(q.created_at)))
-    FROM email_automation.intake_queue q
-    WHERE q.tenant_id = 'tvg' AND q.status = 'pending'
-  ) AS queue_lag_seconds
+  NULL::integer AS newer_mail_count,
+  NULL::integer AS intake_lag_seconds,
+  'dormant'::text AS mailbox_probe
 FROM email_automation.health_checks c
 WHERE c.tenant_id = 'tvg' AND c.component = 'primary_path';
 `.trim();
@@ -733,7 +731,9 @@ const decision = planHealthAlert({
   dependencyOk: true,
   stale,
   messagesSeen: Number(row.pending_count || 0),
-  queueLagSeconds: Number(row.queue_lag_seconds || 0),
+  mailboxProbeLive: false,
+  newerMailCount: null,
+  queueLagSeconds: null,
   targetSeconds: target,
   openIncidentKey: row.open_incident_key || null,
   now: now.toISOString(),
@@ -764,7 +764,7 @@ const health = workflow(
   '[STAGING] TVG Email — Health Heartbeat',
   [
     nodeBase('ff000000-0000-4000-8000-000000000020', 'STAGING ONLY / HOSTINGER OFF', 'n8n-nodes-base.stickyNote', 1, 0, -260, {
-      content: 'Inactive. Quiet inbox is not a fault. One outage alert and one recovery per incident. Writes the notification_log outbox only. Does not send SMS. No Hostinger.',
+      content: 'Inactive. Quiet inbox is not a fault. Hostinger newer-mail and intake-lag checks are mock and dormant until Pre-webhook. This workflow does not call the Hostinger API. One outage and one recovery per local incident. Writes the notification_log outbox only. Does not send SMS.',
       width: 640,
       height: 140,
     }),
@@ -779,6 +779,8 @@ const health = workflow(
   ],
   healthMap,
 );
+health.meta.tvgEmailPass1.hostingerMailboxProbe = 'dormant';
+health.meta.tvgEmailPass1.hostingerApiHealth = 'not-a-live-check';
 
 const files = {
   'tvg-email-intake-fast-ack.json': fastAck,

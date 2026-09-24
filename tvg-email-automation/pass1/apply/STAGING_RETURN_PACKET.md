@@ -21,7 +21,7 @@ Six workflow JSON files. Each has `active: false`. Schedule nodes that exist are
 | `n8n/tvg-email-intake-reconcile.json` | Schedule disabled |
 | `n8n/tvg-email-daily-filtered-digest.json` | Schedule disabled. No send node |
 | `n8n/tvg-email-notification-dispatcher.json` | Selects queued outbox rows. Twilio node disabled and disconnected. Guard throws `INTERNAL_SMS_CREDENTIAL_NOT_APPROVED` |
-| `n8n/tvg-email-health-heartbeat.json` | Schedule disabled. No Twilio node. Writes outbox intent and `health_checks` only |
+| `n8n/tvg-email-health-heartbeat.json` | Schedule disabled. No Twilio node. Hostinger newer-mail and intake-lag are mock (`mailbox_probe = dormant`). No Hostinger API call. Writes outbox intent and `health_checks` only |
 
 Postgres credential name: `TVG Staging n8n_email_automation`. Twilio placeholder name: `TVG Internal SMS Twilio`. `to` is `={{ $json.destination_ref }}`. `from` is `={{ $json.sms_from_credential_only }}`, which the select leaves null. No phone number, account SID, or auth token is in the JSON.
 
@@ -29,9 +29,9 @@ Postgres credential name: `TVG Staging n8n_email_automation`. Twilio placeholder
 
 | Concern | Where it is proved locally |
 |---|---|
-| Heartbeat | `test/pass1-ops-policy.test.mjs` (quiet inbox, stale, fail, dep, lag, one outage, dedup, one recovery). `fixtures/sql/local-smoke.sql` asserts two `health_checks` rows, alerts off, and a repeated `health_outage` window rejected |
+| Heartbeat | `test/pass1-ops-policy.test.mjs` (quiet inbox, stale, fail, dep, one outage, dedup, one recovery). Newer-mail and intake-lag stay dormant unless a test explicitly marks the probe live. The workflow JSON does not. `fixtures/sql/local-smoke.sql` asserts two `health_checks` rows, alerts off, and a repeated `health_outage` window rejected |
 | Outbox | Worker has no Twilio node. Dispatcher is separate and inactive. Local smoke inserts one `queued` row and requires `dispatch_after` plus `dispatch_attempt_count = 0` |
-| Watermark | `test/pass1-internal-sms.test.mjs` (`before the live watermark`). Null watermark, event before the watermark, and a missing `eventCreatedAt` are `record_only`. One `backlog_summary`. Local smoke keeps `live_notification_started_at` null and rejects a second backlog row |
+| Watermark | `test/pass1-internal-sms.test.mjs`. Unset watermark (`null`, blank, or `null` text) is fail-closed: no per-message SMS, and a second call after `backlogSummarySent` writes no further summary. A real watermark with a missing event time is also `record_only`. Local smoke keeps `live_notification_started_at` null and rejects a second backlog row |
 | Storm | Existing SMS tests: first overflow `N=1`, amendment example `N=12`, no second summary. Local smoke rejects a repeated storm window |
 | Threading | `captureThreadMetadata` returns `in_reply_to` and `references_header` and no `parent_id`. Local smoke stores both headers |
 | Attachments | `assertAttachmentMetadataOnly` rejects `bytes`. SQL check `email_events_attachment_metadata_only` rejects a `bytes` key. Local smoke covers that rejection |
@@ -44,6 +44,15 @@ Postgres credential name: `TVG Staging n8n_email_automation`. Twilio placeholder
 - No customer-send tables. The incremental latch refuses to run if `email_responses` or `email_send_queue` exist.
 - No customer SMS channel. The trigger rejects `customer_sms`.
 - No inbound SMS command node.
+- The `n8n_email_automation` password was not set at the reported apply. This pack does not set it. Approved path: an operator runs `ALTER ROLE n8n_email_automation PASSWORD ...` in the staging SQL editor for `glkrykpksbsqmmilmjhs` only, then stores that secret only in the n8n credential `TVG Staging n8n_email_automation`. The password is not written to git, workflow JSON, SQL files, settings, or logs.
+
+## Challenge PASS notes
+
+1. Heartbeat Hostinger newer-mail / intake-lag checks are mock and dormant until Pre-webhook. They are not live Hostinger API health probing.
+2. Unset `live_notification_started_at` means no per-message SMS and at most one backlog summary.
+3. Decision register is required now: [`../TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](../TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md).
+4. Role password path is the staging SQL editor plus the n8n credential, never git.
+5. Pre-webhook still owns form-filter ordering and open-lead production evidence. Those are not staging blockers.
 
 ## Decision register
 

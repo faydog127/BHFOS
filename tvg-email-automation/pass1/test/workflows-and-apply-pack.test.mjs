@@ -127,7 +127,17 @@ test('workflows are staging-named, one-way, and outbox-only', () => {
   assert.match(JSON.stringify(worker), /No reply sent by automation/);
   const health = JSON.parse(load('n8n/tvg-email-health-heartbeat.json'));
   assert.equal(health.nodes.some((node) => node.type === 'n8n-nodes-base.twilio'), false);
-  assert.match(health.nodes.find((node) => node.name === 'Load health').parameters.query, /last_successful_health_at/);
+  assert.equal(health.nodes.some((node) => node.type === 'n8n-nodes-base.httpRequest'), false);
+  assert.equal(health.meta.tvgEmailPass1.hostingerMailboxProbe, 'dormant');
+  assert.equal(health.meta.tvgEmailPass1.hostingerApiHealth, 'not-a-live-check');
+  const healthQuery = health.nodes.find((node) => node.name === 'Load health').parameters.query;
+  assert.match(healthQuery, /last_successful_health_at/);
+  assert.match(healthQuery, /'dormant'::text AS mailbox_probe/);
+  assert.match(healthQuery, /NULL::integer AS newer_mail_count/);
+  assert.doesNotMatch(healthQuery, /api\.mail\.hostinger|developers\.hostinger/);
+  const healthPlan = health.nodes.find((node) => node.name === 'Plan health').parameters.jsCode;
+  assert.match(healthPlan, /mailboxProbeLive: false/);
+  assert.match(plan.parameters.jsCode, /liveNotificationStartedAt: budget\.live_notification_started_at \?\? null/);
 });
 
 test('internal SMS path stays inactive and has no live Twilio secret', () => {
@@ -162,6 +172,26 @@ test('internal SMS path stays inactive and has no live Twilio secret', () => {
   const record = digest.nodes.find((node) => node.name === 'Record suppressed digest');
   assert.match(record.parameters.query, /internal_digest/);
   assert.match(record.parameters.query, /daily_filtered_digest/);
+});
+
+test('challenge notes keep the decision register, dormant mailbox probe, and role password out of git', () => {
+  const register = load('TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md');
+  const packet = load('apply/STAGING_RETURN_PACKET.md');
+  assert.match(register, /TVG Email Automation — Decision Register/);
+  assert.match(packet, /TVG_EMAIL_AUTOMATION_DECISION_REGISTER\.md/);
+  assert.match(packet, /n8n_email_automation/);
+  assert.match(packet, /password was not set/);
+  assert.match(load('PRE_WEBHOOK_OPEN_ITEMS.md'), /not staging blockers/);
+  const scanned = [
+    ...workflowFiles,
+    'apply/20260924_tvg_email_pass1_v5.sql',
+    'apply/20260924_tvg_email_pass1_incremental.sql',
+  ];
+  for (const relativePath of scanned) {
+    const text = load(relativePath);
+    assert.doesNotMatch(text, /PASSWORD/i, relativePath);
+    assert.doesNotMatch(text, /"password"\s*:/, relativePath);
+  }
 });
 
 test('incremental SQL does not re-bootstrap the base pack', () => {

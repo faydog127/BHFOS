@@ -25,9 +25,11 @@ The digest workflow has no send node. It inserts a `notification_log` row on cha
 
 The worker writes notification intent into `notification_log` after a synthetic outcome. That table is the outbox. The worker does not call Twilio. While `internal_sms_enabled` is false, those rows are `recorded_not_sent` with reason `credential_not_approved`. Dedup is `(tenant_id, email_event_id, notification_kind)`. `destination_ref` is the settings value `internal_sms_destination_ref`.
 
-Ordinary SMS text starts with `TVG: New email — review` and ends with `No reply sent by automation.` While `live_notification_started_at` is null, the worker records the event and does not build a per-message SMS. It may write one `backlog_summary`. The exact backlog sentence is an implement reading; see the decision register.
+Ordinary SMS text starts with `TVG: New email — review` and ends with `No reply sent by automation.` While `live_notification_started_at` is unset (null, blank, or missing), the worker records the event and does not build a per-message SMS. It may write one `backlog_summary` and no second one. The exact backlog sentence is an implement reading; see the decision register.
 
-The health workflow is inactive. A quiet pending queue is not a fault. One open `health_outage` and one `health_recovery` share an incident key. `health_alerts_enabled` stays false, so a manual run records success without opening an outage.
+The health workflow is inactive. A quiet pending queue is not a fault. One open `health_outage` and one `health_recovery` share an incident key. `health_alerts_enabled` stays false, so a manual run records success without opening an outage. Newer-mail and intake-lag are SQL nulls with `mailbox_probe = dormant`. The workflow does not call Hostinger. That dormant probe is not live enablement.
+
+The Postgres credential name is `TVG Staging n8n_email_automation`. The role password was not set at apply and is not in these JSON files. The approved path is the staging SQL editor, then that n8n credential only.
 
 When ordinary traffic is already at `max_internal_sms_per_hour` (default 10), further ordinary events are suppress-with-log and one storm summary is stored for the UTC hour. HOLD and error still surface as one prioritized SMS each until their own counter hits that cap, then suppress-with-log. The summary count is the number of ordinary events suppressed when that one summary is written.
 

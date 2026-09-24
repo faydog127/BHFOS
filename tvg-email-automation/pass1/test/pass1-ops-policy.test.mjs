@@ -5,10 +5,12 @@ import {
   captureThreadMetadata,
 } from '../lib/pass1-intake-logic.mjs';
 import {
+  HOSTINGER_MAILBOX_PROBE,
   PRIMARY_PATH_TARGET_SECONDS,
   RECONCILE_TARGET_SECONDS,
   buildHealthAlertSql,
   planHealthAlert,
+  planMailboxProbe,
   primaryPathWithinTarget,
   reconcileWithinTarget,
 } from '../lib/pass1-ops-policy.mjs';
@@ -111,12 +113,33 @@ test('dependency and lag faults are named and alerts stay off by default', () =>
     dependencyOk: true,
     pipelineOk: true,
     stale: false,
+    mailboxProbeLive: true,
     queueLagSeconds: PRIMARY_PATH_TARGET_SECONDS + 1,
     targetSeconds: PRIMARY_PATH_TARGET_SECONDS,
     openIncidentKey: null,
     now: '2026-09-24T13:00:00.000Z',
   });
   assert.equal(lag.fault, 'lag');
+  assert.equal(lag.mailboxProbe, 'live');
+  const dormantLag = planHealthAlert({
+    alertsEnabled: true,
+    dependencyOk: true,
+    pipelineOk: true,
+    stale: false,
+    queueLagSeconds: PRIMARY_PATH_TARGET_SECONDS + 500,
+    newerMailCount: 12,
+    targetSeconds: PRIMARY_PATH_TARGET_SECONDS,
+    openIncidentKey: null,
+    now: '2026-09-24T13:00:00.000Z',
+  });
+  assert.equal(dormantLag.fault, false);
+  assert.equal(dormantLag.action, 'ok');
+  assert.equal(dormantLag.mailboxProbe, HOSTINGER_MAILBOX_PROBE);
+  const probe = planMailboxProbe({ newerMailCount: 4, intakeLagSeconds: 9999 });
+  assert.equal(probe.mode, 'dormant');
+  assert.equal(probe.mock, true);
+  assert.equal(probe.fault, null);
+  assert.equal(probe.reason, 'pre_webhook_closed');
   const off = planHealthAlert({
     alertsEnabled: false,
     dependencyOk: false,

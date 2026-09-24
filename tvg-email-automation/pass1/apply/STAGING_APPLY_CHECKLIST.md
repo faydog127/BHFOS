@@ -97,7 +97,7 @@ Supabase MCP equivalent, only if the caller sets `project_id` to `glkrykpksbsqmm
    - `internal_sms_enabled` is `false`
    - `internal_sms_destination_ref` is `founder_mobile_ref`
    - index `uq_notification_log_event_kind` exists
-5. Set the role password **outside git** (`ALTER ROLE n8n_email_automation PASSWORD ...` in the staging SQL editor). Store it only in n8n credentials for staging. Do not use `service_role` in the workflows.
+5. The reported apply did not set the `n8n_email_automation` password, and this pack does not set it. Approved path only: `ALTER ROLE n8n_email_automation PASSWORD ...` in the staging SQL editor for `glkrykpksbsqmmilmjhs`, then the same secret in the n8n credential `TVG Staging n8n_email_automation`. Never put that password in git, workflow JSON, SQL files, settings, or logs. Do not use `service_role` in the workflows.
 6. Do not add `email_automation` to the Data API exposed schemas.
 7. Import is specified in the incremental section above. Six JSON files, not five. Leave them inactive.
 
@@ -123,5 +123,5 @@ See [`../PRE_WEBHOOK_OPEN_ITEMS.md`](../PRE_WEBHOOK_OPEN_ITEMS.md).
 - A person with the staging database role must run the file. This change does not.
 - Section A of the design gate is not signed inside `design/09-staging-safety-gate.md`. Command Center authorized the contained staging build; the signature block in that gate file is still blank.
 - n8n is not imported by this change. There is no n8n API call in the repo.
-- Role password must be chosen by the operator and kept out of git.
+- The `n8n_email_automation` password was not set at apply. The approved path is the staging SQL editor plus the n8n credential named `TVG Staging n8n_email_automation`. It must not be committed.
 - Pre-webhook stays closed after apply. Apply does not authorize Hostinger.

@@ -134,10 +134,13 @@ export function planInternalSms(input) {
   if (Object.prototype.hasOwnProperty.call(input, 'liveNotificationStartedAt')) {
     const started = input.liveNotificationStartedAt;
     const created = input.eventCreatedAt ? new Date(input.eventCreatedAt) : null;
-    const preLive = started == null
+    const startedText = started == null ? '' : String(started).trim();
+    const startedAt = startedText && startedText.toLowerCase() !== 'null' ? new Date(startedText) : null;
+    const watermarkUnset = startedAt == null || Number.isNaN(startedAt.getTime());
+    const preLive = watermarkUnset
       || created == null
       || Number.isNaN(created.getTime())
-      || created < new Date(started);
+      || created < startedAt;
     if (preLive) {
       let backlog = null;
       if (!input.backlogSummarySent) {

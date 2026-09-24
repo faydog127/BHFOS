@@ -6,6 +6,7 @@ Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amend
 |---|---|
 | Branch | `cursor/tvg-email-pass1-v5-3e46` |
 | Consolidated slice | `417e6a773909151f812d0db9ca0dcef7ee860069` |
+| Consolidated challenge notes | Folded in the commit that follows `b6ccce5d74c99ab2484965d5fd266945bcdb6718`. Read `git rev-parse HEAD` after that commit. |
 | Internal SMS amendment | `e0e1b755d81f048bcaa50a789a9780f644b1f361` |
 | Challenge notes | `22084ee8b241a708571078c41e6c4387efc0c27a` |
 | Pass 1 pack | `b2cddc8bee25f36b1b22d81060defe9847f68aa2` |
@@ -20,10 +21,19 @@ Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amend
 
 ## Local verification (not staging)
 
-- `node --test tvg-email-automation/pass1/test/*.test.mjs` — 41 pass
+- `node --test tvg-email-automation/pass1/test/*.test.mjs` — 42 pass, including dormant Hostinger mailbox probe and unset-watermark fail-closed
+- Incremental SQL was not changed by the challenge-note fold. The prior local `SMOKE_OK` / `REAPPLY_OK` on Postgres 16.15 still covers that file. This session did not re-query staging.
 - Disposable database `tvg_email_pass1` on local PostgreSQL 16.15: stub CRM + base `apply/20260924_tvg_email_pass1_v5.sql` + `apply/20260924_tvg_email_pass1_incremental.sql` + `fixtures/sql/local-smoke.sql` exited 0 (`SMOKE_OK`)
 - Second apply of the incremental file on that database exited 0 (`REAPPLY_OK`). `network_os_assurance_delivery_claims` still had 1 row. `internal_sms_enabled` stayed `false`. `live_notification_started_at` stayed null. `health_alerts_enabled` stayed `false`. `health_checks` had 2 rows. `email_responses` and `email_send_queue` were absent
 - Docker smoke script was not the runner. Staging project was not migrated
+
+## Challenge PASS notes folded
+
+- Hostinger newer-mail and intake-lag checks are mock and dormant until Pre-webhook. The heartbeat does not call the Hostinger API.
+- Unset `live_notification_started_at` records no per-message SMS and at most one backlog summary.
+- `TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md` stays in the repo pack and the return packet.
+- `n8n_email_automation` password was not set at apply. Approved path is the staging SQL editor, then the n8n credential only.
+- Form-filter ordering and open-lead production evidence stay on the Pre-webhook gate. They are not staging blockers.
 
 ## Decision register
 

@@ -200,6 +200,25 @@ test('before the live watermark there is no per-message SMS and one backlog summ
   });
   assert.equal(missingCreated.action, 'record_only');
   assert.equal(missingCreated.reason, 'before_watermark');
+  for (const unset of [null, undefined, '', '   ', 'null']) {
+    const closed = plan({
+      liveNotificationStartedAt: unset,
+      eventCreatedAt: '2026-09-24T12:05:00.000Z',
+      backlogSummarySent: false,
+      backlogCount: 2,
+    });
+    assert.equal(closed.action, 'record_only', String(unset));
+    assert.equal(closed.smsBody, null, String(unset));
+    assert.equal(closed.summary.kind, 'backlog_summary');
+    const again = plan({
+      liveNotificationStartedAt: unset,
+      eventCreatedAt: '2026-09-24T12:05:00.000Z',
+      backlogSummarySent: true,
+      backlogCount: 3,
+    });
+    assert.equal(again.summary, null, String(unset));
+    assert.equal(again.smsBody, null, String(unset));
+  }
 });
 
 test('disabled transport records the event and does not claim a send', () => {

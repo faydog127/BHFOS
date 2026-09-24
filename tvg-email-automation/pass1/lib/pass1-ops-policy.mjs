@@ -8,6 +8,26 @@ import { buildNotificationInsertSql } from './pass1-internal-sms.mjs';
 export const PRIMARY_PATH_TARGET_SECONDS = 120;
 export const RECONCILE_TARGET_SECONDS = 15 * 60;
 
+/** Hostinger newer-mail and intake-lag stay mock until Pre-webhook opens. */
+export const HOSTINGER_MAILBOX_PROBE = 'dormant';
+
+/**
+ * Newer-mail and intake-lag are not Hostinger API calls in this pack.
+ * preWebhookOpen must be exactly true before either signal can become a fault.
+ * The inactive heartbeat never passes that flag.
+ */
+export function planMailboxProbe(input = {}) {
+  const live = input.preWebhookOpen === true;
+  return {
+    mode: live ? 'live' : HOSTINGER_MAILBOX_PROBE,
+    mock: !live,
+    fault: null,
+    newerMailCount: input.newerMailCount ?? null,
+    intakeLagSeconds: input.intakeLagSeconds ?? null,
+    reason: live ? 'pre_webhook_open' : 'pre_webhook_closed',
+  };
+}
+
 export function primaryPathWithinTarget(webhookAt, dispatcherAt) {
   const start = new Date(webhookAt).getTime();
   const end = new Date(dispatcherAt).getTime();
@@ -43,8 +63,14 @@ export function planHealthAlert(input) {
       quietInbox,
       recordSuccess: input.dependencyOk !== false && input.pipelineOk !== false,
       alert: null,
+      mailboxProbe: HOSTINGER_MAILBOX_PROBE,
     };
   }
+  const probe = planMailboxProbe({
+    preWebhookOpen: input.mailboxProbeLive === true,
+    newerMailCount: input.newerMailCount,
+    intakeLagSeconds: input.queueLagSeconds,
+  });
   const lag = input.queueLagSeconds ?? 0;
   const target = input.targetSeconds
     ?? (component === 'reconcile' ? RECONCILE_TARGET_SECONDS : PRIMARY_PATH_TARGET_SECONDS);
@@ -52,7 +78,7 @@ export function planHealthAlert(input) {
   if (input.dependencyOk === false) fault = 'dep';
   else if (input.pipelineOk === false) fault = 'fail';
   else if (input.stale === true) fault = 'stale';
-  else if (lag > target) fault = 'lag';
+  else if (probe.mode === 'live' && lag > target) fault = 'lag';
 
   if (!fault) {
     if (input.openIncidentKey) {
@@ -62,6 +88,7 @@ export function planHealthAlert(input) {
         fault: false,
         quietInbox,
         recordSuccess: true,
+        mailboxProbe: probe.mode,
         alert: {
           kind: 'health_recovery',
           incidentKey: input.openIncidentKey,
@@ -76,6 +103,7 @@ export function planHealthAlert(input) {
       fault: false,
       quietInbox,
       recordSuccess: true,
+      mailboxProbe: probe.mode,
       alert: null,
     };
   }
@@ -87,6 +115,7 @@ export function planHealthAlert(input) {
       fault,
       quietInbox: false,
       recordSuccess: false,
+      mailboxProbe: probe.mode,
       alert: null,
     };
   }
@@ -97,6 +126,7 @@ export function planHealthAlert(input) {
     fault,
     quietInbox: false,
     recordSuccess: false,
+    mailboxProbe: probe.mode,
     alert: {
       kind: 'health_outage',
       incidentKey: key,
