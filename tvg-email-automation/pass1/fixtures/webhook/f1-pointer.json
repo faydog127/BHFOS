@@ -1,0 +1,8 @@
+{
+  "mailboxResourceId": "mbx_synth",
+  "folder": "INBOX",
+  "uid": 42,
+  "mailbox": "info@vent-guys.com",
+  "event": "message.received",
+  "note": "Synthetic pointer only. Not a captured Hostinger payload."
+}
