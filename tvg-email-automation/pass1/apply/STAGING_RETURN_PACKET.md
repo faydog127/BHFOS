@@ -80,6 +80,7 @@ The index also names `staging-apply/APPLY_REPORT.md`, `amendments/CC_AMENDMENT_I
 | Outbox uniqueness, suppression, storm | Unique `(email_event_id, notification_kind)`. Storm tests. Inserts use `ON CONFLICT DO NOTHING` |
 | Actionable, HOLD, error, filtered/system, duplicate, reconcile, watermark | SMS tests, including reconcile rediscovery of a pre-watermark event |
 | No customer address as a destination | `assertDestinationLabel` rejects an email address and a phone number |
+| Founder recipient model and config audit | `notification_recipients` / `notification_subscriptions` are Founder + `internal_sms` only. `escalation_after` is null. `configuration_audit` records actor, timestamp, setting, previous, and new. Pass 2 inputs are in `PASS2_DESIGN_INPUTS.md` and are not built |
 | SMS amendment and carrier readiness | Amendment in `design/`. Carrier readiness remains Proposed under TVG-EMAIL-P1-D020 |
 | APPLY_REPORT, challenge verdicts, PR #160 | PR #160 is this branch. `APPLY_REPORT.md` and the amendment challenge verdict file were not in the upload |
 | Hostinger off, schedules inactive, production untouched, no customer communication | This packet. Production was not queried. No customer send tables |

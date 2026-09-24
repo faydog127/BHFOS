@@ -234,6 +234,9 @@ test('incremental SQL does not re-bootstrap the base pack', () => {
   assert.match(sql, /health_checks/);
   assert.match(sql, /live_notification_started_at/);
   assert.match(sql, /dispatch_after/);
+  assert.match(sql, /notification_subscriptions/);
+  assert.match(sql, /configuration_audit/);
+  assert.match(sql, /escalation_after IS NULL/);
   assert.doesNotMatch(sql, /CREATE TABLE IF NOT EXISTS email_automation\.email_events/);
   assert.doesNotMatch(sql, /CREATE TABLE[^;]*email_responses/i);
 });

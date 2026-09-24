@@ -454,4 +454,48 @@ EXCEPTION
   WHEN unique_violation THEN NULL;
 END $$;
 
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM email_automation.notification_recipients WHERE recipient_key = 'founder') <> 1 THEN
+    RAISE EXCEPTION 'founder recipient missing';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM email_automation.notification_subscriptions
+    WHERE escalation_after IS NOT NULL OR channel IS DISTINCT FROM 'internal_sms' OR recipient_key IS DISTINCT FROM 'founder'
+  ) THEN
+    RAISE EXCEPTION 'subscription left the Founder internal SMS boundary';
+  END IF;
+  PERFORM set_config('tvg_email_pass1.actor', 'staging_operator', true);
+  UPDATE email_automation.automation_settings
+  SET value_json = '"audited"'::jsonb,
+      updated_by = 'staging_operator'
+  WHERE tenant_id = 'tvg' AND key = 'notification_recipient_model';
+  IF NOT EXISTS (
+    SELECT 1 FROM email_automation.configuration_audit
+    WHERE setting_key = 'notification_recipient_model'
+      AND actor = 'staging_operator'
+      AND previous_value = '"founder_internal_sms_only"'::jsonb
+      AND new_value = '"audited"'::jsonb
+  ) THEN
+    RAISE EXCEPTION 'configuration audit did not record actor, previous, and new';
+  END IF;
+  BEGIN
+    INSERT INTO email_automation.notification_subscriptions (
+      tenant_id, recipient_key, channel, event_kind, destination_ref, enabled, escalation_after
+    ) VALUES (
+      'tvg', 'founder', 'internal_sms', 'cadence_probe', 'founder_mobile_ref', false, interval '1 day'
+    );
+    RAISE EXCEPTION 'escalation cadence was accepted';
+  EXCEPTION
+    WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO email_automation.notification_recipients (tenant_id, recipient_key, display_label)
+    VALUES ('tvg', 'office', 'Office');
+    RAISE EXCEPTION 'non-founder recipient was accepted';
+  EXCEPTION
+    WHEN check_violation THEN NULL;
+  END;
+END $$;
+
 SELECT 'SMOKE_OK';
