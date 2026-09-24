@@ -244,6 +244,18 @@ test('challenge notes keep the decision register, dormant mailbox probe, and rol
   assert.match(applyReport, /NOT TOUCHED/);
   assert.match(applyReport, /Hostinger:\*\* OFF/);
   assert.match(applyReport, /PR merge:\*\* NOT performed/);
+  const smsAmendment = load('amendments/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md');
+  const smsChallenge = load('amendments/CHALLENGE_VERDICT_INTERNAL_SMS.md');
+  const designChallenge = load('CHALLENGE_VERDICT.md');
+  const ccVerdict = load('CC_VERDICT.md');
+  assert.match(smsAmendment, /FOUNDER-APPROVED \/ LOCKED/);
+  assert.match(smsAmendment, /Does \*\*not\*\* authorize customer SMS/);
+  assert.match(smsChallenge, /CHALLENGE_PASS/);
+  assert.match(smsChallenge, /does not authorize credential attach, live Hostinger, customer SMS, or production mutation/);
+  assert.match(designChallenge, /CHALLENGE_PASS/);
+  assert.match(designChallenge, /implement still NOT authorized by this verdict/);
+  assert.match(ccVerdict, /STAGING BUILD AUTHORIZED/);
+  assert.match(ccVerdict, /LIVE HOSTINGER \/ PRE-WEBHOOK TRAFFIC NOT AUTHORIZED/);
   const preferencesChallenge = load('directives/CHALLENGE_VERDICT_OPERATOR_PREFERENCES.md');
   assert.match(preferencesChallenge, /CHALLENGE_PASS/);
   assert.match(preferencesChallenge, /single Founder destination/);

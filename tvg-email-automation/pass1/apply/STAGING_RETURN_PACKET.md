@@ -70,7 +70,7 @@ Operator-preference challenge verdict: [`../directives/CHALLENGE_VERDICT_OPERATO
 
 Pack index: [`../INDEX.md`](../INDEX.md).
 
-The index names `staging-apply/APPLY_REPORT.md`. That file is now committed as coordinator evidence of the base apply only. The index also names `amendments/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md`, `amendments/CHALLENGE_VERDICT_INTERNAL_SMS.md`, `CHALLENGE_VERDICT.md`, and `CC_VERDICT.md`. Those paths were not in this upload, so they were not created. The SMS amendment and the design challenge verdict that are already in git stay at `design/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md` and `design/CHALLENGE_VERDICT.md`.
+The index names `staging-apply/APPLY_REPORT.md`. That file is committed as coordinator evidence of the base apply only. The index paths `amendments/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md`, `amendments/CHALLENGE_VERDICT_INTERNAL_SMS.md`, `CHALLENGE_VERDICT.md`, and `CC_VERDICT.md` are now committed as given. The earlier design copies remain at `design/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md` and `design/CHALLENGE_VERDICT.md`.
 
 ## Directive return-packet map
 
@@ -89,8 +89,8 @@ The index names `staging-apply/APPLY_REPORT.md`. That file is now committed as c
 | Actionable, HOLD, error, filtered/system, duplicate, reconcile, watermark | SMS tests, including reconcile rediscovery of a pre-watermark event |
 | No customer address as a destination | `assertDestinationLabel` rejects an email address and a phone number |
 | Founder recipient model and config audit | One Founder destination, `founder_mobile_ref`, until the Founder authorizes more. `escalation_after` is null. `after_hours_ack_enabled` and `auto_send_enabled` stay false. Quiet hours, urgency keywords, draft review, and reply voice are not implemented. `configuration_audit` records actor, timestamp, setting, previous, and new |
-| SMS amendment and carrier readiness | Amendment in `design/`. Carrier readiness remains Proposed under TVG-EMAIL-P1-D020 |
-| APPLY_REPORT, challenge verdicts, PR #160 | PR #160 is this branch. Base apply evidence is `staging-apply/APPLY_REPORT.md`. The amendment challenge verdict file at the index path was not in the upload |
+| SMS amendment and carrier readiness | Index copy `amendments/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md`. Carrier readiness remains Proposed under TVG-EMAIL-P1-D020 |
+| APPLY_REPORT, challenge verdicts, PR #160 | PR #160 is this branch. Base apply evidence is `staging-apply/APPLY_REPORT.md`. Index verdicts are `amendments/CHALLENGE_VERDICT_INTERNAL_SMS.md`, `CHALLENGE_VERDICT.md`, and `CC_VERDICT.md` |
 | Hostinger off, schedules inactive, production untouched, no customer communication | This packet. Production was not queried. No customer send tables |
 
 The list below is the staging packet's gate view. It does not replace Decision ID statuses in the register.
