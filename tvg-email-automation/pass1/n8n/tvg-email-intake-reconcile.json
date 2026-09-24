@@ -1,0 +1,151 @@
+{
+  "name": "[STAGING] TVG Email Intake — Reconcile",
+  "nodes": [
+    {
+      "id": "cc000000-0000-4000-8000-000000000020",
+      "name": "STAGING ONLY / HOSTINGER OFF",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -240
+      ],
+      "parameters": {
+        "content": "Schedule node is disabled and the workflow is inactive. Actor A for deferred_kill_switch resume is apply/resume_deferred_kill_switch.sql. This workflow is actor B and must not be activated. No INBOX list call.",
+        "width": 620,
+        "height": 140
+      }
+    },
+    {
+      "id": "cc000000-0000-4000-8000-000000000001",
+      "name": "Schedule disabled",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        160
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 12
+            }
+          ]
+        }
+      },
+      "disabled": true
+    },
+    {
+      "id": "cc000000-0000-4000-8000-000000000002",
+      "name": "Manual start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "cc000000-0000-4000-8000-000000000003",
+      "name": "Resume deferred",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        300,
+        40
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- =============================================================================\n-- TVG Email Pass 1 — resume actor A\n-- STAGING ONLY / HOSTINGER OFF\n-- Project: glkrykpksbsqmmilmjhs only. Never wwyxohjnyqnegzbxtuxs.\n--\n-- Named actor while the n8n Reconcile schedule is INACTIVE:\n--   this ops SQL, run by the staging migration/owner role.\n-- Actor B (not active in this build): the Reconcile workflow's resume node,\n-- which stays unscheduled until Founder authorizes Pre-webhook.\n--\n-- Moves intake_queue deferred_kill_switch → pending only when\n-- intake_processing_enabled is true.\n-- Does not clear held, error, done, or duplicate.\n-- Does not change Hostinger webhook configuration.\n-- Does not send mail.\n-- =============================================================================\n\nUPDATE email_automation.intake_queue q\nSET status = 'pending',\n    locked_at = NULL,\n    locked_by = NULL\nWHERE q.tenant_id = 'tvg'\n  AND q.status = 'deferred_kill_switch'\n  AND EXISTS (\n    SELECT 1\n    FROM email_automation.automation_settings s\n    WHERE s.tenant_id = 'tvg'\n      AND s.key = 'intake_processing_enabled'\n      AND s.value_json = 'true'::jsonb\n  );\n",
+        "options": {
+          "alwaysOutputData": true
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "tvg-staging-n8n-email-automation",
+          "name": "TVG Staging n8n_email_automation"
+        }
+      }
+    },
+    {
+      "id": "cc000000-0000-4000-8000-000000000004",
+      "name": "Stale to HOLD",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        620,
+        40
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- =============================================================================\n-- TVG Email Pass 1 — stale processing → HOLD\n-- STAGING ONLY / HOSTINGER OFF\n-- Does not requeue. Does not send. Does not clear other HOLD reasons.\n-- =============================================================================\n\nWITH stale AS (\n  UPDATE email_automation.intake_queue q\n  SET status = 'held',\n      hold_reason = 'stale_processing'\n  WHERE q.tenant_id = 'tvg'\n    AND q.status = 'processing'\n    AND q.locked_at IS NOT NULL\n    AND q.locked_at < now() - make_interval(mins => COALESCE((\n      SELECT (s.value_json #>> '{}')::int\n      FROM email_automation.automation_settings s\n      WHERE s.tenant_id = 'tvg'\n        AND s.key = 'stale_processing_ttl_minutes'\n    ), 10))\n  RETURNING q.id, q.email_event_id\n),\nerrs AS (\n  INSERT INTO email_automation.automation_errors (\n    tenant_id, intake_queue_id, email_event_id, stage, error_code, error_message, retryable\n  )\n  SELECT\n    'tvg',\n    stale.id,\n    stale.email_event_id,\n    'reconcile',\n    'stale_processing',\n    'processing lease exceeded; HOLD for review; no automatic requeue into a send path',\n    false\n  FROM stale\n  RETURNING id\n),\nevents AS (\n  UPDATE email_automation.email_events e\n  SET status = 'held',\n      hold_reason = 'stale_processing'\n  FROM stale\n  WHERE e.id = stale.email_event_id\n    AND e.tenant_id = 'tvg'\n    AND e.status IN ('received', 'queued', 'fetching', 'fetched')\n  RETURNING e.id\n),\nnotified AS (\n  INSERT INTO email_automation.notification_log (\n    tenant_id, kind, notification_kind, channel, email_event_id, destination_ref,\n    payload_summary, status, delivery_state, suppression_reason, attempted_at\n  )\n  SELECT\n    'tvg',\n    'hold_alert',\n    'hold_alert',\n    'internal_sms',\n    stale.email_event_id,\n    (\n      SELECT s.value_json #>> '{}'\n      FROM email_automation.automation_settings s\n      WHERE s.tenant_id = 'tvg' AND s.key = 'internal_sms_destination_ref'\n    ),\n    jsonb_build_object('status', 'held', 'hold_reason', 'stale_processing'),\n    CASE WHEN sms.ok THEN 'queued' ELSE 'recorded_not_sent' END,\n    CASE WHEN sms.ok THEN 'queued' ELSE 'recorded_not_sent' END,\n    CASE WHEN sms.ok THEN NULL ELSE 'credential_not_approved' END,\n    now()\n  FROM stale\n  CROSS JOIN (\n    SELECT COALESCE((\n      SELECT value_json = 'true'::jsonb\n      FROM email_automation.automation_settings\n      WHERE tenant_id = 'tvg' AND key = 'internal_sms_enabled'\n    ), false) AS ok\n  ) sms\n  WHERE stale.email_event_id IS NOT NULL\n  ON CONFLICT (tenant_id, email_event_id, notification_kind)\n    WHERE email_event_id IS NOT NULL DO NOTHING\n  RETURNING id\n)\nSELECT\n  (SELECT count(*) FROM stale) AS held_queue_rows,\n  (SELECT count(*) FROM errs) AS error_rows,\n  (SELECT count(*) FROM events) AS held_event_rows,\n  (SELECT count(*) FROM notified) AS notification_rows;\n",
+        "options": {
+          "alwaysOutputData": true
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "tvg-staging-n8n-email-automation",
+          "name": "TVG Staging n8n_email_automation"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual start": {
+      "main": [
+        [
+          {
+            "node": "Resume deferred",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule disabled": {
+      "main": [
+        [
+          {
+            "node": "Resume deferred",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resume deferred": {
+      "main": [
+        [
+          {
+            "node": "Stale to HOLD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "tvgEmailPass1": {
+      "label": "TVG Email Pass 1",
+      "hostinger": "OFF",
+      "schedulesEnabled": false,
+      "projectRef": "glkrykpksbsqmmilmjhs",
+      "productionRefForbidden": "wwyxohjnyqnegzbxtuxs",
+      "credentialScope": "staging-only",
+      "namePrefix": "[STAGING]"
+    }
+  },
+  "tags": []
+}
