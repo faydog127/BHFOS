@@ -10,6 +10,8 @@ Markers: emails on `example.com` / `invalid`, names prefixed `SYNTH `, phones `5
 
 `node --test tvg-email-automation/pass1/test/pass1-intake-logic.test.mjs` covers the decision library for F1, F3, F4, F4b, F4c, F5, F6, F7, F12, F15 (SQL text only), F16, and F17.
 
+`node --test tvg-email-automation/pass1/test/pass1-internal-sms.test.mjs` covers internal SMS dedup, the single storm summary, subject sanitization, and the awaiting_pass2 / held / error gate. `fixtures/sql/local-smoke.sql` checks the unique `(email_event_id, notification_kind)` index, the storm-window unique index, and the customer SMS rejection.
+
 ```bash
 node tvg-email-automation/pass1/fixtures/run-staging-fixtures.mjs
 ```

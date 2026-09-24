@@ -16,7 +16,7 @@ This checklist is not an apply record. Nothing in this change was executed again
 | `apply/20260924_tvg_email_pass1_v5.sql` | Git | Coordinator runs it on `glkrykpksbsqmmilmjhs` only |
 | `apply/pre_apply_audit.sql`, `apply/post_apply_smoke.sql` | Git | Read-only SQL on that same project |
 | `apply/resume_deferred_kill_switch.sql` | Git | Later ops SQL (resume actor A). Not part of DDL apply |
-| n8n JSON under `n8n/` | Git | Import into n8n later, leave **inactive**. Not a Supabase migration |
+| n8n JSON under `n8n/` | Git | Import into n8n later, leave **inactive**. Not a Supabase migration. The Twilio node stays disabled and disconnected |
 | `design/`, tests, fixture runner | Git | No database |
 
 Do not copy the apply file into `command-center/supabase/migrations` or `supabase/migrations`. Those trees are not this staging project and must not carry this DDL toward production.
@@ -60,13 +60,28 @@ Supabase MCP equivalent, only if the caller sets `project_id` to `glkrykpksbsqmm
    - `n8n_contacts_tvg_select` and `n8n_leads_tvg_select` exist
    - `claim_intake_batch` exists
    - claims force-RLS is still true and the column count is still 10
+   - `max_internal_sms_per_hour` is `10`
+   - `internal_sms_enabled` is `false`
+   - `internal_sms_destination_ref` is `founder_mobile_ref`
+   - index `uq_notification_log_event_kind` exists
 5. Set the role password **outside git** (`ALTER ROLE n8n_email_automation PASSWORD ...` in the staging SQL editor). Store it only in n8n credentials for staging. Do not use `service_role` in the workflows.
 6. Do not add `email_automation` to the Data API exposed schemas.
-7. Import the four n8n JSON files. Confirm each workflow shows inactive and the schedule nodes are disabled. Do not activate them. Do not create a Hostinger webhook.
+7. Import the five n8n JSON files. Confirm each workflow shows inactive and the schedule nodes are disabled. Confirm `Twilio send disabled` is disabled, disconnected, and uses credential name `TVG Internal SMS Twilio` with no account SID and no auth token. Do not activate them. Do not create a Hostinger webhook. Do not attach a real SMS credential.
 
 ## Resume actor while schedules stay inactive
 
 `deferred_kill_switch` rows are resumed only by [`resume_deferred_kill_switch.sql`](resume_deferred_kill_switch.sql) (actor A), and only when `intake_processing_enabled` is true. The Reconcile workflow contains the same statement (actor B) but its schedule node is disabled and the workflow is inactive, so actor B does not run. Neither actor clears `held` or `error` rows. Neither actor edits Hostinger.
+
+## Pre-webhook blockers from the internal SMS amendment
+
+These block Pre-webhook. They do not block applying the schema with `internal_sms_enabled` left false.
+
+- Carrier readiness: sending number identified, U.S. registration confirmed (A2P 10DLC or verified toll-free — Founder chooses), use case allows internal operational alerts, one real test SMS to a Founder-approved phone with delivery evidence, and delivery failure logged rather than treated as success.
+- Founder approval before any real internal-alert SMS credential is attached. Secrets stay in n8n credentials. They do not go in workflow JSON, SQL settings, logs, or this repo.
+- SMS transport is not the system of record. `notification_log` is the record. Pass 1 delivery channel is `internal_sms`.
+- Founder-only decisions left open: credential provision, A2P 10DLC versus verified toll-free, and cost. The mobile number stays out of git.
+
+See [`../PRE_WEBHOOK_OPEN_ITEMS.md`](../PRE_WEBHOOK_OPEN_ITEMS.md).
 
 ## Blockers before live apply
 

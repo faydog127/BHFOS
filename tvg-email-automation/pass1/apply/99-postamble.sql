@@ -9,6 +9,9 @@ DECLARE
   auto_send jsonb;
   form_hold jsonb;
   form_senders int;
+  sms_cap jsonb;
+  sms_enabled jsonb;
+  sms_dest jsonb;
 BEGIN
   SELECT c.relforcerowsecurity,
          md5(string_agg(a.attname || ':' || t.typname, ',' ORDER BY a.attnum))
@@ -50,5 +53,34 @@ BEGIN
   SELECT count(*) INTO form_senders FROM email_automation.known_form_senders;
   IF form_senders <> 0 THEN
     RAISE EXCEPTION 'known_form_senders must stay empty until a real form sample is captured';
+  END IF;
+
+  SELECT value_json INTO sms_cap
+  FROM email_automation.automation_settings
+  WHERE tenant_id = 'tvg' AND key = 'max_internal_sms_per_hour';
+  IF sms_cap IS DISTINCT FROM '10'::jsonb THEN
+    RAISE EXCEPTION 'max_internal_sms_per_hour must default to 10';
+  END IF;
+
+  SELECT value_json INTO sms_enabled
+  FROM email_automation.automation_settings
+  WHERE tenant_id = 'tvg' AND key = 'internal_sms_enabled';
+  IF sms_enabled IS DISTINCT FROM 'false'::jsonb THEN
+    RAISE EXCEPTION 'internal_sms_enabled must stay false until Founder approves the credential';
+  END IF;
+
+  SELECT value_json INTO sms_dest
+  FROM email_automation.automation_settings
+  WHERE tenant_id = 'tvg' AND key = 'internal_sms_destination_ref';
+  IF sms_dest IS DISTINCT FROM '"founder_mobile_ref"'::jsonb THEN
+    RAISE EXCEPTION 'internal_sms_destination_ref must stay a label';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_indexes
+    WHERE schemaname = 'email_automation'
+      AND indexname = 'uq_notification_log_event_kind'
+  ) THEN
+    RAISE EXCEPTION 'notification dedup index missing';
   END IF;
 END $$;

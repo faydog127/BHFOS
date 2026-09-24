@@ -162,4 +162,126 @@ BEGIN
      IS DISTINCT FROM 'false'::jsonb THEN
     RAISE EXCEPTION 'auto_send_enabled is not false';
   END IF;
+  IF (SELECT value_json FROM email_automation.automation_settings WHERE tenant_id = 'tvg' AND key = 'max_internal_sms_per_hour')
+     IS DISTINCT FROM '10'::jsonb THEN
+    RAISE EXCEPTION 'max_internal_sms_per_hour is not 10';
+  END IF;
+  IF (SELECT value_json FROM email_automation.automation_settings WHERE tenant_id = 'tvg' AND key = 'internal_sms_enabled')
+     IS DISTINCT FROM 'false'::jsonb THEN
+    RAISE EXCEPTION 'internal_sms_enabled is not false';
+  END IF;
+END $$;
+
+INSERT INTO email_automation.email_events (
+  id, tenant_id, mailbox, message_id, status, subject
+) VALUES (
+  '40000000-0000-4000-8000-000000000001',
+  'tvg',
+  'info@vent-guys.com',
+  'synth-pass1-sms@vent-guys.test',
+  'awaiting_pass2',
+  'SYNTH subject'
+);
+
+INSERT INTO email_automation.notification_log (
+  tenant_id, kind, notification_kind, channel, email_event_id, destination_ref,
+  delivery_state, status
+) VALUES (
+  'tvg',
+  'actionable_inbound',
+  'actionable_inbound',
+  'internal_sms',
+  '40000000-0000-4000-8000-000000000001',
+  'founder_mobile_ref',
+  'recorded_not_sent',
+  'recorded_not_sent'
+);
+
+DO $$
+BEGIN
+  INSERT INTO email_automation.notification_log (
+    tenant_id, kind, notification_kind, channel, email_event_id, destination_ref,
+    delivery_state, status
+  ) VALUES (
+    'tvg',
+    'actionable_inbound',
+    'actionable_inbound',
+    'internal_sms',
+    '40000000-0000-4000-8000-000000000001',
+    'founder_mobile_ref',
+    'recorded_not_sent',
+    'recorded_not_sent'
+  );
+  RAISE EXCEPTION 'SMS dedup unique index did not reject the retry';
+EXCEPTION
+  WHEN unique_violation THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  IF (
+    SELECT count(*) FROM email_automation.notification_log
+    WHERE email_event_id = '40000000-0000-4000-8000-000000000001'
+      AND notification_kind = 'actionable_inbound'
+  ) <> 1 THEN
+    RAISE EXCEPTION 'SMS dedup left more than one row';
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  INSERT INTO email_automation.notification_log (
+    tenant_id, kind, notification_kind, channel, destination_ref, delivery_state, status
+  ) VALUES (
+    'tvg',
+    'hold_alert',
+    'hold_alert',
+    'customer_sms',
+    'founder_mobile_ref',
+    'recorded_not_sent',
+    'recorded_not_sent'
+  );
+  RAISE EXCEPTION 'customer SMS insert succeeded';
+EXCEPTION
+  WHEN check_violation THEN NULL;
+  WHEN raise_exception THEN
+    IF SQLERRM ILIKE '%customer SMS%' THEN
+      NULL;
+    ELSE
+      RAISE;
+    END IF;
+END $$;
+
+INSERT INTO email_automation.notification_log (
+  tenant_id, kind, notification_kind, channel, destination_ref,
+  delivery_state, status, suppression_window
+) VALUES (
+  'tvg',
+  'storm_summary',
+  'storm_summary',
+  'internal_sms',
+  'founder_mobile_ref',
+  'recorded_not_sent',
+  'recorded_not_sent',
+  '2026-09-24T13'
+);
+
+DO $$
+BEGIN
+  INSERT INTO email_automation.notification_log (
+    tenant_id, kind, notification_kind, channel, destination_ref,
+    delivery_state, status, suppression_window
+  ) VALUES (
+    'tvg',
+    'storm_summary',
+    'storm_summary',
+    'internal_sms',
+    'founder_mobile_ref',
+    'recorded_not_sent',
+    'recorded_not_sent',
+    '2026-09-24T13'
+  );
+  RAISE EXCEPTION 'storm summary unique index did not reject the repeat';
+EXCEPTION
+  WHEN unique_violation THEN NULL;
 END $$;

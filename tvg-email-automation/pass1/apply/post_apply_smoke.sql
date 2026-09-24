@@ -12,11 +12,20 @@ WHERE tenant_id = 'tvg'
     'auto_send_enabled',
     'intake_processing_enabled',
     'open_lead_statuses',
-    'hold_on_form_auth_failure'
+    'hold_on_form_auth_failure',
+    'max_internal_sms_per_hour',
+    'internal_sms_enabled',
+    'internal_sms_destination_ref'
   )
 ORDER BY key;
 
 SELECT count(*) AS known_form_senders FROM email_automation.known_form_senders;
+
+SELECT indexname
+FROM pg_indexes
+WHERE schemaname = 'email_automation'
+  AND indexname IN ('uq_notification_log_event_kind', 'uq_notification_log_storm_window')
+ORDER BY indexname;
 
 SELECT schemaname, tablename, policyname, cmd
 FROM pg_policies

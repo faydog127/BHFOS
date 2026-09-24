@@ -43,8 +43,39 @@ events AS (
     AND e.tenant_id = 'tvg'
     AND e.status IN ('received', 'queued', 'fetching', 'fetched')
   RETURNING e.id
+),
+notified AS (
+  INSERT INTO email_automation.notification_log (
+    tenant_id, kind, notification_kind, channel, email_event_id, destination_ref,
+    payload_summary, status, delivery_state, suppression_reason, attempted_at
+  )
+  SELECT
+    'tvg',
+    'hold_alert',
+    'hold_alert',
+    'internal_sms',
+    stale.email_event_id,
+    'founder_mobile_ref',
+    jsonb_build_object('status', 'held', 'hold_reason', 'stale_processing'),
+    CASE WHEN sms.ok THEN 'queued' ELSE 'recorded_not_sent' END,
+    CASE WHEN sms.ok THEN 'queued' ELSE 'recorded_not_sent' END,
+    CASE WHEN sms.ok THEN NULL ELSE 'credential_not_approved' END,
+    now()
+  FROM stale
+  CROSS JOIN (
+    SELECT COALESCE((
+      SELECT value_json = 'true'::jsonb
+      FROM email_automation.automation_settings
+      WHERE tenant_id = 'tvg' AND key = 'internal_sms_enabled'
+    ), false) AS ok
+  ) sms
+  WHERE stale.email_event_id IS NOT NULL
+  ON CONFLICT (tenant_id, email_event_id, notification_kind)
+    WHERE email_event_id IS NOT NULL DO NOTHING
+  RETURNING id
 )
 SELECT
   (SELECT count(*) FROM stale) AS held_queue_rows,
   (SELECT count(*) FROM errs) AS error_rows,
-  (SELECT count(*) FROM events) AS held_event_rows;
+  (SELECT count(*) FROM events) AS held_event_rows,
+  (SELECT count(*) FROM notified) AS notification_rows;

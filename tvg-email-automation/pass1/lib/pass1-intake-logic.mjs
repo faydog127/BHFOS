@@ -674,7 +674,7 @@ SET email_event_id = chosen.id,
 FROM chosen
 WHERE q.id = ${quoteLiteral(queueId)}::uuid
   AND q.tenant_id = 'tvg'
-RETURNING q.id, q.status, chosen.was_existing;
+RETURNING q.id, q.status, q.email_event_id, chosen.was_existing;
 `.trim();
 }
 

@@ -1,0 +1,136 @@
+{
+  "name": "TVG Email — Internal SMS Delivery",
+  "nodes": [
+    {
+      "id": "ee000000-0000-4000-8000-000000000020",
+      "name": "STAGING ONLY / HOSTINGER OFF",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -260
+      ],
+      "parameters": {
+        "content": "Inactive. No Hostinger. No customer SMS. Twilio node is disabled and disconnected. Credential name is a placeholder only. SMS transport is not the system of record. notification_log is the record.",
+        "width": 680,
+        "height": 140
+      }
+    },
+    {
+      "id": "ee000000-0000-4000-8000-000000000001",
+      "name": "Manual start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "ee000000-0000-4000-8000-000000000002",
+      "name": "Select queued internal SMS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        280,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, notification_kind, destination_ref, payload_summary, delivery_state\nFROM email_automation.notification_log\nWHERE tenant_id = 'tvg'\n  AND channel = 'internal_sms'\n  AND delivery_state = 'queued'\n  AND COALESCE((\n    SELECT value_json = 'true'::jsonb\n    FROM email_automation.automation_settings\n    WHERE tenant_id = 'tvg' AND key = 'internal_sms_enabled'\n  ), false);",
+        "options": {
+          "alwaysOutputData": true
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "tvg-staging-n8n-email-automation",
+          "name": "TVG Staging n8n_email_automation"
+        }
+      }
+    },
+    {
+      "id": "ee000000-0000-4000-8000-000000000003",
+      "name": "Credential guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        0
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.id);\nif (rows.length) {\n  throw new Error('INTERNAL_SMS_CREDENTIAL_NOT_APPROVED: refusing to hand queued rows to Twilio. Founder approval is required before this guard is removed.');\n}\nreturn [{ json: { handed_to_twilio: false, queued_rows: 0 } }];\n"
+      }
+    },
+    {
+      "id": "ee000000-0000-4000-8000-000000000004",
+      "name": "Twilio send disabled",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        900,
+        220
+      ],
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "INTERNAL_ALERT_FROM_NOT_IN_REPO",
+        "to": "FOUNDER_APPROVED_MOBILE_NOT_IN_REPO",
+        "message": "={{ $json.payload_summary && $json.payload_summary.sms_text }}",
+        "options": {}
+      },
+      "disabled": true,
+      "credentials": {
+        "twilioApi": {
+          "id": "tvg-internal-sms-twilio-placeholder",
+          "name": "TVG Internal SMS Twilio"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual start": {
+      "main": [
+        [
+          {
+            "node": "Select queued internal SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select queued internal SMS": {
+      "main": [
+        [
+          {
+            "node": "Credential guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "tvgEmailPass1": {
+      "label": "TVG Email Pass 1",
+      "hostinger": "OFF",
+      "schedulesEnabled": false,
+      "projectRef": "glkrykpksbsqmmilmjhs",
+      "productionRefForbidden": "wwyxohjnyqnegzbxtuxs",
+      "internalSms": "placeholder-credential-not-attached",
+      "smsTransportIsNotSoR": true
+    }
+  },
+  "tags": []
+}

@@ -2,9 +2,9 @@
 -- Staging already has CRM tables. This stub exists so the apply pack can be
 -- executed locally without touching glkrykpksbsqmmilmjhs.
 
-CREATE ROLE anon NOLOGIN;
-CREATE ROLE authenticated NOLOGIN;
-CREATE ROLE service_role NOLOGIN BYPASSRLS;
+DO $$ BEGIN CREATE ROLE anon NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE ROLE authenticated NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE ROLE service_role NOLOGIN BYPASSRLS; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE TABLE public.contacts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
