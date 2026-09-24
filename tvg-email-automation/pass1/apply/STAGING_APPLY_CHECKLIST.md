@@ -9,7 +9,7 @@ Forbidden target: `wwyxohjnyqnegzbxtuxs`.
 
 This checklist is not an apply record.
 
-The coordinator reported that `apply/20260924_tvg_email_pass1_v5.sql` was applied on `glkrykpksbsqmmilmjhs` on 2026-09-24. This repository does not contain that apply report. This slice did not re-query staging and did not re-apply the base file. The next live SQL is `apply/20260924_tvg_email_pass1_incremental.sql` only.
+The coordinator applied `apply/20260924_tvg_email_pass1_v5.sql` on `glkrykpksbsqmmilmjhs` on 2026-09-24. That evidence is [`../staging-apply/APPLY_REPORT.md`](../staging-apply/APPLY_REPORT.md). This slice did not re-query staging and did not re-apply the base file. The next live SQL is `apply/20260924_tvg_email_pass1_incremental.sql` only.
 
 The 2026-09-24 read-only audit below predates that reported apply. It is historical evidence, not the current staging catalog.
 

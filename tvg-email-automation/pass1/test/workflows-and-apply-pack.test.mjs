@@ -238,6 +238,12 @@ test('challenge notes keep the decision register, dormant mailbox probe, and rol
   assert.match(outbound, /Pass 1 impact:\*\* NONE/);
   assert.match(outboundChallenge, /CHALLENGE_PASS/);
   assert.match(outboundChallenge, /No implement \/ send \/ Hostinger \/ Pass 1 expand/);
+  const applyReport = load('staging-apply/APPLY_REPORT.md');
+  assert.match(applyReport, /glkrykpksbsqmmilmjhs/);
+  assert.match(applyReport, /wwyxohjnyqnegzbxtuxs/);
+  assert.match(applyReport, /NOT TOUCHED/);
+  assert.match(applyReport, /Hostinger:\*\* OFF/);
+  assert.match(applyReport, /PR merge:\*\* NOT performed/);
   const preferencesChallenge = load('directives/CHALLENGE_VERDICT_OPERATOR_PREFERENCES.md');
   assert.match(preferencesChallenge, /CHALLENGE_PASS/);
   assert.match(preferencesChallenge, /single Founder destination/);
