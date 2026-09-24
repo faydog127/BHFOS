@@ -7,6 +7,7 @@ Workstream: TVG Email Automation pass1-v5, plus the Founder-locked internal SMS 
 | Branch | `cursor/tvg-email-pass1-v5-3e46` |
 | Pass 1 pack | `b2cddc8bee25f36b1b22d81060defe9847f68aa2` |
 | Prior local-verification commit | `c526a5d0e4ff8eb9e1e5f4c26479a2a3cce272f4` |
+| Internal SMS amendment | `e0e1b755d81f048bcaa50a789a9780f644b1f361` |
 | Baseline | `main` at `17f9228951d74824d9b6fb0eb704832befed2afc` |
 | Evidence | **Locally verified** on disposable Postgres 16.15. Staging is 17.6. Not applied on staging. Not merged. Not deployed. |
 | Staging reads | 2026-09-24 read-only SQL on `glkrykpksbsqmmilmjhs`. No DDL. |
