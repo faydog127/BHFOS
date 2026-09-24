@@ -4,7 +4,7 @@
 
 Section B of `design/09-staging-safety-gate.md` is not passed. Do not point Hostinger `message.received` at n8n. Do not enable n8n schedules. Do not send customer notifications. Do not attach a live internal SMS credential. Do not mutate `wwyxohjnyqnegzbxtuxs`.
 
-Command Center left three items open. The Founder-locked internal SMS amendment adds carrier readiness and credential approval as further Pre-webhook blockers. This build documents them and does not close them.
+The consolidated 2026-09-24 directive keeps this gate CLOSED. It does not pass Section B. Command Center left three items open. The Founder-locked internal SMS amendment adds carrier readiness and credential approval as further Pre-webhook blockers. This build documents them and does not close them.
 
 SMS transport is not the system of record. `email_automation.notification_log` is the record. The path is notification event → notification service → delivery channel. Pass 1 channel is `internal_sms`. A later `crm_push` channel can be added without rewriting intake, identity, HOLD, or dedup.
 
@@ -69,6 +69,15 @@ When ordinary `actionable_inbound` traffic is already at `max_internal_sms_per_h
 The summary sentence is `TVG: N additional new emails received — review queue.` `N` is the number of ordinary events suppressed in that hour, including the event that created the summary. The first overflow is `N=1`. The amendment sentence with 12 is that same sentence when 12 ordinary events have been suppressed and the summary has not been written yet. The text is fixed on that single insert. A later suppression in the hour does not change `N` and does not write another summary. `N` is not the count of every email received in the hour.
 
 Column mapping to the design `notification_log` / `review_notify` settings is in [`NOTIFICATION_MODEL.md`](NOTIFICATION_MODEL.md).
+
+The consolidated directive adds these constraints and does not open the gate:
+
+- SMS is one-way. The dispatcher has no inbound command node.
+- `live_notification_started_at` stays null until the Founder sets it. Null means ingest may continue and per-message SMS does not.
+- `health_alerts_enabled` stays false. A quiet inbox is not a fault.
+- Timing targets are 120 seconds on the primary path and 900 seconds for reconcile. There are no application quiet hours.
+- Ordinary alert wording is `review`, and the closing line is `No reply sent by automation.`
+- The backlog summary sentence and excerpt/attachment retention are `DECISION_REQUIRED` in [`TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md).
 
 ## Also still closed
 

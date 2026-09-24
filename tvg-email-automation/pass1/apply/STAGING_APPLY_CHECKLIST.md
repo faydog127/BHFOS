@@ -7,13 +7,18 @@ Apply target: Supabase project `glkrykpksbsqmmilmjhs`
 
 Forbidden target: `wwyxohjnyqnegzbxtuxs`.
 
-This checklist is not an apply record. Nothing in this change was executed against that database except read-only `SELECT`s on 2026-09-24.
+This checklist is not an apply record.
+
+The coordinator reported that `apply/20260924_tvg_email_pass1_v5.sql` was applied on `glkrykpksbsqmmilmjhs` on 2026-09-24. This repository does not contain that apply report. This slice did not re-query staging and did not re-apply the base file. The next live SQL is `apply/20260924_tvg_email_pass1_incremental.sql` only.
+
+The 2026-09-24 read-only audit below predates that reported apply. It is historical evidence, not the current staging catalog.
 
 ## Repo-only vs live apply
 
 | Artifact | Where it lives | Live action |
 |---|---|---|
-| `apply/20260924_tvg_email_pass1_v5.sql` | Git | Coordinator runs it on `glkrykpksbsqmmilmjhs` only |
+| `apply/20260924_tvg_email_pass1_v5.sql` | Git | Coordinator reported this applied. Do not re-apply it |
+| `apply/20260924_tvg_email_pass1_incremental.sql` | Git | Next live SQL on `glkrykpksbsqmmilmjhs` only. Refuses to run unless the base tables exist |
 | `apply/pre_apply_audit.sql`, `apply/post_apply_smoke.sql` | Git | Read-only SQL on that same project |
 | `apply/resume_deferred_kill_switch.sql` | Git | Later ops SQL (resume actor A). Not part of DDL apply |
 | n8n JSON under `n8n/` | Git | Import into n8n later, leave **inactive**. Not a Supabase migration. The Twilio node stays disabled and disconnected |
@@ -35,11 +40,39 @@ Evidence tier: **staging read**. Not an apply. Not production.
 - `PUBLIC` has `CONNECT` on the database.
 - Do not re-baseline CRM. Do not copy production secrets. Do not rename the Supabase project in this pack.
 
-## Apply steps
+## Incremental apply (next live SQL)
 
 1. Confirm the connection is `db.glkrykpksbsqmmilmjhs.supabase.co` (or the Supabase MCP `project_id` `glkrykpksbsqmmilmjhs`). Stop if the ref is `wwyxohjnyqnegzbxtuxs`.
-2. Run `apply/pre_apply_audit.sql`. Expect contacts/leads present, claims table present, email schema absent.
-3. In that same session, set the operator latch and apply in **one transaction**:
+2. Do not run `apply/20260924_tvg_email_pass1_v5.sql` again.
+3. In one transaction:
+
+```bash
+psql "$STAGING_URL" -v ON_ERROR_STOP=1 -1 \
+  -c "SELECT set_config('tvg_email_pass1.target_project', 'glkrykpksbsqmmilmjhs', false);" \
+  -f tvg-email-automation/pass1/apply/20260924_tvg_email_pass1_incremental.sql
+```
+
+The file refuses to run without the latch, without `email_automation.notification_log` and `email_automation.email_events`, or if `email_responses` / `email_send_queue` exist.
+
+4. After that apply, expect:
+   - `live_notification_started_at` is JSON null
+   - `health_alerts_enabled` is `false`
+   - `primary_path_target_seconds` is `120`
+   - `reconcile_target_seconds` is `900`
+   - `notification_quiet_hours` is JSON null
+   - `email_events.in_reply_to` and `email_events.references_header` exist
+   - `email_automation.health_checks` has `primary_path` and `reconcile`, status `unstarted`
+   - `notification_log.dispatch_after` exists
+   - `internal_sms_enabled` is still `false`
+5. Import the six n8n JSON files only after the incremental apply. The worker reads `live_notification_started_at`. Confirm each workflow is inactive, names start with `[STAGING] `, and schedule nodes are disabled. Confirm `Twilio send disabled` is disabled, disconnected, and uses credential name `TVG Internal SMS Twilio` with no account SID and no auth token. Do not activate them. Do not create a Hostinger webhook. Do not attach a real SMS credential.
+
+Return packet: [`STAGING_RETURN_PACKET.md`](STAGING_RETURN_PACKET.md). Decision register: [`../TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](../TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md).
+
+## Base apply (already reported — do not repeat)
+
+1. Confirm the connection is `db.glkrykpksbsqmmilmjhs.supabase.co`. Stop if the ref is `wwyxohjnyqnegzbxtuxs`.
+2. The historical pre-apply audit expected the email schema to be absent. That expectation is stale after the reported base apply.
+3. The base command, kept here so it is not confused with the incremental file:
 
 ```bash
 psql "$STAGING_URL" -v ON_ERROR_STOP=1 -1 \
@@ -66,7 +99,7 @@ Supabase MCP equivalent, only if the caller sets `project_id` to `glkrykpksbsqmm
    - index `uq_notification_log_event_kind` exists
 5. Set the role password **outside git** (`ALTER ROLE n8n_email_automation PASSWORD ...` in the staging SQL editor). Store it only in n8n credentials for staging. Do not use `service_role` in the workflows.
 6. Do not add `email_automation` to the Data API exposed schemas.
-7. Import the five n8n JSON files. Confirm each workflow shows inactive and the schedule nodes are disabled. Confirm `Twilio send disabled` is disabled, disconnected, and uses credential name `TVG Internal SMS Twilio` with no account SID and no auth token. Do not activate them. Do not create a Hostinger webhook. Do not attach a real SMS credential.
+7. Import is specified in the incremental section above. Six JSON files, not five. Leave them inactive.
 
 ## Resume actor while schedules stay inactive
 

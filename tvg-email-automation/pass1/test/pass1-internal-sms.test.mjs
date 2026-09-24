@@ -5,6 +5,7 @@ import {
   buildNotificationInsertSql,
   gateSmsTransport,
   planInternalSms,
+  backlogSummaryBody,
   renderInternalSms,
   sanitizeSubject,
   stormSummaryBody,
@@ -40,10 +41,10 @@ test('ordinary inbound text is deterministic and ends with no reply sent', () =>
     street: '9 Oak Lane',
   });
   assert.equal(text, [
-    'TVG: New email — needs response',
+    'TVG: New email — review',
     'From: Kelly Martin',
     'Subject: Dryer vent question',
-    'No reply sent.',
+    'No reply sent by automation.',
   ].join('\n'));
   assert.doesNotMatch(text, /SECRET BODY|415-555-1212|Oak Lane/);
 });
@@ -157,6 +158,48 @@ test('storm summary count is the suppressed ordinary count and is written once',
   assert.equal(amendmentExample.summary.suppressedCount, 12);
   const repeated = plan({ ordinarySent: 10, suppressedOrdinary: 12, summarySent: true });
   assert.equal(repeated.summary, null);
+});
+
+test('before the live watermark there is no per-message SMS and one backlog summary', () => {
+  const first = plan({
+    liveNotificationStartedAt: null,
+    backlogCount: 4,
+    backlogSummarySent: false,
+  });
+  assert.equal(first.action, 'record_only');
+  assert.equal(first.reason, 'before_watermark');
+  assert.equal(first.smsBody, null);
+  assert.equal(first.summary.smsBody, backlogSummaryBody(4));
+  assert.equal(
+    first.summary.smsBody,
+    'TVG: 4 emails were already queued before live notifications — review backlog.',
+  );
+  const second = plan({
+    liveNotificationStartedAt: null,
+    backlogCount: 5,
+    backlogSummarySent: true,
+  });
+  assert.equal(second.action, 'record_only');
+  assert.equal(second.summary, null);
+  const after = plan({
+    liveNotificationStartedAt: '2026-09-24T12:00:00.000Z',
+    eventCreatedAt: '2026-09-24T12:05:00.000Z',
+  });
+  assert.equal(after.action, 'send');
+  assert.match(after.smsBody, /New email — review/);
+  const older = plan({
+    liveNotificationStartedAt: '2026-09-24T12:00:00.000Z',
+    eventCreatedAt: '2026-09-24T11:00:00.000Z',
+    backlogSummarySent: true,
+  });
+  assert.equal(older.action, 'record_only');
+  assert.equal(older.smsBody, null);
+  const missingCreated = plan({
+    liveNotificationStartedAt: '2026-09-24T12:00:00.000Z',
+    backlogSummarySent: true,
+  });
+  assert.equal(missingCreated.action, 'record_only');
+  assert.equal(missingCreated.reason, 'before_watermark');
 });
 
 test('disabled transport records the event and does not claim a send', () => {

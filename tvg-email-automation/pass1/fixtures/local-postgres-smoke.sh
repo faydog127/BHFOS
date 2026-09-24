@@ -43,6 +43,10 @@ docker exec -i "$CONTAINER" psql -U postgres -d tvg_email_pass1 -v ON_ERROR_STOP
   -c "SELECT set_config('tvg_email_pass1.target_project', 'glkrykpksbsqmmilmjhs', false);" \
   -f - < "$ROOT/apply/20260924_tvg_email_pass1_v5.sql"
 
+docker exec -i "$CONTAINER" psql -U postgres -d tvg_email_pass1 -v ON_ERROR_STOP=1 -1 \
+  -c "SELECT set_config('tvg_email_pass1.target_project', 'glkrykpksbsqmmilmjhs', false);" \
+  -f - < "$ROOT/apply/20260924_tvg_email_pass1_incremental.sql"
+
 docker cp "$ROOT" "$CONTAINER:/opt/pack"
 docker exec "$CONTAINER" psql -U postgres -d tvg_email_pass1 -v ON_ERROR_STOP=1 -1 \
   -f /opt/pack/fixtures/sql/local-smoke.sql

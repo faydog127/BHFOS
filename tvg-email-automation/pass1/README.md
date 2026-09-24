@@ -10,9 +10,10 @@ This is the contained staging build for The Vent Guys email intake. It is not Ne
 | Production SoR | `wwyxohjnyqnegzbxtuxs` read-only. Do not migrate, write, or copy secrets. |
 | Preserve | `public.network_os_assurance_delivery_claims` |
 | Hostinger | Off. No webhook enablement. No live mail fetch. |
-| n8n | Five workflow JSON files are importable and **inactive**. Schedule nodes are **disabled**. The Twilio node is disabled and disconnected. |
+| n8n | Six workflow JSON files are importable and **inactive**. Names start with `[STAGING] `. Schedule nodes are **disabled**. The Twilio node is disabled and disconnected. |
 | Send path | Absent. No `email_responses`. No `email_send_queue`. No customer SMS. |
-| Internal SMS | Founder-locked amendment in [`design/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md`](design/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md). Mapping to the design log is in [`NOTIFICATION_MODEL.md`](NOTIFICATION_MODEL.md). `notification_log` is the record. SMS transport is not the system of record. `internal_sms_enabled` stays false. |
+| Internal SMS | Founder-locked amendment in [`design/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md`](design/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md). Mapping to the design log is in [`NOTIFICATION_MODEL.md`](NOTIFICATION_MODEL.md). `notification_log` is the outbox. SMS transport is not the system of record. `internal_sms_enabled` stays false. |
+| Directive | Consolidated staging summary in [`../pass1-v5/directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.SUMMARY.md`](../pass1-v5/directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.SUMMARY.md). Decision register: [`TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md). |
 
 The vendored design pack in [`design/`](design/) is the pass1-v5 source. Its own README still says design-review-only. Command Center authorized a contained staging build after that pack was written. This directory is that build. It does not apply itself to Supabase.
 
@@ -26,9 +27,9 @@ The vendored design pack in [`design/`](design/) is the pass1-v5 source. Its own
 
 ## What a coordinator must apply
 
-Only on `glkrykpksbsqmmilmjhs`, using [`apply/STAGING_APPLY_CHECKLIST.md`](apply/STAGING_APPLY_CHECKLIST.md):
+Only on `glkrykpksbsqmmilmjhs`, using [`apply/STAGING_APPLY_CHECKLIST.md`](apply/STAGING_APPLY_CHECKLIST.md).
 
-`apply/20260924_tvg_email_pass1_v5.sql`
+The base file was reported applied. The next file is `apply/20260924_tvg_email_pass1_incremental.sql`. Do not re-apply the base file.
 
 Do not put that file under `command-center/supabase/migrations`. That history is not this staging project.
 

@@ -15,6 +15,7 @@ function embedModule(source) {
 
 const logic = embedModule(readFileSync(join(root, 'lib/pass1-intake-logic.mjs'), 'utf8'));
 const smsLogic = embedModule(readFileSync(join(root, 'lib/pass1-internal-sms.mjs'), 'utf8'));
+const opsLogic = embedModule(readFileSync(join(root, 'lib/pass1-ops-policy.mjs'), 'utf8'));
 
 const resumeSql = readFileSync(join(root, 'apply/resume_deferred_kill_switch.sql'), 'utf8');
 const staleSql = readFileSync(join(root, 'apply/reconcile_stale_to_hold.sql'), 'utf8');
@@ -70,6 +71,8 @@ function workflow(name, nodes, connections) {
         schedulesEnabled: false,
         projectRef: 'glkrykpksbsqmmilmjhs',
         productionRefForbidden: 'wwyxohjnyqnegzbxtuxs',
+        credentialScope: 'staging-only',
+        namePrefix: '[STAGING]',
       },
     },
     tags: [],
@@ -188,7 +191,7 @@ connect(fastConnections, 'Shape ack', 'Respond');
 connect(fastConnections, 'Auth sample', 'Respond');
 
 const fastAck = workflow(
-  'TVG Email Intake — Fast ACK',
+  '[STAGING] TVG Email Intake — Fast ACK',
   [
     nodeBase('aa000000-0000-4000-8000-000000000001', 'Webhook', 'n8n-nodes-base.webhook', 2, 0, 0, {
       httpMethod: 'POST',
@@ -272,6 +275,9 @@ const sql = buildOutcomeSql({
   date_header: synthetic.date_header || null,
   authentication_results: synthetic.authentication_results || null,
   body_excerpt: decision.body_normalized || '',
+  in_reply_to: synthetic.in_reply_to || synthetic.inReplyTo || null,
+  references: synthetic.references || synthetic.references_header || null,
+  attachment_meta: synthetic.attachment_meta || synthetic.attachments || null,
 });
 if (/email_responses|email_send_queue|developers\\.hostinger|api\\.mail\\.hostinger/i.test(sql)) {
   throw new Error('refusing outcome SQL that mentions send tables or Hostinger');
@@ -389,7 +395,41 @@ SELECT
     SELECT s.value_json #>> '{}'
     FROM email_automation.automation_settings s
     WHERE s.tenant_id = 'tvg' AND s.key = 'internal_sms_destination_ref'
-  ) AS destination_ref;
+  ) AS destination_ref,
+  (
+    SELECT CASE
+      WHEN s.value_json IS NULL OR s.value_json = 'null'::jsonb THEN NULL
+      ELSE s.value_json #>> '{}'
+    END
+    FROM email_automation.automation_settings s
+    WHERE s.tenant_id = 'tvg' AND s.key = 'live_notification_started_at'
+  ) AS live_notification_started_at,
+  (
+    SELECT count(*)
+    FROM email_automation.email_events e
+    WHERE e.tenant_id = 'tvg'
+      AND e.status IN ('awaiting_pass2', 'held', 'error')
+      AND (
+        (
+          SELECT s.value_json
+          FROM email_automation.automation_settings s
+          WHERE s.tenant_id = 'tvg' AND s.key = 'live_notification_started_at'
+        ) IS NOT DISTINCT FROM 'null'::jsonb
+        OR e.created_at < (
+          SELECT (s.value_json #>> '{}')::timestamptz
+          FROM email_automation.automation_settings s
+          WHERE s.tenant_id = 'tvg'
+            AND s.key = 'live_notification_started_at'
+            AND s.value_json IS DISTINCT FROM 'null'::jsonb
+        )
+      )
+  ) AS backlog_count,
+  EXISTS (
+    SELECT 1 FROM email_automation.notification_log n
+    WHERE n.tenant_id = 'tvg'
+      AND n.channel = 'internal_sms'
+      AND n.notification_kind = 'backlog_summary'
+  ) AS backlog_summary_sent;
 `.trim();
 
 const smsPlan = `${logic}
@@ -422,6 +462,10 @@ const planned = planInternalSms({
   summarySent: budget.summary_sent === true || budget.summary_sent === 't' || budget.summary_sent === 'true',
   suppressionWindow: budget.suppression_window || null,
   existingKeys: new Set(),
+  liveNotificationStartedAt: budget.live_notification_started_at ?? null,
+  eventCreatedAt: written.event_created_at || null,
+  backlogSummarySent: budget.backlog_summary_sent === true || budget.backlog_summary_sent === 't' || budget.backlog_summary_sent === 'true',
+  backlogCount: Number(budget.backlog_count || 1),
 });
 const smsEnabled = budget.sms_enabled === true || budget.sms_enabled === 't' || budget.sms_enabled === 'true';
 const gated = gateSmsTransport(planned, smsEnabled);
@@ -444,12 +488,15 @@ const sql = buildNotificationInsertSql({
 });
 let summarySql = null;
 if (gated.summary) {
+  const summaryKind = gated.summary.kind;
   summarySql = buildNotificationInsertSql({
     action: gated.summary.deliveryState === 'recorded_not_sent' ? 'record_only' : 'send',
-    kind: 'storm_summary',
+    kind: summaryKind,
     deliveryState: gated.summary.deliveryState || null,
-    suppressionWindow: gated.summary.suppressionWindow || budget.suppression_window,
-    status: 'storm',
+    suppressionWindow: summaryKind === 'storm_summary'
+      ? (gated.summary.suppressionWindow || budget.suppression_window)
+      : (gated.summary.suppressionWindow || null),
+    status: summaryKind === 'backlog_summary' ? 'backlog' : 'storm',
     smsText: gated.summary.smsBody,
     destinationRef,
   });
@@ -464,13 +511,13 @@ connect(workerMap, 'Evaluate', 'Write outcome');
 connect(workerMap, 'Write outcome', 'Load SMS budget');
 connect(workerMap, 'Load SMS budget', 'Plan internal SMS');
 connect(workerMap, 'Plan internal SMS', 'Record notification');
-connect(workerMap, 'Record notification', 'Record storm summary');
+connect(workerMap, 'Record notification', 'Record notification summary');
 
 const worker = workflow(
-  'TVG Email Intake — Worker',
+  '[STAGING] TVG Email Intake — Worker',
   [
     nodeBase('bb000000-0000-4000-8000-000000000020', 'STAGING ONLY / HOSTINGER OFF', 'n8n-nodes-base.stickyNote', 1, 0, -220, {
-      content: 'Inactive. No schedule. Claims only rows with hostinger_pointers.synthetic_message. Live Hostinger fetch is not implemented. Internal SMS is recorded on notification_log. This workflow does not call Twilio.',
+      content: 'Inactive. No schedule. Claims synthetic rows only. Writes notification_log outbox intent. Does not call Twilio. Dispatcher is a separate inactive workflow. No Hostinger.',
       width: 640,
       height: 140,
     }),
@@ -481,7 +528,7 @@ const worker = workflow(
     postgresNode('bb000000-0000-4000-8000-000000000005', 'Load SMS budget', 1120, 0, smsBudgetSql),
     codeNode('bb000000-0000-4000-8000-000000000006', 'Plan internal SMS', 1400, 0, smsPlan),
     postgresNode('bb000000-0000-4000-8000-000000000007', 'Record notification', 1680, 0, "={{ $json.sql || 'SELECT 1 WHERE false' }}"),
-    postgresNode('bb000000-0000-4000-8000-000000000008', 'Record storm summary', 1960, 0, "={{ $json.summarySql || 'SELECT 1 WHERE false' }}"),
+    postgresNode('bb000000-0000-4000-8000-000000000008', 'Record notification summary', 1960, 0, "={{ $json.summarySql || 'SELECT 1 WHERE false' }}"),
   ],
   workerMap,
 );
@@ -492,7 +539,7 @@ connect(reconcileMap, 'Schedule disabled', 'Resume deferred');
 connect(reconcileMap, 'Resume deferred', 'Stale to HOLD');
 
 const reconcile = workflow(
-  'TVG Email Intake — Reconcile',
+  '[STAGING] TVG Email Intake — Reconcile',
   [
     nodeBase('cc000000-0000-4000-8000-000000000020', 'STAGING ONLY / HOSTINGER OFF', 'n8n-nodes-base.stickyNote', 1, 0, -240, {
       content: 'Schedule node is disabled and the workflow is inactive. Actor A for deferred_kill_switch resume is apply/resume_deferred_kill_switch.sql. This workflow is actor B and must not be activated. No INBOX list call.',
@@ -515,7 +562,7 @@ connect(digestMap, 'Schedule disabled', 'Count filtered');
 connect(digestMap, 'Count filtered', 'Record suppressed digest');
 
 const digest = workflow(
-  'TVG Email — Daily Filtered Digest',
+  '[STAGING] TVG Email — Daily Filtered Digest',
   [
     nodeBase('dd000000-0000-4000-8000-000000000020', 'STAGING ONLY / HOSTINGER OFF', 'n8n-nodes-base.stickyNote', 1, 0, -240, {
       content: 'Schedule disabled. No email, Slack, or HTTP send node. Writes a suppressed audit row only. Customer addresses are out of scope.',
@@ -590,6 +637,7 @@ FROM email_automation.notification_log n
 WHERE n.tenant_id = 'tvg'
   AND n.channel = 'internal_sms'
   AND n.delivery_state = 'queued'
+  AND (n.dispatch_after IS NULL OR n.dispatch_after <= now())
   AND COALESCE((
     SELECT s.value_json = 'true'::jsonb
     FROM email_automation.automation_settings s
@@ -602,10 +650,10 @@ connect(smsMap, 'Manual start', 'Select queued internal SMS');
 connect(smsMap, 'Select queued internal SMS', 'Credential guard');
 
 const smsDelivery = workflow(
-  'TVG Email — Internal SMS Delivery',
+  '[STAGING] TVG Email — Notification Dispatcher',
   [
     nodeBase('ee000000-0000-4000-8000-000000000020', 'STAGING ONLY / HOSTINGER OFF', 'n8n-nodes-base.stickyNote', 1, 0, -260, {
-      content: 'Inactive. No Hostinger. No customer SMS. Twilio node is disabled and disconnected. to reads internal_sms_destination_ref. No phone number in this JSON. Credential name is a placeholder only. SMS transport is not the system of record.',
+      content: 'Inactive outbox dispatcher. Worker does not send SMS. One-way outbound only: no inbound command path. Twilio node is disabled and disconnected. to reads internal_sms_destination_ref. No phone number in this JSON. Staging credential placeholder only.',
       width: 680,
       height: 140,
     }),
@@ -633,13 +681,112 @@ const smsDelivery = workflow(
 );
 smsDelivery.meta.tvgEmailPass1.internalSms = 'placeholder-credential-not-attached';
 smsDelivery.meta.tvgEmailPass1.smsTransportIsNotSoR = true;
+smsDelivery.meta.tvgEmailPass1.credentialScope = 'staging-only';
+smsDelivery.meta.tvgEmailPass1.smsDirection = 'one-way-outbound';
+smsDelivery.meta.tvgEmailPass1.outbox = 'email_automation.notification_log';
+
+const healthLoadSql = `
+SELECT
+  c.component,
+  c.last_successful_health_at,
+  c.open_incident_key,
+  COALESCE((
+    SELECT s.value_json = 'true'::jsonb
+    FROM email_automation.automation_settings s
+    WHERE s.tenant_id = 'tvg' AND s.key = 'health_alerts_enabled'
+  ), false) AS alerts_enabled,
+  COALESCE((
+    SELECT (s.value_json #>> '{}')::int
+    FROM email_automation.automation_settings s
+    WHERE s.tenant_id = 'tvg' AND s.key = 'primary_path_target_seconds'
+  ), 120) AS primary_target,
+  (
+    SELECT s.value_json #>> '{}'
+    FROM email_automation.automation_settings s
+    WHERE s.tenant_id = 'tvg' AND s.key = 'internal_sms_destination_ref'
+  ) AS destination_ref,
+  (
+    SELECT count(*)
+    FROM email_automation.intake_queue q
+    WHERE q.tenant_id = 'tvg' AND q.status = 'pending'
+  ) AS pending_count,
+  (
+    SELECT extract(epoch FROM (now() - min(q.created_at)))
+    FROM email_automation.intake_queue q
+    WHERE q.tenant_id = 'tvg' AND q.status = 'pending'
+  ) AS queue_lag_seconds
+FROM email_automation.health_checks c
+WHERE c.tenant_id = 'tvg' AND c.component = 'primary_path';
+`.trim();
+
+const healthFooter = `
+const row = $input.first().json || {};
+const alertsEnabled = row.alerts_enabled === true || row.alerts_enabled === 't' || row.alerts_enabled === 'true';
+const last = row.last_successful_health_at ? new Date(row.last_successful_health_at) : null;
+const target = Number(row.primary_target || 120);
+const now = new Date();
+const stale = Boolean(last) && (now.getTime() - last.getTime()) > target * 1000;
+const decision = planHealthAlert({
+  component: 'primary_path',
+  alertsEnabled,
+  pipelineOk: true,
+  dependencyOk: true,
+  stale,
+  messagesSeen: Number(row.pending_count || 0),
+  queueLagSeconds: Number(row.queue_lag_seconds || 0),
+  targetSeconds: target,
+  openIncidentKey: row.open_incident_key || null,
+  now: now.toISOString(),
+});
+const destinationRef = row.destination_ref || '';
+let alertSql = null;
+let stateSql = null;
+if (decision.alert && decision.action === 'outage') {
+  alertSql = buildHealthAlertSql(decision.alert, destinationRef);
+  stateSql = buildHealthOutageSql('primary_path', decision.alert.incidentKey, decision.fault);
+} else if (decision.alert && decision.action === 'recover') {
+  alertSql = buildHealthAlertSql(decision.alert, destinationRef);
+  stateSql = buildHealthSuccessSql('primary_path');
+} else if (decision.recordSuccess) {
+  stateSql = buildHealthSuccessSql('primary_path');
+}
+return [{ json: { action: decision.action, reason: decision.reason, fault: decision.fault, quietInbox: decision.quietInbox, alertSql, stateSql } }];
+`;
+
+const healthMap = {};
+connect(healthMap, 'Manual start', 'Load health');
+connect(healthMap, 'Schedule disabled', 'Load health');
+connect(healthMap, 'Load health', 'Plan health');
+connect(healthMap, 'Plan health', 'Record health alert');
+connect(healthMap, 'Record health alert', 'Record health state');
+
+const health = workflow(
+  '[STAGING] TVG Email — Health Heartbeat',
+  [
+    nodeBase('ff000000-0000-4000-8000-000000000020', 'STAGING ONLY / HOSTINGER OFF', 'n8n-nodes-base.stickyNote', 1, 0, -260, {
+      content: 'Inactive. Quiet inbox is not a fault. One outage alert and one recovery per incident. Writes the notification_log outbox only. Does not send SMS. No Hostinger.',
+      width: 640,
+      height: 140,
+    }),
+    nodeBase('ff000000-0000-4000-8000-000000000001', 'Schedule disabled', 'n8n-nodes-base.scheduleTrigger', 1.2, 0, 160, {
+      rule: { interval: [{ field: 'minutes', minutesInterval: 1 }] },
+    }, { disabled: true }),
+    nodeBase('ff000000-0000-4000-8000-000000000002', 'Manual start', 'n8n-nodes-base.manualTrigger', 1, 0, 0, {}),
+    postgresNode('ff000000-0000-4000-8000-000000000003', 'Load health', 300, 40, healthLoadSql),
+    codeNode('ff000000-0000-4000-8000-000000000004', 'Plan health', 620, 40, `${logic}\n\n${smsLogic}\n\n${opsLogic}\n\n${healthFooter}`),
+    postgresNode('ff000000-0000-4000-8000-000000000005', 'Record health alert', 940, 40, "={{ $json.alertSql || 'SELECT 1 WHERE false' }}"),
+    postgresNode('ff000000-0000-4000-8000-000000000006', 'Record health state', 1220, 40, "={{ $json.stateSql || 'SELECT 1 WHERE false' }}"),
+  ],
+  healthMap,
+);
 
 const files = {
   'tvg-email-intake-fast-ack.json': fastAck,
   'tvg-email-intake-worker.json': worker,
   'tvg-email-intake-reconcile.json': reconcile,
   'tvg-email-daily-filtered-digest.json': digest,
-  'tvg-email-internal-sms-delivery.json': smsDelivery,
+  'tvg-email-notification-dispatcher.json': smsDelivery,
+  'tvg-email-health-heartbeat.json': health,
 };
 
 for (const [name, value] of Object.entries(files)) {

@@ -598,6 +598,39 @@ export function evaluateIntake({
   };
 }
 
+const ATTACHMENT_FORBIDDEN = new Set(['bytes', 'content', 'data', 'body', 'base64', 'payload', 'mime']);
+const ATTACHMENT_ALLOWED = new Set(['filename', 'content_type', 'size_bytes', 'attachment_id']);
+
+export function assertAttachmentMetadataOnly(meta) {
+  if (meta == null) return [];
+  if (!Array.isArray(meta)) throw new Error('attachment_meta must be an array');
+  return meta.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error('attachment item must be an object');
+    }
+    const clean = {};
+    for (const key of Object.keys(item)) {
+      if (ATTACHMENT_FORBIDDEN.has(key)) throw new Error('attachment bytes are outside Pass 1');
+      if (!ATTACHMENT_ALLOWED.has(key)) throw new Error('attachment field is not metadata');
+      clean[key] = item[key];
+    }
+    return {
+      filename: clean.filename == null ? null : String(clean.filename).slice(0, 200),
+      content_type: clean.content_type == null ? null : String(clean.content_type).slice(0, 120),
+      size_bytes: Number.isFinite(Number(clean.size_bytes)) ? Number(clean.size_bytes) : null,
+      attachment_id: clean.attachment_id == null ? null : String(clean.attachment_id).slice(0, 200),
+    };
+  });
+}
+
+export function captureThreadMetadata(message) {
+  const clip = (value) => String(value || '').slice(0, 2000);
+  return {
+    in_reply_to: clip(message?.in_reply_to || message?.inReplyTo || ''),
+    references_header: clip(message?.references || message?.references_header || ''),
+  };
+}
+
 export function buildOutcomeSql(input) {
   const queueId = requireUuid(input.queue_id);
   if (!EVENT_STATUSES.has(input.event_status)) throw new Error('bad event status');
@@ -613,6 +646,10 @@ export function buildOutcomeSql(input) {
     ? `message_id = ${quoteLiteral(input.message_id)}`
     : `fallback_hash = ${quoteLiteral(input.fallback_hash)}`;
   const excerpt = String(input.body_excerpt || '').slice(0, 500);
+  const thread = captureThreadMetadata(input);
+  const attachments = assertAttachmentMetadataOnly(input.attachment_meta);
+  const inReply = thread.in_reply_to ? quoteLiteral(thread.in_reply_to) : 'NULL';
+  const referencesHeader = thread.references_header ? quoteLiteral(thread.references_header) : 'NULL';
   return `
 WITH inserted AS (
   INSERT INTO email_automation.email_events (
@@ -620,6 +657,7 @@ WITH inserted AS (
     status, filter_reason, hold_reason, from_email, reply_to_email, subject,
     message_date_header, body_hash, resolved_recipient, recipient_resolution,
     authentication_results, spf_pass, dkim_pass, dmarc_pass, body_text_excerpt,
+    in_reply_to, references_header, has_attachments, attachment_meta,
     contact_id, lead_id, fetched_at
   ) VALUES (
     'tvg',
@@ -644,6 +682,10 @@ WITH inserted AS (
     ${input.dkim_pass ? 'TRUE' : 'FALSE'},
     ${input.dmarc_pass ? 'TRUE' : 'FALSE'},
     ${excerpt ? quoteLiteral(excerpt) : 'NULL'},
+    ${inReply},
+    ${referencesHeader},
+    ${attachments.length > 0 ? 'TRUE' : 'FALSE'},
+    ${quoteLiteral(JSON.stringify(attachments))}::jsonb,
     ${contactSql},
     ${leadSql},
     now()
@@ -674,7 +716,8 @@ SET email_event_id = chosen.id,
 FROM chosen
 WHERE q.id = ${quoteLiteral(queueId)}::uuid
   AND q.tenant_id = 'tvg'
-RETURNING q.id, q.status, q.email_event_id, chosen.was_existing;
+RETURNING q.id, q.status, q.email_event_id, chosen.was_existing,
+  (SELECT e.created_at FROM email_automation.email_events e WHERE e.id = q.email_event_id) AS event_created_at;
 `.trim();
 }
 

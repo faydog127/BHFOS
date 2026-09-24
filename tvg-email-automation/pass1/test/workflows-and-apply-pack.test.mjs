@@ -11,7 +11,8 @@ const workflowFiles = [
   'n8n/tvg-email-intake-worker.json',
   'n8n/tvg-email-intake-reconcile.json',
   'n8n/tvg-email-daily-filtered-digest.json',
-  'n8n/tvg-email-internal-sms-delivery.json',
+  'n8n/tvg-email-notification-dispatcher.json',
+  'n8n/tvg-email-health-heartbeat.json',
 ];
 
 function load(relativePath) {
@@ -106,8 +107,31 @@ test('apply pack follows bootstrap order and preserves the claims table', () => 
   assert.doesNotMatch(sql, /authToken|AUTH_TOKEN|TWILIO_AUTH/);
 });
 
+test('workflows are staging-named, one-way, and outbox-only', () => {
+  for (const relativePath of workflowFiles) {
+    const workflow = JSON.parse(load(relativePath));
+    assert.equal(workflow.name.startsWith('[STAGING] '), true, relativePath);
+    assert.equal(workflow.name.includes('[PROD]'), false, relativePath);
+    assert.equal(workflow.meta.tvgEmailPass1.credentialScope, 'staging-only');
+    const blob = JSON.stringify(workflow);
+    assert.equal(blob.includes('wwyxohjnyqnegzbxtuxs') && blob.includes('prod credential'), false);
+    assert.equal(workflow.nodes.some((node) => /inbound|smsTrigger|command/i.test(node.type)), false);
+  }
+  const worker = JSON.parse(load('n8n/tvg-email-intake-worker.json'));
+  assert.equal(worker.nodes.some((node) => node.type === 'n8n-nodes-base.twilio'), false);
+  assert.match(worker.nodes.find((node) => node.name === 'Load SMS budget').parameters.query, /live_notification_started_at/);
+  const plan = worker.nodes.find((node) => node.name === 'Plan internal SMS');
+  assert.match(plan.parameters.jsCode, /kind: summaryKind/);
+  assert.match(plan.parameters.jsCode, /backlog_summary/);
+  assert.doesNotMatch(JSON.stringify(worker), /needs response/);
+  assert.match(JSON.stringify(worker), /No reply sent by automation/);
+  const health = JSON.parse(load('n8n/tvg-email-health-heartbeat.json'));
+  assert.equal(health.nodes.some((node) => node.type === 'n8n-nodes-base.twilio'), false);
+  assert.match(health.nodes.find((node) => node.name === 'Load health').parameters.query, /last_successful_health_at/);
+});
+
 test('internal SMS path stays inactive and has no live Twilio secret', () => {
-  const delivery = JSON.parse(load('n8n/tvg-email-internal-sms-delivery.json'));
+  const delivery = JSON.parse(load('n8n/tvg-email-notification-dispatcher.json'));
   assert.equal(delivery.active, false);
   assert.equal(delivery.meta.tvgEmailPass1.smsTransportIsNotSoR, true);
   const twilio = delivery.nodes.filter((node) => node.type === 'n8n-nodes-base.twilio');
@@ -138,6 +162,18 @@ test('internal SMS path stays inactive and has no live Twilio secret', () => {
   const record = digest.nodes.find((node) => node.name === 'Record suppressed digest');
   assert.match(record.parameters.query, /internal_digest/);
   assert.match(record.parameters.query, /daily_filtered_digest/);
+});
+
+test('incremental SQL does not re-bootstrap the base pack', () => {
+  const sql = load('apply/20260924_tvg_email_pass1_incremental.sql');
+  assert.match(sql, /base pass1 pack is not present/);
+  assert.match(sql, /in_reply_to/);
+  assert.match(sql, /references_header/);
+  assert.match(sql, /health_checks/);
+  assert.match(sql, /live_notification_started_at/);
+  assert.match(sql, /dispatch_after/);
+  assert.doesNotMatch(sql, /CREATE TABLE IF NOT EXISTS email_automation\.email_events/);
+  assert.doesNotMatch(sql, /CREATE TABLE[^;]*email_responses/i);
 });
 
 test('fast ACK and worker code nodes parse', () => {

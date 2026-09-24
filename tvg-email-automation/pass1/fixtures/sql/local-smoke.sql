@@ -308,3 +308,150 @@ BEGIN
 EXCEPTION
   WHEN unique_violation THEN NULL;
 END $$;
+
+INSERT INTO email_automation.email_events (
+  id, tenant_id, mailbox, message_id, status, in_reply_to, references_header, attachment_meta
+) VALUES (
+  '40000000-0000-4000-8000-000000000002',
+  'tvg',
+  'info@vent-guys.com',
+  'synth-pass1-thread@vent-guys.test',
+  'awaiting_pass2',
+  '<parent@vent-guys.test>',
+  '<parent@vent-guys.test>',
+  '[{"filename":"photo.jpg","content_type":"image/jpeg","size_bytes":10,"attachment_id":"att-1"}]'::jsonb
+);
+
+DO $$
+BEGIN
+  INSERT INTO email_automation.email_events (
+    tenant_id, mailbox, message_id, status, attachment_meta
+  ) VALUES (
+    'tvg',
+    'info@vent-guys.com',
+    'synth-pass1-bytes@vent-guys.test',
+    'awaiting_pass2',
+    '[{"filename":"a.bin","bytes":"AAAA"}]'::jsonb
+  );
+  RAISE EXCEPTION 'attachment bytes were accepted';
+EXCEPTION
+  WHEN check_violation THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM email_automation.health_checks WHERE tenant_id = 'tvg') < 2 THEN
+    RAISE EXCEPTION 'health heartbeat rows missing';
+  END IF;
+  IF (SELECT value_json FROM email_automation.automation_settings WHERE tenant_id = 'tvg' AND key = 'live_notification_started_at')
+     IS DISTINCT FROM 'null'::jsonb THEN
+    RAISE EXCEPTION 'live watermark was not null';
+  END IF;
+  IF (SELECT value_json FROM email_automation.automation_settings WHERE tenant_id = 'tvg' AND key = 'health_alerts_enabled')
+     IS DISTINCT FROM 'false'::jsonb THEN
+    RAISE EXCEPTION 'health alerts were enabled';
+  END IF;
+  IF (SELECT value_json FROM email_automation.automation_settings WHERE tenant_id = 'tvg' AND key = 'primary_path_target_seconds')
+     IS DISTINCT FROM '120'::jsonb THEN
+    RAISE EXCEPTION 'primary path target was not 120 seconds';
+  END IF;
+  IF (SELECT value_json FROM email_automation.automation_settings WHERE tenant_id = 'tvg' AND key = 'reconcile_target_seconds')
+     IS DISTINCT FROM '900'::jsonb THEN
+    RAISE EXCEPTION 'reconcile target was not 900 seconds';
+  END IF;
+  IF (SELECT value_json FROM email_automation.automation_settings WHERE tenant_id = 'tvg' AND key = 'notification_quiet_hours')
+     IS DISTINCT FROM 'null'::jsonb THEN
+    RAISE EXCEPTION 'quiet hours were set';
+  END IF;
+END $$;
+
+INSERT INTO email_automation.notification_log (
+  tenant_id, kind, notification_kind, channel, destination_ref, delivery_state, status
+) VALUES (
+  'tvg',
+  'hold_alert',
+  'hold_alert',
+  'internal_sms',
+  'founder_mobile_ref',
+  'queued',
+  'queued'
+);
+
+DO $$
+BEGIN
+  IF (
+    SELECT dispatch_after IS NULL OR dispatch_attempt_count IS DISTINCT FROM 0
+    FROM email_automation.notification_log
+    WHERE delivery_state = 'queued'
+    ORDER BY created_at DESC
+    LIMIT 1
+  ) THEN
+    RAISE EXCEPTION 'queued outbox row did not receive dispatch_after';
+  END IF;
+END $$;
+
+INSERT INTO email_automation.notification_log (
+  tenant_id, kind, notification_kind, channel, destination_ref,
+  delivery_state, status, suppression_window
+) VALUES (
+  'tvg',
+  'health_outage',
+  'health_outage',
+  'internal_sms',
+  'founder_mobile_ref',
+  'recorded_not_sent',
+  'recorded_not_sent',
+  'primary_path:fixture'
+);
+
+DO $$
+BEGIN
+  INSERT INTO email_automation.notification_log (
+    tenant_id, kind, notification_kind, channel, destination_ref,
+    delivery_state, status, suppression_window
+  ) VALUES (
+    'tvg',
+    'health_outage',
+    'health_outage',
+    'internal_sms',
+    'founder_mobile_ref',
+    'recorded_not_sent',
+    'recorded_not_sent',
+    'primary_path:fixture'
+  );
+  RAISE EXCEPTION 'health outage unique index did not reject the repeat';
+EXCEPTION
+  WHEN unique_violation THEN NULL;
+END $$;
+
+INSERT INTO email_automation.notification_log (
+  tenant_id, kind, notification_kind, channel, destination_ref, delivery_state, status
+) VALUES (
+  'tvg',
+  'backlog_summary',
+  'backlog_summary',
+  'internal_sms',
+  'founder_mobile_ref',
+  'recorded_not_sent',
+  'recorded_not_sent'
+);
+
+DO $$
+BEGIN
+  INSERT INTO email_automation.notification_log (
+    tenant_id, kind, notification_kind, channel, destination_ref, delivery_state, status
+  ) VALUES (
+    'tvg',
+    'backlog_summary',
+    'backlog_summary',
+    'internal_sms',
+    'founder_mobile_ref',
+    'recorded_not_sent',
+    'recorded_not_sent'
+  );
+  RAISE EXCEPTION 'backlog summary unique index did not reject the repeat';
+EXCEPTION
+  WHEN unique_violation THEN NULL;
+END $$;
+
+SELECT 'SMOKE_OK';

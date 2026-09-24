@@ -1,5 +1,5 @@
 {
-  "name": "TVG Email Intake — Reconcile",
+  "name": "[STAGING] TVG Email Intake — Reconcile",
   "nodes": [
     {
       "id": "cc000000-0000-4000-8000-000000000020",
@@ -142,7 +142,9 @@
       "hostinger": "OFF",
       "schedulesEnabled": false,
       "projectRef": "glkrykpksbsqmmilmjhs",
-      "productionRefForbidden": "wwyxohjnyqnegzbxtuxs"
+      "productionRefForbidden": "wwyxohjnyqnegzbxtuxs",
+      "credentialScope": "staging-only",
+      "namePrefix": "[STAGING]"
     }
   },
   "tags": []

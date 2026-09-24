@@ -10,7 +10,7 @@ There is one notification table in this pack: `email_automation.notification_log
 
 | Design shape | SMS amendment |
 |---|---|
-| `kind` enum `notification_kind` (`hold_alert`, `error_alert`, `daily_filtered_digest`, `stale_intake_hold`, `auth_reject_sample`) | Same enum. Labels `actionable_inbound` and `storm_summary` are added. Text column `notification_kind` must equal `kind::text`. The dedup index uses the text column. |
+| `kind` enum `notification_kind` (`hold_alert`, `error_alert`, `daily_filtered_digest`, `stale_intake_hold`, `auth_reject_sample`) | Same enum. Labels `actionable_inbound`, `storm_summary`, `backlog_summary`, `health_outage`, and `health_recovery` are added. Text column `notification_kind` must equal `kind::text`. The dedup index uses the text column. |
 | `destination_ref` | Same column. Channel `internal_sms` stores the Founder-approved settings label from `internal_sms_destination_ref` (`founder_mobile_ref`). A phone number is rejected. |
 | `status` | Same column. SMS writes set `status` and `delivery_state` to the same token. |
 | `error_message` | Same column. Reserved for a later provider failure. |
@@ -27,7 +27,11 @@ Suppression is columns on this table (`suppression_state`, `suppression_reason`,
 | `held`, including `stale_processing` | `hold_alert` | `internal_sms` |
 | material `error` | `error_alert` | `internal_sms` |
 | ordinary storm overflow | `storm_summary` | `internal_sms` |
+| pre-live backlog, at most one | `backlog_summary` | `internal_sms` |
+| heartbeat outage / recovery | `health_outage` / `health_recovery` | `internal_sms` |
 | filtered digest audit | `daily_filtered_digest` | `internal_digest` |
+
+`notification_log` is the durable outbox. The worker inserts intent. `dispatch_after`, `dispatched_at`, and `dispatch_attempt_count` belong to the inactive dispatcher. The worker does not send SMS.
 
 `stale_intake_hold` stays on the enum for a future `review_notify` email or Slack row. This pack does not insert that kind for the SMS channel. A held event gets one `hold_alert` row.
 

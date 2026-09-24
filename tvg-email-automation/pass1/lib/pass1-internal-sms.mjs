@@ -10,7 +10,15 @@ export const DEFAULT_MAX_INTERNAL_SMS_PER_HOUR = 10;
 export const DESTINATION_REF = 'founder_mobile_ref';
 
 const SEND_STATES = new Set(['queued', 'attempted', 'sent', 'delivered', 'recorded_not_sent']);
-const KINDS = new Set(['actionable_inbound', 'hold_alert', 'error_alert', 'storm_summary']);
+const KINDS = new Set([
+  'actionable_inbound',
+  'hold_alert',
+  'error_alert',
+  'storm_summary',
+  'backlog_summary',
+  'health_outage',
+  'health_recovery',
+]);
 const REASONS = /^[a-z0-9_]+$/;
 
 const STATUS_KIND = {
@@ -61,7 +69,7 @@ function formValue(formFields, key) {
 export function renderInternalSms(event) {
   const spec = STATUS_KIND[event.status];
   if (!spec) throw new Error('status is not an internal SMS event');
-  let headline = 'TVG: New email — needs response';
+  let headline = 'TVG: New email — review';
   if (event.status === 'held') {
     const reason = REASONS.test(event.holdReason || '') ? event.holdReason : 'held';
     headline = `TVG: Email held — ${reason}`;
@@ -80,7 +88,7 @@ export function renderInternalSms(event) {
   if (service) lines.push(`Form service: ${service}`);
   const city = sanitizeCity(formValue(event.formFields, 'city'));
   if (city) lines.push(`City: ${city}`);
-  lines.push('No reply sent.');
+  lines.push('No reply sent by automation.');
   return lines.join('\n');
 }
 
@@ -88,6 +96,12 @@ export function stormSummaryBody(suppressedCount) {
   const count = Number(suppressedCount);
   if (!Number.isInteger(count) || count < 1) throw new Error('summary count must be a positive integer');
   return `TVG: ${count} additional new emails received — review queue.`;
+}
+
+export function backlogSummaryBody(backlogCount) {
+  const count = Number(backlogCount);
+  if (!Number.isInteger(count) || count < 1) throw new Error('backlog count must be a positive integer');
+  return `TVG: ${count} emails were already queued before live notifications — review backlog.`;
 }
 
 function requireEventUuid(value) {
@@ -116,6 +130,36 @@ export function planInternalSms(input) {
   const identity = `${emailEventId}:${spec.kind}`;
   if (input.existingKeys && input.existingKeys.has(identity)) {
     return { action: 'dedup', kind: spec.kind, emailEventId, identity, smsBody: null, summary: null };
+  }
+  if (Object.prototype.hasOwnProperty.call(input, 'liveNotificationStartedAt')) {
+    const started = input.liveNotificationStartedAt;
+    const created = input.eventCreatedAt ? new Date(input.eventCreatedAt) : null;
+    const preLive = started == null
+      || created == null
+      || Number.isNaN(created.getTime())
+      || created < new Date(started);
+    if (preLive) {
+      let backlog = null;
+      if (!input.backlogSummarySent) {
+        backlog = {
+          kind: 'backlog_summary',
+          smsBody: backlogSummaryBody(input.backlogCount || 1),
+          suppressedCount: input.backlogCount || 1,
+        };
+      }
+      return {
+        action: 'record_only',
+        reason: 'before_watermark',
+        kind: spec.kind,
+        priority: spec.priority,
+        surface: 'backlog',
+        emailEventId,
+        identity,
+        suppressionReason: 'before_watermark',
+        summary: backlog,
+        smsBody: null,
+      };
+    }
   }
   const max = input.maxPerHour ?? DEFAULT_MAX_INTERNAL_SMS_PER_HOUR;
   const ordinarySent = input.ordinarySent ?? 0;
@@ -202,6 +246,23 @@ function assertSafeSmsText(text) {
   return value;
 }
 
+function conflictClause(kind) {
+  if (kind === 'storm_summary') {
+    return `ON CONFLICT (tenant_id, channel, suppression_window, notification_kind)
+       WHERE notification_kind = 'storm_summary' DO NOTHING`;
+  }
+  if (kind === 'backlog_summary') {
+    return `ON CONFLICT (tenant_id, channel, notification_kind)
+       WHERE notification_kind = 'backlog_summary' DO NOTHING`;
+  }
+  if (kind === 'health_outage' || kind === 'health_recovery') {
+    return `ON CONFLICT (tenant_id, suppression_window)
+       WHERE notification_kind = '${kind}' DO NOTHING`;
+  }
+  return `ON CONFLICT (tenant_id, email_event_id, notification_kind)
+       WHERE email_event_id IS NOT NULL DO NOTHING`;
+}
+
 export function buildNotificationInsertSql(row) {
   if (!KINDS.has(row.kind)) throw new Error('bad notification kind');
   for (const key of ['body', 'bodyText', 'phone', 'street', 'streetAddress']) {
@@ -211,8 +272,9 @@ export function buildNotificationInsertSql(row) {
   if (!SEND_STATES.has(deliveryState) && deliveryState !== 'suppressed') {
     throw new Error('bad delivery state');
   }
-  if (row.kind === 'storm_summary' && !row.suppressionWindow) {
-    throw new Error('storm summary requires a suppression window');
+  if ((row.kind === 'storm_summary' || row.kind === 'health_outage' || row.kind === 'health_recovery')
+    && !row.suppressionWindow) {
+    throw new Error('suppression window required');
   }
   const destinationRef = assertDestinationLabel(row.destinationRef);
   const emailSql = row.emailEventId ? `${quoteLiteral(requireEventUuid(row.emailEventId))}::uuid` : 'NULL';
@@ -222,11 +284,7 @@ export function buildNotificationInsertSql(row) {
     error_code: row.errorCode && REASONS.test(row.errorCode) ? row.errorCode : null,
   };
   if (row.smsText) payload.sms_text = assertSafeSmsText(row.smsText);
-  const conflict = row.kind === 'storm_summary'
-    ? `ON CONFLICT (tenant_id, channel, suppression_window, notification_kind)
-       WHERE notification_kind = 'storm_summary' DO NOTHING`
-    : `ON CONFLICT (tenant_id, email_event_id, notification_kind)
-       WHERE email_event_id IS NOT NULL DO NOTHING`;
+  const conflict = conflictClause(row.kind);
   const suppressionState = row.action === 'suppress' ? 'suppressed' : null;
   return `
 INSERT INTO email_automation.notification_log (

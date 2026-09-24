@@ -1,5 +1,5 @@
 {
-  "name": "TVG Email — Internal SMS Delivery",
+  "name": "[STAGING] TVG Email — Notification Dispatcher",
   "nodes": [
     {
       "id": "ee000000-0000-4000-8000-000000000020",
@@ -11,7 +11,7 @@
         -260
       ],
       "parameters": {
-        "content": "Inactive. No Hostinger. No customer SMS. Twilio node is disabled and disconnected. to reads internal_sms_destination_ref. No phone number in this JSON. Credential name is a placeholder only. SMS transport is not the system of record.",
+        "content": "Inactive outbox dispatcher. Worker does not send SMS. One-way outbound only: no inbound command path. Twilio node is disabled and disconnected. to reads internal_sms_destination_ref. No phone number in this JSON. Staging credential placeholder only.",
         "width": 680,
         "height": 140
       }
@@ -38,7 +38,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT\n  n.id,\n  n.notification_kind,\n  (\n    SELECT s.value_json #>> '{}'\n    FROM email_automation.automation_settings s\n    WHERE s.tenant_id = 'tvg' AND s.key = 'internal_sms_destination_ref'\n  ) AS destination_ref,\n  n.payload_summary,\n  n.delivery_state,\n  NULL::text AS sms_from_credential_only\nFROM email_automation.notification_log n\nWHERE n.tenant_id = 'tvg'\n  AND n.channel = 'internal_sms'\n  AND n.delivery_state = 'queued'\n  AND COALESCE((\n    SELECT s.value_json = 'true'::jsonb\n    FROM email_automation.automation_settings s\n    WHERE s.tenant_id = 'tvg' AND s.key = 'internal_sms_enabled'\n  ), false);",
+        "query": "SELECT\n  n.id,\n  n.notification_kind,\n  (\n    SELECT s.value_json #>> '{}'\n    FROM email_automation.automation_settings s\n    WHERE s.tenant_id = 'tvg' AND s.key = 'internal_sms_destination_ref'\n  ) AS destination_ref,\n  n.payload_summary,\n  n.delivery_state,\n  NULL::text AS sms_from_credential_only\nFROM email_automation.notification_log n\nWHERE n.tenant_id = 'tvg'\n  AND n.channel = 'internal_sms'\n  AND n.delivery_state = 'queued'\n  AND (n.dispatch_after IS NULL OR n.dispatch_after <= now())\n  AND COALESCE((\n    SELECT s.value_json = 'true'::jsonb\n    FROM email_automation.automation_settings s\n    WHERE s.tenant_id = 'tvg' AND s.key = 'internal_sms_enabled'\n  ), false);",
         "options": {
           "alwaysOutputData": true
         }
@@ -128,8 +128,12 @@
       "schedulesEnabled": false,
       "projectRef": "glkrykpksbsqmmilmjhs",
       "productionRefForbidden": "wwyxohjnyqnegzbxtuxs",
+      "credentialScope": "staging-only",
+      "namePrefix": "[STAGING]",
       "internalSms": "placeholder-credential-not-attached",
-      "smsTransportIsNotSoR": true
+      "smsTransportIsNotSoR": true,
+      "smsDirection": "one-way-outbound",
+      "outbox": "email_automation.notification_log"
     }
   },
   "tags": []
