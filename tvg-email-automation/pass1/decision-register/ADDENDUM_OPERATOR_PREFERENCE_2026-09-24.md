@@ -6,15 +6,18 @@ Founder-approved. The design loop stays closed. This note records the addendum t
 
 ## Decision IDs
 
-The coordinator is writing Decision IDs for addendum items 1–6. Item 6 is OPEN. Those IDs were not under `uploads/` or `decision-register/` when this note was committed. They are not invented here. No follow-up cadence default is invented here.
+The coordinator files are now in the pack and were copied without status edits:
 
-When the coordinator file arrives, commit it beside this note and do not rewrite the statuses already in the register.
+- Addendum: [`../directives/CC_ADDENDUM_FOUNDER_OPERATOR_PREFERENCES_2026-09-24.md`](../directives/CC_ADDENDUM_FOUNDER_OPERATOR_PREFERENCES_2026-09-24.md)
+- Register rows TVG-EMAIL-P1-D023 through D028 in [`TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md)
+
+Recorded statuses, unchanged by this pack: D023 Active; D024 Recommendation; D025 Recommendation; D026 Recommendation; D027 Recommendation; D028 Open / Proposed. No follow-up cadence default is stored.
 
 ## Challenge PASS notes folded
 
 1. Pass 1 has one Founder destination, `founder_mobile_ref`, until the Founder authorizes more recipients.
 2. Quiet hours, urgency detection, draft review, and reply voice are not implemented in Pass 1. They stay Pass 2 inputs.
-3. Urgent candidates stay in the Decision Register or design notes. Pass 1 has no keyword rules. No candidate list was supplied, so none is stored.
+3. Urgent candidates are recorded only in TVG-EMAIL-P1-D026: property management, commercial, and fire/smoke/CO/burning-smell. Pass 1 has no keyword rules and no emergency acknowledgement language.
 4. After-hours acknowledgement stays disabled (`after_hours_ack_enabled` false). That is not permission for general auto-send. `auto_send_enabled` stays false.
 
 ## Pass 1 boundary that this pack implements

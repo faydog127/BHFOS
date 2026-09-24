@@ -6,13 +6,12 @@ These notes are design inputs from the 2026-09-24 Founder operator-preference ad
 
 | Input | What was stated | What this pack does |
 |---|---|---|
-| Review surface | Mobile-first authenticated review | Not built |
-| Timing | Time, holiday, and 8:30 AM targets | Not built. No scheduler and no customer send |
+| Draft review | TVG-EMAIL-P1-D024 Recommendation. Mobile-first authenticated view, edit, approve, or reject. No bearer open approval links | Not built. Pass 1 creates no drafts, responses, or sends |
+| Time of day | TVG-EMAIL-P1-D025 Recommendation. Timezone, working hours, holidays, after-hours acknowledgement, and about 8:30 AM next-business-day preparation | Not built. No scheduler and no customer send. Unset material preferences stay `DECISION_REQUIRED` |
 | Quiet hours | Not a Pass 1 control | `notification_quiet_hours` stays null. Pass 1 does not delay intake or notification for quiet hours |
-| Urgency | Urgent candidates belong in the Decision Register or design notes only | No candidate list is stored here, and Pass 1 has no keyword rules |
-| Voice | “The Vent Guys Team” | Design note only. Not a Pass 1 sender, reply voice, or customer acknowledgement |
-| Draft review | Mobile-first authenticated review | Not built |
-| After-hours acknowledgement | Stays disabled | `after_hours_ack_enabled` is false. That is not permission to set `auto_send_enabled` |
-| Follow-up | OPEN | No cadence default. `escalation_after` stays null |
+| Urgency | TVG-EMAIL-P1-D026 Recommendation. Candidates: property management, commercial, and fire/smoke/CO/burning-smell | Design note only. Pass 1 has no keyword rules and no emergency acknowledgement language |
+| Voice | TVG-EMAIL-P1-D027 Recommendation. “The Vent Guys Team.” The mailbox already has a signature | Design note only. Pass 1 does not draft, so it does not add or duplicate a signature |
+| After-hours acknowledgement | Stays disabled until separately authorized | `after_hours_ack_enabled` is false. That is not permission to set `auto_send_enabled` |
+| Follow-up | TVG-EMAIL-P1-D028 Open / Proposed | No cadence default. `escalation_after` stays null |
 
-Coordinator Decision IDs for these items were not in the workspace. Item 6 (follow-up) stays OPEN until that file is committed.
+Pass 1 implements TVG-EMAIL-P1-D023 only inside the existing recipient and configuration model: one Founder destination, `founder_mobile_ref`, plus `configuration_audit`. D024 through D028 stay documentation.

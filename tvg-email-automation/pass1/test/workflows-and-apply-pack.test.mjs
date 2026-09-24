@@ -181,6 +181,10 @@ test('challenge notes keep the decision register, dormant mailbox probe, and rol
   const directive = load('directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md');
   assert.match(register, /TVG Email Automation Decision Register/);
   assert.match(directive, /PASS 1 STAGING BUILD PROCEED/);
+  const addendum = load('directives/CC_ADDENDUM_FOUNDER_OPERATOR_PREFERENCES_2026-09-24.md');
+  assert.match(addendum, /FOUNDER OPERATOR-PREFERENCE DECISIONS/);
+  assert.match(addendum, /OPEN — FOUNDER DECISION REQUIRED LATER/);
+  assert.match(register, /CC_ADDENDUM_FOUNDER_OPERATOR_PREFERENCES_2026-09-24\.md/);
   assert.match(load('INDEX.md'), /decision-register\/TVG_EMAIL_AUTOMATION_DECISION_REGISTER\.md/);
   const statuses = {
     'TVG-EMAIL-P1-D001': 'Implementation-authorized',
@@ -205,6 +209,12 @@ test('challenge notes keep the decision register, dormant mailbox probe, and rol
     'TVG-EMAIL-P1-D020': 'Proposed',
     'TVG-EMAIL-P1-D021': 'Active',
     'TVG-EMAIL-P1-D022': 'Active',
+    'TVG-EMAIL-P1-D023': 'Active',
+    'TVG-EMAIL-P1-D024': 'Recommendation',
+    'TVG-EMAIL-P1-D025': 'Recommendation',
+    'TVG-EMAIL-P1-D026': 'Recommendation',
+    'TVG-EMAIL-P1-D027': 'Recommendation',
+    'TVG-EMAIL-P1-D028': 'Open / Proposed',
   };
   for (const [id, status] of Object.entries(statuses)) {
     const row = register.split('\n').find((line) => line.includes(`| ${id} |`));

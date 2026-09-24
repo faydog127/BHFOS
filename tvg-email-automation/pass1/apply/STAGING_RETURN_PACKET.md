@@ -50,7 +50,7 @@ Postgres credential name: `TVG Staging n8n_email_automation`. Twilio placeholder
 
 1. Heartbeat Hostinger newer-mail / intake-lag checks are mock and dormant until Pre-webhook. They are not live Hostinger API health probing.
 2. Unset `live_notification_started_at` means no per-message SMS and at most one backlog summary.
-3. Decision register is required now: [`../decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](../decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md). Statuses TVG-EMAIL-P1-D001 through D022 are unchanged from the coordinator file.
+3. Decision register is required now: [`../decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](../decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md). Statuses TVG-EMAIL-P1-D001 through D028 are unchanged from the coordinator file. The addendum is [`../directives/CC_ADDENDUM_FOUNDER_OPERATOR_PREFERENCES_2026-09-24.md`](../directives/CC_ADDENDUM_FOUNDER_OPERATOR_PREFERENCES_2026-09-24.md).
 4. Role password path is the staging SQL editor plus the n8n credential, never git.
 5. Pre-webhook still owns form-filter ordering and open-lead production evidence. Those are not staging blockers.
 
@@ -59,6 +59,8 @@ Postgres credential name: `TVG Staging n8n_email_automation`. Twilio placeholder
 Authoritative register: [`../decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](../decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md).
 
 Full directive: [`../directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md`](../directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md).
+
+Founder operator-preference addendum: [`../directives/CC_ADDENDUM_FOUNDER_OPERATOR_PREFERENCES_2026-09-24.md`](../directives/CC_ADDENDUM_FOUNDER_OPERATOR_PREFERENCES_2026-09-24.md). D023 is the Pass 1 recipient and audit model. D024 through D027 stay documentation. D028 is Open / Proposed.
 
 Pack index: [`../INDEX.md`](../INDEX.md).
 
@@ -97,6 +99,7 @@ DECISION_REQUIRED:
 
 1. The exact backlog summary sentence. The sentence in code is an implement reading.
 2. Retention of excerpts and attachment metadata before any retention job.
+3. Follow-up cadence, TVG-EMAIL-P1-D028, stays Open / Proposed. No cadence is stored.
 
 ## Next staging command
 
