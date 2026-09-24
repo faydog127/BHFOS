@@ -7,6 +7,7 @@ Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amend
 | Branch | `cursor/tvg-email-pass1-v5-3e46` |
 | Consolidated slice | `417e6a773909151f812d0db9ca0dcef7ee860069` |
 | Consolidated challenge notes | `4b4b1dee6b8f7fabfd6201710cee8862269780f5` |
+| Coordinator register and directive | `00effebf7ca3f0e5c4cf322cc21984c2c58163db` |
 | Internal SMS amendment | `e0e1b755d81f048bcaa50a789a9780f644b1f361` |
 | Challenge notes | `22084ee8b241a708571078c41e6c4387efc0c27a` |
 | Pass 1 pack | `b2cddc8bee25f36b1b22d81060defe9847f68aa2` |
