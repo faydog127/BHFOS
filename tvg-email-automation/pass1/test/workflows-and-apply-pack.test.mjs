@@ -238,6 +238,10 @@ test('challenge notes keep the decision register, dormant mailbox probe, and rol
   assert.match(outbound, /Pass 1 impact:\*\* NONE/);
   assert.match(outboundChallenge, /CHALLENGE_PASS/);
   assert.match(outboundChallenge, /No implement \/ send \/ Hostinger \/ Pass 1 expand/);
+  const preferencesChallenge = load('directives/CHALLENGE_VERDICT_OPERATOR_PREFERENCES.md');
+  assert.match(preferencesChallenge, /CHALLENGE_PASS/);
+  assert.match(preferencesChallenge, /single Founder destination/);
+  assert.match(preferencesChallenge, /No Hostinger \/ credential attach \/ customer SMS \/ production mutation authorized/);
   const implementation = [
     ...workflowFiles,
     'apply/20260924_tvg_email_pass1_v5.sql',

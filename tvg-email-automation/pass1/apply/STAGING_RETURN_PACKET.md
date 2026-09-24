@@ -66,7 +66,7 @@ Unapproved-by-deadline addendum: [`../directives/CC_ADDENDUM_UNAPPROVED_BY_DEADL
 
 Outbound observation: [`../directives/CC_ADDENDUM_D035_AUTHORITATIVE_OUTBOUND_OBSERVATION_2026-09-24.md`](../directives/CC_ADDENDUM_D035_AUTHORITATIVE_OUTBOUND_OBSERVATION_2026-09-24.md). Challenge verdict: [`../directives/CHALLENGE_VERDICT_D035_OUTBOUND_OBSERVATION.md`](../directives/CHALLENGE_VERDICT_D035_OUTBOUND_OBSERVATION.md) — CHALLENGE_PASS. D035 is a Pass 2 dependency. Pass 1 impact is none. No observation job, Handled UI, or IMAP path was added. `send_anyway_enabled` is not set.
 
-The index names `directives/CHALLENGE_VERDICT_OPERATOR_PREFERENCES.md`. That file was not in this upload, so it was not created.
+Operator-preference challenge verdict: [`../directives/CHALLENGE_VERDICT_OPERATOR_PREFERENCES.md`](../directives/CHALLENGE_VERDICT_OPERATOR_PREFERENCES.md) — CHALLENGE_PASS. It does not authorize Hostinger, credential attach, customer SMS, or production mutation. Pass 1 stays one Founder destination. Quiet hours, urgency detection, draft review, and reply voice stay out of Pass 1.
 
 Pack index: [`../INDEX.md`](../INDEX.md).
 
