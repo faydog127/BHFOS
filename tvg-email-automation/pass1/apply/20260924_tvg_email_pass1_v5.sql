@@ -1003,6 +1003,13 @@ BEGIN
   IF NEW.channel = 'customer_sms' THEN
     RAISE EXCEPTION 'customer SMS is outside Pass 1';
   END IF;
+  IF NEW.notification_kind IS DISTINCT FROM NEW.kind::text THEN
+    RAISE EXCEPTION 'notification_kind must equal kind';
+  END IF;
+  IF NEW.channel = 'internal_sms'
+     AND NEW.destination_ref !~ '^[a-z][a-z0-9_]{0,63}$' THEN
+    RAISE EXCEPTION 'internal SMS destination_ref must be the Founder-approved settings label';
+  END IF;
   IF NEW.attempted_at IS NULL THEN
     NEW.attempted_at := now();
   END IF;
@@ -1031,12 +1038,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_notification_log_storm_window
 
 INSERT INTO email_automation.automation_settings (tenant_id, key, value_json, description) VALUES
   ('tvg', 'max_internal_sms_per_hour', '10'::jsonb,
-   'Shared storm cap. Ordinary awaiting_pass2 SMS and priority HOLD/error SMS each stop at this count per UTC hour. Default 10.'),
+   'Per UTC hour. Ordinary actionable_inbound at this count becomes suppress-with-log plus one storm summary. HOLD/error still send as one prioritized SMS each until their own count hits this number, then suppress-with-log. Default 10.'),
   ('tvg', 'internal_sms_enabled', 'false'::jsonb,
    'Internal SMS channel switch. Stays false until Founder approves a dedicated credential and carrier readiness.'),
   ('tvg', 'internal_sms_destination_ref', '"founder_mobile_ref"'::jsonb,
    'Label for the Founder-approved mobile. Not the phone number. The number stays in n8n credentials.')
 ON CONFLICT (tenant_id, key) DO NOTHING;
+
+UPDATE email_automation.automation_settings
+SET description = 'Per UTC hour. Ordinary actionable_inbound at this count becomes suppress-with-log plus one storm summary. HOLD/error still send as one prioritized SMS each until their own count hits this number, then suppress-with-log. Default 10.'
+WHERE tenant_id = 'tvg' AND key = 'max_internal_sms_per_hour';
 
 -- Search path lock for the two functions. Bodies stay schema-qualified.
 ALTER FUNCTION email_automation.set_updated_at() SET search_path = email_automation, pg_temp;

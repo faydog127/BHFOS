@@ -55,7 +55,11 @@ notified AS (
     'hold_alert',
     'internal_sms',
     stale.email_event_id,
-    'founder_mobile_ref',
+    (
+      SELECT s.value_json #>> '{}'
+      FROM email_automation.automation_settings s
+      WHERE s.tenant_id = 'tvg' AND s.key = 'internal_sms_destination_ref'
+    ),
     jsonb_build_object('status', 'held', 'hold_reason', 'stale_processing'),
     CASE WHEN sms.ok THEN 'queued' ELSE 'recorded_not_sent' END,
     CASE WHEN sms.ok THEN 'queued' ELSE 'recorded_not_sent' END,

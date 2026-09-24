@@ -269,6 +269,29 @@ INSERT INTO email_automation.notification_log (
 DO $$
 BEGIN
   INSERT INTO email_automation.notification_log (
+    tenant_id, kind, notification_kind, channel, destination_ref, delivery_state, status
+  ) VALUES (
+    'tvg',
+    'hold_alert',
+    'hold_alert',
+    'internal_sms',
+    '4155551212',
+    'recorded_not_sent',
+    'recorded_not_sent'
+  );
+  RAISE EXCEPTION 'phone destination_ref was accepted';
+EXCEPTION
+  WHEN raise_exception THEN
+    IF SQLERRM ILIKE '%settings label%' THEN
+      NULL;
+    ELSE
+      RAISE;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+  INSERT INTO email_automation.notification_log (
     tenant_id, kind, notification_kind, channel, destination_ref,
     delivery_state, status, suppression_window
   ) VALUES (

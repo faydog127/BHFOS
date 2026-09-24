@@ -115,12 +115,14 @@ test('internal SMS path stays inactive and has no live Twilio secret', () => {
   assert.equal(twilio[0].disabled, true);
   assert.equal(twilio[0].name, 'Twilio send disabled');
   assert.equal(twilio[0].credentials.twilioApi.name, 'TVG Internal SMS Twilio');
-  assert.equal(twilio[0].parameters.to, 'FOUNDER_APPROVED_MOBILE_NOT_IN_REPO');
-  assert.equal(twilio[0].parameters.from, 'INTERNAL_ALERT_FROM_NOT_IN_REPO');
+  assert.equal(twilio[0].parameters.to, '={{ $json.destination_ref }}');
+  assert.equal(twilio[0].parameters.from, '={{ $json.sms_from_credential_only }}');
   assert.equal(JSON.stringify(delivery.connections).includes('Twilio'), false);
   const blob = JSON.stringify(delivery);
   assert.doesNotMatch(blob, /AC[0-9a-f]{32}/i);
   assert.doesNotMatch(blob, /authToken|auth_token|AccountSid/i);
+  assert.doesNotMatch(blob, /FOUNDER_APPROVED_MOBILE|INTERNAL_ALERT_FROM|\+1\d{10}|\b\d{3}-\d{3}-\d{4}\b/);
+  assert.match(blob, /internal_sms_destination_ref/);
   const guard = delivery.nodes.find((node) => node.name === 'Credential guard');
   assert.match(guard.parameters.jsCode, /INTERNAL_SMS_CREDENTIAL_NOT_APPROVED/);
   const worker = JSON.parse(load('n8n/tvg-email-intake-worker.json'));

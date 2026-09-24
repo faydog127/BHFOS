@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  assertDestinationLabel,
   buildNotificationInsertSql,
   gateSmsTransport,
   planInternalSms,
@@ -95,22 +96,67 @@ test('webhook retry and reconcile rediscovery do not plan a second SMS', () => {
   assert.equal(decision.summary, null);
 });
 
-test('storm suppression sends one summary and keeps HOLD on a separate budget', () => {
-  const first = plan({ ordinarySent: 10, suppressedOrdinary: 11, summarySent: false });
-  assert.equal(first.action, 'suppress');
-  assert.equal(first.suppressionReason, 'storm_cap');
-  assert.equal(first.summary.smsBody, stormSummaryBody(12));
-  assert.equal(first.summary.smsBody, 'TVG: 12 additional new emails received — review queue.');
-  const repeat = plan({ ordinarySent: 10, suppressedOrdinary: 12, summarySent: true });
-  assert.equal(repeat.action, 'suppress');
-  assert.equal(repeat.summary, null);
-  const hold = plan({ status: 'held', holdReason: 'phone_conflict', ordinarySent: 10, prioritySent: 0 });
+test('at the hourly cap HOLD and error still surface, then suppress-with-log', () => {
+  const ordinary = plan({ ordinarySent: 10, suppressedOrdinary: 0, summarySent: false });
+  assert.equal(ordinary.action, 'suppress');
+  assert.equal(ordinary.surface, 'suppress_with_log');
+  assert.equal(ordinary.suppressionReason, 'storm_cap');
+  assert.equal(ordinary.smsBody, null);
+  const hold = plan({
+    status: 'held',
+    holdReason: 'phone_conflict',
+    ordinarySent: 10,
+    prioritySent: 0,
+  });
   assert.equal(hold.action, 'send');
+  assert.equal(hold.surface, 'prioritized_sms');
   assert.equal(hold.kind, 'hold_alert');
   assert.equal(hold.summary, null);
-  const holdCapped = plan({ status: 'error', errorCode: 'fetch_failed', prioritySent: 10, ordinarySent: 0 });
+  assert.match(hold.smsBody, /Email held — phone_conflict/);
+  const error = plan({
+    status: 'error',
+    errorCode: 'fetch_failed',
+    ordinarySent: 10,
+    prioritySent: 9,
+  });
+  assert.equal(error.surface, 'prioritized_sms');
+  assert.equal(error.action, 'send');
+  const holdCapped = plan({
+    status: 'held',
+    holdReason: 'form_auth_failure',
+    ordinarySent: 10,
+    prioritySent: 10,
+  });
   assert.equal(holdCapped.action, 'suppress');
+  assert.equal(holdCapped.surface, 'suppress_with_log');
   assert.equal(holdCapped.summary, null);
+  assert.equal(holdCapped.smsBody, null);
+  const errorCapped = plan({
+    status: 'error',
+    errorCode: 'fetch_failed',
+    prioritySent: 10,
+    ordinarySent: 0,
+  });
+  assert.equal(errorCapped.surface, 'suppress_with_log');
+  assert.equal(errorCapped.summary, null);
+});
+
+test('storm summary count is the suppressed ordinary count and is written once', () => {
+  const firstOverflow = plan({ ordinarySent: 10, suppressedOrdinary: 0, summarySent: false });
+  assert.equal(firstOverflow.summary.suppressedCount, 1);
+  assert.equal(firstOverflow.summary.smsBody, 'TVG: 1 additional new emails received — review queue.');
+  const secondOverflow = plan({ ordinarySent: 10, suppressedOrdinary: 1, summarySent: true });
+  assert.equal(secondOverflow.action, 'suppress');
+  assert.equal(secondOverflow.summary, null);
+  const amendmentExample = plan({ ordinarySent: 10, suppressedOrdinary: 11, summarySent: false });
+  assert.equal(amendmentExample.summary.smsBody, stormSummaryBody(12));
+  assert.equal(
+    amendmentExample.summary.smsBody,
+    'TVG: 12 additional new emails received — review queue.',
+  );
+  assert.equal(amendmentExample.summary.suppressedCount, 12);
+  const repeated = plan({ ordinarySent: 10, suppressedOrdinary: 12, summarySent: true });
+  assert.equal(repeated.summary, null);
 });
 
 test('disabled transport records the event and does not claim a send', () => {
@@ -126,6 +172,7 @@ test('disabled transport records the event and does not claim a send', () => {
     deliveryState: gated.deliveryState,
     suppressionReason: gated.suppressionReason,
     smsText: gated.smsBody,
+    destinationRef: 'founder_mobile_ref',
   });
   assert.match(sql, /recorded_not_sent/);
   assert.match(sql, /credential_not_approved/);
@@ -136,8 +183,11 @@ test('disabled transport records the event and does not claim a send', () => {
     emailEventId: EVENT,
     status: 'awaiting_pass2',
     deliveryState: gated.deliveryState,
+    destinationRef: 'founder_mobile_ref',
     body: 'SECRET BODY TEXT',
   }), /must not carry body/);
+  assert.throws(() => assertDestinationLabel('4155551212'), /settings label/);
+  assert.throws(() => assertDestinationLabel('+14155551212'), /settings label/);
 });
 
 test('notification SQL dedups on event and kind and omits body, phone, and street', () => {
@@ -157,6 +207,7 @@ test('notification SQL dedups on event and kind and omits body, phone, and stree
     deliveryState: 'recorded_not_sent',
     suppressionReason: 'credential_not_approved',
     smsText,
+    destinationRef: 'founder_mobile_ref',
   });
   assert.match(sql, /ON CONFLICT \(tenant_id, email_event_id, notification_kind\)/);
   assert.match(sql, /'tvg'/);
@@ -170,6 +221,7 @@ test('notification SQL dedups on event and kind and omits body, phone, and stree
     suppressionWindow: '2026-09-24T13',
     status: 'storm',
     smsText: stormSummaryBody(12),
+    destinationRef: 'founder_mobile_ref',
   });
   assert.match(summary, /WHERE notification_kind = 'storm_summary' DO NOTHING/);
   assert.match(summary, /12 additional new emails received/);

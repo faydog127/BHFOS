@@ -384,7 +384,12 @@ SELECT
       AND n.channel = 'internal_sms'
       AND n.notification_kind = 'storm_summary'
       AND n.suppression_window = to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24')
-  ) AS summary_sent;
+  ) AS summary_sent,
+  (
+    SELECT s.value_json #>> '{}'
+    FROM email_automation.automation_settings s
+    WHERE s.tenant_id = 'tvg' AND s.key = 'internal_sms_destination_ref'
+  ) AS destination_ref;
 `.trim();
 
 const smsPlan = `${logic}
@@ -423,6 +428,7 @@ const gated = gateSmsTransport(planned, smsEnabled);
 if (gated.action === 'skip' || gated.action === 'dedup') {
   return [{ json: { action: gated.action, sql: null, summarySql: null } }];
 }
+const destinationRef = budget.destination_ref || '';
 const sql = buildNotificationInsertSql({
   action: gated.action,
   kind: gated.kind,
@@ -434,6 +440,7 @@ const sql = buildNotificationInsertSql({
   suppressionReason: gated.suppressionReason,
   suppressionWindow: gated.action === 'suppress' ? (budget.suppression_window || null) : null,
   smsText: gated.smsBody || null,
+  destinationRef,
 });
 let summarySql = null;
 if (gated.summary) {
@@ -444,6 +451,7 @@ if (gated.summary) {
     suppressionWindow: gated.summary.suppressionWindow || budget.suppression_window,
     status: 'storm',
     smsText: gated.summary.smsBody,
+    destinationRef,
   });
 }
 return [{ json: { action: gated.action, kind: gated.kind, sql, summarySql } }];
@@ -567,15 +575,25 @@ return [{ json: { handed_to_twilio: false, queued_rows: 0 } }];
 `;
 
 const smsSelectSql = `
-SELECT id, notification_kind, destination_ref, payload_summary, delivery_state
-FROM email_automation.notification_log
-WHERE tenant_id = 'tvg'
-  AND channel = 'internal_sms'
-  AND delivery_state = 'queued'
+SELECT
+  n.id,
+  n.notification_kind,
+  (
+    SELECT s.value_json #>> '{}'
+    FROM email_automation.automation_settings s
+    WHERE s.tenant_id = 'tvg' AND s.key = 'internal_sms_destination_ref'
+  ) AS destination_ref,
+  n.payload_summary,
+  n.delivery_state,
+  NULL::text AS sms_from_credential_only
+FROM email_automation.notification_log n
+WHERE n.tenant_id = 'tvg'
+  AND n.channel = 'internal_sms'
+  AND n.delivery_state = 'queued'
   AND COALESCE((
-    SELECT value_json = 'true'::jsonb
-    FROM email_automation.automation_settings
-    WHERE tenant_id = 'tvg' AND key = 'internal_sms_enabled'
+    SELECT s.value_json = 'true'::jsonb
+    FROM email_automation.automation_settings s
+    WHERE s.tenant_id = 'tvg' AND s.key = 'internal_sms_enabled'
   ), false);
 `.trim();
 
@@ -587,7 +605,7 @@ const smsDelivery = workflow(
   'TVG Email — Internal SMS Delivery',
   [
     nodeBase('ee000000-0000-4000-8000-000000000020', 'STAGING ONLY / HOSTINGER OFF', 'n8n-nodes-base.stickyNote', 1, 0, -260, {
-      content: 'Inactive. No Hostinger. No customer SMS. Twilio node is disabled and disconnected. Credential name is a placeholder only. SMS transport is not the system of record. notification_log is the record.',
+      content: 'Inactive. No Hostinger. No customer SMS. Twilio node is disabled and disconnected. to reads internal_sms_destination_ref. No phone number in this JSON. Credential name is a placeholder only. SMS transport is not the system of record.',
       width: 680,
       height: 140,
     }),
@@ -597,8 +615,8 @@ const smsDelivery = workflow(
     nodeBase('ee000000-0000-4000-8000-000000000004', 'Twilio send disabled', 'n8n-nodes-base.twilio', 1, 900, 220, {
       resource: 'sms',
       operation: 'send',
-      from: 'INTERNAL_ALERT_FROM_NOT_IN_REPO',
-      to: 'FOUNDER_APPROVED_MOBILE_NOT_IN_REPO',
+      from: '={{ $json.sms_from_credential_only }}',
+      to: '={{ $json.destination_ref }}',
       message: '={{ $json.payload_summary && $json.payload_summary.sms_text }}',
       options: {},
     }, {

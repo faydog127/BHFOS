@@ -20,8 +20,10 @@ The fast ACK path does not call Hostinger. The worker claims only `intake_queue`
 
 The digest workflow has no send node. It inserts a `notification_log` row on channel `internal_digest` with status `suppressed_pre_webhook` when the digest is not both enabled and destined.
 
-The worker plans internal SMS after a synthetic outcome and inserts `notification_log` rows. It does not call Twilio. While `internal_sms_enabled` is false, those rows are `recorded_not_sent` with reason `credential_not_approved`. Dedup is `(tenant_id, email_event_id, notification_kind)`. Ordinary actionable-inbound texts and priority HOLD/error texts each stop at `max_internal_sms_per_hour` (default 10). One storm summary is stored per UTC hour.
+The worker plans internal SMS after a synthetic outcome and inserts `notification_log` rows. It does not call Twilio. While `internal_sms_enabled` is false, those rows are `recorded_not_sent` with reason `credential_not_approved`. Dedup is `(tenant_id, email_event_id, notification_kind)`. `destination_ref` is the settings value `internal_sms_destination_ref`.
 
-The delivery workflow selects `queued` internal SMS rows only when `internal_sms_enabled` is true, then throws `INTERNAL_SMS_CREDENTIAL_NOT_APPROVED` if any row is present. The Twilio node uses placeholder credential name `TVG Internal SMS Twilio`, `to` `FOUNDER_APPROVED_MOBILE_NOT_IN_REPO`, and `from` `INTERNAL_ALERT_FROM_NOT_IN_REPO`. It is disabled and disconnected. SMS transport is not the system of record.
+When ordinary traffic is already at `max_internal_sms_per_hour` (default 10), further ordinary events are suppress-with-log and one storm summary is stored for the UTC hour. HOLD and error still surface as one prioritized SMS each until their own counter hits that cap, then suppress-with-log. The summary count is the number of ordinary events suppressed when that one summary is written.
+
+The delivery workflow selects `queued` internal SMS rows only when `internal_sms_enabled` is true, then throws `INTERNAL_SMS_CREDENTIAL_NOT_APPROVED` if any row is present. The Twilio node uses placeholder credential name `TVG Internal SMS Twilio`. `to` is `={{ $json.destination_ref }}` from `internal_sms_destination_ref`. `from` is `={{ $json.sms_from_credential_only }}`, which the select leaves null. The node is disabled and disconnected. No phone number is in the JSON. SMS transport is not the system of record.
 
 Resume actor A is `apply/resume_deferred_kill_switch.sql`. Resume actor B is the inactive Reconcile workflow.

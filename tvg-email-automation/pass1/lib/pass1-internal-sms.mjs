@@ -99,9 +99,14 @@ function requireEventUuid(value) {
 }
 
 /**
- * Ordinary awaiting_pass2 and priority HOLD/error each have a budget of
- * maxPerHour (default 10). An ordinary storm does not spend the HOLD/error
- * budget. One ordinary summary is sent per suppression window.
+ * Exact behavior once ordinary traffic is already at maxPerHour (default 10)
+ * for the UTC hour:
+ * - further awaiting_pass2 rows are suppress-with-log (storm_cap) plus one
+ *   storm summary for that window;
+ * - a held or error row still surfaces as one prioritized SMS while the
+ *   priority counter is below the same cap. It is not folded into the summary;
+ * - once the priority counter is also at the cap, further HOLD/error rows are
+ *   suppress-with-log. The log row remains. No second summary is created.
  */
 export function planInternalSms(input) {
   const spec = STATUS_KIND[input.status];
@@ -118,19 +123,23 @@ export function planInternalSms(input) {
   let action = 'send';
   let suppressionReason = null;
   let summary = null;
+  let surface = spec.priority ? 'prioritized_sms' : 'sms';
   if (spec.priority) {
     if (prioritySent >= max) {
       action = 'suppress';
       suppressionReason = 'storm_cap';
+      surface = 'suppress_with_log';
     }
   } else if (ordinarySent >= max) {
     action = 'suppress';
     suppressionReason = 'storm_cap';
+    surface = 'suppress_with_log';
     if (!input.summarySent) {
       const count = (input.suppressedOrdinary ?? 0) + 1;
       summary = {
         kind: 'storm_summary',
         smsBody: stormSummaryBody(count),
+        suppressedCount: count,
         suppressionWindow: input.suppressionWindow || null,
       };
     }
@@ -139,12 +148,22 @@ export function planInternalSms(input) {
     action,
     kind: spec.kind,
     priority: spec.priority,
+    surface,
     emailEventId,
     identity,
     suppressionReason,
     summary,
     smsBody: action === 'send' ? renderInternalSms(input) : null,
   };
+}
+
+/** Settings label only. A phone number is rejected. */
+export function assertDestinationLabel(value) {
+  const text = String(value || '').trim();
+  if (!/^[a-z][a-z0-9_]{0,63}$/.test(text)) {
+    throw new Error('destination ref must be the Founder-approved settings label');
+  }
+  return text;
 }
 
 export function gateSmsTransport(decision, smsEnabled) {
@@ -195,6 +214,7 @@ export function buildNotificationInsertSql(row) {
   if (row.kind === 'storm_summary' && !row.suppressionWindow) {
     throw new Error('storm summary requires a suppression window');
   }
+  const destinationRef = assertDestinationLabel(row.destinationRef);
   const emailSql = row.emailEventId ? `${quoteLiteral(requireEventUuid(row.emailEventId))}::uuid` : 'NULL';
   const payload = {
     status: row.status || null,
@@ -219,7 +239,7 @@ INSERT INTO email_automation.notification_log (
   ${quoteLiteral(row.kind)},
   'internal_sms',
   ${emailSql},
-  ${quoteLiteral(DESTINATION_REF)},
+  ${quoteLiteral(destinationRef)},
   ${quoteLiteral(JSON.stringify(payload))}::jsonb,
   ${quoteLiteral(deliveryState)},
   ${quoteLiteral(deliveryState)},

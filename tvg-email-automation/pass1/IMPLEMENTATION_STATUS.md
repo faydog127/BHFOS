@@ -13,13 +13,13 @@ Workstream: TVG Email Automation pass1-v5, plus the Founder-locked internal SMS 
 | Staging reads | 2026-09-24 read-only SQL on `glkrykpksbsqmmilmjhs`. No DDL. |
 | Production | `wwyxohjnyqnegzbxtuxs` not queried and not modified |
 | Hostinger | Off |
-| Internal SMS | Schema, inactive n8n path, and tests are in this branch. `internal_sms_enabled` stays false. No Twilio secret in git. SMS transport is not the system of record. |
+| Internal SMS | Schema, inactive n8n path, and tests are in this branch. Challenge CHALLENGE_PASS notes are folded in: cap surface, settings-only destination, credential scope, model mapping, summary count. `internal_sms_enabled` stays false. No Twilio secret in git. SMS transport is not the system of record. |
 | Pre-webhook | Closed. See `PRE_WEBHOOK_OPEN_ITEMS.md` |
 
 ## Local verification (not staging)
 
-- `node --test tvg-email-automation/pass1/test/*.test.mjs` — 33 pass, after the internal SMS amendment
-- Disposable database `tvg_email_pass1` on local PostgreSQL 16.15: stub CRM + `apply/20260924_tvg_email_pass1_v5.sql` + `fixtures/sql/local-smoke.sql` exited 0 (`SMOKE_OK`), including notification dedup, storm-window uniqueness, and customer SMS rejection
+- `node --test tvg-email-automation/pass1/test/*.test.mjs` — 34 pass, including the hourly-cap HOLD/error surface and the storm summary count text
+- Disposable database `tvg_email_pass1` on local PostgreSQL 16.15: stub CRM + `apply/20260924_tvg_email_pass1_v5.sql` + `fixtures/sql/local-smoke.sql` exited 0 (`SMOKE_OK`), including notification dedup, storm-window uniqueness, customer SMS rejection, and phone-shaped `destination_ref` rejection
 - Second apply of the same file on that database exited 0 (`REAPPLY_OK`). `network_os_assurance_delivery_claims` still had 1 row. `auto_send_enabled` stayed `false`. `max_internal_sms_per_hour` stayed `10`. `internal_sms_enabled` stayed `false`. `internal_sms_destination_ref` stayed `founder_mobile_ref`
 - Docker smoke script was not the runner. Staging project was not migrated
 

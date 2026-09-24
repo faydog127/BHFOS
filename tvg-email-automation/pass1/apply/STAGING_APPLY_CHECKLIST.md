@@ -77,8 +77,10 @@ Supabase MCP equivalent, only if the caller sets `project_id` to `glkrykpksbsqmm
 These block Pre-webhook. They do not block applying the schema with `internal_sms_enabled` left false.
 
 - Carrier readiness: sending number identified, U.S. registration confirmed (A2P 10DLC or verified toll-free — Founder chooses), use case allows internal operational alerts, one real test SMS to a Founder-approved phone with delivery evidence, and delivery failure logged rather than treated as success.
-- Founder approval before any real internal-alert SMS credential is attached. Secrets stay in n8n credentials. They do not go in workflow JSON, SQL settings, logs, or this repo.
-- SMS transport is not the system of record. `notification_log` is the record. Pass 1 delivery channel is `internal_sms`.
+- Founder approval before any real internal-alert SMS credential is attached. At attach time, confirm the Twilio key or subaccount cannot send unrestricted customer SMS (dedicated subaccount or restricted API key; no customer messaging service; no production customer number pool). Secrets stay in n8n credentials. They do not go in workflow JSON, SQL settings, logs, or this repo.
+- Destination is the Founder-approved settings value `internal_sms_destination_ref` only. The inactive Twilio node reads that value with an expression. The workflow JSON has no phone number.
+- SMS transport is not the system of record. `notification_log` is the record. Pass 1 delivery channel is `internal_sms`. The column mapping to the design `kind` enum and `review_notify_*` settings is in [`../NOTIFICATION_MODEL.md`](../NOTIFICATION_MODEL.md).
+- At `max_internal_sms_per_hour`, further ordinary events are suppress-with-log plus one storm summary. HOLD and error still send as one prioritized SMS each until their own counter hits the same cap, then suppress-with-log. Summary count `N` is the suppressed ordinary count at the moment that one summary is stored.
 - Founder-only decisions left open: credential provision, A2P 10DLC versus verified toll-free, and cost. The mobile number stays out of git.
 
 See [`../PRE_WEBHOOK_OPEN_ITEMS.md`](../PRE_WEBHOOK_OPEN_ITEMS.md).

@@ -54,11 +54,21 @@ Not approved. Pre-webhook stays closed until all of the following are true:
 5. A delivery failure is logged and surfaced. A failed send must not look like success.
 6. The Founder explicitly approves attaching the dedicated internal-alert credential. Preferred form is a Twilio subaccount or a restricted API key. It is separate from any customer SMS credential.
 
-`internal_sms_enabled` stays `false`. `max_internal_sms_per_hour` stays `10`. The n8n credential name in the inactive delivery workflow is `TVG Internal SMS Twilio`. That JSON has no account SID and no auth token. The destination label is `founder_mobile_ref`. The phone number stays out of git, SQL settings, and `notification_log`.
+`internal_sms_enabled` stays `false`. `max_internal_sms_per_hour` stays `10`. The n8n credential name in the inactive delivery workflow is `TVG Internal SMS Twilio`. That JSON has no account SID, no auth token, and no phone number. The Twilio `to` expression is `{{ $json.destination_ref }}`, loaded from `internal_sms_destination_ref`. The seeded label is `founder_mobile_ref`. The phone number stays in the n8n credential after Founder approval, not in git, SQL settings, workflow JSON, or `notification_log`.
+
+At Founder attach time, before that credential is saved and before the Twilio node is enabled, confirm the key or subaccount cannot send unrestricted customer SMS. It is a dedicated internal-alert subaccount or a restricted API key, with no customer messaging service and no production customer number pool.
 
 Founder-only decisions still open: provision and attach the real credential, A2P 10DLC versus verified toll-free, and cost.
 
-Ordinary `awaiting_pass2` texts and priority HOLD/error texts each use that hourly cap. An ordinary storm does not spend the HOLD/error budget. One ordinary summary is stored per suppression window: `TVG: <count> additional new emails received — review queue.` This budget split is the staging reading of “prioritize HOLD/error within the same safety mechanism.”
+When ordinary `actionable_inbound` traffic is already at `max_internal_sms_per_hour` for the UTC hour:
+
+- Further ordinary events are suppress-with-log (`suppression_reason=storm_cap`). One `storm_summary` row is stored for that hour.
+- A `held` or material `error` event still surfaces as one prioritized SMS. It is not part of the ordinary summary, and it does not spend the ordinary counter.
+- HOLD and error keep their own counter of the same cap. When that counter is also at the cap, further HOLD/error rows are suppress-with-log. The row stays in `notification_log`. No second summary is created.
+
+The summary sentence is `TVG: N additional new emails received — review queue.` `N` is the number of ordinary events suppressed in that hour, including the event that created the summary. The first overflow is `N=1`. The amendment sentence with 12 is that same sentence when 12 ordinary events have been suppressed and the summary has not been written yet. The text is fixed on that single insert. A later suppression in the hour does not change `N` and does not write another summary. `N` is not the count of every email received in the hour.
+
+Column mapping to the design `notification_log` / `review_notify` settings is in [`NOTIFICATION_MODEL.md`](NOTIFICATION_MODEL.md).
 
 ## Also still closed
 

@@ -12,7 +12,7 @@ This is the contained staging build for The Vent Guys email intake. It is not Ne
 | Hostinger | Off. No webhook enablement. No live mail fetch. |
 | n8n | Five workflow JSON files are importable and **inactive**. Schedule nodes are **disabled**. The Twilio node is disabled and disconnected. |
 | Send path | Absent. No `email_responses`. No `email_send_queue`. No customer SMS. |
-| Internal SMS | Founder-locked amendment in [`design/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md`](design/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md). `notification_log` is the record. SMS transport is not the system of record. `internal_sms_enabled` stays false. |
+| Internal SMS | Founder-locked amendment in [`design/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md`](design/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md). Mapping to the design log is in [`NOTIFICATION_MODEL.md`](NOTIFICATION_MODEL.md). `notification_log` is the record. SMS transport is not the system of record. `internal_sms_enabled` stays false. |
 
 The vendored design pack in [`design/`](design/) is the pass1-v5 source. Its own README still says design-review-only. Command Center authorized a contained staging build after that pack was written. This directory is that build. It does not apply itself to Supabase.
 
