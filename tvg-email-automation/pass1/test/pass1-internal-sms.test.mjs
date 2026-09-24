@@ -75,6 +75,31 @@ test('subject text does not change the send decision', () => {
   assert.doesNotMatch(noisy.smsBody, /https?:\/\/|555-0100|Oak Street/);
 });
 
+test('a customer address cannot be the internal SMS destination', () => {
+  assert.throws(() => assertDestinationLabel('founder@example.com'), /settings label/);
+  assert.throws(() => assertDestinationLabel('4155551212'), /settings label/);
+  assert.equal(assertDestinationLabel('founder_mobile_ref'), 'founder_mobile_ref');
+});
+
+test('reconcile rediscovery of a pre-watermark event does not send', () => {
+  const historical = plan({
+    liveNotificationStartedAt: '2026-09-24T12:00:00.000Z',
+    eventCreatedAt: '2026-06-01T00:00:00.000Z',
+    backlogSummarySent: true,
+  });
+  assert.equal(historical.action, 'record_only');
+  assert.equal(historical.smsBody, null);
+  assert.equal(historical.summary, null);
+  const rediscovered = plan({
+    liveNotificationStartedAt: '2026-09-24T12:00:00.000Z',
+    eventCreatedAt: '2026-06-01T00:00:00.000Z',
+    existingKeys: new Set([`${EVENT}:actionable_inbound`]),
+  });
+  assert.equal(rediscovered.action, 'dedup');
+  assert.equal(rediscovered.smsBody, null);
+  assert.equal(rediscovered.summary, null);
+});
+
 test('immediate SMS is only for awaiting_pass2, held, and error', () => {
   for (const status of ['filtered', 'system_lessen', 'duplicate_ignored', 'received']) {
     const decision = plan({ status });

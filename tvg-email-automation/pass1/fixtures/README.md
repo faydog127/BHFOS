@@ -10,7 +10,7 @@ Markers: emails on `example.com` / `invalid`, names prefixed `SYNTH `, phones `5
 
 `node --test tvg-email-automation/pass1/test/pass1-intake-logic.test.mjs` covers the decision library for F1, F3, F4, F4b, F4c, F5, F6, F7, F12, F15 (SQL text only), F16, and F17.
 
-`node --test tvg-email-automation/pass1/test/pass1-internal-sms.test.mjs` covers internal SMS dedup, the hourly-cap HOLD/error surface (`prioritized_sms` then `suppress_with_log`), the storm summary count text (`N=1` on the first overflow, and `TVG: 12 additional new emails received — review queue.` when 12 ordinary events are already the suppressed set), the pre-live watermark (no per-message SMS, one backlog summary), subject sanitization, and the awaiting_pass2 / held / error gate.
+`node --test tvg-email-automation/pass1/test/pass1-internal-sms.test.mjs` covers internal SMS dedup, the hourly-cap HOLD/error surface (`prioritized_sms` then `suppress_with_log`), the storm summary count text (`N=1` on the first overflow, and `TVG: 12 additional new emails received — review queue.` when 12 ordinary events are already the suppressed set), the pre-live watermark (no per-message SMS, one backlog summary), reconcile rediscovery of a pre-watermark event, rejection of an email or phone as `destination_ref`, subject sanitization, and the awaiting_pass2 / held / error gate. Filtered and system traffic stay `skip`.
 
 `node --test tvg-email-automation/pass1/test/pass1-ops-policy.test.mjs` covers the heartbeat (quiet inbox, one outage, dedup, one recovery, dep, fail, lag), the 120-second and 900-second targets, attachment metadata rejection, and thread-header capture without a parent id.
 

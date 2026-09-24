@@ -21,7 +21,7 @@ Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amend
 
 ## Local verification (not staging)
 
-- `node --test tvg-email-automation/pass1/test/*.test.mjs` — 42 pass, including dormant Hostinger mailbox probe and unset-watermark fail-closed
+- `node --test tvg-email-automation/pass1/test/*.test.mjs` — 44 pass, including Decision ID status lock TVG-EMAIL-P1-D001 through D022, dormant Hostinger mailbox probe, and unset-watermark fail-closed
 - Incremental SQL was not changed by the challenge-note fold. The prior local `SMOKE_OK` / `REAPPLY_OK` on Postgres 16.15 still covers that file. This session did not re-query staging.
 - Disposable database `tvg_email_pass1` on local PostgreSQL 16.15: stub CRM + base `apply/20260924_tvg_email_pass1_v5.sql` + `apply/20260924_tvg_email_pass1_incremental.sql` + `fixtures/sql/local-smoke.sql` exited 0 (`SMOKE_OK`)
 - Second apply of the incremental file on that database exited 0 (`REAPPLY_OK`). `network_os_assurance_delivery_claims` still had 1 row. `internal_sms_enabled` stayed `false`. `live_notification_started_at` stayed null. `health_alerts_enabled` stayed `false`. `health_checks` had 2 rows. `email_responses` and `email_send_queue` were absent
@@ -37,7 +37,9 @@ Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amend
 
 ## Decision register
 
-[`TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md)
+[`decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md)
+
+Decision IDs TVG-EMAIL-P1-D001 through D022 were copied from the coordinator file. Their statuses were not edited. The full directive is [`directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md`](directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md). The pack index is [`INDEX.md`](INDEX.md). `staging-apply/APPLY_REPORT.md` is named by that index and was not in the upload, so it was not created here.
 
 DECISION_REQUIRED:
 

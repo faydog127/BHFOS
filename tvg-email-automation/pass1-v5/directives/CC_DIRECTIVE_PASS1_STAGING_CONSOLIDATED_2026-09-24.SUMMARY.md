@@ -1,8 +1,8 @@
 # CC DIRECTIVE SUMMARY — Pass 1 Staging Consolidated (2026-09-24)
 
-Provenance: this file is the summary that was attached to the staging-slice mission. The full Founder paste named `CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md` was not in the workspace when the pack was written. Do not treat this summary as a reconstruction of that paste.
+Provenance: this file is the summary that was attached to the staging-slice mission. The full directive text is now `tvg-email-automation/pass1/directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md`. This summary is not that text.
 
-Implementation pack: `tvg-email-automation/pass1/`. Decision register: `tvg-email-automation/pass1/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`.
+Implementation pack: `tvg-email-automation/pass1/`. Decision register: `tvg-email-automation/pass1/decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`.
 
 **Decision:** PASS 1 STAGING BUILD — PROCEED  
 **Design loop:** CLOSED except material implementation discoveries  

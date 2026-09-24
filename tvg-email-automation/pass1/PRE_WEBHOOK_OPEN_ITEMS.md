@@ -78,7 +78,7 @@ The consolidated directive adds these constraints and does not open the gate:
 - The `n8n_email_automation` password was not set at apply. The approved path is the staging SQL editor and the n8n credential `TVG Staging n8n_email_automation` only.
 - Timing targets are 120 seconds on the primary path and 900 seconds for reconcile. There are no application quiet hours.
 - Ordinary alert wording is `review`, and the closing line is `No reply sent by automation.`
-- The backlog summary sentence and excerpt/attachment retention are `DECISION_REQUIRED` in [`TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md).
+- The backlog summary sentence in the planner is an implement reading. It is not a Decision ID status. Retention stays deferred under TVG-EMAIL-P1-D007. Statuses are only in [`decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md).
 
 ## Also still closed
 

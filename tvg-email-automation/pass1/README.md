@@ -13,7 +13,8 @@ This is the contained staging build for The Vent Guys email intake. It is not Ne
 | n8n | Six workflow JSON files are importable and **inactive**. Names start with `[STAGING] `. Schedule nodes are **disabled**. The Twilio node is disabled and disconnected. |
 | Send path | Absent. No `email_responses`. No `email_send_queue`. No customer SMS. |
 | Internal SMS | Founder-locked amendment in [`design/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md`](design/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md). Mapping to the design log is in [`NOTIFICATION_MODEL.md`](NOTIFICATION_MODEL.md). `notification_log` is the outbox. SMS transport is not the system of record. `internal_sms_enabled` stays false. |
-| Directive | Consolidated staging summary in [`../pass1-v5/directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.SUMMARY.md`](../pass1-v5/directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.SUMMARY.md). Decision register: [`TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md). |
+| Directive | Full text: [`directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md`](directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md). Index: [`INDEX.md`](INDEX.md). |
+| Decision register | [`decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md). Statuses TVG-EMAIL-P1-D001 through D022 are recorded only there. |
 
 The vendored design pack in [`design/`](design/) is the pass1-v5 source. Its own README still says design-review-only. Command Center authorized a contained staging build after that pack was written. This directory is that build. It does not apply itself to Supabase.
 

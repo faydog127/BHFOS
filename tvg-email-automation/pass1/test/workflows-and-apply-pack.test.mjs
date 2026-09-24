@@ -175,10 +175,42 @@ test('internal SMS path stays inactive and has no live Twilio secret', () => {
 });
 
 test('challenge notes keep the decision register, dormant mailbox probe, and role password out of git', () => {
-  const register = load('TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md');
+  const register = load('decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md');
   const packet = load('apply/STAGING_RETURN_PACKET.md');
-  assert.match(register, /TVG Email Automation — Decision Register/);
-  assert.match(packet, /TVG_EMAIL_AUTOMATION_DECISION_REGISTER\.md/);
+  const directive = load('directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md');
+  assert.match(register, /TVG Email Automation Decision Register/);
+  assert.match(directive, /PASS 1 STAGING BUILD PROCEED/);
+  assert.match(load('INDEX.md'), /decision-register\/TVG_EMAIL_AUTOMATION_DECISION_REGISTER\.md/);
+  const statuses = {
+    'TVG-EMAIL-P1-D001': 'Implementation-authorized',
+    'TVG-EMAIL-P1-D002': 'Implementation-authorized',
+    'TVG-EMAIL-P1-D003': 'Active',
+    'TVG-EMAIL-P1-D004': 'Active',
+    'TVG-EMAIL-P1-D005': 'Active',
+    'TVG-EMAIL-P1-D006': 'Active',
+    'TVG-EMAIL-P1-D007': 'Active',
+    'TVG-EMAIL-P1-D008': 'Active',
+    'TVG-EMAIL-P1-D009': 'Active',
+    'TVG-EMAIL-P1-D010': 'Active',
+    'TVG-EMAIL-P1-D011': 'Active',
+    'TVG-EMAIL-P1-D012': 'Active',
+    'TVG-EMAIL-P1-D013': 'Proposed',
+    'TVG-EMAIL-P1-D014': 'Recommendation',
+    'TVG-EMAIL-P1-D015': 'Recommendation',
+    'TVG-EMAIL-P1-D016': 'Implementation-authorized',
+    'TVG-EMAIL-P1-D017': 'Active',
+    'TVG-EMAIL-P1-D018': 'Active',
+    'TVG-EMAIL-P1-D019': 'Active',
+    'TVG-EMAIL-P1-D020': 'Proposed',
+    'TVG-EMAIL-P1-D021': 'Active',
+    'TVG-EMAIL-P1-D022': 'Active',
+  };
+  for (const [id, status] of Object.entries(statuses)) {
+    const row = register.split('\n').find((line) => line.includes(`| ${id} |`));
+    assert.ok(row, id);
+    assert.match(row, new RegExp(`\\| ${status} \\|`), id);
+  }
+  assert.match(packet, /decision-register\/TVG_EMAIL_AUTOMATION_DECISION_REGISTER\.md/);
   assert.match(packet, /n8n_email_automation/);
   assert.match(packet, /password was not set/);
   assert.match(load('PRE_WEBHOOK_OPEN_ITEMS.md'), /not staging blockers/);

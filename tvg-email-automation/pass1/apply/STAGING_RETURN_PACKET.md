@@ -50,13 +50,41 @@ Postgres credential name: `TVG Staging n8n_email_automation`. Twilio placeholder
 
 1. Heartbeat Hostinger newer-mail / intake-lag checks are mock and dormant until Pre-webhook. They are not live Hostinger API health probing.
 2. Unset `live_notification_started_at` means no per-message SMS and at most one backlog summary.
-3. Decision register is required now: [`../TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](../TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md).
+3. Decision register is required now: [`../decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](../decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md). Statuses TVG-EMAIL-P1-D001 through D022 are unchanged from the coordinator file.
 4. Role password path is the staging SQL editor plus the n8n credential, never git.
 5. Pre-webhook still owns form-filter ordering and open-lead production evidence. Those are not staging blockers.
 
-## Decision register
+## Decision register and directive
 
-[`../TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](../TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md)
+Authoritative register: [`../decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](../decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md).
+
+Full directive: [`../directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md`](../directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md).
+
+Pack index: [`../INDEX.md`](../INDEX.md).
+
+The index also names `staging-apply/APPLY_REPORT.md`, `amendments/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md`, `amendments/CHALLENGE_VERDICT_INTERNAL_SMS.md`, `CHALLENGE_VERDICT.md`, and `CC_VERDICT.md`. Those paths were not in the coordinator upload committed here. This pack does not invent them. The SMS amendment and the design challenge verdict that are already in git stay at `design/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md` and `design/CHALLENGE_VERDICT.md`.
+
+## Directive return-packet map
+
+| Required item | Where this pack records it |
+|---|---|
+| Directive and Decision Register | Files above. Statuses were copied, not edited |
+| Schema mapped to notification and health | `apply/20260924_tvg_email_pass1_incremental.sql` |
+| Inactive workflows, schedules disabled | Six `[STAGING]` JSON files. `active: false`. Schedule nodes `disabled: true` |
+| Staging-only credentials and prefixes | Workflow meta `credentialScope: staging-only`. No password in JSON or SQL |
+| Heartbeat, stale/fail/dep, outage/recovery, timing | `test/pass1-ops-policy.test.mjs`. Newer-mail and intake-lag stay dormant while Pre-webhook is closed (TVG-EMAIL-P1-D021) |
+| Watermark pre-live and post-live | `test/pass1-internal-sms.test.mjs` |
+| Thread metadata, no thread logic | `captureThreadMetadata` and local smoke |
+| Attachment metadata, no bytes | `assertAttachmentMetadataOnly` and the SQL check |
+| One-way SMS, wording, privacy | No inbound command node. Ordinary text is `review` / `No reply sent by automation.` Sanitizer tests |
+| Outbox uniqueness, suppression, storm | Unique `(email_event_id, notification_kind)`. Storm tests. Inserts use `ON CONFLICT DO NOTHING` |
+| Actionable, HOLD, error, filtered/system, duplicate, reconcile, watermark | SMS tests, including reconcile rediscovery of a pre-watermark event |
+| No customer address as a destination | `assertDestinationLabel` rejects an email address and a phone number |
+| SMS amendment and carrier readiness | Amendment in `design/`. Carrier readiness remains Proposed under TVG-EMAIL-P1-D020 |
+| APPLY_REPORT, challenge verdicts, PR #160 | PR #160 is this branch. `APPLY_REPORT.md` and the amendment challenge verdict file were not in the upload |
+| Hostinger off, schedules inactive, production untouched, no customer communication | This packet. Production was not queried. No customer send tables |
+
+The list below is the staging packet's gate view. It does not replace Decision ID statuses in the register.
 
 ## CLOSED / OPEN / DECISION_REQUIRED
 

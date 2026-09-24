@@ -1,0 +1,10 @@
+# TVG Email Automation Pass 1 — Consolidated Decision Index
+
+- **Directive:** [`directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md`](directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md)
+- **Decision Register:** [`decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md)
+- **SMS amendment:** [`amendments/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md`](amendments/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md)
+- **Challenge verdicts:** [`CHALLENGE_VERDICT.md`](CHALLENGE_VERDICT.md), [`amendments/CHALLENGE_VERDICT_INTERNAL_SMS.md`](amendments/CHALLENGE_VERDICT_INTERNAL_SMS.md)
+- **Staging apply evidence:** [`staging-apply/APPLY_REPORT.md`](staging-apply/APPLY_REPORT.md)
+- **Implementation reference:** GitHub PR #160, branch `cursor/tvg-email-pass1-v5-3e46`
+
+Boundary: staging build may proceed; Pre-webhook and Production remain closed. Hostinger and schedules remain off.
