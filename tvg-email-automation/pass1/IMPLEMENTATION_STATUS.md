@@ -5,6 +5,7 @@ Workstream: TVG Email Automation pass1-v5. Not Media Intelligence. `command-cent
 | Field | Value |
 |---|---|
 | Branch | `cursor/tvg-email-pass1-v5-3e46` |
+| Implementation commit | `b2cddc8bee25f36b1b22d81060defe9847f68aa2` |
 | Baseline | `main` at `17f9228951d74824d9b6fb0eb704832befed2afc` (even with `origin/main` at branch creation) |
 | Evidence | **Locally verified** on a disposable Postgres 16.15 (staging is 17.6; Docker was not available, so `fixtures/local-postgres-smoke.sh` was not the runner). Not applied on staging. Not merged. Not deployed. |
 | Staging reads | 2026-09-24 read-only SQL on `glkrykpksbsqmmilmjhs`. No DDL. |
