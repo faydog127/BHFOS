@@ -215,11 +215,33 @@ test('challenge notes keep the decision register, dormant mailbox probe, and rol
     'TVG-EMAIL-P1-D026': 'Recommendation',
     'TVG-EMAIL-P1-D027': 'Recommendation',
     'TVG-EMAIL-P1-D028': 'Open / Proposed',
+    'TVG-EMAIL-P1-D029': 'Active (policy) / Implementation: Deferred Pass 2',
+    'TVG-EMAIL-P1-D030': 'Recommendation / Open config',
+    'TVG-EMAIL-P1-D031': 'Recommendation / requires Founder template approval',
+    'TVG-EMAIL-P1-D032': 'Active (policy) / Implementation: Deferred Pass 2',
+    'TVG-EMAIL-P1-D033': 'Active (policy) / Implementation: Deferred Pass 2',
+    'TVG-EMAIL-P1-D034': 'Active (policy gate) / Implementation: Deferred Pass 2',
   };
   for (const [id, status] of Object.entries(statuses)) {
     const row = register.split('\n').find((line) => line.includes(`| ${id} |`));
     assert.ok(row, id);
-    assert.match(row, new RegExp(`\\| ${status} \\|`), id);
+    assert.ok(row.includes(`| ${status} |`), id);
+  }
+  const deadline = load('directives/CC_ADDENDUM_UNAPPROVED_BY_DEADLINE_ESCALATION_2026-09-24.md');
+  const deadlineChallenge = load('directives/CHALLENGE_VERDICT_UNAPPROVED_BY_DEADLINE.md');
+  assert.match(deadline, /Pass 1 impact: NONE/);
+  assert.match(deadlineChallenge, /CHALLENGE_CONCERNS/);
+  assert.match(deadlineChallenge, /does \*\*not\*\* authorize implement/);
+  const implementation = [
+    ...workflowFiles,
+    'apply/20260924_tvg_email_pass1_v5.sql',
+    'apply/20260924_tvg_email_pass1_incremental.sql',
+    'apply/96-recipient-config.sql',
+  ];
+  for (const relativePath of implementation) {
+    const text = load(relativePath);
+    assert.doesNotMatch(text, /send_anyway_enabled/, relativePath);
+    assert.doesNotMatch(text, /fallback template/i, relativePath);
   }
   assert.match(packet, /decision-register\/TVG_EMAIL_AUTOMATION_DECISION_REGISTER\.md/);
   assert.match(packet, /n8n_email_automation/);

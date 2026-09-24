@@ -23,7 +23,7 @@ Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amend
 
 ## Local verification (not staging)
 
-- `node --test tvg-email-automation/pass1/test/*.test.mjs` — 49 pass, including Decision ID status lock TVG-EMAIL-P1-D001 through D028, one Founder destination, no urgency keyword rules, and after-hours acknowledgement staying disabled
+- `node --test tvg-email-automation/pass1/test/*.test.mjs` — 49 pass, including Decision ID status lock TVG-EMAIL-P1-D001 through D034. D029–D034 are documentation. Pass 1 SQL and n8n do not implement send-anyway or a fallback customer send.
 - Disposable Postgres 16.15: base file, then incremental file, then `fixtures/sql/local-smoke.sql` (`SMOKE_OK`), then a second incremental apply (`REAPPLY_OK`). Claims stayed 1. Founder recipients stayed 1. Subscriptions with null escalation stayed 7. `internal_sms_enabled` stayed false. Staging was not queried.
 - Disposable database `tvg_email_pass1` on local PostgreSQL 16.15: stub CRM + base `apply/20260924_tvg_email_pass1_v5.sql` + `apply/20260924_tvg_email_pass1_incremental.sql` + `fixtures/sql/local-smoke.sql` exited 0 (`SMOKE_OK`)
 - Second apply of the incremental file on that database exited 0 (`REAPPLY_OK`). `network_os_assurance_delivery_claims` still had 1 row. `internal_sms_enabled` stayed `false`. `live_notification_started_at` stayed null. `health_alerts_enabled` stayed `false`. `health_checks` had 2 rows. `email_responses` and `email_send_queue` were absent
@@ -44,9 +44,9 @@ Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amend
 
 [`decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md)
 
-Decision IDs TVG-EMAIL-P1-D001 through D028 were copied from the coordinator file. Their statuses were not edited. The full directive is [`directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md`](directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md). The Founder operator-preference addendum is [`directives/CC_ADDENDUM_FOUNDER_OPERATOR_PREFERENCES_2026-09-24.md`](directives/CC_ADDENDUM_FOUNDER_OPERATOR_PREFERENCES_2026-09-24.md). The pack index is [`INDEX.md`](INDEX.md). `staging-apply/APPLY_REPORT.md` is named by that index and was not in the upload, so it was not created here.
+Decision IDs TVG-EMAIL-P1-D001 through D034 were copied from the coordinator file. Their statuses were not edited. The full directive is [`directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md`](directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md). The Founder operator-preference addendum is [`directives/CC_ADDENDUM_FOUNDER_OPERATOR_PREFERENCES_2026-09-24.md`](directives/CC_ADDENDUM_FOUNDER_OPERATOR_PREFERENCES_2026-09-24.md). The unapproved-by-deadline addendum is [`directives/CC_ADDENDUM_UNAPPROVED_BY_DEADLINE_ESCALATION_2026-09-24.md`](directives/CC_ADDENDUM_UNAPPROVED_BY_DEADLINE_ESCALATION_2026-09-24.md). Its challenge verdict is [`directives/CHALLENGE_VERDICT_UNAPPROVED_BY_DEADLINE.md`](directives/CHALLENGE_VERDICT_UNAPPROVED_BY_DEADLINE.md): CHALLENGE_CONCERNS / proceed-with-concerns. That verdict does not authorize implementation. The pack index is [`INDEX.md`](INDEX.md). `staging-apply/APPLY_REPORT.md` and `directives/CHALLENGE_VERDICT_OPERATOR_PREFERENCES.md` are named by that index and were not in this upload, so they were not created here.
 
-D023 Active is the Pass 1 recipient and configuration model already in this pack: one Founder destination and `configuration_audit`. D024 through D027 stay documentation in [`PASS2_DESIGN_INPUTS.md`](PASS2_DESIGN_INPUTS.md). D028 is Open / Proposed. No cadence default is stored.
+D023 Active is the Pass 1 recipient and configuration model already in this pack: one Founder destination and `configuration_audit`. D024 through D028 stay documentation in [`PASS2_DESIGN_INPUTS.md`](PASS2_DESIGN_INPUTS.md). D028 is Open / Proposed. D029 through D034 are Pass 2 policy and gates. Pass 1 impact is none. No eligible-class list, fallback template, escalation, or send-anyway path was added.
 
 DECISION_REQUIRED:
 
