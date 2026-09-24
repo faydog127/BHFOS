@@ -5,7 +5,7 @@ Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amend
 | Field | Value |
 |---|---|
 | Branch | `cursor/tvg-email-pass1-v5-3e46` |
-| Consolidated slice | Recorded in the commit that adds this status paragraph. Read `git rev-parse HEAD` on this branch after that commit. |
+| Consolidated slice | `417e6a773909151f812d0db9ca0dcef7ee860069` |
 | Internal SMS amendment | `e0e1b755d81f048bcaa50a789a9780f644b1f361` |
 | Challenge notes | `22084ee8b241a708571078c41e6c4387efc0c27a` |
 | Pass 1 pack | `b2cddc8bee25f36b1b22d81060defe9847f68aa2` |
