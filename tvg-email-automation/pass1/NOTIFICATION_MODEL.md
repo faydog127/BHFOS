@@ -33,7 +33,7 @@ Suppression is columns on this table (`suppression_state`, `suppression_reason`,
 
 `notification_log` is the durable outbox. The worker inserts intent. `dispatch_after`, `dispatched_at`, and `dispatch_attempt_count` belong to the inactive dispatcher. The worker does not send SMS.
 
-The 2026-09-24 operator-preference addendum adds `notification_recipients` and `notification_subscriptions`. Pass 1 seeds one recipient, `founder`, and one channel, `internal_sms`. `destination_ref` stays the settings label `founder_mobile_ref`. Subscription `enabled` stays false. `escalation_after` stays null. A change to `automation_settings` or a subscription writes `configuration_audit` with actor, timestamp, setting, previous value, and new value.
+The 2026-09-24 operator-preference addendum adds `notification_recipients` and `notification_subscriptions`. Pass 1 seeds one recipient, `founder`, one channel, `internal_sms`, and one destination, `founder_mobile_ref`, until the Founder authorizes more recipients. Subscription `enabled` stays false. `escalation_after` stays null. `after_hours_ack_enabled` stays false and does not turn on `auto_send_enabled`. A change to `automation_settings` or a subscription writes `configuration_audit` with actor, timestamp, setting, previous value, and new value.
 
 `stale_intake_hold` stays on the enum for a future `review_notify` email or Slack row. This pack does not insert that kind for the SMS channel. A held event gets one `hold_alert` row.
 

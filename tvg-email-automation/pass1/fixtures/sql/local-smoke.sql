@@ -459,6 +459,26 @@ BEGIN
   IF (SELECT count(*) FROM email_automation.notification_recipients WHERE recipient_key = 'founder') <> 1 THEN
     RAISE EXCEPTION 'founder recipient missing';
   END IF;
+  IF (
+    SELECT count(DISTINCT destination_ref) FROM email_automation.notification_subscriptions
+  ) IS DISTINCT FROM 1
+     OR (
+       SELECT min(destination_ref) FROM email_automation.notification_subscriptions
+     ) IS DISTINCT FROM 'founder_mobile_ref' THEN
+    RAISE EXCEPTION 'Pass 1 destination was not the single Founder label';
+  END IF;
+  IF (
+    SELECT value_json FROM email_automation.automation_settings
+    WHERE tenant_id = 'tvg' AND key = 'after_hours_ack_enabled'
+  ) IS DISTINCT FROM 'false'::jsonb THEN
+    RAISE EXCEPTION 'after-hours acknowledgement was enabled';
+  END IF;
+  IF (
+    SELECT value_json FROM email_automation.automation_settings
+    WHERE tenant_id = 'tvg' AND key = 'auto_send_enabled'
+  ) IS DISTINCT FROM 'false'::jsonb THEN
+    RAISE EXCEPTION 'auto send was enabled';
+  END IF;
   IF EXISTS (
     SELECT 1 FROM email_automation.notification_subscriptions
     WHERE escalation_after IS NOT NULL OR channel IS DISTINCT FROM 'internal_sms' OR recipient_key IS DISTINCT FROM 'founder'
@@ -493,6 +513,16 @@ BEGIN
     INSERT INTO email_automation.notification_recipients (tenant_id, recipient_key, display_label)
     VALUES ('tvg', 'office', 'Office');
     RAISE EXCEPTION 'non-founder recipient was accepted';
+  EXCEPTION
+    WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO email_automation.notification_subscriptions (
+      tenant_id, recipient_key, channel, event_kind, destination_ref, enabled, escalation_after
+    ) VALUES (
+      'tvg', 'founder', 'internal_sms', 'second_destination_probe', 'office_mobile_ref', false, NULL
+    );
+    RAISE EXCEPTION 'a second destination was accepted';
   EXCEPTION
     WHEN check_violation THEN NULL;
   END;

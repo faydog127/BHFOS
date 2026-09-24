@@ -408,7 +408,7 @@ CREATE TABLE IF NOT EXISTS email_automation.notification_recipients (
 );
 
 COMMENT ON TABLE email_automation.notification_recipients IS
-  'Pass 1 notification recipient. Founder only. The shape is one row per recipient key so a later decision can add recipients without a new table. This pack rejects any key other than founder.';
+  'Pass 1 notification recipient. One Founder destination until the Founder authorizes more recipients.';
 
 CREATE TABLE IF NOT EXISTS email_automation.notification_subscriptions (
   tenant_id text NOT NULL DEFAULT 'tvg',
@@ -427,6 +427,9 @@ CREATE TABLE IF NOT EXISTS email_automation.notification_subscriptions (
   CONSTRAINT notification_subscriptions_no_cadence CHECK (escalation_after IS NULL),
   CONSTRAINT notification_subscriptions_destination_label CHECK (
     destination_ref ~ '^[a-z][a-z0-9_]{0,63}$'
+  ),
+  CONSTRAINT notification_subscriptions_single_founder_destination CHECK (
+    destination_ref = 'founder_mobile_ref'
   )
 );
 
@@ -567,8 +570,16 @@ ON CONFLICT (tenant_id, recipient_key, channel, event_kind) DO NOTHING;
 
 INSERT INTO email_automation.automation_settings (tenant_id, key, value_json, description) VALUES
   ('tvg', 'notification_recipient_model', '"founder_internal_sms_only"'::jsonb,
-   'Pass 1 recipient model. Founder internal SMS only. No multi-recipient delivery and no escalation cadence.')
+   'Pass 1 recipient model. One Founder destination until the Founder authorizes more recipients.'),
+  ('tvg', 'after_hours_ack_enabled', 'false'::jsonb,
+   'After-hours customer acknowledgement stays disabled. This is not permission to set auto_send_enabled.')
 ON CONFLICT (tenant_id, key) DO NOTHING;
+
+ALTER TABLE email_automation.notification_subscriptions
+  DROP CONSTRAINT IF EXISTS notification_subscriptions_single_founder_destination;
+ALTER TABLE email_automation.notification_subscriptions
+  ADD CONSTRAINT notification_subscriptions_single_founder_destination
+  CHECK (destination_ref = 'founder_mobile_ref');
 
 DO $$
 BEGIN
@@ -583,5 +594,23 @@ BEGIN
     WHERE tenant_id = 'tvg' AND recipient_key IS DISTINCT FROM 'founder'
   ) THEN
     RAISE EXCEPTION 'Pass 1 recipient must stay founder';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM email_automation.notification_subscriptions
+    WHERE tenant_id = 'tvg' AND destination_ref IS DISTINCT FROM 'founder_mobile_ref'
+  ) THEN
+    RAISE EXCEPTION 'Pass 1 has one Founder destination';
+  END IF;
+  IF (
+    SELECT value_json FROM email_automation.automation_settings
+    WHERE tenant_id = 'tvg' AND key = 'after_hours_ack_enabled'
+  ) IS DISTINCT FROM 'false'::jsonb THEN
+    RAISE EXCEPTION 'after-hours acknowledgement must stay disabled';
+  END IF;
+  IF (
+    SELECT value_json FROM email_automation.automation_settings
+    WHERE tenant_id = 'tvg' AND key = 'auto_send_enabled'
+  ) IS DISTINCT FROM 'false'::jsonb THEN
+    RAISE EXCEPTION 'after-hours acknowledgement disabled is not auto-send permission';
   END IF;
 END $$;

@@ -79,7 +79,8 @@ The consolidated directive adds these constraints and does not open the gate:
 - Timing targets are 120 seconds on the primary path and 900 seconds for reconcile. There are no application quiet hours.
 - Ordinary alert wording is `review`, and the closing line is `No reply sent by automation.`
 - The backlog summary sentence in the planner is an implement reading. It is not a Decision ID status. Retention stays deferred under TVG-EMAIL-P1-D007. Statuses are only in [`decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md).
-- Pass 2 inputs (mobile-first authenticated review, time/holiday/8:30 AM targets, urgency candidates, voice “The Vent Guys Team”, follow-up OPEN) are documented in [`PASS2_DESIGN_INPUTS.md`](PASS2_DESIGN_INPUTS.md) and are not built. No follow-up cadence default is stored.
+- Pass 2 inputs stay design notes only: quiet hours, urgency candidates, draft review, reply voice “The Vent Guys Team”, time/holiday/8:30 AM targets, and follow-up OPEN. See [`PASS2_DESIGN_INPUTS.md`](PASS2_DESIGN_INPUTS.md). Pass 1 has no keyword rules and no cadence default.
+- After-hours acknowledgement stays disabled. That does not authorize `auto_send_enabled`. Pass 1 keeps one Founder destination, `founder_mobile_ref`, until the Founder authorizes more recipients.
 
 ## Also still closed
 

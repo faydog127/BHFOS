@@ -64,6 +64,8 @@ The file refuses to run without the latch, without `email_automation.notificatio
    - `email_automation.health_checks` has `primary_path` and `reconcile`, status `unstarted`
    - `notification_log.dispatch_after` exists
    - `internal_sms_enabled` is still `false`
+   - `after_hours_ack_enabled` is `false` and `auto_send_enabled` is still `false`
+   - every `notification_subscriptions.destination_ref` is `founder_mobile_ref`
 5. Import the six n8n JSON files only after the incremental apply. The worker reads `live_notification_started_at`. Confirm each workflow is inactive, names start with `[STAGING] `, and schedule nodes are disabled. Confirm `Twilio send disabled` is disabled, disconnected, and uses credential name `TVG Internal SMS Twilio` with no account SID and no auth token. Do not activate them. Do not create a Hostinger webhook. Do not attach a real SMS credential.
 
 Return packet: [`STAGING_RETURN_PACKET.md`](STAGING_RETURN_PACKET.md). Decision register: [`../decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](../decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md). Directive: [`../directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md`](../directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md).

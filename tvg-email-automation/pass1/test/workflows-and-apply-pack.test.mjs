@@ -124,6 +124,7 @@ test('workflows are staging-named, one-way, and outbox-only', () => {
   assert.match(plan.parameters.jsCode, /kind: summaryKind/);
   assert.match(plan.parameters.jsCode, /backlog_summary/);
   assert.doesNotMatch(JSON.stringify(worker), /needs response/);
+  assert.doesNotMatch(JSON.stringify(worker), /The Vent Guys Team|draft review|urgencyKeywords|after_hours_ack/);
   assert.match(JSON.stringify(worker), /No reply sent by automation/);
   const health = JSON.parse(load('n8n/tvg-email-health-heartbeat.json'));
   assert.equal(health.nodes.some((node) => node.type === 'n8n-nodes-base.twilio'), false);
@@ -237,6 +238,9 @@ test('incremental SQL does not re-bootstrap the base pack', () => {
   assert.match(sql, /notification_subscriptions/);
   assert.match(sql, /configuration_audit/);
   assert.match(sql, /escalation_after IS NULL/);
+  assert.match(sql, /founder_mobile_ref/);
+  assert.match(sql, /after_hours_ack_enabled/);
+  assert.doesNotMatch(sql, /The Vent Guys Team/);
   assert.doesNotMatch(sql, /CREATE TABLE IF NOT EXISTS email_automation\.email_events/);
   assert.doesNotMatch(sql, /CREATE TABLE[^;]*email_responses/i);
 });

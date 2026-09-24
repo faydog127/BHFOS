@@ -23,7 +23,7 @@ Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amend
 
 ## Local verification (not staging)
 
-- `node --test tvg-email-automation/pass1/test/*.test.mjs` — 47 pass, including Decision ID status lock TVG-EMAIL-P1-D001 through D022, the Founder-only recipient model, and no free-text urgency class
+- `node --test tvg-email-automation/pass1/test/*.test.mjs` — 49 pass, including Decision ID status lock TVG-EMAIL-P1-D001 through D022, one Founder destination, no urgency keyword rules, and after-hours acknowledgement staying disabled
 - Disposable Postgres 16.15: base file, then incremental file, then `fixtures/sql/local-smoke.sql` (`SMOKE_OK`), then a second incremental apply (`REAPPLY_OK`). Claims stayed 1. Founder recipients stayed 1. Subscriptions with null escalation stayed 7. `internal_sms_enabled` stayed false. Staging was not queried.
 - Disposable database `tvg_email_pass1` on local PostgreSQL 16.15: stub CRM + base `apply/20260924_tvg_email_pass1_v5.sql` + `apply/20260924_tvg_email_pass1_incremental.sql` + `fixtures/sql/local-smoke.sql` exited 0 (`SMOKE_OK`)
 - Second apply of the incremental file on that database exited 0 (`REAPPLY_OK`). `network_os_assurance_delivery_claims` still had 1 row. `internal_sms_enabled` stayed `false`. `live_notification_started_at` stayed null. `health_alerts_enabled` stayed `false`. `health_checks` had 2 rows. `email_responses` and `email_send_queue` were absent
@@ -36,6 +36,9 @@ Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amend
 - `TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md` stays in the repo pack and the return packet.
 - `n8n_email_automation` password was not set at apply. Approved path is the staging SQL editor, then the n8n credential only.
 - Form-filter ordering and open-lead production evidence stay on the Pre-webhook gate. They are not staging blockers.
+- Pass 1 keeps one Founder destination, `founder_mobile_ref`, until the Founder authorizes more recipients.
+- Quiet hours, urgency detection, draft review, and reply voice stay Pass 2 inputs. Urgent candidates stay design notes. Pass 1 has no keyword rules.
+- After-hours acknowledgement stays disabled. That is not permission for general auto-send.
 
 ## Decision register
 

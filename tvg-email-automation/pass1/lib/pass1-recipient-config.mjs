@@ -1,13 +1,14 @@
 /**
  * Pass 1 notification recipient model.
- * Founder-only internal SMS. No escalation cadence. No free-text urgency class.
+ * One Founder destination until the Founder authorizes more.
+ * No quiet hours, urgency detection, draft review, or reply voice.
  */
-const LABEL = /^[a-z][a-z0-9_]{0,63}$/;
+export const PASS1_FOUNDER_DESTINATION = 'founder_mobile_ref';
 
 export const PASS1_RECIPIENT = Object.freeze({
   recipientKey: 'founder',
   channel: 'internal_sms',
-  destinationRef: 'founder_mobile_ref',
+  destinationRef: PASS1_FOUNDER_DESTINATION,
   enabled: false,
   escalationAfter: null,
 });
@@ -19,9 +20,14 @@ export function assertPass1Recipient(row) {
   if (channel !== 'internal_sms') throw new Error('Pass 1 channel is internal SMS only');
   if (row?.escalationAfter != null) throw new Error('Pass 1 does not set an escalation cadence');
   const destinationRef = String(row?.destinationRef || '');
-  if (!LABEL.test(destinationRef)) throw new Error('destination ref must be the Founder-approved settings label');
-  if (row?.urgency != null || row?.urgencyClass != null) {
-    throw new Error('free-text urgency classification is outside Pass 1');
+  if (destinationRef !== PASS1_FOUNDER_DESTINATION) {
+    throw new Error('Pass 1 has a single Founder destination');
+  }
+  if (row?.urgency != null || row?.urgencyClass != null || row?.urgencyKeywords != null) {
+    throw new Error('urgency detection is outside Pass 1');
+  }
+  if (row?.replyVoice != null || row?.draftReview != null) {
+    throw new Error('reply voice and draft review are outside Pass 1');
   }
   return {
     recipientKey,
@@ -29,6 +35,28 @@ export function assertPass1Recipient(row) {
     destinationRef,
     enabled: row?.enabled === true,
     escalationAfter: null,
+  };
+}
+
+/**
+ * After-hours acknowledgement stays off. That does not turn on auto-send.
+ * Quiet hours, urgency keywords, draft review, and reply voice stay out of Pass 1.
+ */
+export function assertPass1SendBoundary(settings = {}) {
+  if (settings.autoSendEnabled === true) throw new Error('auto send is outside Pass 1');
+  if (settings.afterHoursAckEnabled === true) throw new Error('after-hours acknowledgement is disabled');
+  if (settings.quietHours != null) throw new Error('quiet hours are outside Pass 1');
+  if (settings.urgencyKeywords != null) throw new Error('urgency keyword rules are outside Pass 1');
+  if (settings.replyVoice != null || settings.draftReview != null) {
+    throw new Error('reply voice and draft review are outside Pass 1');
+  }
+  return {
+    autoSendEnabled: false,
+    afterHoursAckEnabled: false,
+    quietHours: null,
+    urgencyKeywords: null,
+    replyVoice: null,
+    draftReview: null,
   };
 }
 
