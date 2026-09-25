@@ -3,6 +3,7 @@
 **Evidence tier: source-present and locally verified.** Real Hostinger retrieval is **not** verified. No staging n8n execution was run in this session. No Supabase migration was applied. Nothing was merged.
 
 Branch: `cursor/tvg-email-pass1-corrective-fetch-fff2`  
+Implementation commit: `5b1b3c04fcd6a39fe37c65d1b77a90154659f954`  
 Baseline: `cursor/tvg-email-pass1-v5-3e46` at `a81b067c1c621a53d2a6a3522fe4da3b5e036478`  
 Authorization: Command Center 2026-09-25 14:14 ET. Challenge verdict `CHALLENGE_CONCERNS` (proceed; the six concerns are acceptance criteria).
 

@@ -7,6 +7,7 @@ Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amend
 | Field | Value |
 |---|---|
 | Branch | `cursor/tvg-email-pass1-corrective-fetch-fff2` |
+| Implementation commit | `5b1b3c04fcd6a39fe37c65d1b77a90154659f954` |
 | Baseline | `cursor/tvg-email-pass1-v5-3e46` at `a81b067c1c621a53d2a6a3522fe4da3b5e036478` |
 | Authorization | CC 2026-09-25 14:14 ET. Challenge `CHALLENGE_CONCERNS`, proceed, six acceptance criteria |
 | Evidence | **Locally verified** by `node --test tvg-email-automation/pass1/test/*.test.mjs` (57 pass, 0 fail) in this session. **Not** staging executed. **Not** applied to `glkrykpksbsqmmilmjhs`. **Not** merged. Real Hostinger retrieval is **not** verified. |
