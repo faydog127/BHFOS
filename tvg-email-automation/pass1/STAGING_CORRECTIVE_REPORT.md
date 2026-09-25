@@ -1,6 +1,16 @@
 # Staging corrective report — TVG Email Pass 1
 
-**Evidence tier: source-present and locally verified.** Real Hostinger retrieval is **not** verified. No staging n8n execution was run in this session. No Supabase migration was applied. Nothing was merged.
+**Evidence tier for this defect fix: locally verified.** The 2026-09-25 staging smoke already ran and found two defects (Worker execution 3444, `url_build_failed`, mock received 0 requests; three mock webhook ids). This fix was not re-executed on staging. Real Hostinger retrieval is **not** verified. No Supabase write in this session. Nothing was merged. The mock workflow in git is still inactive.
+
+## Defect fix after the corrective smoke
+
+Staging execution 3444 held uid 910001 as `pointer_unresolved` / `last_error` `url_build_failed` because `buildMessageUrl` and the GET guard called `new URL()` inside the worker Code node. The mock's three webhook nodes also used three webhook ids, so metadata, `/text`, and `/source` were not suffixes of one base. n8n test listeners accept one call.
+
+`pass1-hostinger-fetch.mjs` now parses and composes `https` URLs without `URL`, `URLSearchParams`, `TextEncoder`, or `Buffer`. The same three URLs and the same guard rejections are covered with those globals removed, including inside `node:vm`. A build failure records `url_build_failed:<ErrorClass>:<message>` on `last_error` and `automation_errors`, with the message stripped of URL and bearer text. Pointer fields are numeric uid, mailbox id, and folder patterns, encoded per segment. Traversal, a full URL in a field, an extra query, and a non-https base do not produce a fetch URL. A URL stuffed into the queue row is ignored.
+
+The mock keeps three Hostinger path shapes because n8n matches one segment count per webhook node. All three nodes use webhook id `b1000000-0000-4000-8000-000000000001`. `Dispatch mock` selects metadata, text, or source from the path suffix. One `/webhook-test/` listen still cannot serve the worker's three sequential GETs. **Activating the mock is required** for that proof. This repo does not activate it. That needs a separate Command Center yes. The runbook has the base URL and the temporary allowlist host `bhfos.app.n8n.cloud`.
+
+Local command: `node --test tvg-email-automation/pass1/test/*.test.mjs` — 59 pass, 0 fail. Not staging. Not merged.
 
 Branch: `cursor/tvg-email-pass1-corrective-fetch-fff2`  
 Implementation commit: `5b1b3c04fcd6a39fe37c65d1b77a90154659f954`  

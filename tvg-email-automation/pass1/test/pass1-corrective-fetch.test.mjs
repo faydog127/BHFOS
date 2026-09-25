@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 import { evaluateIntake } from '../lib/pass1-intake-logic.mjs';
 import {
   DISABLED_BASE_URL,
@@ -10,6 +11,8 @@ import {
   MOCK_CASES,
   STUCK_REAL_UID,
   assertHostingerGetRequest,
+  buildClosedHoldSql,
+  buildMessageUrl,
   decideFetchedIntake,
   planWorkerRoute,
   renderMockHostingerResponse,
@@ -127,6 +130,18 @@ test('real-fetch mock cases fail closed or follow the approved identity rule', (
   const happy = decide(910001);
   assert.equal(happy.plan.route, 'fetch');
   assert.equal(happy.plan.fetch_base_url, mockBase);
+  assert.equal(
+    happy.plan.metadata_url,
+    `${mockBase}/api/v1/mailboxes/mbx_mock/folders/INBOX/messages/910001`,
+  );
+  assert.equal(
+    happy.plan.text_url,
+    `${mockBase}/api/v1/mailboxes/mbx_mock/folders/INBOX/messages/910001/text`,
+  );
+  assert.equal(
+    happy.plan.source_url,
+    `${mockBase}/api/v1/mailboxes/mbx_mock/folders/INBOX/messages/910001/source`,
+  );
   assert.equal(happy.decided.decision.event_status, 'awaiting_pass2');
   assert.match(happy.decided.sql, /fetch_base_url/);
   assert.match(happy.decided.sql, /email_automation\.email_events/);
@@ -268,10 +283,356 @@ test('worker HTTP nodes are GET-only and the mock workflow stays inactive', () =
     assert.equal(node.credentials.httpHeaderAuth.id, 'tvg-staging-hostinger-mail-api-placeholder');
   }
   assert.equal(mock.nodes.some((node) => node.type === 'n8n-nodes-base.httpRequest'), false);
+  const mockHooks = mock.nodes.filter((node) => node.type === 'n8n-nodes-base.webhook');
+  assert.equal(mockHooks.length, 3);
+  assert.deepEqual(
+    mockHooks.map((node) => node.webhookId),
+    [
+      'b1000000-0000-4000-8000-000000000001',
+      'b1000000-0000-4000-8000-000000000001',
+      'b1000000-0000-4000-8000-000000000001',
+    ],
+  );
+  assert.deepEqual(
+    mockHooks.map((node) => node.parameters.path).sort(),
+    [
+      'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid',
+      'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid/source',
+      'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid/text',
+    ],
+  );
+  for (const name of ['Mock metadata', 'Mock text', 'Mock source']) {
+    assert.equal(mock.connections[name].main[0][0].node, 'Dispatch mock');
+  }
+  assert.equal(mock.connections['Dispatch mock'].main[0][0].node, 'Render mock');
+  assert.equal(mock.nodes.some((node) => node.name === 'Mark metadata'), false);
   assert.match(JSON.stringify(worker), /assertHostingerGetRequest/);
+  assert.doesNotMatch(JSON.stringify(worker), /new URL\(|URLSearchParams/);
+  for (const node of httpNodes) {
+    assert.match(node.parameters.url, /\$\('Plan route'\)\.first\(\)\.json\.(metadata_url|text_url|source_url)/);
+    assert.doesNotMatch(node.parameters.url, /hostinger_pointers|queue_row/);
+  }
   assert.match(worker.nodes.find((node) => node.name === 'Claim pending').parameters.query, /924150001/);
   const blob = `${JSON.stringify(worker)}\n${JSON.stringify(mock)}`;
   assert.doesNotMatch(blob, /Bearer [A-Za-z0-9._\-]{20,}/);
   assert.doesNotMatch(blob, /db\.wwyxohjnyqnegzbxtuxs/);
   assert.match(blob, /productionRefForbidden/);
+});
+
+const pointer = {
+  mailbox_resource_id: 'mbx_mock',
+  folder: 'INBOX',
+  uid: '910001',
+};
+
+function messageUrls(baseUrl) {
+  return {
+    metadata: buildMessageUrl(baseUrl, pointer, ''),
+    text: buildMessageUrl(baseUrl, pointer, 'text'),
+    source: buildMessageUrl(baseUrl, pointer, 'source'),
+  };
+}
+
+function guardSample(baseUrl, urls) {
+  const allowed = ['mock.staging.invalid', 'bhfos.app.n8n.cloud'];
+  return {
+    post: assertHostingerGetRequest({
+      method: 'POST',
+      url: urls.metadata,
+      baseUrl,
+      allowedHosts: allowed,
+      liveFetchEnabled: false,
+    }).reason,
+    query: assertHostingerGetRequest({
+      method: 'GET',
+      url: `${urls.text}?injected=1`,
+      baseUrl,
+      allowedHosts: allowed,
+      liveFetchEnabled: false,
+    }).reason,
+    scheme: assertHostingerGetRequest({
+      method: 'GET',
+      url: urls.metadata.replace('https://', 'http://'),
+      baseUrl: baseUrl.replace('https://', 'http://'),
+      allowedHosts: allowed,
+      liveFetchEnabled: false,
+    }).reason,
+    traversal: assertHostingerGetRequest({
+      method: 'GET',
+      url: `${baseUrl}/api/v1/mailboxes/mbx_mock/folders/../messages/910001`,
+      baseUrl,
+      allowedHosts: allowed,
+      liveFetchEnabled: false,
+    }).reason,
+    encodedTraversal: assertHostingerGetRequest({
+      method: 'GET',
+      url: `${baseUrl}/api/v1/mailboxes/mbx_mock/folders/%2e%2e/messages/910001/source`,
+      baseUrl,
+      allowedHosts: allowed,
+      liveFetchEnabled: false,
+    }).reason,
+    live: assertHostingerGetRequest({
+      method: 'GET',
+      url: `https://${HOSTINGER_LIVE_HOST}/api/v1/mailboxes/mbx_mock/folders/INBOX/messages/910001/text`,
+      baseUrl: `https://${HOSTINGER_LIVE_HOST}`,
+      allowedHosts: [HOSTINGER_LIVE_HOST],
+      liveFetchEnabled: false,
+    }).reason,
+    get: assertHostingerGetRequest({
+      method: 'GET',
+      url: urls.source,
+      baseUrl,
+      allowedHosts: allowed,
+      liveFetchEnabled: false,
+    }).ok,
+  };
+}
+
+function hideSandboxGlobals() {
+  const names = ['URL', 'URLSearchParams', 'Buffer', 'TextEncoder', 'TextDecoder'];
+  const saved = names.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]);
+  for (const name of names) {
+    delete globalThis[name];
+    Object.defineProperty(globalThis, name, {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
+  }
+  return saved;
+}
+
+function restoreSandboxGlobals(saved) {
+  for (const [name, descriptor] of saved) {
+    delete globalThis[name];
+    if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+  }
+}
+
+test('path injection and queue-supplied URLs do not pass the GET guard', () => {
+  const urls = messageUrls(mockBase);
+  const reference = new URL(mockBase);
+  reference.pathname = `${reference.pathname}/api/v1/mailboxes/mbx_mock/folders/INBOX/messages/910001`;
+  reference.search = '';
+  reference.hash = '';
+  assert.equal(urls.metadata, reference.toString());
+  assert.equal(urls.text, `${reference.toString()}/text`);
+  assert.equal(urls.source, `${reference.toString()}/source`);
+
+  const poisoned = planWorkerRoute({
+    queueRow: queue(910001, {
+      metadata_url: 'https://evil.example/steal',
+      text_url: 'http://evil.example/text',
+      source_url: `https://${HOSTINGER_LIVE_HOST}/api/v1/mailboxes/mbx_mock/folders/INBOX/messages/910001/source`,
+      hostinger_pointers: {
+        mailbox_resource_id: 'mbx_mock',
+        folder: 'INBOX',
+        uid: '910001',
+        metadata_url: 'https://evil.example/steal',
+        url: 'https://evil.example/?q=1',
+      },
+    }),
+    settings,
+  });
+  assert.equal(poisoned.route, 'fetch');
+  assert.equal(poisoned.metadata_url, urls.metadata);
+  assert.equal(poisoned.text_url, urls.text);
+  assert.equal(poisoned.source_url, urls.source);
+  assert.doesNotMatch(`${poisoned.metadata_url} ${poisoned.text_url} ${poisoned.source_url}`, /evil\.example|api\.mail\.hostinger\.com/);
+
+  const traversal = planWorkerRoute({
+    queueRow: queue(910001, {
+      folder: '../secret',
+      hostinger_pointers: { mailbox_resource_id: 'mbx_mock', folder: '../secret', uid: '910001' },
+    }),
+    settings,
+  });
+  assert.equal(traversal.metadata_url, null);
+  assert.equal(traversal.detail, 'folder_unresolved');
+
+  const dotted = planWorkerRoute({
+    queueRow: queue(910001, {
+      folder: '..',
+      hostinger_pointers: { mailbox_resource_id: 'mbx_mock', folder: '..', uid: '910001' },
+    }),
+    settings,
+  });
+  assert.equal(dotted.metadata_url, null);
+  assert.equal(dotted.detail, 'folder_unresolved');
+
+  const fullUrlField = planWorkerRoute({
+    queueRow: queue(910001, {
+      mailbox_resource_id: 'https://evil.example/api',
+      hostinger_pointers: {
+        mailbox_resource_id: 'https://evil.example/api',
+        folder: 'INBOX',
+        uid: '910001',
+      },
+    }),
+    settings,
+  });
+  assert.equal(fullUrlField.metadata_url, null);
+  assert.equal(fullUrlField.detail, 'mailbox_resource_id_unresolved');
+
+  const queryUid = planWorkerRoute({
+    queueRow: queue(910001, {
+      uid: '910001?x=1',
+      hostinger_pointers: { mailbox_resource_id: 'mbx_mock', folder: 'INBOX', uid: '910001?x=1' },
+    }),
+    settings,
+  });
+  assert.equal(queryUid.metadata_url, null);
+  assert.equal(queryUid.detail, 'uid_unresolved');
+
+  const httpPlan = planWorkerRoute({
+    queueRow: queue(910001),
+    settings: {
+      ...settings,
+      hostinger_mail_api_base_url: mockBase.replace('https://', 'http://'),
+    },
+  });
+  assert.equal(httpPlan.route, 'hold');
+  assert.equal(httpPlan.metadata_url, null);
+  assert.equal(httpPlan.error_code, 'scheme_rejected');
+  assert.equal(httpPlan.detail, 'metadata:scheme_rejected');
+
+  const queriedBase = `${mockBase}?token=supersecret`;
+  const stripped = planWorkerRoute({
+    queueRow: queue(910001),
+    settings: { ...settings, hostinger_mail_api_base_url: queriedBase },
+  });
+  assert.equal(stripped.metadata_url, urls.metadata);
+  assert.doesNotMatch(stripped.metadata_url, /supersecret|\?/);
+
+  const userinfo = planWorkerRoute({
+    queueRow: queue(910001),
+    settings: {
+      ...settings,
+      hostinger_mail_api_base_url: mockBase.replace('https://', 'https://user:supersecret@'),
+    },
+  });
+  assert.equal(userinfo.metadata_url, null);
+  assert.equal(userinfo.error_code, 'url_rejected');
+  assert.doesNotMatch(userinfo.detail, /supersecret/);
+
+  const broken = planWorkerRoute({
+    queueRow: queue(910001),
+    settings: { ...settings, hostinger_mail_api_base_url: 'not-a-url' },
+  });
+  assert.equal(broken.route, 'hold');
+  assert.equal(broken.metadata_url, null);
+  assert.match(broken.detail, /^url_build_failed:TypeError:Invalid URL$/);
+  const sql = buildClosedHoldSql({
+    queue_id: queue(910001).id,
+    queue_status: 'held',
+    hold_reason: 'pointer_unresolved',
+    error_code: 'pointer_unresolved',
+    detail: broken.detail,
+    fetch_base_url: 'not-a-url',
+  });
+  assert.match(sql, /last_error = 'url_build_failed:TypeError:Invalid URL'/);
+  assert.match(sql, /'url_build_failed:TypeError:Invalid URL'/);
+  assert.doesNotMatch(sql, /Bearer |supersecret/);
+
+  const guards = guardSample(mockBase, urls);
+  assert.equal(guards.post, 'method_rejected');
+  assert.equal(guards.query, 'query_rejected');
+  assert.equal(guards.scheme, 'scheme_rejected');
+  assert.equal(guards.traversal, 'path_rejected');
+  assert.equal(guards.encodedTraversal, 'path_rejected');
+  assert.equal(guards.live, 'live_fetch_disabled');
+  assert.equal(guards.get, true);
+});
+
+test('URL building and the GET guard match when sandbox globals are removed', () => {
+  const fetchSource = readFileSync(join(root, 'lib/pass1-hostinger-fetch.mjs'), 'utf8');
+  assert.doesNotMatch(fetchSource, /new URL\(|URLSearchParams|TextEncoder|\bBuffer\b/);
+  const withGlobals = {
+    urls: messageUrls(mockBase),
+    guards: null,
+  };
+  withGlobals.guards = guardSample(mockBase, withGlobals.urls);
+
+  const saved = hideSandboxGlobals();
+  let withoutGlobals;
+  try {
+    assert.equal(globalThis.URL, undefined);
+    assert.equal(globalThis.URLSearchParams, undefined);
+    assert.equal(globalThis.Buffer, undefined);
+    assert.equal(globalThis.TextEncoder, undefined);
+    withoutGlobals = {
+      urls: messageUrls(mockBase),
+      guards: null,
+    };
+    withoutGlobals.guards = guardSample(mockBase, withoutGlobals.urls);
+  } finally {
+    restoreSandboxGlobals(saved);
+  }
+  assert.equal(typeof globalThis.URL, 'function');
+  assert.deepEqual(withoutGlobals.urls, withGlobals.urls);
+  assert.deepEqual(withoutGlobals.guards, withGlobals.guards);
+
+  const stripped = fetchSource
+    .split('\n')
+    .filter((line) => !line.startsWith('import ') && !line.startsWith('export {'))
+    .map((line) => (line.startsWith('export ') ? line.slice('export '.length) : line))
+    .join('\n');
+  const sandbox = {
+    encodeURIComponent,
+    decodeURIComponent,
+    Object,
+    Array,
+    String,
+    Number,
+    Boolean,
+    RegExp,
+    JSON,
+    Math,
+    Error,
+    TypeError,
+    URIError,
+    SyntaxError,
+    RangeError,
+    Map,
+    Set,
+    Date,
+    parseInt,
+    parseFloat,
+    isFinite,
+    isNaN,
+  };
+  assert.equal(Object.hasOwn(sandbox, 'URL'), false);
+  assert.equal(Object.hasOwn(sandbox, 'URLSearchParams'), false);
+  assert.equal(Object.hasOwn(sandbox, 'Buffer'), false);
+  assert.equal(Object.hasOwn(sandbox, 'TextEncoder'), false);
+  const script = `
+    const buildOutcomeSql = () => { throw new Error('unused'); };
+    const computeIdentity = () => { throw new Error('unused'); };
+    const evaluateIntake = () => { throw new Error('unused'); };
+    const normalizeEmail = () => '';
+    const parseAuthResults = () => ({});
+    const quoteLiteral = (value) => "'" + String(value) + "'";
+    ${stripped}
+    const pointer = { mailbox_resource_id: 'mbx_mock', folder: 'INBOX', uid: '910001' };
+    const baseUrl = ${JSON.stringify(mockBase)};
+    const urls = {
+      metadata: buildMessageUrl(baseUrl, pointer, ''),
+      text: buildMessageUrl(baseUrl, pointer, 'text'),
+      source: buildMessageUrl(baseUrl, pointer, 'source'),
+    };
+    const allowed = ['mock.staging.invalid'];
+    const guards = {
+      post: assertHostingerGetRequest({ method: 'POST', url: urls.metadata, baseUrl, allowedHosts: allowed, liveFetchEnabled: false }).reason,
+      query: assertHostingerGetRequest({ method: 'GET', url: urls.text + '?injected=1', baseUrl, allowedHosts: allowed, liveFetchEnabled: false }).reason,
+      scheme: assertHostingerGetRequest({ method: 'GET', url: urls.metadata.replace('https://', 'http://'), baseUrl: baseUrl.replace('https://', 'http://'), allowedHosts: allowed, liveFetchEnabled: false }).reason,
+      traversal: assertHostingerGetRequest({ method: 'GET', url: baseUrl + '/api/v1/mailboxes/mbx_mock/folders/../messages/910001', baseUrl, allowedHosts: allowed, liveFetchEnabled: false }).reason,
+    };
+    ({ urls, guards });
+  `;
+  const vmResult = JSON.parse(JSON.stringify(vm.runInNewContext(script, sandbox)));
+  assert.deepEqual(vmResult.urls, withGlobals.urls);
+  assert.equal(vmResult.guards.post, 'method_rejected');
+  assert.equal(vmResult.guards.query, 'query_rejected');
+  assert.equal(vmResult.guards.scheme, 'scheme_rejected');
+  assert.equal(vmResult.guards.traversal, 'path_rejected');
 });

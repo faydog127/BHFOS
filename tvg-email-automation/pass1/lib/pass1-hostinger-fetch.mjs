@@ -51,7 +51,110 @@ function settingsInt(settings, key, fallback, cap) {
 
 function utf8Bytes(value) {
   const text = typeof value === 'string' ? value : JSON.stringify(value ?? '');
-  return new TextEncoder().encode(text).length;
+  let bytes = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    if (code < 0x80) bytes += 1;
+    else if (code < 0x800) bytes += 2;
+    else if (code >= 0xd800 && code <= 0xdbff) {
+      bytes += 4;
+      i += 1;
+    } else bytes += 3;
+  }
+  return bytes;
+}
+
+const MAILBOX_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const FOLDER_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
+const UID_PATTERN = /^\d{1,18}$/;
+
+function segmentTextOk(value, pattern) {
+  const text = String(value ?? '');
+  if (!pattern.test(text)) return false;
+  if (text === '.' || text === '..' || text.includes('..')) return false;
+  if (/[/?#%@:\\]/.test(text)) return false;
+  return true;
+}
+
+function encodePathSegment(value, pattern) {
+  const text = String(value ?? '');
+  if (!segmentTextOk(text, pattern)) throw new TypeError('path segment rejected');
+  return encodeURIComponent(text);
+}
+
+function invalidUrl() {
+  return new TypeError('Invalid URL');
+}
+
+function parseHttpUrl(input) {
+  const raw = String(input ?? '').trim();
+  const match = /^(https?):\/\/([^/?#]*)([^?#]*)(\?[^#]*)?(#.*)?$/i.exec(raw);
+  if (!match) throw invalidUrl();
+  const protocol = `${match[1].toLowerCase()}:`;
+  let authority = match[2];
+  if (!authority) throw invalidUrl();
+  let username = '';
+  let pass = '';
+  const at = authority.lastIndexOf('@');
+  if (at !== -1) {
+    const userinfo = authority.slice(0, at);
+    authority = authority.slice(at + 1);
+    const colon = userinfo.indexOf(':');
+    if (colon === -1) username = userinfo;
+    else {
+      username = userinfo.slice(0, colon);
+      pass = userinfo.slice(colon + 1);
+    }
+  }
+  if (!authority || /[\s@]/.test(authority) || authority.startsWith('[')) throw invalidUrl();
+  let hostname = authority;
+  let port = '';
+  const colon = hostname.lastIndexOf(':');
+  if (colon !== -1) {
+    port = hostname.slice(colon + 1);
+    hostname = hostname.slice(0, colon);
+    if (!/^\d{1,5}$/.test(port) || Number(port) > 65535) throw invalidUrl();
+  }
+  hostname = hostname.toLowerCase();
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/.test(hostname) && hostname !== 'localhost') {
+    throw invalidUrl();
+  }
+  let pathname = match[3] || '/';
+  if (!pathname.startsWith('/')) pathname = `/${pathname}`;
+  const defaultPort = protocol === 'https:' ? '443' : '80';
+  const portSuffix = port && port !== defaultPort ? `:${port}` : '';
+  return {
+    protocol,
+    username,
+    pass,
+    hostname,
+    port,
+    pathname,
+    search: match[4] || '',
+    hash: match[5] || '',
+    origin: `${protocol}//${hostname}${portSuffix}`,
+  };
+}
+
+function composeHttpUrl(parts) {
+  const defaultPort = parts.protocol === 'https:' ? '443' : '80';
+  const portSuffix = parts.port && parts.port !== defaultPort ? `:${parts.port}` : '';
+  const userinfo = parts.username
+    ? `${parts.username}${parts.pass ? `:${parts.pass}` : ''}@`
+    : (parts.pass ? `:${parts.pass}@` : '');
+  let pathname = parts.pathname || '/';
+  if (!pathname.startsWith('/')) pathname = `/${pathname}`;
+  return `${parts.protocol}//${userinfo}${parts.hostname}${portSuffix}${pathname}`;
+}
+
+function urlBuildFailureDetail(error) {
+  const name = String(error && error.name ? error.name : 'Error').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40) || 'Error';
+  const message = String(error && error.message ? error.message : 'url_build_failed')
+    .replace(/https?:\/\/\S+/gi, '[url]')
+    .replace(/bearer\s+\S+/gi, '[redacted]')
+    .replace(/[\r\n\t]+/g, ' ')
+    .slice(0, 160);
+  return `url_build_failed:${name}:${message}`.slice(0, 220);
 }
 
 export function assertHostingerGetRequest({
@@ -67,13 +170,13 @@ export function assertHostingerGetRequest({
   let parsed;
   let base;
   try {
-    parsed = new URL(url);
-    base = new URL(baseUrl);
+    parsed = parseHttpUrl(url);
+    base = parseHttpUrl(baseUrl);
   } catch {
     return { ok: false, reason: 'url_rejected' };
   }
   if (parsed.protocol !== 'https:') return { ok: false, reason: 'scheme_rejected' };
-  const userinfo = parsed.username || parsed['pass' + 'word'];
+  const userinfo = parsed.username || parsed.pass;
   if (userinfo) return { ok: false, reason: 'url_rejected' };
   if (parsed.origin !== base.origin) return { ok: false, reason: 'host_rejected' };
   if (parsed.search || parsed.hash) return { ok: false, reason: 'query_rejected' };
@@ -99,18 +202,27 @@ export function assertHostingerGetRequest({
 
 export function buildMessageUrl(baseUrl, pointer, suffix) {
   if (suffix !== '' && suffix !== 'text' && suffix !== 'source') {
-    throw new Error('suffix rejected');
+    throw new TypeError('suffix rejected');
   }
-  const base = new URL(baseUrl);
-  const folder = encodeURIComponent(pointer.folder);
-  const id = encodeURIComponent(pointer.mailbox_resource_id);
-  const uid = encodeURIComponent(String(pointer.uid));
+  const base = parseHttpUrl(baseUrl);
+  const id = encodePathSegment(pointer.mailbox_resource_id, MAILBOX_ID_PATTERN);
+  const folder = encodePathSegment(pointer.folder, FOLDER_PATTERN);
+  const uid = encodePathSegment(String(pointer.uid), UID_PATTERN);
   const tail = suffix ? `/${suffix}` : '';
   const prefix = base.pathname.replace(/\/+$/, '');
-  base.pathname = `${prefix}/api/v1/mailboxes/${id}/folders/${folder}/messages/${uid}${tail}`;
-  base.search = '';
-  base.hash = '';
-  return base.toString();
+  const pathname = `${prefix}/api/v1/mailboxes/${id}/folders/${folder}/messages/${uid}${tail}`;
+  const relative = pathname.slice(prefix.length);
+  if (relative.includes('..') || !MESSAGE_PATH.test(relative)) {
+    throw new TypeError('path segment rejected');
+  }
+  return composeHttpUrl({
+    protocol: base.protocol,
+    username: base.username,
+    pass: base.pass,
+    hostname: base.hostname,
+    port: base.port,
+    pathname,
+  });
 }
 
 function resolveStoredPointer(queue) {
@@ -133,13 +245,13 @@ function resolveStoredPointer(queue) {
       return { ok: false, detail: `pointer_mismatch:${key}` };
     }
   }
-  if (!/^[A-Za-z0-9_-]{1,128}$/.test(String(column.mailbox_resource_id || ''))) {
+  if (!segmentTextOk(column.mailbox_resource_id, MAILBOX_ID_PATTERN)) {
     return { ok: false, detail: 'mailbox_resource_id_unresolved' };
   }
-  if (!/^[A-Za-z0-9._-]{1,128}$/.test(String(column.folder || ''))) {
+  if (!segmentTextOk(column.folder, FOLDER_PATTERN)) {
     return { ok: false, detail: 'folder_unresolved' };
   }
-  if (!/^\d{1,18}$/.test(column.uid)) return { ok: false, detail: 'uid_unresolved' };
+  if (!segmentTextOk(column.uid, UID_PATTERN)) return { ok: false, detail: 'uid_unresolved' };
   if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(String(column.mailbox || ''))) {
     return { ok: false, detail: 'mailbox_unresolved' };
   }
@@ -232,12 +344,12 @@ export function planWorkerRoute({
       text: buildMessageUrl(baseUrl, pointer, 'text'),
       source: buildMessageUrl(baseUrl, pointer, 'source'),
     };
-  } catch {
+  } catch (error) {
     return holdPlan(common, {
       hold_reason: 'pointer_unresolved',
       error_code: 'pointer_unresolved',
       queue_status: 'held',
-      detail: 'url_build_failed',
+      detail: urlBuildFailureDetail(error),
     });
   }
   const allowedHosts = settingsArray(settings, 'hostinger_mail_api_allowed_hosts');

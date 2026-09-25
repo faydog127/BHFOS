@@ -944,32 +944,55 @@ const health = workflow(
 health.meta.tvgEmailPass1.hostingerMailboxProbe = 'dormant';
 health.meta.tvgEmailPass1.hostingerApiHealth = 'not-a-live-check';
 
+const MOCK_WEBHOOK_ID = 'b1000000-0000-4000-8000-000000000001';
+
 function mockWebhook(id, name, path, x, y) {
   return nodeBase(id, name, 'n8n-nodes-base.webhook', 2, x, y, {
     httpMethod: 'GET',
     path,
     responseMode: 'responseNode',
     options: {},
-  }, { webhookId: id });
+  }, { webhookId: MOCK_WEBHOOK_ID });
 }
+
+const mockDispatch = `
+const item = $input.first().json || {};
+const params = item.params && typeof item.params === 'object' ? item.params : {};
+const headers = item.headers && typeof item.headers === 'object' ? item.headers : {};
+const forwarded = headers['x-forwarded-path'] || headers['x-forwarded-uri'] || '';
+const pathOnly = String(item.webhookUrl || forwarded || '').split('?')[0].split('#')[0];
+let mock_kind = '';
+if (/\\/source$/.test(pathOnly)) mock_kind = 'source';
+else if (/\\/text$/.test(pathOnly)) mock_kind = 'text';
+else if (/\\/messages\\/[^/]+$/.test(pathOnly)) mock_kind = 'metadata';
+if (!mock_kind) {
+  try { if ($('Mock source').isExecuted) mock_kind = 'source'; } catch (error) { /* parent not run */ }
+}
+if (!mock_kind) {
+  try { if ($('Mock text').isExecuted) mock_kind = 'text'; } catch (error) { /* parent not run */ }
+}
+if (!mock_kind) mock_kind = 'metadata';
+if (mock_kind !== 'metadata' && mock_kind !== 'text' && mock_kind !== 'source') {
+  return [{ json: { http_status: 404, response_body: { error: 'not_found' }, timeout: false, mock_kind: 'rejected' } }];
+}
+return [{ json: { ...item, params, mock_kind, uid: params.uid || '' } }];
+`;
 
 const mockRender = `${fetchLogic}
 
 const item = $input.first().json || {};
 const params = item.params || {};
 const query = item.query || {};
-const uid = params.uid || query.uid || '';
+const uid = item.uid || params.uid || query.uid || '';
 const rendered = renderMockHostingerResponse({ uid, kind: item.mock_kind });
 return [{ json: rendered }];
 `;
 
 const mockMap = {};
-connect(mockMap, 'Mock metadata', 'Mark metadata');
-connect(mockMap, 'Mock text', 'Mark text');
-connect(mockMap, 'Mock source', 'Mark source');
-connect(mockMap, 'Mark metadata', 'Render mock');
-connect(mockMap, 'Mark text', 'Render mock');
-connect(mockMap, 'Mark source', 'Render mock');
+connect(mockMap, 'Mock metadata', 'Dispatch mock');
+connect(mockMap, 'Mock text', 'Dispatch mock');
+connect(mockMap, 'Mock source', 'Dispatch mock');
+connect(mockMap, 'Dispatch mock', 'Render mock');
 connect(mockMap, 'Render mock', 'Is timeout');
 connect(mockMap, 'Is timeout', 'Wait for timeout case', 0);
 connect(mockMap, 'Is timeout', 'Respond mock', 1);
@@ -979,17 +1002,15 @@ const hostingerMock = workflow(
   '[STAGING] TVG Email — Hostinger Mock',
   [
     nodeBase('b1000000-0000-4000-8000-000000000020', 'STAGING ONLY / HOSTINGER OFF', 'n8n-nodes-base.stickyNote', 1, 0, -260, {
-      content: 'Inactive mock. Not the live Hostinger API. Use the test URL only. UIDs: 910001 happy, 910404 not found, 910500 upstream, 910408 delay, 910601 missing Authentication-Results, 910602 missing Message-ID and Date, 910603 oversized text. This workflow does not read or flag a mailbox.',
-      width: 720,
-      height: 160,
+      content: 'Inactive in this file. Not the live Hostinger API. One webhook id, three Hostinger path shapes, one dispatcher on the /text or /source suffix. A test listener accepts one call and then drops, so one worker run cannot hit metadata, /text, and /source until Command Center permits activating this mock only. UIDs: 910001 happy, 910404 not found, 910500 upstream, 910408 delay, 910601 missing Authentication-Results, 910602 missing Message-ID and Date, 910603 oversized text. This workflow does not read or flag a mailbox.',
+      width: 760,
+      height: 200,
     }),
     mockWebhook('b1000000-0000-4000-8000-000000000001', 'Mock metadata', 'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid', 0, 0),
     mockWebhook('b1000000-0000-4000-8000-000000000002', 'Mock text', 'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid/text', 0, 180),
     mockWebhook('b1000000-0000-4000-8000-000000000003', 'Mock source', 'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid/source', 0, 360),
-    codeNode('b1000000-0000-4000-8000-000000000004', 'Mark metadata', 360, 0, "const item = $input.first().json || {};\nreturn [{ json: { ...item, mock_kind: 'metadata' } }];\n"),
-    codeNode('b1000000-0000-4000-8000-000000000005', 'Mark text', 360, 180, "const item = $input.first().json || {};\nreturn [{ json: { ...item, mock_kind: 'text' } }];\n"),
-    codeNode('b1000000-0000-4000-8000-000000000006', 'Mark source', 360, 360, "const item = $input.first().json || {};\nreturn [{ json: { ...item, mock_kind: 'source' } }];\n"),
-    codeNode('b1000000-0000-4000-8000-000000000007', 'Render mock', 680, 180, mockRender),
+    codeNode('b1000000-0000-4000-8000-000000000004', 'Dispatch mock', 420, 180, mockDispatch),
+    codeNode('b1000000-0000-4000-8000-000000000007', 'Render mock', 740, 180, mockRender),
     nodeBase('b1000000-0000-4000-8000-000000000008', 'Is timeout', 'n8n-nodes-base.if', 2.2, 960, 180, {
       conditions: {
         options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },

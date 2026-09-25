@@ -2,7 +2,7 @@
 
 **STAGING ONLY.** Project `glkrykpksbsqmmilmjhs`. Forbidden project `wwyxohjnyqnegzbxtuxs`.
 
-This runbook is the coordinator's manual procedure. It is not evidence that the smokes have been run. Workflows stay **inactive**. The Hostinger webhook stays **unregistered**. Do not merge the pull request.
+This runbook is the coordinator's manual procedure. It is not evidence that the smokes have been run. The Fast ACK and the Worker stay **inactive**. The mock file is **inactive**. One worker run can reach metadata, `/text`, and `/source` only if Command Center permits activating the mock for that window; deactivate it before close-out. The Hostinger webhook stays **unregistered**. Do not merge the pull request.
 
 Local unit tests cover the same decisions without n8n or Supabase. They are not a substitute for these staging executions.
 
@@ -83,15 +83,34 @@ Capture: the three HTTP status codes, the response bodies, and the `intake_queue
 
 ## B. Point the worker at the mock
 
-Do this only after section A. Do not set the base URL to `https://api.mail.hostinger.com`.
+Do this only after section A. Do not set the base URL to `https://api.mail.hostinger.com`. Do not put `api.mail.hostinger.com` on the allowlist.
 
-1. Open `[STAGING] TVG Email — Hostinger Mock`. Leave it inactive. Click **Listen for test event**.
-2. Copy the test URL through `.../webhook-test/tvg/staging-mock/mail` (no message path after `mail`).
-3. Set only that host and that base URL:
+Re-import `n8n/tvg-email-intake-worker.json` and `n8n/tvg-email-hostinger-mock.json` over the staging workflows (Worker `6YVQGAJqOfkuulht`, Mock `gk84Az11ruwqGYCN`). Leave the Worker inactive. The mock file is inactive. After import, open the three mock webhook nodes and confirm each test URL contains the same id `b1000000-0000-4000-8000-000000000001`. If n8n rewrote them into three different ids, stop. Do not run the worker against three bases.
+
+n8n dynamic routes include that id, then the path. The shared base, with no message path after `mail`, is:
+
+- Inactive test listener (one request, then n8n drops the listener): `https://bhfos.app.n8n.cloud/webhook-test/b1000000-0000-4000-8000-000000000001/tvg/staging-mock/mail`
+- Mock activated (production registration): `https://bhfos.app.n8n.cloud/webhook/b1000000-0000-4000-8000-000000000001/tvg/staging-mock/mail`
+
+Use the URL the node displays if the host differs, trimmed after `mail`. The three shapes under that base are:
+
+- `{base}/api/v1/mailboxes/mbx_mock/folders/INBOX/messages/{uid}`
+- `{base}/api/v1/mailboxes/mbx_mock/folders/INBOX/messages/{uid}/text`
+- `{base}/api/v1/mailboxes/mbx_mock/folders/INBOX/messages/{uid}/source`
+
+`Dispatch mock` chooses metadata, text, or source from that suffix. One listener cannot serve all three. n8n removes a `/webhook-test/` registration when the first call finishes, and the worker calls Fetch metadata, then Fetch text, then Fetch source. The second and third calls 404. **Activating the mock is required** for one manual worker run to hit all three. This pack does not activate it. Do that only after a separate Command Center yes for this window. Activating the Fast ACK or the Worker is not part of that yes.
+
+Until that yes, a single Listen on one mock node can prove one path only. That is not the happy path.
+
+When Command Center permits the mock activation:
+
+1. Activate only `[STAGING] TVG Email — Hostinger Mock`.
+2. Copy the production base through `.../webhook/b1000000-0000-4000-8000-000000000001/tvg/staging-mock/mail`.
+3. Set only that host and that base URL. The host for this n8n instance is `bhfos.app.n8n.cloud`.
 
 ```sql
 UPDATE email_automation.automation_settings
-SET value_json = to_jsonb('<PASTE_TEST_BASE_URL>'::text),
+SET value_json = to_jsonb('<PASTE_MOCK_BASE_URL>'::text),
     updated_by = 'corrective-smoke'
 WHERE tenant_id = 'tvg' AND key = 'hostinger_mail_api_base_url';
 
@@ -101,9 +120,9 @@ SET value_json = jsonb_build_array('<PASTE_N8N_HOSTNAME_ONLY>'),
 WHERE tenant_id = 'tvg' AND key = 'hostinger_mail_api_allowed_hosts';
 ```
 
-`hostinger_live_fetch_enabled` stays `false`. The hostname is the host of the test URL, not `api.mail.hostinger.com`.
+`hostinger_live_fetch_enabled` stays `false`. The allowlist entry is the hostname only (`bhfos.app.n8n.cloud` on this instance), never `api.mail.hostinger.com`.
 
-The mock must be listening before each worker run, because an inactive workflow does not serve the production webhook URL. Use the test URL only.
+With the mock activated, one **Test workflow** / manual run of `[STAGING] TVG Email Intake — Worker` calls all three paths. Do not activate the worker and do not add a schedule. Deactivate the mock before section D.
 
 Mock UIDs:
 
@@ -228,6 +247,6 @@ Capture all of the following. Label it **staging**, not production, and not "rea
 - `auto_send_enabled`, `internal_sms_enabled` still false
 - No new `public.contacts` or `public.leads` rows from this smoke
 
-When finished, set `hostinger_mail_api_base_url` back to `"disabled"` and `hostinger_mail_api_allowed_hosts` back to `[]` unless Command Center says to keep the mock URL for a named retest. Leave `hostinger_live_fetch_enabled` false.
+When finished, deactivate the mock if it was activated. Set `hostinger_mail_api_base_url` back to `"disabled"` and `hostinger_mail_api_allowed_hosts` back to `[]` unless Command Center says to keep the mock URL for a named retest. Leave `hostinger_live_fetch_enabled` false. Confirm `api.mail.hostinger.com` is not on the allowlist.
 
 Do not flip the base URL to `https://api.mail.hostinger.com` in this run. That flip is a later CC/Founder step. `GET .../messages/{uid}/text` marks the message `\Seen` on the live API. See the report.
