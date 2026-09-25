@@ -1,0 +1,277 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { evaluateIntake } from '../lib/pass1-intake-logic.mjs';
+import {
+  DISABLED_BASE_URL,
+  HOSTINGER_LIVE_HOST,
+  MOCK_CASES,
+  STUCK_REAL_UID,
+  assertHostingerGetRequest,
+  decideFetchedIntake,
+  planWorkerRoute,
+  renderMockHostingerResponse,
+} from '../lib/pass1-hostinger-fetch.mjs';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const mockBase = 'https://mock.staging.invalid/webhook-test/tvg/staging-mock/mail';
+const settings = {
+  hold_on_form_auth_failure: true,
+  open_lead_statuses: ['new', 'contacted', 'qualified', 'escalated'],
+  hostinger_mail_api_base_url: mockBase,
+  hostinger_mail_api_allowed_hosts: ['mock.staging.invalid'],
+  hostinger_live_fetch_enabled: false,
+  hostinger_fetch_timeout_ms: 8000,
+  hostinger_fetch_max_body_bytes: 262144,
+};
+
+function queue(uid, extra = {}) {
+  return {
+    id: '30000000-0000-4000-8000-000000000099',
+    mailbox: 'info@vent-guys.com',
+    mailbox_resource_id: 'mbx_mock',
+    folder: 'INBOX',
+    uid: String(uid),
+    hostinger_pointers: {
+      mailbox_resource_id: 'mbx_mock',
+      folder: 'INBOX',
+      uid: String(uid),
+      source: 'fast_ack_normalized',
+    },
+    ...extra,
+  };
+}
+
+function httpItem(rendered) {
+  if (rendered.timeout) return { error: { message: 'timeout of 8000ms exceeded' } };
+  return { statusCode: rendered.http_status, body: JSON.stringify(rendered.response_body) };
+}
+
+function decide(uid, settingOverride = settings) {
+  const plan = planWorkerRoute({
+    queueRow: queue(uid),
+    settings: settingOverride,
+    filterRows: [],
+    formSenders: [],
+    contacts: [],
+    leads: [],
+  });
+  const decided = decideFetchedIntake({
+    plan,
+    metadataItem: httpItem(renderMockHostingerResponse({ uid, kind: 'metadata' })),
+    textItem: httpItem(renderMockHostingerResponse({ uid, kind: 'text' })),
+    sourceItem: httpItem(renderMockHostingerResponse({ uid, kind: 'source' })),
+  });
+  return { plan, decided };
+}
+
+test('GET guard rejects other methods, other paths, and the live host by default', () => {
+  const base = mockBase;
+  const allowed = ['mock.staging.invalid'];
+  const good = assertHostingerGetRequest({
+    method: 'GET',
+    url: `${base}/api/v1/mailboxes/mbx_mock/folders/INBOX/messages/910001/source`,
+    baseUrl: base,
+    allowedHosts: allowed,
+    liveFetchEnabled: false,
+  });
+  assert.equal(good.ok, true);
+  assert.equal(assertHostingerGetRequest({
+    method: 'POST',
+    url: `${base}/api/v1/mailboxes/mbx_mock/folders/INBOX/messages/910001`,
+    baseUrl: base,
+    allowedHosts: allowed,
+    liveFetchEnabled: false,
+  }).reason, 'method_rejected');
+  assert.equal(assertHostingerGetRequest({
+    method: 'GET',
+    url: `${base}/api/v1/mailboxes/mbx_mock/send`,
+    baseUrl: base,
+    allowedHosts: allowed,
+    liveFetchEnabled: false,
+  }).reason, 'path_rejected');
+  assert.equal(assertHostingerGetRequest({
+    method: 'DELETE',
+    url: `${base}/api/v1/mailboxes/mbx_mock/folders/INBOX/messages/1`,
+    baseUrl: base,
+    allowedHosts: allowed,
+    liveFetchEnabled: false,
+  }).reason, 'method_rejected');
+  const liveUrl = `https://${HOSTINGER_LIVE_HOST}/api/v1/mailboxes/mbx_mock/folders/INBOX/messages/1/text`;
+  assert.equal(assertHostingerGetRequest({
+    method: 'GET',
+    url: liveUrl,
+    baseUrl: `https://${HOSTINGER_LIVE_HOST}`,
+    allowedHosts: [HOSTINGER_LIVE_HOST],
+    liveFetchEnabled: false,
+  }).reason, 'live_fetch_disabled');
+  assert.equal(assertHostingerGetRequest({
+    method: 'GET',
+    url: liveUrl,
+    baseUrl: `https://${HOSTINGER_LIVE_HOST}`,
+    allowedHosts: [HOSTINGER_LIVE_HOST],
+    liveFetchEnabled: true,
+  }).ok, true);
+  assert.equal(assertHostingerGetRequest({
+    method: 'GET',
+    url: 'https://evil.example/api/v1/mailboxes/mbx_mock/folders/INBOX/messages/1',
+    baseUrl: 'https://evil.example',
+    allowedHosts: allowed,
+    liveFetchEnabled: true,
+  }).reason, 'host_rejected');
+});
+
+test('real-fetch mock cases fail closed or follow the approved identity rule', () => {
+  const happy = decide(910001);
+  assert.equal(happy.plan.route, 'fetch');
+  assert.equal(happy.plan.fetch_base_url, mockBase);
+  assert.equal(happy.decided.decision.event_status, 'awaiting_pass2');
+  assert.match(happy.decided.sql, /fetch_base_url/);
+  assert.match(happy.decided.sql, /email_automation\.email_events/);
+  assert.doesNotMatch(happy.decided.sql, /email_responses|email_send_queue|insert into public/i);
+
+  const missing = decide(910404);
+  assert.equal(missing.decided.decision.hold_reason, 'message_moved_uncertain');
+  assert.equal(missing.decided.decision.queue_status, 'held');
+  assert.doesNotMatch(missing.decided.sql, /INSERT INTO email_automation\.email_events/);
+
+  const upstream = decide(910500);
+  assert.equal(upstream.decided.decision.queue_status, 'error');
+  assert.equal(upstream.decided.decision.hold_reason, 'hostinger_upstream_error');
+  assert.doesNotMatch(upstream.decided.sql, /INSERT INTO email_automation\.email_events/);
+
+  const timeout = decide(910408);
+  assert.equal(timeout.decided.decision.hold_reason, 'hostinger_timeout');
+  assert.equal(timeout.decided.decision.queue_status, 'error');
+
+  const noAuth = decide(910601);
+  assert.equal(noAuth.decided.decision.hold_reason, 'identity_uncertain');
+  assert.equal(noAuth.decided.decision.event_status, 'held');
+  assert.match(noAuth.decided.sql, /INSERT INTO email_automation\.email_events/);
+
+  const noId = decide(910602);
+  assert.equal(noId.decided.decision.event_status, 'awaiting_pass2');
+  assert.match(noId.decided.sql, /fallback_hash/);
+  assert.match(noId.decided.sql, /message_id = NULL/);
+
+  const oversized = decide(910603);
+  assert.equal(oversized.decided.decision.hold_reason, 'hostinger_body_too_large');
+  assert.doesNotMatch(oversized.decided.sql, /INSERT INTO email_automation\.email_events/);
+  assert.equal(Object.keys(MOCK_CASES).length, 7);
+});
+
+test('disabled base URL and unresolved pointers do not build a request', () => {
+  const disabled = planWorkerRoute({ queueRow: queue(910001), settings: { hold_on_form_auth_failure: true } });
+  assert.equal(disabled.route, 'hold');
+  assert.equal(disabled.hold_reason, 'hostinger_fetch_disabled');
+  assert.equal(disabled.fetch_base_url, DISABLED_BASE_URL);
+  assert.equal(disabled.metadata_url, null);
+
+  const mismatch = planWorkerRoute({
+    queueRow: queue(910001, {
+      mailbox_resource_id: 'other_box',
+    }),
+    settings,
+  });
+  assert.equal(mismatch.route, 'hold');
+  assert.equal(mismatch.hold_reason, 'pointer_unresolved');
+  assert.equal(mismatch.metadata_url, null);
+
+  const blank = planWorkerRoute({
+    queueRow: queue(910001, { mailbox_resource_id: '' }),
+    settings,
+  });
+  assert.equal(blank.hold_reason, 'pointer_unresolved');
+});
+
+test('stuck non-synthetic uid 924150001 is not fetched', () => {
+  const plan = planWorkerRoute({
+    queueRow: queue(STUCK_REAL_UID),
+    settings: {
+      ...settings,
+      hostinger_mail_api_base_url: `https://${HOSTINGER_LIVE_HOST}`,
+      hostinger_mail_api_allowed_hosts: [HOSTINGER_LIVE_HOST],
+      hostinger_live_fetch_enabled: true,
+    },
+  });
+  assert.equal(plan.route, 'hold');
+  assert.equal(plan.hold_reason, 'excluded_stuck_uid');
+  assert.equal(plan.metadata_url, null);
+  assert.equal(plan.text_url, null);
+  assert.equal(plan.source_url, null);
+});
+
+test('synthetic path still decides happy, duplicate SQL, and hold without a fetch URL', () => {
+  const synthetic = {
+    from_raw: 'Customer <customer@example.com>',
+    to_raw: 'info@vent-guys.com',
+    subject: 'SYNTH Hello',
+    date_header: 'Thu, 24 Sep 2026 12:00:00 +0000',
+    bodyText: 'Hello from a synthetic fixture.\n',
+    message_id: '<synth-pass1-corrective@vent-guys.test>',
+    authentication_results: 'spf=pass dkim=pass dmarc=pass',
+  };
+  const plan = planWorkerRoute({
+    queueRow: queue(42, { hostinger_pointers: { synthetic_message: synthetic } }),
+    settings,
+  });
+  assert.equal(plan.route, 'synthetic');
+  assert.equal(plan.metadata_url, null);
+  const decision = evaluateIntake({
+    message: { ...synthetic, mailbox: 'info@vent-guys.com' },
+    settings,
+  });
+  assert.equal(decision.event_status, 'awaiting_pass2');
+  const held = evaluateIntake({
+    message: {
+      ...synthetic,
+      mailbox: 'info@vent-guys.com',
+      reply_to_raw: 'person@other.co.uk',
+    },
+    settings,
+  });
+  assert.equal(held.event_status, 'held');
+  assert.equal(held.hold_reason, 'reply_to_domain_mismatch');
+  const duplicateSql = decide(910001).decided.sql;
+  assert.match(duplicateSql, /ON CONFLICT \(tenant_id, mailbox, message_id\)/);
+  assert.match(duplicateSql, /WHEN chosen\.was_existing THEN 'duplicate'/);
+});
+
+test('corrective SQL is staging-only, additive, and defaults fetch off', () => {
+  const sql = readFileSync(join(root, 'apply/20260925_tvg_email_pass1_corrective_fetch.sql'), 'utf8');
+  assert.match(sql, /glkrykpksbsqmmilmjhs/);
+  assert.match(sql, /hostinger_mail_api_base_url/);
+  assert.match(sql, /"disabled"/);
+  assert.match(sql, /hostinger_live_fetch_enabled/);
+  assert.match(sql, /924150001/);
+  assert.match(sql, /ON CONFLICT \(tenant_id, key\) DO NOTHING/);
+  assert.match(sql, /customer send tables must not exist/);
+  assert.doesNotMatch(sql, /wwyxohjnyqnegzbxtuxs/);
+  assert.doesNotMatch(sql, /INSERT INTO public/i);
+  assert.doesNotMatch(sql, /CREATE TABLE[^;]*email_responses/i);
+});
+
+test('worker HTTP nodes are GET-only and the mock workflow stays inactive', () => {
+  const worker = JSON.parse(readFileSync(join(root, 'n8n/tvg-email-intake-worker.json'), 'utf8'));
+  const mock = JSON.parse(readFileSync(join(root, 'n8n/tvg-email-hostinger-mock.json'), 'utf8'));
+  assert.equal(worker.active, false);
+  assert.equal(mock.active, false);
+  const httpNodes = worker.nodes.filter((node) => node.type === 'n8n-nodes-base.httpRequest');
+  assert.equal(httpNodes.length, 3);
+  for (const node of httpNodes) {
+    assert.equal(node.parameters.method, 'GET');
+    assert.match(node.parameters.url, /Plan route/);
+    assert.doesNotMatch(node.parameters.url, /api\.mail\.hostinger\.com/);
+    assert.equal(node.credentials.httpHeaderAuth.name, 'TVG Staging Hostinger Mail API');
+    assert.equal(node.credentials.httpHeaderAuth.id, 'tvg-staging-hostinger-mail-api-placeholder');
+  }
+  assert.equal(mock.nodes.some((node) => node.type === 'n8n-nodes-base.httpRequest'), false);
+  assert.match(JSON.stringify(worker), /assertHostingerGetRequest/);
+  assert.match(worker.nodes.find((node) => node.name === 'Claim pending').parameters.query, /924150001/);
+  const blob = `${JSON.stringify(worker)}\n${JSON.stringify(mock)}`;
+  assert.doesNotMatch(blob, /Bearer [A-Za-z0-9._\-]{20,}/);
+  assert.doesNotMatch(blob, /db\.wwyxohjnyqnegzbxtuxs/);
+  assert.match(blob, /productionRefForbidden/);
+});

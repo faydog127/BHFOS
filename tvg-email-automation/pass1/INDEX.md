@@ -9,5 +9,6 @@
 - **Challenge verdicts:** [`CHALLENGE_VERDICT.md`](CHALLENGE_VERDICT.md), [`amendments/CHALLENGE_VERDICT_INTERNAL_SMS.md`](amendments/CHALLENGE_VERDICT_INTERNAL_SMS.md), [`directives/CHALLENGE_VERDICT_UNAPPROVED_BY_DEADLINE.md`](directives/CHALLENGE_VERDICT_UNAPPROVED_BY_DEADLINE.md), [`directives/CHALLENGE_VERDICT_D035_OUTBOUND_OBSERVATION.md`](directives/CHALLENGE_VERDICT_D035_OUTBOUND_OBSERVATION.md), [`directives/CHALLENGE_VERDICT_OPERATOR_PREFERENCES.md`](directives/CHALLENGE_VERDICT_OPERATOR_PREFERENCES.md)
 - **Staging apply evidence:** [`staging-apply/APPLY_REPORT.md`](staging-apply/APPLY_REPORT.md)
 - **Implementation reference:** GitHub PR #160, branch `cursor/tvg-email-pass1-v5-3e46`
+- **Corrective fetch slice:** [`STAGING_CORRECTIVE_SMOKE_RUNBOOK.md`](STAGING_CORRECTIVE_SMOKE_RUNBOOK.md), [`STAGING_CORRECTIVE_REPORT.md`](STAGING_CORRECTIVE_REPORT.md), [`directives/CHALLENGE_VERDICT_CORRECTIVE_2026-09-25.md`](directives/CHALLENGE_VERDICT_CORRECTIVE_2026-09-25.md)
 
 Boundary: staging build may proceed; Pre-webhook and Production remain closed. Hostinger and schedules remain off.

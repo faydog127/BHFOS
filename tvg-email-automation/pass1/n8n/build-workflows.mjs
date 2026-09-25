@@ -14,6 +14,7 @@ function embedModule(source) {
 }
 
 const logic = embedModule(readFileSync(join(root, 'lib/pass1-intake-logic.mjs'), 'utf8'));
+const fetchLogic = embedModule(readFileSync(join(root, 'lib/pass1-hostinger-fetch.mjs'), 'utf8'));
 const smsLogic = embedModule(readFileSync(join(root, 'lib/pass1-internal-sms.mjs'), 'utf8'));
 const opsLogic = embedModule(readFileSync(join(root, 'lib/pass1-ops-policy.mjs'), 'utf8'));
 
@@ -24,6 +25,13 @@ const credential = {
   postgres: {
     id: 'tvg-staging-n8n-email-automation',
     name: 'TVG Staging n8n_email_automation',
+  },
+};
+
+const hostingerCredential = {
+  httpHeaderAuth: {
+    id: 'tvg-staging-hostinger-mail-api-placeholder',
+    name: 'TVG Staging Hostinger Mail API',
   },
 };
 
@@ -87,84 +95,12 @@ function connect(map, from, to, outputIndex = 0) {
 
 const fastAckPrepare = `${logic}
 
+// Auth: enforced by Webhook node Header Auth (httpHeaderAuth credential).
+// Do not re-check $env.HOSTINGER_WEBHOOK_SECRET here (Starter Variables / Code-node secret path retired).
 const item = $input.first().json;
 const body = item.body && typeof item.body === 'object' ? item.body : item;
-const headers = item.headers || {};
-const secret = (typeof $env !== 'undefined' && $env.HOSTINGER_WEBHOOK_SECRET) ? String($env.HOSTINGER_WEBHOOK_SECRET) : '';
-const headerValue = headers.authorization || headers.Authorization || '';
-const presented = headerValue.startsWith('Bearer ') ? headerValue.slice('Bearer '.length) : '';
-let authOk = false;
-if (secret && presented.length === secret.length) {
-  let mismatch = 0;
-  for (let i = 0; i < secret.length; i += 1) mismatch |= secret.charCodeAt(i) ^ presented.charCodeAt(i);
-  authOk = mismatch === 0;
-}
-if (!authOk) {
-  const reason = secret ? 'bad_bearer' : 'webhook_secret_unset';
-  return [{
-    json: {
-      http_status: 401,
-      response_body: { ok: false, error: 'unauthorized' },
-      sql: null,
-      sample_sql: \`INSERT INTO email_automation.notification_log (tenant_id, kind, destination_ref, payload_summary, status)
-SELECT 'tvg', 'auth_reject_sample', 'internal_sample', \${quoteLiteral(JSON.stringify({ reason }))}::jsonb, 'sampled'
-WHERE (
-  SELECT count(*) FROM email_automation.notification_log
-  WHERE tenant_id = 'tvg' AND kind = 'auth_reject_sample' AND created_at > now() - interval '1 hour'
-) < COALESCE((
-  SELECT (value_json #>> '{}')::int
-  FROM email_automation.automation_settings
-  WHERE tenant_id = 'tvg' AND key = 'rejected_webhook_sample_per_hour'
-), 5);\`,
-    },
-  }];
-}
-const pointer = normalizeWebhookPointer(body);
-if (!pointer.ok) {
-  return [{
-    json: {
-      http_status: 400,
-      response_body: { ok: false, error: pointer.reason },
-      sql: null,
-      sample_sql: null,
-    },
-  }];
-}
-const killSwitchSql = \`(
-  SELECT COALESCE((
-    SELECT value_json = 'true'::jsonb
-    FROM email_automation.automation_settings
-    WHERE tenant_id = 'tvg' AND key = 'intake_processing_enabled'
-  ), true)
-)\`;
-return [{
-  json: {
-    http_status: 200,
-    response_body: { ok: true },
-    sample_sql: null,
-    sql: \`
-INSERT INTO email_automation.intake_queue (
-  tenant_id, mailbox, mailbox_resource_id, folder, uid, event_type, status, hostinger_pointers
-) VALUES (
-  'tvg',
-  \${quoteLiteral(pointer.mailbox)},
-  \${quoteLiteral(pointer.mailbox_resource_id)},
-  \${quoteLiteral(pointer.folder)},
-  \${quoteLiteral(pointer.uid)}::bigint,
-  \${pointer.event_type ? quoteLiteral(pointer.event_type) : 'NULL'},
-  CASE WHEN \${killSwitchSql} THEN 'pending'::email_automation.intake_queue_status
-       ELSE 'deferred_kill_switch'::email_automation.intake_queue_status END,
-  \${quoteLiteral(JSON.stringify({
-    mailbox_resource_id: pointer.mailbox_resource_id,
-    folder: pointer.folder,
-    uid: pointer.uid,
-    source: 'fast_ack_normalized',
-  }))}::jsonb
-)
-ON CONFLICT (tenant_id, mailbox_resource_id, folder, uid) DO NOTHING
-RETURNING id, status;\`,
-  },
-}];
+const planned = planFastAck(body);
+return [{ json: planned }];
 `;
 
 const fastAckShape = `
@@ -182,14 +118,6 @@ return [{
 }];
 `;
 
-const fastConnections = {};
-connect(fastConnections, 'Webhook', 'Prepare intake');
-connect(fastConnections, 'Prepare intake', 'Insert pointer', 0);
-connect(fastConnections, 'Prepare intake', 'Auth sample', 1);
-connect(fastConnections, 'Insert pointer', 'Shape ack');
-connect(fastConnections, 'Shape ack', 'Respond');
-connect(fastConnections, 'Auth sample', 'Respond');
-
 const fastAck = workflow(
   '[STAGING] TVG Email Intake — Fast ACK',
   [
@@ -198,11 +126,20 @@ const fastAck = workflow(
       path: 'tvg/hostinger-mail/inbound',
       responseMode: 'responseNode',
       options: {},
-    }, { webhookId: 'aa000000-0000-4000-8000-000000000010' }),
+      authentication: 'headerAuth',
+    }, {
+      webhookId: 'aa000000-0000-4000-8000-000000000010',
+      credentials: {
+        httpHeaderAuth: {
+          id: 'REPLACE_WITH_STAGING_HEADER_AUTH_CRED_ID',
+          name: 'TVG Staging Hostinger Webhook Header Auth',
+        },
+      },
+    }),
     nodeBase('aa000000-0000-4000-8000-000000000020', 'STAGING ONLY / HOSTINGER OFF', 'n8n-nodes-base.stickyNote', 1, 0, -220, {
-      content: 'TVG Email Pass 1. Workflow MUST stay inactive. Do not point Hostinger at this path. No fetch on this path.',
-      width: 520,
-      height: 120,
+      content: 'TVG Email Pass 1. Workflow MUST stay inactive. Do not point Hostinger at this path. Auth = Webhook Header Auth credential (Authorization: Bearer …). No Global Variables for auth. No fetch on this path. Incomplete pointer: HTTP 400 from Shape reject, no intake_queue insert. Auth sample is disconnected.',
+      width: 560,
+      height: 160,
     }),
     codeNode('aa000000-0000-4000-8000-000000000002', 'Prepare intake', 280, 0, fastAckPrepare),
     nodeBase('aa000000-0000-4000-8000-000000000003', 'Has durable SQL', 'n8n-nodes-base.if', 2.2, 560, 0, {
@@ -221,7 +158,7 @@ const fastAck = workflow(
     }),
     postgresNode('aa000000-0000-4000-8000-000000000004', 'Insert pointer', 840, -80, '={{ $json.sql }}'),
     codeNode('aa000000-0000-4000-8000-000000000005', 'Shape ack', 1100, -80, fastAckShape),
-    postgresNode('aa000000-0000-4000-8000-000000000006', 'Auth sample', 840, 160, "={{ $json.sample_sql || 'SELECT 1 WHERE false' }}"),
+    postgresNode('aa000000-0000-4000-8000-000000000006', 'Auth sample disconnected', 840, 320, "={{ $json.sample_sql || 'SELECT 1 WHERE false' }}"),
     codeNode('aa000000-0000-4000-8000-000000000008', 'Shape reject', 1100, 160, `
 const prepared = $('Prepare intake').first().json;
 return [{ json: { http_status: prepared.http_status, response_body: prepared.response_body } }];
@@ -240,21 +177,46 @@ const fastMap = {};
 connect(fastMap, 'Webhook', 'Prepare intake');
 connect(fastMap, 'Prepare intake', 'Has durable SQL');
 connect(fastMap, 'Has durable SQL', 'Insert pointer', 0);
-connect(fastMap, 'Has durable SQL', 'Auth sample', 1);
+connect(fastMap, 'Has durable SQL', 'Shape reject', 1);
 connect(fastMap, 'Insert pointer', 'Shape ack');
 connect(fastMap, 'Shape ack', 'Respond');
-connect(fastMap, 'Auth sample', 'Shape reject');
 connect(fastMap, 'Shape reject', 'Respond');
 fastAck.connections = fastMap;
+fastAck.meta.auth_redesign = 'headerAuth-2026-09-24';
+fastAck.meta.hostinger = 'OFF';
+const authSample = fastAck.nodes.find((node) => node.name === 'Auth sample disconnected');
+authSample.disabled = true;
+delete authSample.parameters.options;
+
+const sqlGuard = `
+function refuseUnsafeSql(sql) {
+  if (/email_responses|email_send_queue|developers\\.hostinger|insert\\s+into\\s+public\\./i.test(sql || '')) {
+    throw new Error('refusing SQL that mentions send tables, public inserts, or the Hostinger developers host');
+  }
+}
+`;
 
 const workerEval = `${logic}
 
-const row = $input.all().map((item) => item.json).find((item) => item && item.queue_row);
-if (!row) return [{ json: { sql: null, skipped: true } }];
+${fetchLogic}
+
+${sqlGuard}
+
+const row = $input.first().json || {};
+if (!row.queue_row) return [{ json: { sql: null, skipped: true, fetch_base_url: row.fetch_base_url || null } }];
 const queue = row.queue_row;
 const synthetic = queue.hostinger_pointers && queue.hostinger_pointers.synthetic_message;
 if (!synthetic) {
-  throw new Error('HOSTINGER_OFF: refusing to fetch live mail. Pass 1 workflows claim synthetic_message rows only.');
+  const sql = buildClosedHoldSql({
+    queue_id: queue.id,
+    queue_status: 'held',
+    hold_reason: 'pointer_unresolved',
+    error_code: 'pointer_unresolved',
+    detail: 'evaluate_received_non_synthetic',
+    fetch_base_url: row.fetch_base_url || 'disabled',
+  });
+  refuseUnsafeSql(sql);
+  return [{ json: { sql, fetch_base_url: row.fetch_base_url || 'disabled', decision: { event_status: 'held', hold_reason: 'pointer_unresolved' }, display: {} } }];
 }
 const decision = evaluateIntake({
   message: { ...synthetic, mailbox: queue.mailbox },
@@ -278,10 +240,10 @@ const sql = buildOutcomeSql({
   in_reply_to: synthetic.in_reply_to || synthetic.inReplyTo || null,
   references: synthetic.references || synthetic.references_header || null,
   attachment_meta: synthetic.attachment_meta || synthetic.attachments || null,
+  fetch_base_url: row.fetch_base_url || 'disabled',
+  fetch_mode: 'synthetic',
 });
-if (/email_responses|email_send_queue|developers\\.hostinger|api\\.mail\\.hostinger/i.test(sql)) {
-  throw new Error('refusing outcome SQL that mentions send tables or Hostinger');
-}
+refuseUnsafeSql(sql);
 const formFields = synthetic.form_fields && typeof synthetic.form_fields === 'object' ? synthetic.form_fields : {};
 const display = {
   senderName: synthetic.sender_name || synthetic.from_name || '',
@@ -292,7 +254,100 @@ const display = {
     city: formFields.city || '',
   },
 };
-return [{ json: { sql, decision, display } }];
+return [{ json: { sql, decision, display, fetch_base_url: row.fetch_base_url || 'disabled' } }];
+`;
+
+const workerPlan = `${logic}
+
+${fetchLogic}
+
+const claimed = $input.all().map((item) => item.json).find((item) => item && item.queue_row);
+if (!claimed) return [{ json: planWorkerRoute({ queueRow: null, settings: {} }) }];
+return [{ json: planWorkerRoute({
+  queueRow: claimed.queue_row,
+  settings: claimed.settings || {},
+  filterRows: claimed.filter_rows || [],
+  formSenders: claimed.form_senders || [],
+  contacts: claimed.contacts || [],
+  leads: claimed.leads || [],
+}) }];
+`;
+
+const workerGuard = `${logic}
+
+${fetchLogic}
+
+${sqlGuard}
+
+const plan = $input.first().json || {};
+const checked = recheckFetchPlan(plan);
+if (!checked.ok) {
+  refuseUnsafeSql(checked.sql);
+  return [{
+    json: {
+      guard_ok: false,
+      sql: checked.sql,
+      fetch_base_url: plan.fetch_base_url || null,
+      decision: { event_status: 'held', hold_reason: checked.hold_reason || 'hostinger_request_rejected' },
+      display: {},
+    },
+  }];
+}
+return [{ json: { ...plan, guard_ok: true } }];
+`;
+
+const workerNormalize = `${logic}
+
+${fetchLogic}
+
+${sqlGuard}
+
+function nodeJson(name) {
+  try {
+    const item = $(name).first();
+    return item ? item.json : null;
+  } catch (error) {
+    return { error: { message: 'node ' + name + ' did not run' } };
+  }
+}
+const plan = nodeJson('Plan route') || {};
+const decided = decideFetchedIntake({
+  plan,
+  metadataItem: nodeJson('Fetch metadata'),
+  textItem: nodeJson('Fetch text'),
+  sourceItem: nodeJson('Fetch source'),
+});
+refuseUnsafeSql(decided.sql);
+return [{ json: decided }];
+`;
+
+const workerClosed = `${logic}
+
+${fetchLogic}
+
+${sqlGuard}
+
+const plan = $input.first().json || {};
+const sql = buildClosedHoldSql({
+  queue_id: plan.queue_row.id,
+  queue_status: plan.queue_status || 'held',
+  hold_reason: plan.hold_reason,
+  error_code: plan.error_code,
+  detail: plan.detail,
+  fetch_base_url: plan.fetch_base_url,
+});
+refuseUnsafeSql(sql);
+return [{
+  json: {
+    sql,
+    fetch_base_url: plan.fetch_base_url,
+    decision: {
+      event_status: plan.queue_status === 'error' ? 'error' : 'held',
+      hold_reason: plan.hold_reason,
+    },
+    display: {},
+  },
+}];
 `;
 
 const workerClaimSql = `
@@ -301,7 +356,22 @@ WITH claim AS (
   FROM email_automation.intake_queue q
   WHERE q.tenant_id = 'tvg'
     AND q.status = 'pending'
-    AND q.hostinger_pointers ? 'synthetic_message'
+    AND (
+      q.hostinger_pointers ? 'synthetic_message'
+      OR (
+        q.uid IS DISTINCT FROM 924150001
+        AND NOT EXISTS (
+          SELECT 1
+          FROM email_automation.automation_settings s
+          CROSS JOIN LATERAL jsonb_array_elements_text(s.value_json) AS ex(uid_text)
+          WHERE s.tenant_id = 'tvg'
+            AND s.key = 'hostinger_fetch_excluded_uids'
+            AND jsonb_typeof(s.value_json) = 'array'
+            AND ex.uid_text ~ '^[0-9]{1,18}$'
+            AND ex.uid_text::bigint = q.uid
+        )
+      )
+    )
   ORDER BY q.created_at
   FOR UPDATE SKIP LOCKED
   LIMIT COALESCE((
@@ -314,7 +384,10 @@ updated AS (
   UPDATE email_automation.intake_queue q
   SET status = 'processing',
       locked_at = now(),
-      locked_by = 'n8n-worker-synthetic',
+      locked_by = CASE
+        WHEN q.hostinger_pointers ? 'synthetic_message' THEN 'n8n-worker-synthetic'
+        ELSE 'n8n-worker-fetch'
+      END,
       attempt_count = q.attempt_count + 1
   FROM claim
   WHERE q.id = claim.id
@@ -439,7 +512,16 @@ ${smsLogic}
 // SMS_PLAN_FOOTER
 const written = $('Write outcome').first().json || {};
 const budget = $input.first().json || {};
-const evaluated = $('Evaluate').first().json || {};
+function executedJson(name) {
+  try {
+    const item = $(name).first();
+    if (item && item.json && item.json.decision) return item.json;
+  } catch (error) {
+    return null;
+  }
+  return null;
+}
+const evaluated = executedJson('Evaluate') || executedJson('Normalize fetch') || executedJson('Closed hold') || {};
 const decision = evaluated.decision || {};
 const display = evaluated.display || {};
 const wasExisting = written.was_existing === true || written.was_existing === 't' || written.was_existing === 'true';
@@ -504,9 +586,63 @@ if (gated.summary) {
 return [{ json: { action: gated.action, kind: gated.kind, sql, summarySql } }];
 `;
 
+function routeIf(id, name, x, y, route) {
+  return nodeBase(id, name, 'n8n-nodes-base.if', 2.2, x, y, {
+    conditions: {
+      options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+      combinator: 'and',
+      conditions: [
+        {
+          id: `${route}-route`,
+          leftValue: '={{ $json.route }}',
+          rightValue: route,
+          operator: { type: 'string', operation: 'equals' },
+        },
+      ],
+    },
+  });
+}
+
+function hostingerGetNode(id, name, x, y, urlField) {
+  return nodeBase(id, name, 'n8n-nodes-base.httpRequest', 4.2, x, y, {
+    method: 'GET',
+    url: `={{ $('Plan route').first().json.${urlField} }}`,
+    authentication: 'genericCredentialType',
+    genericAuthType: 'httpHeaderAuth',
+    options: {
+      timeout: "={{ $('Plan route').first().json.timeout_ms }}",
+      redirect: { redirect: { followRedirects: false, maxRedirects: 0 } },
+      response: {
+        response: {
+          fullResponse: true,
+          neverError: true,
+          responseFormat: 'text',
+        },
+      },
+    },
+  }, {
+    credentials: hostingerCredential,
+    onError: 'continueRegularOutput',
+    notes: 'GET only. URL comes from Plan route after the host and path guard. No live token in this file.',
+  });
+}
+
 const workerMap = {};
-connect(workerMap, 'Manual start', 'Claim synthetic');
-connect(workerMap, 'Claim synthetic', 'Evaluate');
+connect(workerMap, 'Manual start', 'Claim pending');
+connect(workerMap, 'Claim pending', 'Plan route');
+connect(workerMap, 'Plan route', 'Is fetch');
+connect(workerMap, 'Is fetch', 'Re-guard GET', 0);
+connect(workerMap, 'Is fetch', 'Is closed hold', 1);
+connect(workerMap, 'Re-guard GET', 'Guard passed');
+connect(workerMap, 'Guard passed', 'Fetch metadata', 0);
+connect(workerMap, 'Guard passed', 'Write outcome', 1);
+connect(workerMap, 'Fetch metadata', 'Fetch text');
+connect(workerMap, 'Fetch text', 'Fetch source');
+connect(workerMap, 'Fetch source', 'Normalize fetch');
+connect(workerMap, 'Normalize fetch', 'Write outcome');
+connect(workerMap, 'Is closed hold', 'Closed hold', 0);
+connect(workerMap, 'Is closed hold', 'Evaluate', 1);
+connect(workerMap, 'Closed hold', 'Write outcome');
 connect(workerMap, 'Evaluate', 'Write outcome');
 connect(workerMap, 'Write outcome', 'Load SMS budget');
 connect(workerMap, 'Load SMS budget', 'Plan internal SMS');
@@ -516,22 +652,48 @@ connect(workerMap, 'Record notification', 'Record notification summary');
 const worker = workflow(
   '[STAGING] TVG Email Intake — Worker',
   [
-    nodeBase('bb000000-0000-4000-8000-000000000020', 'STAGING ONLY / HOSTINGER OFF', 'n8n-nodes-base.stickyNote', 1, 0, -220, {
-      content: 'Inactive. No schedule. Claims synthetic rows only. Writes notification_log outbox intent. Does not call Twilio. Dispatcher is a separate inactive workflow. No Hostinger.',
-      width: 640,
-      height: 140,
+    nodeBase('bb000000-0000-4000-8000-000000000020', 'STAGING ONLY / HOSTINGER OFF', 'n8n-nodes-base.stickyNote', 1, 0, -280, {
+      content: 'Inactive. No schedule. Synthetic rows skip HTTP. Real pointers are GET metadata, text, and source only, after a host allowlist check. Base URL defaults to disabled, never the live API. api.mail.hostinger.com also requires hostinger_live_fetch_enabled. Non-synthetic uid 924150001 is excluded from claim and is not fetched. GET /text marks Seen on the live API per the Hostinger SDK; metadata and source docs do not say they change flags. No Twilio. No customer send.',
+      width: 760,
+      height: 180,
     }),
     nodeBase('bb000000-0000-4000-8000-000000000001', 'Manual start', 'n8n-nodes-base.manualTrigger', 1, 0, 0, {}),
-    postgresNode('bb000000-0000-4000-8000-000000000002', 'Claim synthetic', 280, 0, workerClaimSql),
-    codeNode('bb000000-0000-4000-8000-000000000003', 'Evaluate', 560, 0, workerEval),
-    postgresNode('bb000000-0000-4000-8000-000000000004', 'Write outcome', 840, 0, "={{ $json.sql || 'SELECT 1 WHERE false' }}"),
-    postgresNode('bb000000-0000-4000-8000-000000000005', 'Load SMS budget', 1120, 0, smsBudgetSql),
-    codeNode('bb000000-0000-4000-8000-000000000006', 'Plan internal SMS', 1400, 0, smsPlan),
-    postgresNode('bb000000-0000-4000-8000-000000000007', 'Record notification', 1680, 0, "={{ $json.sql || 'SELECT 1 WHERE false' }}"),
-    postgresNode('bb000000-0000-4000-8000-000000000008', 'Record notification summary', 1960, 0, "={{ $json.summarySql || 'SELECT 1 WHERE false' }}"),
+    postgresNode('bb000000-0000-4000-8000-000000000002', 'Claim pending', 280, 0, workerClaimSql),
+    codeNode('bb000000-0000-4000-8000-000000000003', 'Plan route', 560, 0, workerPlan),
+    routeIf('bb000000-0000-4000-8000-000000000009', 'Is fetch', 840, 0, 'fetch'),
+    codeNode('bb000000-0000-4000-8000-00000000000a', 'Re-guard GET', 1120, -180, workerGuard),
+    nodeBase('bb000000-0000-4000-8000-00000000000b', 'Guard passed', 'n8n-nodes-base.if', 2.2, 1400, -180, {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        combinator: 'and',
+        conditions: [
+          {
+            id: 'guard-ok',
+            leftValue: '={{ $json.guard_ok }}',
+            rightValue: true,
+            operator: { type: 'boolean', operation: 'true', singleValue: true },
+          },
+        ],
+      },
+    }),
+    hostingerGetNode('bb000000-0000-4000-8000-00000000000c', 'Fetch metadata', 1680, -300, 'metadata_url'),
+    hostingerGetNode('bb000000-0000-4000-8000-00000000000d', 'Fetch text', 1960, -300, 'text_url'),
+    hostingerGetNode('bb000000-0000-4000-8000-00000000000e', 'Fetch source', 2240, -300, 'source_url'),
+    codeNode('bb000000-0000-4000-8000-00000000000f', 'Normalize fetch', 2520, -300, workerNormalize),
+    routeIf('bb000000-0000-4000-8000-000000000010', 'Is closed hold', 1120, 180, 'hold'),
+    codeNode('bb000000-0000-4000-8000-000000000011', 'Closed hold', 1400, 180, workerClosed),
+    codeNode('bb000000-0000-4000-8000-000000000012', 'Evaluate', 1400, 360, workerEval),
+    postgresNode('bb000000-0000-4000-8000-000000000004', 'Write outcome', 2800, 0, "={{ $json.sql || 'SELECT 1 WHERE false' }}"),
+    postgresNode('bb000000-0000-4000-8000-000000000005', 'Load SMS budget', 3080, 0, smsBudgetSql),
+    codeNode('bb000000-0000-4000-8000-000000000006', 'Plan internal SMS', 3360, 0, smsPlan),
+    postgresNode('bb000000-0000-4000-8000-000000000007', 'Record notification', 3640, 0, "={{ $json.sql || 'SELECT 1 WHERE false' }}"),
+    postgresNode('bb000000-0000-4000-8000-000000000008', 'Record notification summary', 3920, 0, "={{ $json.summarySql || 'SELECT 1 WHERE false' }}"),
   ],
   workerMap,
 );
+worker.meta.tvgEmailPass1.hostingerFetch = 'get-only-mock-or-disabled';
+worker.meta.tvgEmailPass1.liveFetchDefault = false;
+worker.meta.hostinger = 'OFF';
 
 const reconcileMap = {};
 connect(reconcileMap, 'Manual start', 'Resume deferred');
@@ -782,9 +944,85 @@ const health = workflow(
 health.meta.tvgEmailPass1.hostingerMailboxProbe = 'dormant';
 health.meta.tvgEmailPass1.hostingerApiHealth = 'not-a-live-check';
 
+function mockWebhook(id, name, path, x, y) {
+  return nodeBase(id, name, 'n8n-nodes-base.webhook', 2, x, y, {
+    httpMethod: 'GET',
+    path,
+    responseMode: 'responseNode',
+    options: {},
+  }, { webhookId: id });
+}
+
+const mockRender = `${fetchLogic}
+
+const item = $input.first().json || {};
+const params = item.params || {};
+const query = item.query || {};
+const uid = params.uid || query.uid || '';
+const rendered = renderMockHostingerResponse({ uid, kind: item.mock_kind });
+return [{ json: rendered }];
+`;
+
+const mockMap = {};
+connect(mockMap, 'Mock metadata', 'Mark metadata');
+connect(mockMap, 'Mock text', 'Mark text');
+connect(mockMap, 'Mock source', 'Mark source');
+connect(mockMap, 'Mark metadata', 'Render mock');
+connect(mockMap, 'Mark text', 'Render mock');
+connect(mockMap, 'Mark source', 'Render mock');
+connect(mockMap, 'Render mock', 'Is timeout');
+connect(mockMap, 'Is timeout', 'Wait for timeout case', 0);
+connect(mockMap, 'Is timeout', 'Respond mock', 1);
+connect(mockMap, 'Wait for timeout case', 'Respond mock');
+
+const hostingerMock = workflow(
+  '[STAGING] TVG Email — Hostinger Mock',
+  [
+    nodeBase('b1000000-0000-4000-8000-000000000020', 'STAGING ONLY / HOSTINGER OFF', 'n8n-nodes-base.stickyNote', 1, 0, -260, {
+      content: 'Inactive mock. Not the live Hostinger API. Use the test URL only. UIDs: 910001 happy, 910404 not found, 910500 upstream, 910408 delay, 910601 missing Authentication-Results, 910602 missing Message-ID and Date, 910603 oversized text. This workflow does not read or flag a mailbox.',
+      width: 720,
+      height: 160,
+    }),
+    mockWebhook('b1000000-0000-4000-8000-000000000001', 'Mock metadata', 'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid', 0, 0),
+    mockWebhook('b1000000-0000-4000-8000-000000000002', 'Mock text', 'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid/text', 0, 180),
+    mockWebhook('b1000000-0000-4000-8000-000000000003', 'Mock source', 'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid/source', 0, 360),
+    codeNode('b1000000-0000-4000-8000-000000000004', 'Mark metadata', 360, 0, "const item = $input.first().json || {};\nreturn [{ json: { ...item, mock_kind: 'metadata' } }];\n"),
+    codeNode('b1000000-0000-4000-8000-000000000005', 'Mark text', 360, 180, "const item = $input.first().json || {};\nreturn [{ json: { ...item, mock_kind: 'text' } }];\n"),
+    codeNode('b1000000-0000-4000-8000-000000000006', 'Mark source', 360, 360, "const item = $input.first().json || {};\nreturn [{ json: { ...item, mock_kind: 'source' } }];\n"),
+    codeNode('b1000000-0000-4000-8000-000000000007', 'Render mock', 680, 180, mockRender),
+    nodeBase('b1000000-0000-4000-8000-000000000008', 'Is timeout', 'n8n-nodes-base.if', 2.2, 960, 180, {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        combinator: 'and',
+        conditions: [
+          {
+            id: 'timeout-case',
+            leftValue: '={{ $json.timeout }}',
+            rightValue: true,
+            operator: { type: 'boolean', operation: 'true', singleValue: true },
+          },
+        ],
+      },
+    }),
+    nodeBase('b1000000-0000-4000-8000-000000000009', 'Wait for timeout case', 'n8n-nodes-base.wait', 1.1, 1240, 40, {
+      amount: 12,
+      unit: 'seconds',
+    }),
+    nodeBase('b1000000-0000-4000-8000-00000000000a', 'Respond mock', 'n8n-nodes-base.respondToWebhook', 1.1, 1520, 180, {
+      respondWith: 'json',
+      responseBody: '={{ $json.response_body }}',
+      options: { responseCode: '={{ $json.http_status }}' },
+    }),
+  ],
+  mockMap,
+);
+hostingerMock.meta.tvgEmailPass1.hostingerFetch = 'inactive-mock';
+hostingerMock.meta.hostinger = 'OFF';
+
 const files = {
   'tvg-email-intake-fast-ack.json': fastAck,
   'tvg-email-intake-worker.json': worker,
+  'tvg-email-hostinger-mock.json': hostingerMock,
   'tvg-email-intake-reconcile.json': reconcile,
   'tvg-email-daily-filtered-digest.json': digest,
   'tvg-email-notification-dispatcher.json': smsDelivery,

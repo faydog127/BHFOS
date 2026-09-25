@@ -1,6 +1,20 @@
 # TVG Email Pass 1 — implementation status
 
-Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amendment, and the 2026-09-24 consolidated staging directive. Not Media Intelligence. `command-center/docs/media-intelligence/IMPLEMENTATION_STATUS.md` is unchanged on purpose.
+Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amendment, the 2026-09-24 consolidated staging directive, and the 2026-09-25 corrective fetch slice. Not Media Intelligence. `command-center/docs/media-intelligence/IMPLEMENTATION_STATUS.md` is unchanged on purpose.
+
+## Corrective fetch slice (2026-09-25)
+
+| Field | Value |
+|---|---|
+| Branch | `cursor/tvg-email-pass1-corrective-fetch-fff2` |
+| Baseline | `cursor/tvg-email-pass1-v5-3e46` at `a81b067c1c621a53d2a6a3522fe4da3b5e036478` |
+| Authorization | CC 2026-09-25 14:14 ET. Challenge `CHALLENGE_CONCERNS`, proceed, six acceptance criteria |
+| Evidence | **Locally verified** by `node --test tvg-email-automation/pass1/test/*.test.mjs` (57 pass, 0 fail) in this session. **Not** staging executed. **Not** applied to `glkrykpksbsqmmilmjhs`. **Not** merged. Real Hostinger retrieval is **not** verified. |
+| Live fetch | Default base URL `disabled`. `hostinger_live_fetch_enabled` seeds false. GET `/text` marks `\Seen` per Hostinger SDK 1.1.0. |
+| Stuck uid 924150001 | Excluded from claim and left `pending`. Not fetched. |
+| Production | `wwyxohjnyqnegzbxtuxs` not queried and not modified |
+
+Report: [`STAGING_CORRECTIVE_REPORT.md`](STAGING_CORRECTIVE_REPORT.md). Coordinator procedure: [`STAGING_CORRECTIVE_SMOKE_RUNBOOK.md`](STAGING_CORRECTIVE_SMOKE_RUNBOOK.md).
 
 | Field | Value |
 |---|---|
@@ -57,7 +71,7 @@ OPEN and still Founder-only: SMS credential attach (including proof it cannot se
 
 ## Next action
 
-Coordinator runs only `apply/20260924_tvg_email_pass1_incremental.sql` on `glkrykpksbsqmmilmjhs`, using `apply/STAGING_APPLY_CHECKLIST.md`. Do not re-apply the base file. Then import the six n8n JSON files and leave them inactive. Do not attach the Twilio credential. Do not enable Hostinger.
+If the incremental file is not already applied, the coordinator runs `apply/20260924_tvg_email_pass1_incremental.sql` on `glkrykpksbsqmmilmjhs` using `apply/STAGING_APPLY_CHECKLIST.md`. Do not re-apply the base file. Then apply `apply/20260925_tvg_email_pass1_corrective_fetch.sql` the same way. Import the Fast ACK, Worker, and Hostinger Mock JSON files and leave them inactive. Follow `STAGING_CORRECTIVE_SMOKE_RUNBOOK.md`. Do not attach a real Hostinger token in git. Do not set the base URL to `https://api.mail.hostinger.com`. Do not register the Hostinger webhook. Do not merge.
 
 ## Authorization boundary
 
