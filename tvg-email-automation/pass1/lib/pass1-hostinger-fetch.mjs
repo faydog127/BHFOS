@@ -465,9 +465,57 @@ export function recheckFetchPlan(plan) {
   return { ok: true };
 }
 
-function unwrapHttp(item) {
-  if (item == null) return { status: 0, body: null, timedOut: true, error: 'empty' };
-  if (typeof item !== 'object') return { status: 200, body: item, timedOut: false, error: null };
+function responsePayload(item) {
+  if (item == null || typeof item !== 'object' || Array.isArray(item)) return item;
+  if (Object.prototype.hasOwnProperty.call(item, 'body')) return item.body;
+  if (Object.prototype.hasOwnProperty.call(item, 'data')) return item.data;
+  return item;
+}
+
+function parseJsonEnvelope(raw) {
+  if (typeof raw !== 'string') return { ok: false, reason: 'non_object' };
+  const trimmed = raw.trim();
+  if (trimmed === '') return { ok: false, reason: 'empty' };
+  if (trimmed === 'null') return { ok: false, reason: 'null' };
+  let parsed;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return { ok: false, reason: 'invalid_json' };
+  }
+  if (parsed === null) return { ok: false, reason: 'null' };
+  if (typeof parsed !== 'object' || Array.isArray(parsed)) return { ok: false, reason: 'non_object' };
+  const inner = parsed.data;
+  if (inner == null || typeof inner !== 'object' || Array.isArray(inner)) {
+    return { ok: false, reason: 'missing_envelope' };
+  }
+  return { ok: true, value: inner };
+}
+
+function sourceRawString(raw) {
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && typeof parsed.data === 'string') {
+          return parsed.data;
+        }
+      } catch {
+        /* rfc822 that is not an envelope stays the original string */
+      }
+    }
+    return raw;
+  }
+  if (raw && typeof raw === 'object' && typeof raw.data === 'string') return raw.data;
+  return '';
+}
+
+function unwrapHttp(item, endpoint) {
+  if (item == null) return { status: 0, body: null, timedOut: true, error: 'empty', parseError: null };
+  if (typeof item !== 'object') {
+    return { status: 200, body: item, timedOut: false, error: null, parseError: null };
+  }
   if (item.error) {
     const message = String(item.error.message || item.error.description || item.error);
     const timedOut = /timeout|timed out|etimedout|econnaborted|aborted/i.test(message);
@@ -476,17 +524,31 @@ function unwrapHttp(item) {
       body: null,
       timedOut,
       error: message.slice(0, 300),
+      parseError: null,
     };
   }
-  const status = Number(item.statusCode || item.status || 0);
-  let body = Object.prototype.hasOwnProperty.call(item, 'body') ? item.body : item;
-  if (typeof body === 'string') {
-    const trimmed = body.trim();
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-      try { body = JSON.parse(trimmed); } catch { /* raw text, including rfc822 that is not json */ }
-    }
+  const status = Number(item.statusCode || item.status || 0) || 200;
+  const raw = responsePayload(item);
+  if (endpoint === 'source') {
+    return { status, body: sourceRawString(raw), timedOut: false, error: null, parseError: null };
   }
-  return { status: status || 200, body, timedOut: false, error: null };
+  if (status < 200 || status >= 300) {
+    return { status, body: raw, timedOut: false, error: null, parseError: null };
+  }
+  const parsed = parseJsonEnvelope(raw);
+  if (!parsed.ok) {
+    return { status, body: null, timedOut: false, error: null, parseError: parsed.reason };
+  }
+  return { status, body: parsed.value, timedOut: false, error: null, parseError: null };
+}
+
+function parseHold(endpoint, reason) {
+  return {
+    queue_status: 'held',
+    hold_reason: 'parse_failed',
+    error_code: `parse_failed:${endpoint}`,
+    detail: String(reason || 'parse_failed'),
+  };
 }
 
 export function parseRfc822(raw) {
@@ -742,10 +804,12 @@ function forcedUncertain(plan, message) {
 }
 
 export function decideFetchedIntake({ plan, metadataItem, textItem, sourceItem }) {
-  const meta = unwrapHttp(metadataItem);
-  const text = unwrapHttp(textItem);
-  const source = unwrapHttp(sourceItem);
-  const failure = retrievalFailure(meta, text, source);
+  const meta = unwrapHttp(metadataItem, 'metadata');
+  const text = unwrapHttp(textItem, 'text');
+  const source = unwrapHttp(sourceItem, 'source');
+  const failure = retrievalFailure(meta, text, source)
+    || (meta.parseError ? parseHold('metadata', meta.parseError) : null)
+    || (text.parseError ? parseHold('text', text.parseError) : null);
   if (failure) {
     return {
       sql: buildClosedHoldSql({

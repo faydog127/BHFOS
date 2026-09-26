@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
-import { evaluateIntake } from '../lib/pass1-intake-logic.mjs';
+import { computeIdentity, evaluateIntake } from '../lib/pass1-intake-logic.mjs';
 import {
   DISABLED_BASE_URL,
   HOSTINGER_LIVE_HOST,
@@ -635,4 +637,217 @@ test('URL building and the GET guard match when sandbox globals are removed', ()
   assert.equal(vmResult.guards.query, 'query_rejected');
   assert.equal(vmResult.guards.scheme, 'scheme_rejected');
   assert.equal(vmResult.guards.traversal, 'path_rejected');
+});
+
+const n8nFixture = JSON.parse(readFileSync(join(root, 'test/fixtures/n8n-exec-3445-full-response.json'), 'utf8'));
+
+function assertN8nFullResponseShape(item, kind) {
+  assert.deepEqual(Object.keys(item), n8nFixture.wrapper_keys);
+  assert.equal(typeof item.data, 'string');
+  assert.equal(item.statusCode, 200);
+  assert.equal(item.statusMessage, 'OK');
+  assert.equal(item.headers['content-type'], 'application/json; charset=utf-8');
+  assert.equal(Object.hasOwn(item, 'body'), false);
+  const envelope = JSON.parse(item.data);
+  assert.equal(Object.hasOwn(envelope, 'data'), true);
+  if (kind === 'source') {
+    assert.equal(typeof envelope.data, 'string');
+    assert.match(envelope.data, /Authentication-Results:|From: /);
+  } else {
+    assert.equal(typeof envelope.data, 'object');
+    assert.equal(Array.isArray(envelope.data), false);
+  }
+}
+
+function decideN8n(uid, items) {
+  const plan = planWorkerRoute({
+    queueRow: queue(uid),
+    settings,
+    filterRows: [],
+    formSenders: [],
+    contacts: [],
+    leads: [],
+  });
+  return decideFetchedIntake({
+    plan,
+    metadataItem: items.metadata,
+    textItem: items.text,
+    sourceItem: items.source,
+  });
+}
+
+function assertParseFailed(decided, endpoint) {
+  assert.equal(decided.decision.queue_status, 'held');
+  assert.equal(decided.decision.hold_reason, 'parse_failed');
+  assert.notEqual(decided.decision.queue_status, 'done');
+  assert.notEqual(decided.decision.event_status, 'awaiting_pass2');
+  assert.match(decided.sql, new RegExp(`'parse_failed:${endpoint}'`));
+  assert.match(decided.sql, /INSERT INTO email_automation\.automation_errors/);
+  assert.match(decided.sql, /FALSE\nFROM closed/);
+  assert.match(decided.sql, /NULL::uuid AS email_event_id/);
+  assert.doesNotMatch(decided.sql, /INSERT INTO email_automation\.email_events/);
+  assert.doesNotMatch(decided.sql, /identity_uncertain/);
+  assert.doesNotMatch(decided.sql, /'done'/);
+}
+
+test('n8n full-response fixtures unwrap the double envelope and fail closed', () => {
+  for (const [name, block] of [
+    ['happy_910001', n8nFixture.happy_910001],
+    ['missing_auth_910601', n8nFixture.missing_auth_910601],
+    ['missing_message_id_and_date_910602', n8nFixture.missing_message_id_and_date_910602],
+  ]) {
+    assertN8nFullResponseShape(block.metadata, 'metadata');
+    assertN8nFullResponseShape(block.text, 'text');
+    assertN8nFullResponseShape(block.source, 'source');
+    const renderedMeta = JSON.stringify(renderMockHostingerResponse({
+      uid: name.endsWith('910001') ? 910001 : name.endsWith('910601') ? 910601 : 910602,
+      kind: 'metadata',
+    }).response_body);
+    assert.equal(block.metadata.data, renderedMeta);
+  }
+
+  const happy = decideN8n(910001, n8nFixture.happy_910001);
+  assert.equal(happy.decision.event_status, 'awaiting_pass2');
+  assert.equal(happy.decision.queue_status, 'done');
+  assert.match(happy.sql, /INSERT INTO email_automation\.email_events/);
+  assert.match(happy.sql, /'awaiting_pass2'/);
+  assert.match(happy.sql, /pat@example.com/);
+  assert.match(happy.sql, /Synthetic mock inquiry/);
+  assert.doesNotMatch(happy.sql, /identity_uncertain_no_event|parse_failed/);
+
+  const rawRfc822Item = n8nFixture.happy_910001.source_raw_rfc822_application_json;
+  assert.equal(rawRfc822Item.headers['content-type'], 'application/json; charset=utf-8');
+  assert.match(rawRfc822Item.data, /^Message-ID:/);
+  const rawSource = decideN8n(910001, {
+    metadata: n8nFixture.happy_910001.metadata,
+    text: n8nFixture.happy_910001.text,
+    source: rawRfc822Item,
+  });
+  assert.equal(rawSource.decision.event_status, 'awaiting_pass2');
+  assert.equal(rawSource.decision.queue_status, 'done');
+
+  const jsonObjectSource = decideN8n(910001, {
+    metadata: n8nFixture.happy_910001.metadata,
+    text: n8nFixture.happy_910001.text,
+    source: {
+      data: '{"from":"spoofed@evil.example"}',
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+      statusCode: 200,
+      statusMessage: 'OK',
+    },
+  });
+  assert.equal(jsonObjectSource.decision.hold_reason, 'identity_uncertain');
+  assert.equal(jsonObjectSource.decision.event_status, 'held');
+  assert.match(jsonObjectSource.sql, /INSERT INTO email_automation\.email_events/);
+  assert.match(jsonObjectSource.sql, /pat@example.com/);
+  assert.doesNotMatch(jsonObjectSource.sql, /spoofed@evil\.example|parse_failed/);
+
+  const noAuth = decideN8n(910601, n8nFixture.missing_auth_910601);
+  assert.equal(noAuth.decision.hold_reason, 'identity_uncertain');
+  assert.equal(noAuth.decision.event_status, 'held');
+  assert.equal(noAuth.decision.queue_status, 'held');
+  assert.match(noAuth.sql, /INSERT INTO email_automation\.email_events/);
+  assert.doesNotMatch(noAuth.sql, /parse_failed|identity_uncertain_no_event/);
+
+  const noId = decideN8n(910602, n8nFixture.missing_message_id_and_date_910602);
+  assert.equal(noId.decision.event_status, 'awaiting_pass2');
+  assert.equal(noId.decision.queue_status, 'done');
+  assert.match(noId.sql, /message_id = NULL/);
+  assert.match(noId.sql, /fallback_hash = 'v2:[0-9a-f]{64}'/);
+
+  const again = decideN8n(910602, n8nFixture.missing_message_id_and_date_910602);
+  const hashOf = (sql) => sql.match(/fallback_hash = '(v2:[0-9a-f]{64})'/)[1];
+  assert.equal(hashOf(noId.sql), hashOf(again.sql));
+  const expected = computeIdentity({
+    mailbox_email: 'info@vent-guys.com',
+    from_email: 'pat@example.com',
+    to_email: 'info@vent-guys.com',
+    subject: 'Synthetic mock inquiry',
+    date_header: '',
+    bodyText: 'Hello from mock uid 910602.',
+    bodyHtml: '',
+    message_id: '',
+  });
+  assert.equal(hashOf(noId.sql), expected.fallback_hash);
+  assert.equal(expected.message_id, null);
+  assert.match(noId.sql, /ON CONFLICT \(tenant_id, mailbox, fallback_hash\) WHERE fallback_hash IS NOT NULL DO NOTHING/);
+  assert.match(again.sql, /ON CONFLICT \(tenant_id, mailbox, fallback_hash\) WHERE fallback_hash IS NOT NULL DO NOTHING/);
+  assert.equal((noId.sql.match(/INSERT INTO email_automation\.email_events/g) || []).length, 1);
+  assert.equal((again.sql.match(/INSERT INTO email_automation\.email_events/g) || []).length, 1);
+
+  const replacements = {
+    empty: '',
+    null: 'null',
+    invalid_json: '{',
+    number: '1',
+    array: '[1]',
+    string: '"hello"',
+    missing_envelope: '{}',
+    data_not_object: '{"data":"text"}',
+  };
+  for (const endpoint of ['metadata', 'text']) {
+    for (const [label, data] of Object.entries(replacements)) {
+      const items = {
+        metadata: n8nFixture.happy_910001.metadata,
+        text: n8nFixture.happy_910001.text,
+        source: n8nFixture.happy_910001.source,
+      };
+      items[endpoint] = {
+        data,
+        headers: { 'content-type': 'application/json; charset=utf-8' },
+        statusCode: 200,
+        statusMessage: 'OK',
+      };
+      const decided = decideN8n(910001, items);
+      assertParseFailed(decided, endpoint);
+      const reason = label === 'data_not_object'
+        ? 'missing_envelope'
+        : (label === 'number' || label === 'array' || label === 'string' ? 'non_object' : label);
+      assert.match(decided.sql, new RegExp(`'${reason}'`));
+    }
+  }
+});
+
+test('exec 3445 fixtures fail on df42e8ff Normalize and pass on the fix', async () => {
+  const repo = join(root, '../..');
+  const oldSource = execFileSync(
+    'git',
+    ['show', 'df42e8ff:tvg-email-automation/pass1/lib/pass1-hostinger-fetch.mjs'],
+    { cwd: repo, encoding: 'utf8' },
+  );
+  assert.match(oldSource, /function unwrapHttp\(item\)/);
+  assert.doesNotMatch(oldSource, /parseJsonEnvelope/);
+  const intakeUrl = pathToFileURL(join(root, 'lib/pass1-intake-logic.mjs')).href;
+  const rewritten = oldSource.replace("from './pass1-intake-logic.mjs'", `from '${intakeUrl}'`);
+  const dir = mkdtempSync(join(tmpdir(), 'df42e8ff-fetch-'));
+  const file = join(dir, 'pass1-hostinger-fetch.mjs');
+  writeFileSync(file, rewritten);
+  const oldMod = await import(pathToFileURL(file).href);
+  const plan = planWorkerRoute({
+    queueRow: queue(910001),
+    settings,
+    filterRows: [],
+    formSenders: [],
+    contacts: [],
+    leads: [],
+  });
+  const items = {
+    plan,
+    metadataItem: n8nFixture.happy_910001.metadata,
+    textItem: n8nFixture.happy_910001.text,
+    sourceItem: n8nFixture.happy_910001.source,
+  };
+  const before = oldMod.decideFetchedIntake(items);
+  const after = decideFetchedIntake(items);
+  console.log(`REGRESSION df42e8ff: queue=${before.decision.queue_status} hold=${before.decision.hold_reason} event=${before.decision.event_status} identity_uncertain_no_event=${/identity_uncertain_no_event/.test(before.sql)} email_events=${/INSERT INTO email_automation\.email_events/.test(before.sql)}`);
+  console.log(`REGRESSION fix: queue=${after.decision.queue_status} event=${after.decision.event_status} awaiting_pass2=${/awaiting_pass2/.test(after.sql)} email_events=${/INSERT INTO email_automation\.email_events/.test(after.sql)}`);
+  assert.match(before.sql, /identity_uncertain_no_event/);
+  assert.equal(before.decision.queue_status, 'held');
+  assert.equal(before.decision.hold_reason, 'identity_uncertain');
+  assert.doesNotMatch(before.sql, /INSERT INTO email_automation\.email_events/);
+  assert.notEqual(before.decision.queue_status, 'done');
+  assert.equal(after.decision.event_status, 'awaiting_pass2');
+  assert.equal(after.decision.queue_status, 'done');
+  assert.match(after.sql, /INSERT INTO email_automation\.email_events/);
+  assert.doesNotMatch(after.sql, /identity_uncertain_no_event|parse_failed/);
 });
