@@ -4,7 +4,8 @@
  * form path is known_form_senders allowlist only, and that From is judged
  * for form_auth_failure before any email_filter_lists deny can mark it filtered.
  *
- * No send path. No email_responses. No email_send_queue. No Hostinger calls.
+ * No send path. No email_responses. No email_send_queue.
+ * Hostinger GET lives only in pass1-hostinger-fetch.mjs and only on the worker.
  */
 
 export const PSL_SUBSET_ID = 'tvg-email-pass1-psl-subset-2026-09-24';
@@ -40,6 +41,7 @@ const HOLD_REASONS = new Set([
   'ambiguous_recipient',
   'ambiguous_contact',
   'message_moved_uncertain',
+  'identity_uncertain',
   'stale_processing',
   'cross_tenant_match',
 ]);
@@ -648,6 +650,16 @@ export function buildOutcomeSql(input) {
   const excerpt = String(input.body_excerpt || '').slice(0, 500);
   const thread = captureThreadMetadata(input);
   const attachments = assertAttachmentMetadataOnly(input.attachment_meta);
+  const fetchParts = [];
+  if (input.fetch_base_url != null && input.fetch_base_url !== '') {
+    fetchParts.push(`'fetch_base_url', ${quoteLiteral(String(input.fetch_base_url).slice(0, 300))}::text`);
+  }
+  if (input.fetch_mode != null && input.fetch_mode !== '') {
+    fetchParts.push(`'fetch_mode', ${quoteLiteral(String(input.fetch_mode).slice(0, 40))}::text`);
+  }
+  const pointerMerge = fetchParts.length
+    ? `hostinger_pointers = COALESCE(q.hostinger_pointers, '{}'::jsonb) || jsonb_build_object(${fetchParts.join(', ')}),`
+    : '';
   const inReply = thread.in_reply_to ? quoteLiteral(thread.in_reply_to) : 'NULL';
   const referencesHeader = thread.references_header ? quoteLiteral(thread.references_header) : 'NULL';
   return `
@@ -705,7 +717,8 @@ chosen AS (
   LIMIT 1
 )
 UPDATE email_automation.intake_queue q
-SET email_event_id = chosen.id,
+SET ${pointerMerge}
+    email_event_id = chosen.id,
     message_id = ${input.message_id ? quoteLiteral(input.message_id) : 'NULL'},
     fallback_hash = ${input.fallback_hash ? quoteLiteral(input.fallback_hash) : 'NULL'},
     status = CASE
@@ -719,6 +732,51 @@ WHERE q.id = ${quoteLiteral(queueId)}::uuid
 RETURNING q.id, q.status, q.email_event_id, chosen.was_existing,
   (SELECT e.created_at FROM email_automation.email_events e WHERE e.id = q.email_event_id) AS event_created_at;
 `.trim();
+}
+
+export function planFastAck(body) {
+  const pointer = normalizeWebhookPointer(body);
+  if (!pointer.ok) {
+    return {
+      http_status: 400,
+      response_body: { ok: false, error: pointer.reason },
+      sql: null,
+      sample_sql: null,
+    };
+  }
+  const killSwitchSql = `(
+  SELECT COALESCE((
+    SELECT value_json = 'true'::jsonb
+    FROM email_automation.automation_settings
+    WHERE tenant_id = 'tvg' AND key = 'intake_processing_enabled'
+  ), true)
+)`;
+  return {
+    http_status: 200,
+    response_body: { ok: true },
+    sample_sql: null,
+    sql: `
+INSERT INTO email_automation.intake_queue (
+  tenant_id, mailbox, mailbox_resource_id, folder, uid, event_type, status, hostinger_pointers
+) VALUES (
+  'tvg',
+  ${quoteLiteral(pointer.mailbox)},
+  ${quoteLiteral(pointer.mailbox_resource_id)},
+  ${quoteLiteral(pointer.folder)},
+  ${quoteLiteral(pointer.uid)}::bigint,
+  ${pointer.event_type ? quoteLiteral(pointer.event_type) : 'NULL'},
+  CASE WHEN ${killSwitchSql} THEN 'pending'::email_automation.intake_queue_status
+       ELSE 'deferred_kill_switch'::email_automation.intake_queue_status END,
+  ${quoteLiteral(JSON.stringify({
+    mailbox_resource_id: pointer.mailbox_resource_id,
+    folder: pointer.folder,
+    uid: pointer.uid,
+    source: 'fast_ack_normalized',
+  }))}::jsonb
+)
+ON CONFLICT (tenant_id, mailbox_resource_id, folder, uid) DO NOTHING
+RETURNING id, status;`.trim(),
+  };
 }
 
 export function buildFastPathInsertSql(pointer, { killSwitchEnabled }) {

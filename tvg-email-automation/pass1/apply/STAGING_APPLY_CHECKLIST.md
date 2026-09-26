@@ -9,7 +9,7 @@ Forbidden target: `wwyxohjnyqnegzbxtuxs`.
 
 This checklist is not an apply record.
 
-The coordinator applied `apply/20260924_tvg_email_pass1_v5.sql` on `glkrykpksbsqmmilmjhs` on 2026-09-24. That evidence is [`../staging-apply/APPLY_REPORT.md`](../staging-apply/APPLY_REPORT.md). This slice did not re-query staging and did not re-apply the base file. The next live SQL is `apply/20260924_tvg_email_pass1_incremental.sql` only.
+The coordinator applied `apply/20260924_tvg_email_pass1_v5.sql` on `glkrykpksbsqmmilmjhs` on 2026-09-24. That evidence is [`../staging-apply/APPLY_REPORT.md`](../staging-apply/APPLY_REPORT.md). This slice did not re-query staging and did not re-apply the base file. The incremental file remains `apply/20260924_tvg_email_pass1_incremental.sql`. The 2026-09-25 corrective file is additional and is not a substitute for it.
 
 The 2026-09-24 read-only audit below predates that reported apply. It is historical evidence, not the current staging catalog.
 
@@ -18,7 +18,8 @@ The 2026-09-24 read-only audit below predates that reported apply. It is histori
 | Artifact | Where it lives | Live action |
 |---|---|---|
 | `apply/20260924_tvg_email_pass1_v5.sql` | Git | Coordinator reported this applied. Do not re-apply it |
-| `apply/20260924_tvg_email_pass1_incremental.sql` | Git | Next live SQL on `glkrykpksbsqmmilmjhs` only. Refuses to run unless the base tables exist |
+| `apply/20260924_tvg_email_pass1_incremental.sql` | Git | Live SQL on `glkrykpksbsqmmilmjhs` only, if that file is not already applied. Refuses to run unless the base tables exist |
+| `apply/20260925_tvg_email_pass1_corrective_fetch.sql` | Git | Additional staging settings for the corrective fetch slice. Defaults the Hostinger base URL to `disabled`. Does not reset a key that already exists |
 | `apply/pre_apply_audit.sql`, `apply/post_apply_smoke.sql` | Git | Read-only SQL on that same project |
 | `apply/resume_deferred_kill_switch.sql` | Git | Later ops SQL (resume actor A). Not part of DDL apply |
 | n8n JSON under `n8n/` | Git | Import into n8n later, leave **inactive**. Not a Supabase migration. The Twilio node stays disabled and disconnected |
@@ -69,6 +70,18 @@ The file refuses to run without the latch, without `email_automation.notificatio
 5. Import the six n8n JSON files only after the incremental apply. The worker reads `live_notification_started_at`. Confirm each workflow is inactive, names start with `[STAGING] `, and schedule nodes are disabled. Confirm `Twilio send disabled` is disabled, disconnected, and uses credential name `TVG Internal SMS Twilio` with no account SID and no auth token. Do not activate them. Do not create a Hostinger webhook. Do not attach a real SMS credential.
 
 Return packet: [`STAGING_RETURN_PACKET.md`](STAGING_RETURN_PACKET.md). Decision register: [`../decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](../decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md). Directive: [`../directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md`](../directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md).
+
+## Corrective fetch settings (2026-09-25)
+
+Apply this only after the base pack is present. Apply the incremental file first if it has not been applied. Do not re-apply the base file.
+
+```bash
+psql "$STAGING_URL" -v ON_ERROR_STOP=1 -1 \
+  -c "SELECT set_config('tvg_email_pass1.target_project', 'glkrykpksbsqmmilmjhs', false);" \
+  -f tvg-email-automation/pass1/apply/20260925_tvg_email_pass1_corrective_fetch.sql
+```
+
+Expect `hostinger_mail_api_base_url` = JSON string `disabled`, `hostinger_live_fetch_enabled` = false, and `hostinger_fetch_excluded_uids` containing `924150001`. Re-applying this file does not overwrite a key that already exists. Manual smoke steps are in [`../STAGING_CORRECTIVE_SMOKE_RUNBOOK.md`](../STAGING_CORRECTIVE_SMOKE_RUNBOOK.md). Do not activate n8n workflows. Do not register a Hostinger webhook.
 
 ## Base apply (already reported — do not repeat)
 

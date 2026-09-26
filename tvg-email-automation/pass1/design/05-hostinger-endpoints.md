@@ -98,6 +98,16 @@ URL-encode folder segments. Token: `HOSTINGER_MAIL_API_TOKEN` in n8n Credentials
 
 **Auth-Results:** Required for form trust and for **form_auth_failure HOLD**. Capture header shape from `/source` (**MUST_CAPTURE_FROM_REAL_TEST**).
 
+### Side effects (Hostinger Mail API Python SDK 1.1.0, `MessagesApi.md`)
+
+| Endpoint | Documented mailbox change |
+|----------|---------------------------|
+| `GET .../messages/{uid}` | Docs do not say this marks read, moves the message, or changes flags. Treat that silence as **unknown**, not as proof of no side effect. |
+| `GET .../messages/{uid}/source` | Docs describe raw RFC822 retrieval only. They do **not** say flags change. Same unknown. |
+| `GET .../messages/{uid}/text` | **Marks the message as `\Seen`.** This is explicit in the SDK text for `get_message_text`. |
+
+Move and flag updates are separate operations (`POST .../move`, `PATCH` message, `POST .../flags`). The worker does not call them. A later live test must still confirm the two silent GETs before that window, and must treat `/text` as a read-flag change unless Hostinger documents otherwise. The corrective worker calls all three GETs only when the base URL and live flag allow it. The default base URL is `disabled`.
+
 ---
 
 ## 6. List recent INBOX (reconcile gap-fill)

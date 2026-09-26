@@ -1,6 +1,23 @@
 # TVG Email Pass 1 — implementation status
 
-Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amendment, and the 2026-09-24 consolidated staging directive. Not Media Intelligence. `command-center/docs/media-intelligence/IMPLEMENTATION_STATUS.md` is unchanged on purpose.
+Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amendment, the 2026-09-24 consolidated staging directive, and the 2026-09-25 corrective fetch slice. Not Media Intelligence. `command-center/docs/media-intelligence/IMPLEMENTATION_STATUS.md` is unchanged on purpose.
+
+## Corrective fetch slice (2026-09-25)
+
+| Field | Value |
+|---|---|
+| Branch | `cursor/tvg-email-pass1-corrective-fetch-fff2` |
+| Implementation commit | `5b1b3c04fcd6a39fe37c65d1b77a90154659f954` |
+| Defect-fix commit | `b4f8351b5ffc3f705c53af9d2d695c8330192536` |
+| Baseline | `cursor/tvg-email-pass1-v5-3e46` at `a81b067c1c621a53d2a6a3522fe4da3b5e036478` |
+| Authorization | CC 2026-09-25 14:14 ET. Challenge `CHALLENGE_CONCERNS`, proceed, six acceptance criteria |
+| Evidence | First slice **locally verified** at 57 pass. Defect fix below is **locally verified** at 59 pass, 0 fail (`node --test tvg-email-automation/pass1/test/*.test.mjs`). **Not** re-run on staging. **Not** merged. Real Hostinger retrieval is **not** verified. |
+| Defect fix | After staging smoke execution 3444 (`url_build_failed`, mock 0 requests). URL build and the GET guard no longer use `URL` / `URLSearchParams` / `TextEncoder` / `Buffer`. Mock webhook id is shared (`b1000000-0000-4000-8000-000000000001`); `Dispatch mock` reads the path suffix. Mock JSON stays inactive. One worker run hits all three paths only if Command Center permits activating the mock. |
+| Live fetch | Default base URL `disabled`. `hostinger_live_fetch_enabled` seeds false. GET `/text` marks `\Seen` per Hostinger SDK 1.1.0. |
+| Stuck uid 924150001 | Excluded from claim and left `pending`. Not fetched. |
+| Production | `wwyxohjnyqnegzbxtuxs` not queried and not modified |
+
+Report: [`STAGING_CORRECTIVE_REPORT.md`](STAGING_CORRECTIVE_REPORT.md). Coordinator procedure: [`STAGING_CORRECTIVE_SMOKE_RUNBOOK.md`](STAGING_CORRECTIVE_SMOKE_RUNBOOK.md).
 
 | Field | Value |
 |---|---|
@@ -57,8 +74,8 @@ OPEN and still Founder-only: SMS credential attach (including proof it cannot se
 
 ## Next action
 
-Coordinator runs only `apply/20260924_tvg_email_pass1_incremental.sql` on `glkrykpksbsqmmilmjhs`, using `apply/STAGING_APPLY_CHECKLIST.md`. Do not re-apply the base file. Then import the six n8n JSON files and leave them inactive. Do not attach the Twilio credential. Do not enable Hostinger.
+The corrective SQL is already applied on staging. Re-import `n8n/tvg-email-intake-worker.json` and `n8n/tvg-email-hostinger-mock.json` and follow `STAGING_CORRECTIVE_SMOKE_RUNBOOK.md` section B. Leave the Worker inactive. Do not activate the mock unless Command Center says yes for that window; then deactivate it, set `hostinger_mail_api_base_url` back to `"disabled"`, and set `hostinger_mail_api_allowed_hosts` back to `[]`. The temporary allowlist host is `bhfos.app.n8n.cloud`, not `api.mail.hostinger.com`. `hostinger_live_fetch_enabled` stays false. Do not register a Hostinger webhook. Do not merge.
 
 ## Authorization boundary
 
-This change does not merge, does not deploy, does not enable Hostinger, does not activate n8n schedules, does not send SMS, and does not create CRM leads.
+This change does not merge, does not deploy, does not enable Hostinger, does not activate n8n schedules, does not activate the mock, does not send SMS, and does not create CRM leads. Mock activation for the three-request smoke is a separate Command Center decision.

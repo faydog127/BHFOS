@@ -11,6 +11,7 @@ import {
   computeIdentity,
   evaluateIntake,
   normalizeWebhookPointer,
+  planFastAck,
   parseAuthResults,
   registrableDomain,
   sha256Hex,
@@ -231,6 +232,23 @@ test('webhook pointer fails closed when fields are missing', () => {
   const sql = buildFastPathInsertSql(ok, { killSwitchEnabled: false });
   assert.match(sql, /deferred_kill_switch/);
   assert.doesNotMatch(sql, /hostinger\.com/i);
+});
+
+test('malformed pointer plans a 400 and no insert', () => {
+  const missing = planFastAck({ mailbox: 'info@vent-guys.com', folder: 'INBOX' });
+  assert.equal(missing.http_status, 400);
+  assert.equal(missing.response_body.error, 'pointer_incomplete');
+  assert.equal(missing.sql, null);
+  assert.equal(missing.sample_sql, null);
+  const ok = planFastAck({
+    mailboxResourceId: 'mbx_synth',
+    folder: 'INBOX',
+    uid: 42,
+    mailbox: 'info@vent-guys.com',
+  });
+  assert.equal(ok.http_status, 200);
+  assert.match(ok.sql, /INSERT INTO email_automation\.intake_queue/);
+  assert.doesNotMatch(ok.sql, /email_events|email_responses|email_send_queue/);
 });
 
 test('F15 gap fill is pointer SQL and refuses an incomplete item', () => {

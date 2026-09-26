@@ -1,0 +1,270 @@
+{
+  "name": "[STAGING] TVG Email — Hostinger Mock",
+  "nodes": [
+    {
+      "id": "b1000000-0000-4000-8000-000000000020",
+      "name": "STAGING ONLY / HOSTINGER OFF",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -260
+      ],
+      "parameters": {
+        "content": "Inactive in this file. Not the live Hostinger API. One webhook id, three Hostinger path shapes, one dispatcher on the /text or /source suffix. A test listener accepts one call and then drops, so one worker run cannot hit metadata, /text, and /source until Command Center permits activating this mock only. UIDs: 910001 happy, 910404 not found, 910500 upstream, 910408 delay, 910601 missing Authentication-Results, 910602 missing Message-ID and Date, 910603 oversized text. This workflow does not read or flag a mailbox.",
+        "width": 760,
+        "height": 200
+      }
+    },
+    {
+      "id": "b1000000-0000-4000-8000-000000000001",
+      "name": "Mock metadata",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "b1000000-0000-4000-8000-000000000001"
+    },
+    {
+      "id": "b1000000-0000-4000-8000-000000000002",
+      "name": "Mock text",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        180
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid/text",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "b1000000-0000-4000-8000-000000000001"
+    },
+    {
+      "id": "b1000000-0000-4000-8000-000000000003",
+      "name": "Mock source",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        360
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid/source",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "b1000000-0000-4000-8000-000000000001"
+    },
+    {
+      "id": "b1000000-0000-4000-8000-000000000004",
+      "name": "Dispatch mock",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        180
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst item = $input.first().json || {};\nconst params = item.params && typeof item.params === 'object' ? item.params : {};\nconst headers = item.headers && typeof item.headers === 'object' ? item.headers : {};\nconst forwarded = headers['x-forwarded-path'] || headers['x-forwarded-uri'] || '';\nconst pathOnly = String(item.webhookUrl || forwarded || '').split('?')[0].split('#')[0];\nlet mock_kind = '';\nif (/\\/source$/.test(pathOnly)) mock_kind = 'source';\nelse if (/\\/text$/.test(pathOnly)) mock_kind = 'text';\nelse if (/\\/messages\\/[^/]+$/.test(pathOnly)) mock_kind = 'metadata';\nif (!mock_kind) {\n  try { if ($('Mock source').isExecuted) mock_kind = 'source'; } catch (error) { /* parent not run */ }\n}\nif (!mock_kind) {\n  try { if ($('Mock text').isExecuted) mock_kind = 'text'; } catch (error) { /* parent not run */ }\n}\nif (!mock_kind) mock_kind = 'metadata';\nif (mock_kind !== 'metadata' && mock_kind !== 'text' && mock_kind !== 'source') {\n  return [{ json: { http_status: 404, response_body: { error: 'not_found' }, timeout: false, mock_kind: 'rejected' } }];\n}\nreturn [{ json: { ...item, params, mock_kind, uid: params.uid || '' } }];\n"
+      }
+    },
+    {
+      "id": "b1000000-0000-4000-8000-000000000007",
+      "name": "Render mock",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        740,
+        180
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "/**\n * TVG Email Pass 1 — worker-only Hostinger message fetch.\n * GET metadata, text, and source. No other method. No other path.\n * Default base URL is disabled. The live host stays off until an explicit flag.\n * No token is stored here.\n */\n\nconst HOSTINGER_LIVE_HOST = 'api.mail.hostinger.com';\nconst DISABLED_BASE_URL = 'disabled';\nconst STUCK_REAL_UID = '924150001';\nconst DEFAULT_TIMEOUT_MS = 8000;\nconst DEFAULT_MAX_BODY_BYTES = 262144;\n\nconst MOCK_CASES = Object.freeze({\n  910001: 'happy',\n  910404: 'not_found',\n  910500: 'upstream',\n  910408: 'timeout',\n  910601: 'missing_auth_results',\n  910602: 'missing_message_id_and_date',\n  910603: 'oversized',\n});\n\nconst MESSAGE_PATH = /^\\/api\\/v1\\/mailboxes\\/([A-Za-z0-9_-]{1,128})\\/folders\\/([A-Za-z0-9._-]{1,128})\\/messages\\/(\\d{1,18})(\\/text|\\/source)?$/;\n\nfunction requireUuid(value) {\n  const text = String(value || '');\n  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text)) {\n    throw new Error('expected uuid');\n  }\n  return text.toLowerCase();\n}\n\nfunction settingsArray(settings, key) {\n  const value = settings?.[key];\n  return Array.isArray(value) ? value : [];\n}\n\nfunction settingsString(settings, key, fallback) {\n  const value = settings?.[key];\n  if (typeof value !== 'string' || value.trim() === '') return fallback;\n  return value.trim();\n}\n\nfunction settingsInt(settings, key, fallback, cap) {\n  const n = Number(settings?.[key]);\n  if (!Number.isFinite(n) || n <= 0) return fallback;\n  return Math.min(Math.floor(n), cap);\n}\n\nfunction utf8Bytes(value) {\n  const text = typeof value === 'string' ? value : JSON.stringify(value ?? '');\n  let bytes = 0;\n  for (let i = 0; i < text.length; i += 1) {\n    const code = text.charCodeAt(i);\n    if (code < 0x80) bytes += 1;\n    else if (code < 0x800) bytes += 2;\n    else if (code >= 0xd800 && code <= 0xdbff) {\n      bytes += 4;\n      i += 1;\n    } else bytes += 3;\n  }\n  return bytes;\n}\n\nconst MAILBOX_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;\nconst FOLDER_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;\nconst UID_PATTERN = /^\\d{1,18}$/;\n\nfunction segmentTextOk(value, pattern) {\n  const text = String(value ?? '');\n  if (!pattern.test(text)) return false;\n  if (text === '.' || text === '..' || text.includes('..')) return false;\n  if (/[/?#%@:\\\\]/.test(text)) return false;\n  return true;\n}\n\nfunction encodePathSegment(value, pattern) {\n  const text = String(value ?? '');\n  if (!segmentTextOk(text, pattern)) throw new TypeError('path segment rejected');\n  return encodeURIComponent(text);\n}\n\nfunction invalidUrl() {\n  return new TypeError('Invalid URL');\n}\n\nfunction parseHttpUrl(input) {\n  const raw = String(input ?? '').trim();\n  const match = /^(https?):\\/\\/([^/?#]*)([^?#]*)(\\?[^#]*)?(#.*)?$/i.exec(raw);\n  if (!match) throw invalidUrl();\n  const protocol = `${match[1].toLowerCase()}:`;\n  let authority = match[2];\n  if (!authority) throw invalidUrl();\n  let username = '';\n  let pass = '';\n  const at = authority.lastIndexOf('@');\n  if (at !== -1) {\n    const userinfo = authority.slice(0, at);\n    authority = authority.slice(at + 1);\n    const colon = userinfo.indexOf(':');\n    if (colon === -1) username = userinfo;\n    else {\n      username = userinfo.slice(0, colon);\n      pass = userinfo.slice(colon + 1);\n    }\n  }\n  if (!authority || /[\\s@]/.test(authority) || authority.startsWith('[')) throw invalidUrl();\n  let hostname = authority;\n  let port = '';\n  const colon = hostname.lastIndexOf(':');\n  if (colon !== -1) {\n    port = hostname.slice(colon + 1);\n    hostname = hostname.slice(0, colon);\n    if (!/^\\d{1,5}$/.test(port) || Number(port) > 65535) throw invalidUrl();\n  }\n  hostname = hostname.toLowerCase();\n  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/.test(hostname) && hostname !== 'localhost') {\n    throw invalidUrl();\n  }\n  let pathname = match[3] || '/';\n  if (!pathname.startsWith('/')) pathname = `/${pathname}`;\n  const defaultPort = protocol === 'https:' ? '443' : '80';\n  const portSuffix = port && port !== defaultPort ? `:${port}` : '';\n  return {\n    protocol,\n    username,\n    pass,\n    hostname,\n    port,\n    pathname,\n    search: match[4] || '',\n    hash: match[5] || '',\n    origin: `${protocol}//${hostname}${portSuffix}`,\n  };\n}\n\nfunction composeHttpUrl(parts) {\n  const defaultPort = parts.protocol === 'https:' ? '443' : '80';\n  const portSuffix = parts.port && parts.port !== defaultPort ? `:${parts.port}` : '';\n  const userinfo = parts.username\n    ? `${parts.username}${parts.pass ? `:${parts.pass}` : ''}@`\n    : (parts.pass ? `:${parts.pass}@` : '');\n  let pathname = parts.pathname || '/';\n  if (!pathname.startsWith('/')) pathname = `/${pathname}`;\n  return `${parts.protocol}//${userinfo}${parts.hostname}${portSuffix}${pathname}`;\n}\n\nfunction urlBuildFailureDetail(error) {\n  const name = String(error && error.name ? error.name : 'Error').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40) || 'Error';\n  const message = String(error && error.message ? error.message : 'url_build_failed')\n    .replace(/https?:\\/\\/\\S+/gi, '[url]')\n    .replace(/bearer\\s+\\S+/gi, '[redacted]')\n    .replace(/[\\r\\n\\t]+/g, ' ')\n    .slice(0, 160);\n  return `url_build_failed:${name}:${message}`.slice(0, 220);\n}\n\nfunction assertHostingerGetRequest({\n  method,\n  url,\n  baseUrl,\n  allowedHosts,\n  liveFetchEnabled,\n}) {\n  if (String(method || '').toUpperCase() !== 'GET') {\n    return { ok: false, reason: 'method_rejected' };\n  }\n  let parsed;\n  let base;\n  try {\n    parsed = parseHttpUrl(url);\n    base = parseHttpUrl(baseUrl);\n  } catch {\n    return { ok: false, reason: 'url_rejected' };\n  }\n  if (parsed.protocol !== 'https:') return { ok: false, reason: 'scheme_rejected' };\n  const userinfo = parsed.username || parsed.pass;\n  if (userinfo) return { ok: false, reason: 'url_rejected' };\n  if (parsed.origin !== base.origin) return { ok: false, reason: 'host_rejected' };\n  if (parsed.search || parsed.hash) return { ok: false, reason: 'query_rejected' };\n  const basePath = base.pathname.replace(/\\/+$/, '');\n  if (!parsed.pathname.startsWith(`${basePath}/`)) return { ok: false, reason: 'path_rejected' };\n  let relative;\n  try {\n    relative = decodeURIComponent(parsed.pathname.slice(basePath.length));\n  } catch {\n    return { ok: false, reason: 'path_rejected' };\n  }\n  if (relative.includes('..') || !MESSAGE_PATH.test(relative)) {\n    return { ok: false, reason: 'path_rejected' };\n  }\n  const host = parsed.hostname.toLowerCase();\n  const allowed = (allowedHosts || []).map((item) => String(item).trim().toLowerCase()).filter(Boolean);\n  if (!allowed.includes(host)) return { ok: false, reason: 'host_rejected' };\n  if (host === HOSTINGER_LIVE_HOST && liveFetchEnabled !== true) {\n    return { ok: false, reason: 'live_fetch_disabled' };\n  }\n  return { ok: true, host, path: relative };\n}\n\nfunction buildMessageUrl(baseUrl, pointer, suffix) {\n  if (suffix !== '' && suffix !== 'text' && suffix !== 'source') {\n    throw new TypeError('suffix rejected');\n  }\n  const base = parseHttpUrl(baseUrl);\n  const id = encodePathSegment(pointer.mailbox_resource_id, MAILBOX_ID_PATTERN);\n  const folder = encodePathSegment(pointer.folder, FOLDER_PATTERN);\n  const uid = encodePathSegment(String(pointer.uid), UID_PATTERN);\n  const tail = suffix ? `/${suffix}` : '';\n  const prefix = base.pathname.replace(/\\/+$/, '');\n  const pathname = `${prefix}/api/v1/mailboxes/${id}/folders/${folder}/messages/${uid}${tail}`;\n  const relative = pathname.slice(prefix.length);\n  if (relative.includes('..') || !MESSAGE_PATH.test(relative)) {\n    throw new TypeError('path segment rejected');\n  }\n  return composeHttpUrl({\n    protocol: base.protocol,\n    username: base.username,\n    pass: base.pass,\n    hostname: base.hostname,\n    port: base.port,\n    pathname,\n  });\n}\n\nfunction resolveStoredPointer(queue) {\n  const column = {\n    mailbox_resource_id: queue.mailbox_resource_id,\n    folder: queue.folder,\n    uid: queue.uid == null ? '' : String(queue.uid),\n    mailbox: queue.mailbox,\n  };\n  const pointers = queue.hostinger_pointers && typeof queue.hostinger_pointers === 'object'\n    ? queue.hostinger_pointers\n    : {};\n  const mirrored = [\n    ['mailbox_resource_id', pointers.mailbox_resource_id],\n    ['folder', pointers.folder],\n    ['uid', pointers.uid == null || pointers.uid === '' ? undefined : String(pointers.uid)],\n  ];\n  for (const [key, value] of mirrored) {\n    if (value != null && value !== '' && String(value) !== String(column[key] ?? '')) {\n      return { ok: false, detail: `pointer_mismatch:${key}` };\n    }\n  }\n  if (!segmentTextOk(column.mailbox_resource_id, MAILBOX_ID_PATTERN)) {\n    return { ok: false, detail: 'mailbox_resource_id_unresolved' };\n  }\n  if (!segmentTextOk(column.folder, FOLDER_PATTERN)) {\n    return { ok: false, detail: 'folder_unresolved' };\n  }\n  if (!segmentTextOk(column.uid, UID_PATTERN)) return { ok: false, detail: 'uid_unresolved' };\n  if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$/.test(String(column.mailbox || ''))) {\n    return { ok: false, detail: 'mailbox_unresolved' };\n  }\n  return {\n    ok: true,\n    mailbox_resource_id: String(column.mailbox_resource_id),\n    folder: String(column.folder),\n    uid: column.uid,\n    mailbox: String(column.mailbox).toLowerCase(),\n  };\n}\n\nfunction holdPlan(common, fields) {\n  return {\n    ...common,\n    route: 'hold',\n    metadata_url: null,\n    text_url: null,\n    source_url: null,\n    ...fields,\n  };\n}\n\nfunction planWorkerRoute({\n  queueRow,\n  settings = {},\n  filterRows = [],\n  formSenders = [],\n  contacts = [],\n  leads = [],\n}) {\n  const baseUrl = settingsString(settings, 'hostinger_mail_api_base_url', DISABLED_BASE_URL);\n  const timeoutMs = settingsInt(settings, 'hostinger_fetch_timeout_ms', DEFAULT_TIMEOUT_MS, 20000);\n  const maxBodyBytes = settingsInt(settings, 'hostinger_fetch_max_body_bytes', DEFAULT_MAX_BODY_BYTES, 1048576);\n  const common = {\n    queue_row: queueRow || null,\n    filter_rows: filterRows || [],\n    form_senders: formSenders || [],\n    settings,\n    contacts: contacts || [],\n    leads: leads || [],\n    fetch_base_url: baseUrl,\n    timeout_ms: timeoutMs,\n    max_body_bytes: maxBodyBytes,\n    metadata_url: null,\n    text_url: null,\n    source_url: null,\n    hold_reason: null,\n    error_code: null,\n    queue_status: null,\n    detail: null,\n  };\n  if (!queueRow) return { ...common, route: 'skip' };\n  const pointers = queueRow.hostinger_pointers || {};\n  if (pointers.synthetic_message) return { ...common, route: 'synthetic' };\n  const excluded = new Set([\n    STUCK_REAL_UID,\n    ...settingsArray(settings, 'hostinger_fetch_excluded_uids').map((value) => String(value)),\n  ]);\n  if (excluded.has(String(queueRow.uid))) {\n    return holdPlan(common, {\n      fetch_base_url: 'excluded',\n      hold_reason: 'excluded_stuck_uid',\n      error_code: 'excluded_stuck_uid',\n      queue_status: 'held',\n      detail: 'non-synthetic uid 924150001 is excluded from fetch',\n    });\n  }\n  const pointer = resolveStoredPointer(queueRow);\n  if (!pointer.ok) {\n    return holdPlan(common, {\n      hold_reason: 'pointer_unresolved',\n      error_code: 'pointer_unresolved',\n      queue_status: 'held',\n      detail: pointer.detail,\n    });\n  }\n  if (baseUrl === DISABLED_BASE_URL || baseUrl === 'off' || baseUrl === 'mock') {\n    return holdPlan(common, {\n      hold_reason: 'hostinger_fetch_disabled',\n      error_code: 'hostinger_fetch_disabled',\n      queue_status: 'held',\n      detail: 'base URL is disabled; no request was made',\n    });\n  }\n  let urls;\n  try {\n    urls = {\n      metadata: buildMessageUrl(baseUrl, pointer, ''),\n      text: buildMessageUrl(baseUrl, pointer, 'text'),\n      source: buildMessageUrl(baseUrl, pointer, 'source'),\n    };\n  } catch (error) {\n    return holdPlan(common, {\n      hold_reason: 'pointer_unresolved',\n      error_code: 'pointer_unresolved',\n      queue_status: 'held',\n      detail: urlBuildFailureDetail(error),\n    });\n  }\n  const allowedHosts = settingsArray(settings, 'hostinger_mail_api_allowed_hosts');\n  const liveFetchEnabled = settings.hostinger_live_fetch_enabled === true;\n  for (const [name, url] of Object.entries(urls)) {\n    const guard = assertHostingerGetRequest({\n      method: 'GET',\n      url,\n      baseUrl,\n      allowedHosts,\n      liveFetchEnabled,\n    });\n    if (!guard.ok) {\n      const reason = guard.reason === 'live_fetch_disabled'\n        ? 'hostinger_live_fetch_disabled'\n        : 'hostinger_request_rejected';\n      return holdPlan(common, {\n        hold_reason: reason,\n        error_code: guard.reason,\n        queue_status: 'held',\n        detail: `${name}:${guard.reason}`,\n      });\n    }\n  }\n  return {\n    ...common,\n    route: 'fetch',\n    metadata_url: urls.metadata,\n    text_url: urls.text,\n    source_url: urls.source,\n  };\n}\n\nfunction buildClosedHoldSql(input) {\n  const queueId = requireUuid(input.queue_id);\n  const queueStatus = input.queue_status === 'error' ? 'error' : 'held';\n  const holdReason = String(input.hold_reason || 'pointer_unresolved').slice(0, 80);\n  const errorCode = String(input.error_code || holdReason).slice(0, 80);\n  const detail = String(input.detail || holdReason).slice(0, 400);\n  const fetchBaseUrl = String(input.fetch_base_url || DISABLED_BASE_URL).slice(0, 300);\n  const sql = `\nWITH closed AS (\n  UPDATE email_automation.intake_queue q\n  SET status = ${quoteLiteral(queueStatus)}::email_automation.intake_queue_status,\n      hold_reason = ${quoteLiteral(holdReason)},\n      last_error = ${quoteLiteral(detail)},\n      hostinger_pointers = COALESCE(q.hostinger_pointers, '{}'::jsonb) || jsonb_build_object(\n        'fetch_base_url', ${quoteLiteral(fetchBaseUrl)}::text,\n        'fetch_mode', 'closed'::text,\n        'fetch_error_code', ${quoteLiteral(errorCode)}::text\n      )\n  WHERE q.id = ${quoteLiteral(queueId)}::uuid\n    AND q.tenant_id = 'tvg'\n  RETURNING q.id\n)\nINSERT INTO email_automation.automation_errors (\n  tenant_id, intake_queue_id, stage, error_code, error_message, context_json, retryable\n)\nSELECT\n  'tvg',\n  closed.id,\n  'worker_fetch',\n  ${quoteLiteral(errorCode)},\n  ${quoteLiteral(detail)},\n  jsonb_build_object('fetch_base_url', ${quoteLiteral(fetchBaseUrl)}::text),\n  FALSE\nFROM closed\nRETURNING intake_queue_id AS id,\n  ${quoteLiteral(queueStatus)}::text AS status,\n  NULL::uuid AS email_event_id,\n  FALSE AS was_existing,\n  NULL::timestamptz AS event_created_at;\n`.trim();\n  if (/email_responses|email_send_queue|developers\\.hostinger|insert\\s+into\\s+public\\./i.test(sql)) {\n    throw new Error('refusing closed-hold SQL');\n  }\n  return sql;\n}\n\nfunction recheckFetchPlan(plan) {\n  if (!plan || plan.route !== 'fetch') return { ok: false, detail: 'not_fetch' };\n  const allowedHosts = settingsArray(plan.settings, 'hostinger_mail_api_allowed_hosts');\n  const liveFetchEnabled = plan.settings?.hostinger_live_fetch_enabled === true;\n  const requests = [\n    { method: 'GET', url: plan.metadata_url },\n    { method: 'GET', url: plan.text_url },\n    { method: 'GET', url: plan.source_url },\n  ];\n  for (const request of requests) {\n    const guard = assertHostingerGetRequest({\n      method: request.method,\n      url: request.url,\n      baseUrl: plan.fetch_base_url,\n      allowedHosts,\n      liveFetchEnabled,\n    });\n    if (!guard.ok) {\n      return {\n        ok: false,\n        fetch_base_url: plan.fetch_base_url,\n        hold_reason: 'hostinger_request_rejected',\n        sql: buildClosedHoldSql({\n          queue_id: plan.queue_row.id,\n          queue_status: 'held',\n          hold_reason: 'hostinger_request_rejected',\n          error_code: guard.reason,\n          detail: guard.reason,\n          fetch_base_url: plan.fetch_base_url,\n        }),\n      };\n    }\n  }\n  return { ok: true };\n}\n\nfunction unwrapHttp(item) {\n  if (item == null) return { status: 0, body: null, timedOut: true, error: 'empty' };\n  if (typeof item !== 'object') return { status: 200, body: item, timedOut: false, error: null };\n  if (item.error) {\n    const message = String(item.error.message || item.error.description || item.error);\n    const timedOut = /timeout|timed out|etimedout|econnaborted|aborted/i.test(message);\n    return {\n      status: Number(item.error.status || item.error.httpCode || 0),\n      body: null,\n      timedOut,\n      error: message.slice(0, 300),\n    };\n  }\n  const status = Number(item.statusCode || item.status || 0);\n  let body = Object.prototype.hasOwnProperty.call(item, 'body') ? item.body : item;\n  if (typeof body === 'string') {\n    const trimmed = body.trim();\n    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {\n      try { body = JSON.parse(trimmed); } catch { /* raw text, including rfc822 that is not json */ }\n    }\n  }\n  return { status: status || 200, body, timedOut: false, error: null };\n}\n\nfunction parseRfc822(raw) {\n  const text = String(raw || '').replace(/\\r\\n/g, '\\n').replace(/\\r/g, '\\n');\n  const splitAt = text.indexOf('\\n\\n');\n  const headerBlock = splitAt === -1 ? text : text.slice(0, splitAt);\n  const body = splitAt === -1 ? '' : text.slice(splitAt + 2);\n  const unfolded = headerBlock.replace(/\\n[ \\t]+/g, ' ');\n  const headers = {};\n  for (const line of unfolded.split('\\n')) {\n    const idx = line.indexOf(':');\n    if (idx <= 0) continue;\n    const name = line.slice(0, idx).trim().toLowerCase();\n    const value = line.slice(idx + 1).trim();\n    if (!name) continue;\n    headers[name] = headers[name] ? `${headers[name]}\\n${value}` : value;\n  }\n  return { headers, body };\n}\n\nfunction sourceText(body) {\n  if (typeof body === 'string') return body;\n  if (!body || typeof body !== 'object') return '';\n  if (typeof body.source === 'string') return body.source;\n  if (typeof body.data === 'string') return body.data;\n  return '';\n}\n\nfunction metadataObject(body) {\n  if (!body || typeof body !== 'object' || Array.isArray(body)) return {};\n  const data = body.data && typeof body.data === 'object' && !Array.isArray(body.data) ? body.data : body;\n  return data;\n}\n\nfunction textParts(body) {\n  const data = metadataObject(body);\n  return {\n    text: data.text == null ? '' : String(data.text),\n    html: data.html == null ? '' : String(data.html),\n  };\n}\n\nfunction addressText(value) {\n  if (value == null) return '';\n  if (typeof value === 'string') return value;\n  if (typeof value === 'object' && value.address) {\n    const name = value.name ? String(value.name).replace(/[<>]/g, '') : '';\n    return name ? `${name} <${value.address}>` : String(value.address);\n  }\n  return '';\n}\n\nfunction addressList(value) {\n  if (!Array.isArray(value)) return '';\n  return value.map(addressText).filter(Boolean).join(', ');\n}\n\nfunction bareId(value) {\n  return String(value || '').trim().replace(/^<|>$/g, '').toLowerCase();\n}\n\nfunction loose(value) {\n  return String(value || '').replace(/\\s+/g, ' ').trim().toLowerCase();\n}\n\nfunction attachmentMeta(list) {\n  if (!Array.isArray(list)) return [];\n  return list.map((item) => ({\n    filename: item?.filename ?? null,\n    content_type: item?.contentType || item?.content_type || null,\n    size_bytes: item?.sizeBytes ?? item?.size_bytes ?? null,\n    attachment_id: item?.id || item?.attachment_id || null,\n  }));\n}\n\nfunction retrievalFailure(meta, text, source) {\n  const parts = [meta, text, source];\n  if (parts.some((part) => part.timedOut)) {\n    return { queue_status: 'error', hold_reason: 'hostinger_timeout', error_code: 'hostinger_timeout', detail: 'timeout' };\n  }\n  if (parts.some((part) => part.status >= 500)) {\n    return { queue_status: 'error', hold_reason: 'hostinger_upstream_error', error_code: 'hostinger_upstream_error', detail: 'upstream' };\n  }\n  if (parts.some((part) => part.status === 404)) {\n    return {\n      queue_status: 'held',\n      hold_reason: 'message_moved_uncertain',\n      error_code: 'hostinger_not_found',\n      detail: 'not_found_no_search',\n    };\n  }\n  if (parts.some((part) => part.status === 401 || part.status === 403)) {\n    return { queue_status: 'error', hold_reason: 'hostinger_auth_rejected', error_code: 'hostinger_auth_rejected', detail: 'auth' };\n  }\n  if (parts.some((part) => part.status < 200 || part.status >= 300)) {\n    return { queue_status: 'held', hold_reason: 'hostinger_client_error', error_code: 'hostinger_client_error', detail: 'client_status' };\n  }\n  return null;\n}\n\nfunction normalizeHostingerPayload({\n  metadataBody,\n  textBody,\n  sourceBody,\n  mailbox,\n  maxBodyBytes,\n}) {\n  const rawSizes = [metadataBody, textBody, sourceBody].map(utf8Bytes);\n  if (rawSizes.some((size) => size > maxBodyBytes)) {\n    return { ok: false, code: 'hostinger_body_too_large', detail: 'body_too_large' };\n  }\n  const sourceRaw = sourceText(sourceBody);\n  if (!sourceRaw.trim()) {\n    return { ok: false, code: 'identity_uncertain', detail: 'missing_source', uncertain: true };\n  }\n  const parsed = parseRfc822(sourceRaw);\n  const auth = parsed.headers['authentication-results'] || '';\n  if (!String(auth).trim()) {\n    return {\n      ok: false,\n      code: 'identity_uncertain',\n      detail: 'missing_authentication_results',\n      uncertain: true,\n      partial: assembleMessage({ parsed, metadataBody, textBody, mailbox, auth: '' }),\n    };\n  }\n  const message = assembleMessage({ parsed, metadataBody, textBody, mailbox, auth });\n  if (message.conflict) {\n    return { ok: false, code: 'identity_uncertain', detail: message.conflict, uncertain: true, partial: message };\n  }\n  return { ok: true, message };\n}\n\nfunction assembleMessage({ parsed, metadataBody, textBody, mailbox, auth }) {\n  const meta = metadataObject(metadataBody);\n  const parts = textParts(textBody);\n  const headerFrom = parsed.headers.from || '';\n  const metaFrom = addressText(meta.from);\n  const headerId = parsed.headers['message-id'] || '';\n  const metaId = meta.messageId || meta.message_id || '';\n  const headerSubject = parsed.headers.subject || '';\n  const metaSubject = meta.subject == null ? '' : String(meta.subject);\n  let conflict = '';\n  if (headerFrom && metaFrom && normalizeEmail(headerFrom) && normalizeEmail(metaFrom)\n    && normalizeEmail(headerFrom) !== normalizeEmail(metaFrom)) {\n    conflict = 'from_mismatch';\n  }\n  if (headerId && metaId && bareId(headerId) !== bareId(metaId)) conflict = conflict || 'message_id_mismatch';\n  if (headerSubject && metaSubject && loose(headerSubject) !== loose(metaSubject)) conflict = conflict || 'subject_mismatch';\n  const contentType = String(parsed.headers['content-type'] || '');\n  let bodyText = parts.text;\n  if (!bodyText && !parts.html && (contentType === '' || /^text\\/plain/i.test(contentType))) {\n    bodyText = parsed.body;\n  }\n  return {\n    conflict,\n    mailbox,\n    from_raw: headerFrom || metaFrom,\n    from_name: meta.from && typeof meta.from === 'object' ? (meta.from.name || '') : '',\n    reply_to_raw: parsed.headers['reply-to'] || '',\n    to_raw: parsed.headers.to || addressList(meta.to),\n    cc_raw: parsed.headers.cc || addressList(meta.cc),\n    subject: headerSubject || metaSubject,\n    date_header: parsed.headers.date || '',\n    bodyText,\n    bodyHtml: parts.html,\n    message_id: headerId || metaId || '',\n    authentication_results: auth,\n    in_reply_to: parsed.headers['in-reply-to'] || meta.inReplyTo || meta.in_reply_to || '',\n    references: parsed.headers.references || '',\n    auto_submitted: parsed.headers['auto-submitted'] || '',\n    precedence_header: parsed.headers.precedence || '',\n    list_id: parsed.headers['list-id'] || '',\n    content_type: contentType,\n    attachment_meta: attachmentMeta(meta.attachments),\n  };\n}\n\nfunction displayFrom(message, decision) {\n  return {\n    senderName: message.from_name || '',\n    senderEmail: decision.from_email || '',\n    subject: message.subject || '',\n    formFields: { service: '', city: '' },\n  };\n}\n\nfunction outcomeFromDecision(decision, plan, message) {\n  const sql = buildOutcomeSql({\n    ...decision,\n    queue_id: plan.queue_row.id,\n    mailbox: plan.queue_row.mailbox,\n    mailbox_resource_id: plan.queue_row.mailbox_resource_id,\n    folder: plan.queue_row.folder,\n    uid: String(plan.queue_row.uid),\n    subject: message.subject || null,\n    date_header: message.date_header || null,\n    authentication_results: message.authentication_results || null,\n    body_excerpt: decision.body_normalized || '',\n    in_reply_to: message.in_reply_to || null,\n    references: message.references || null,\n    attachment_meta: message.attachment_meta || null,\n    fetch_base_url: plan.fetch_base_url,\n    fetch_mode: 'get',\n  });\n  return { sql, decision, display: displayFrom(message, decision), fetch_base_url: plan.fetch_base_url };\n}\n\nfunction forcedUncertain(plan, message) {\n  const prepared = {\n    ...message,\n    from_email: normalizeEmail(message.from_raw),\n    reply_to_email: normalizeEmail(message.reply_to_raw),\n    to_email: normalizeEmail(message.to_raw),\n    mailbox_email: normalizeEmail(message.mailbox),\n  };\n  const identity = computeIdentity(prepared);\n  const auth = parseAuthResults(prepared.authentication_results);\n  const canPersist = Boolean(identity.message_id)\n    || Boolean(prepared.from_email && (prepared.bodyText || prepared.subject || prepared.date_header));\n  if (!canPersist) {\n    return {\n      sql: buildClosedHoldSql({\n        queue_id: plan.queue_row.id,\n        queue_status: 'held',\n        hold_reason: 'identity_uncertain',\n        error_code: 'identity_uncertain',\n        detail: 'identity_uncertain_no_event',\n        fetch_base_url: plan.fetch_base_url,\n      }),\n      decision: { event_status: 'held', queue_status: 'held', hold_reason: 'identity_uncertain' },\n      display: displayFrom(message, { from_email: prepared.from_email }),\n      fetch_base_url: plan.fetch_base_url,\n    };\n  }\n  return outcomeFromDecision({\n    ...identity,\n    from_email: prepared.from_email,\n    reply_to_email: prepared.reply_to_email,\n    spf_pass: auth.spf_pass,\n    dkim_pass: auth.dkim_pass,\n    dmarc_pass: auth.dmarc_pass,\n    is_form_sender: false,\n    contact_id: null,\n    lead_id: null,\n    resolved_recipient: null,\n    recipient_resolution: null,\n    hold_reason: 'identity_uncertain',\n    filter_reason: null,\n    event_status: 'held',\n    queue_status: 'held',\n  }, plan, message);\n}\n\nfunction decideFetchedIntake({ plan, metadataItem, textItem, sourceItem }) {\n  const meta = unwrapHttp(metadataItem);\n  const text = unwrapHttp(textItem);\n  const source = unwrapHttp(sourceItem);\n  const failure = retrievalFailure(meta, text, source);\n  if (failure) {\n    return {\n      sql: buildClosedHoldSql({\n        queue_id: plan.queue_row.id,\n        queue_status: failure.queue_status,\n        hold_reason: failure.hold_reason,\n        error_code: failure.error_code,\n        detail: failure.detail,\n        fetch_base_url: plan.fetch_base_url,\n      }),\n      decision: {\n        event_status: failure.queue_status === 'error' ? 'error' : 'held',\n        queue_status: failure.queue_status,\n        hold_reason: failure.hold_reason,\n      },\n      display: {},\n      fetch_base_url: plan.fetch_base_url,\n    };\n  }\n  const normalized = normalizeHostingerPayload({\n    metadataBody: meta.body,\n    textBody: text.body,\n    sourceBody: source.body,\n    mailbox: plan.queue_row.mailbox,\n    maxBodyBytes: plan.max_body_bytes || DEFAULT_MAX_BODY_BYTES,\n  });\n  if (!normalized.ok && normalized.code === 'hostinger_body_too_large') {\n    return {\n      sql: buildClosedHoldSql({\n        queue_id: plan.queue_row.id,\n        queue_status: 'held',\n        hold_reason: 'hostinger_body_too_large',\n        error_code: 'hostinger_body_too_large',\n        detail: 'body_too_large',\n        fetch_base_url: plan.fetch_base_url,\n      }),\n      decision: { event_status: 'held', queue_status: 'held', hold_reason: 'hostinger_body_too_large' },\n      display: {},\n      fetch_base_url: plan.fetch_base_url,\n    };\n  }\n  if (!normalized.ok) {\n    return forcedUncertain(plan, normalized.partial || {\n      mailbox: plan.queue_row.mailbox,\n      from_raw: '',\n      subject: '',\n      date_header: '',\n      bodyText: '',\n      message_id: '',\n      authentication_results: '',\n    });\n  }\n  const decision = evaluateIntake({\n    message: normalized.message,\n    filterRows: plan.filter_rows || [],\n    formSenders: plan.form_senders || [],\n    settings: plan.settings || {},\n    contacts: plan.contacts || [],\n    leads: plan.leads || [],\n  });\n  return outcomeFromDecision(decision, plan, normalized.message);\n}\n\nfunction happySource({ uid, subject, messageId, date, auth, from }) {\n  const lines = [\n    messageId ? `Message-ID: ${messageId}` : null,\n    date ? `Date: ${date}` : null,\n    `From: ${from}`,\n    'Reply-To: Pat Customer <pat@example.com>',\n    'To: TVG <info@vent-guys.com>',\n    `Subject: ${subject}`,\n    auth ? `Authentication-Results: ${auth}` : null,\n    'MIME-Version: 1.0',\n    'Content-Type: text/plain; charset=utf-8',\n    '',\n    `Hello from mock uid ${uid}.`,\n  ].filter((line) => line != null);\n  return lines.join('\\r\\n');\n}\n\nfunction renderMockHostingerResponse({ uid, kind }) {\n  const mode = MOCK_CASES[String(uid)] || 'not_found';\n  if (mode === 'not_found') {\n    return { http_status: 404, response_body: { error: 'not_found', uid: String(uid) }, timeout: false };\n  }\n  if (mode === 'upstream') {\n    return { http_status: 500, response_body: { error: 'upstream', uid: String(uid) }, timeout: false };\n  }\n  if (mode === 'timeout') {\n    return { http_status: 200, response_body: { error: 'delayed', uid: String(uid) }, timeout: true };\n  }\n  const omitAuth = mode === 'missing_auth_results';\n  const omitId = mode === 'missing_message_id_and_date';\n  const subject = 'Synthetic mock inquiry';\n  const from = 'Pat Customer <pat@example.com>';\n  const messageId = omitId ? '' : `<mock-${uid}@example.com>`;\n  const date = omitId ? '' : 'Thu, 25 Sep 2026 14:00:00 +0000';\n  const auth = omitAuth ? '' : 'mock.example; spf=pass smtp.mailfrom=example.com; dkim=pass header.d=example.com; dmarc=pass header.from=example.com';\n  if (kind === 'metadata') {\n    return {\n      http_status: 200,\n      timeout: false,\n      response_body: {\n        data: {\n          uid: Number(uid),\n          path: 'INBOX',\n          date: date || null,\n          flags: [],\n          unseen: true,\n          size: 400,\n          subject,\n          from: { name: 'Pat Customer', address: 'pat@example.com' },\n          to: [{ name: 'TVG', address: 'info@vent-guys.com' }],\n          cc: [],\n          bcc: [],\n          messageId: messageId || null,\n          inReplyTo: null,\n          attachments: [],\n        },\n      },\n    };\n  }\n  if (kind === 'text') {\n    const text = mode === 'oversized' ? 'x'.repeat(300000) : `Hello from mock uid ${uid}.`;\n    return { http_status: 200, timeout: false, response_body: { data: { text, html: '' } } };\n  }\n  return {\n    http_status: 200,\n    timeout: false,\n    response_body: {\n      data: happySource({ uid, subject, messageId, date, auth, from }),\n    },\n  };\n}\n\n\nconst item = $input.first().json || {};\nconst params = item.params || {};\nconst query = item.query || {};\nconst uid = item.uid || params.uid || query.uid || '';\nconst rendered = renderMockHostingerResponse({ uid, kind: item.mock_kind });\nreturn [{ json: rendered }];\n"
+      }
+    },
+    {
+      "id": "b1000000-0000-4000-8000-000000000008",
+      "name": "Is timeout",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "timeout-case",
+              "leftValue": "={{ $json.timeout }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b1000000-0000-4000-8000-000000000009",
+      "name": "Wait for timeout case",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1240,
+        40
+      ],
+      "parameters": {
+        "amount": 12,
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "b1000000-0000-4000-8000-00000000000a",
+      "name": "Respond mock",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1520,
+        180
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.response_body }}",
+        "options": {
+          "responseCode": "={{ $json.http_status }}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Mock metadata": {
+      "main": [
+        [
+          {
+            "node": "Dispatch mock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock text": {
+      "main": [
+        [
+          {
+            "node": "Dispatch mock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock source": {
+      "main": [
+        [
+          {
+            "node": "Dispatch mock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch mock": {
+      "main": [
+        [
+          {
+            "node": "Render mock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render mock": {
+      "main": [
+        [
+          {
+            "node": "Is timeout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is timeout": {
+      "main": [
+        [
+          {
+            "node": "Wait for timeout case",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond mock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for timeout case": {
+      "main": [
+        [
+          {
+            "node": "Respond mock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "tvgEmailPass1": {
+      "label": "TVG Email Pass 1",
+      "hostinger": "OFF",
+      "schedulesEnabled": false,
+      "projectRef": "glkrykpksbsqmmilmjhs",
+      "productionRefForbidden": "wwyxohjnyqnegzbxtuxs",
+      "credentialScope": "staging-only",
+      "namePrefix": "[STAGING]",
+      "hostingerFetch": "inactive-mock"
+    },
+    "hostinger": "OFF"
+  },
+  "tags": []
+}

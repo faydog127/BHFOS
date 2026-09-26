@@ -9,6 +9,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const workflowFiles = [
   'n8n/tvg-email-intake-fast-ack.json',
   'n8n/tvg-email-intake-worker.json',
+  'n8n/tvg-email-hostinger-mock.json',
   'n8n/tvg-email-intake-reconcile.json',
   'n8n/tvg-email-daily-filtered-digest.json',
   'n8n/tvg-email-notification-dispatcher.json',
@@ -26,8 +27,14 @@ test('workflows stay inactive and do not enable schedules or send', () => {
     assert.equal(workflow.meta.tvgEmailPass1.hostinger, 'OFF');
     assert.equal(workflow.meta.tvgEmailPass1.projectRef, 'glkrykpksbsqmmilmjhs');
     const serialized = JSON.stringify(workflow);
-    assert.doesNotMatch(serialized, /n8n-nodes-base\.(emailSend|slack|httpRequest)/);
-    assert.doesNotMatch(serialized, /api\.mail\.hostinger\.com|developers\.hostinger\.com/);
+    assert.doesNotMatch(serialized, /n8n-nodes-base\.(emailSend|slack)/);
+    assert.doesNotMatch(serialized, /developers\.hostinger\.com/);
+    const mentionsLiveHost = relativePath.endsWith('tvg-email-intake-worker.json')
+      || relativePath.endsWith('tvg-email-hostinger-mock.json');
+    if (!mentionsLiveHost) assert.doesNotMatch(serialized, /api\.mail\.hostinger\.com/);
+    if (!relativePath.endsWith('tvg-email-intake-worker.json')) {
+      assert.doesNotMatch(serialized, /n8n-nodes-base\.httpRequest/);
+    }
     for (const node of workflow.nodes) {
       const query = node.parameters?.query || '';
       assert.doesNotMatch(query, /email_responses|email_send_queue/);
@@ -40,16 +47,25 @@ test('workflows stay inactive and do not enable schedules or send', () => {
   }
 });
 
-test('fast ACK code has no Hostinger fetch and worker claims synthetic rows only', () => {
+test('fast ACK has header auth, no Hostinger fetch, and a direct 4xx branch', () => {
   const fast = JSON.parse(load('n8n/tvg-email-intake-fast-ack.json'));
   assert.equal(fast.nodes.some((node) => node.type === 'n8n-nodes-base.httpRequest'), false);
+  const webhook = fast.nodes.find((node) => node.name === 'Webhook');
+  assert.equal(webhook.parameters.authentication, 'headerAuth');
+  assert.equal(webhook.credentials.httpHeaderAuth.name, 'TVG Staging Hostinger Webhook Header Auth');
   const prepare = fast.nodes.find((node) => node.name === 'Prepare intake');
-  assert.match(prepare.parameters.jsCode, /normalizeWebhookPointer/);
+  assert.match(prepare.parameters.jsCode, /planFastAck/);
+  assert.match(prepare.parameters.jsCode, /Header Auth/);
+  assert.doesNotMatch(prepare.parameters.jsCode, /webhook_secret_unset|bad_bearer/);
   assert.doesNotMatch(prepare.parameters.jsCode, /fetch\(/);
+  assert.equal(fast.connections['Has durable SQL'].main[1][0].node, 'Shape reject');
+  assert.equal(fast.connections['Shape reject'].main[0][0].node, 'Respond');
+  assert.equal(JSON.stringify(fast.connections).includes('Auth sample'), false);
   const worker = JSON.parse(load('n8n/tvg-email-intake-worker.json'));
-  const claim = worker.nodes.find((node) => node.name === 'Claim synthetic');
+  const claim = worker.nodes.find((node) => node.name === 'Claim pending');
   assert.match(claim.parameters.query, /FOR UPDATE SKIP LOCKED/);
   assert.match(claim.parameters.query, /synthetic_message/);
+  assert.match(claim.parameters.query, /924150001/);
   assert.equal(worker.nodes.some((node) => node.type === 'n8n-nodes-base.scheduleTrigger'), false);
 });
 

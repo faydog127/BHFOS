@@ -4,8 +4,9 @@
 
 | File | Trigger in the file | Active | Schedule |
 |---|---|---|---|
-| `tvg-email-intake-fast-ack.json` | Webhook path `tvg/hostinger-mail/inbound` | `false` | none |
+| `tvg-email-intake-fast-ack.json` | Webhook path `tvg/hostinger-mail/inbound`, Header Auth | `false` | none |
 | `tvg-email-intake-worker.json` | Manual only | `false` | none |
+| `tvg-email-hostinger-mock.json` | Three GET paths under one webhook id `b1000000-0000-4000-8000-000000000001`, suffix dispatched in `Dispatch mock` | `false` | none |
 | `tvg-email-intake-reconcile.json` | Manual, plus a schedule node | `false` | node `disabled: true` (12 minutes) |
 | `tvg-email-daily-filtered-digest.json` | Manual, plus a schedule node | `false` | node `disabled: true` (daily) |
 | `tvg-email-notification-dispatcher.json` | Manual only | `false` | none. Twilio node `disabled: true` and not connected |
@@ -19,7 +20,7 @@ Import into n8n and leave every workflow inactive. Do not register the webhook w
 
 Credential name expected after a future staging setup: `TVG Staging n8n_email_automation`. The JSON does not contain a password. Webhook bearer comparison reads `HOSTINGER_WEBHOOK_SECRET` from the n8n environment and fails closed when it is unset. Do not put that secret in git.
 
-The fast ACK path does not call Hostinger. The worker claims only `intake_queue` rows whose `hostinger_pointers` contain `synthetic_message`, and only while `intake_processing_enabled` is true. There is no HTTP Request node.
+The fast ACK path does not call Hostinger. Webhook auth is Header Auth (`Authorization: Bearer`), credential name `TVG Staging Hostinger Webhook Header Auth`. A body that fails pointer checks returns HTTP 400 from `Shape reject` and does not insert `intake_queue`. The worker claims synthetic rows and real pointers while `intake_processing_enabled` is true. Non-synthetic uid `924150001` is excluded from that claim. Real fetch is three GET requests (metadata, text, source) after a host allowlist check. The base URL setting defaults to `disabled`. `api.mail.hostinger.com` also requires `hostinger_live_fetch_enabled=true`. The Hostinger Mail API credential in the JSON is a placeholder name only. The mock workflow does not call Hostinger. Its three webhook nodes share one webhook id so metadata, `/text`, and `/source` hang off one base. A test listener still accepts one call; serving all three in one worker run needs the mock activated, which is a separate Command Center step. See `STAGING_CORRECTIVE_SMOKE_RUNBOOK.md`.
 
 The digest workflow has no send node. It inserts a `notification_log` row on channel `internal_digest` with status `suppressed_pre_webhook` when the digest is not both enabled and destined.
 
