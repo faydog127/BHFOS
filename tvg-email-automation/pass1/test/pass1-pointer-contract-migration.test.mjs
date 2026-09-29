@@ -140,12 +140,20 @@ function envelope({ eventId, envelopeId, messageId }) {
 
 test('M1–M8 and SQL-backed pointer-contract checks on throwaway Postgres', () => {
   const rollbackExecutable = rollbackSql.replace(/--[^\n]*/g, '');
+  const migrationExecutable = migrationSql.replace(/--[^\n]*/g, '');
   const lockAt = rollbackExecutable.indexOf('LOCK TABLE email_automation.intake_queue IN ACCESS EXCLUSIVE MODE');
   const nullAt = rollbackExecutable.indexOf('WHERE uid IS NULL');
   const settingsLock = rollbackExecutable.indexOf('LOCK TABLE email_automation.automation_settings IN ACCESS EXCLUSIVE MODE');
   const deleteAt = rollbackExecutable.indexOf('DELETE FROM email_automation.automation_settings');
   assert.ok(lockAt > 0 && lockAt < nullAt, 'rollback locks intake_queue before the NULL uid check');
   assert.ok(settingsLock > nullAt && settingsLock < deleteAt, 'rollback locks automation_settings before the settings delete');
+  for (const executable of [migrationExecutable, rollbackExecutable]) {
+    const beginAt = executable.indexOf('BEGIN;');
+    const timeoutAt = executable.indexOf("SET LOCAL lock_timeout = '5s';");
+    const firstLock = executable.indexOf('LOCK TABLE');
+    assert.ok(beginAt >= 0 && timeoutAt > beginAt && timeoutAt < firstLock, 'lock_timeout is set immediately after BEGIN');
+    assert.equal((executable.match(/SET LOCAL lock_timeout = '5s';/g) || []).length, 1);
+  }
   assert.equal((migrationSql.match(/^BEGIN;/m) || []).length, 1);
   assert.equal((migrationSql.match(/^COMMIT;/m) || []).length, 1);
   assert.equal((rollbackSql.match(/^BEGIN;/m) || []).length, 1);
@@ -490,6 +498,70 @@ SELECT status FROM email_automation.intake_queue WHERE id = '${refusedId}'::uuid
 SELECT count(*) FROM email_automation.intake_queue
  WHERE id = '${allowedId}'::uuid AND status = 'pending' AND resolve_attempts = 0 AND attempt_count = 9;
 `), '1');
+
+  const strandedSql = readFileSync(join(root, 'apply/20260929_tvg_email_pass1_stranded_rows.sql'), 'utf8');
+  const recoverySql = readFileSync(join(root, 'apply/20260929_tvg_email_pass1_stale_processing_recovery.sql'), 'utf8');
+  const preflightSql = readFileSync(join(root, 'apply/20260929_tvg_email_pass1_resolve_max_attempts_preflight.sql'), 'utf8');
+  must(DB, strandedSql);
+  must(DB, preflightSql, [LATCH]);
+  must(DB, `
+UPDATE email_automation.automation_settings
+   SET value_json = '8'::jsonb
+ WHERE tenant_id = 'tvg' AND key = 'resolve_max_attempts';
+`);
+  assert.match(mustFail(DB, preflightSql, [LATCH]), /resolve_max_attempts must be exactly 5/);
+  must(DB, `
+UPDATE email_automation.automation_settings
+   SET value_json = '5'::jsonb
+ WHERE tenant_id = 'tvg' AND key = 'resolve_max_attempts';
+`);
+  assert.match(mustFail(DB, recoverySql, [LATCH]), /placeholder refused/);
+  const staleId = must(DB, `
+INSERT INTO email_automation.intake_queue
+  (mailbox, mailbox_resource_id, folder, uid, webhook_event_id, resolution_status,
+   status, hold_reason, locked_at, locked_by, resolve_attempts)
+VALUES
+  ('info@vent-guys.com', 'mbx_fast', 'INBOX', NULL, 'evt-stale-recover',
+   'unresolved', 'held', 'stale_processing', now(), 'crashed-worker', 2)
+RETURNING id;
+`);
+  const decoyId = must(DB, `
+INSERT INTO email_automation.intake_queue
+  (mailbox, mailbox_resource_id, folder, uid, webhook_event_id, resolution_status,
+   status, hold_reason, locked_at, locked_by)
+VALUES
+  ('info@vent-guys.com', 'mbx_fast', 'INBOX', NULL, 'evt-stale-decoy',
+   'unresolved', 'held', 'message_id_missing', now(), 'keep')
+RETURNING id;
+`);
+  const aimedAtDecoy = recoverySql
+    .replace("queue_id uuid := '00000000-0000-4000-8000-000000000000'", `queue_id uuid := '${decoyId}'`)
+    .replace("actor text := 'REPLACE_ACTOR'", "actor text := 'cc-operator'")
+    .replace("reason text := 'REPLACE_REASON'", "reason text := 'wrong reason must not match'");
+  assert.match(mustFail(DB, aimedAtDecoy, [LATCH]), /matched no row/);
+  assert.equal(must(DB, `
+SELECT status || '|' || hold_reason || '|' || COALESCE(locked_by, '')
+  FROM email_automation.intake_queue WHERE id = '${decoyId}'::uuid;
+`), 'held|message_id_missing|keep');
+  const aimedAtStale = recoverySql
+    .replace("queue_id uuid := '00000000-0000-4000-8000-000000000000'", `queue_id uuid := '${staleId}'`)
+    .replace("actor text := 'REPLACE_ACTOR'", "actor text := 'cc-operator'")
+    .replace("reason text := 'REPLACE_REASON'", "reason text := 'crash after list before commit'");
+  const proof = must(DB, aimedAtStale, [LATCH]);
+  assert.match(proof, new RegExp(staleId));
+  assert.match(proof, /cc-operator/);
+  assert.equal(must(DB, `
+SELECT status || '|' || COALESCE(hold_reason, '') || '|' || COALESCE(locked_at::text, '')
+     || '|' || COALESCE(locked_by, '') || '|' || resolution_status || '|' || COALESCE(uid::text, '')
+     || '|' || resolve_attempts::text
+  FROM email_automation.intake_queue WHERE id = '${staleId}'::uuid;
+`), 'pending||||unresolved||2');
+  assert.equal(must(DB, `
+SELECT (context_json->>'actor') || '|' || (context_json->>'reason') || '|' || error_code
+  FROM email_automation.automation_errors
+ WHERE intake_queue_id = '${staleId}'::uuid
+   AND error_code = 'stale_processing_return_to_pending';
+`), 'cc-operator|crash after list before commit|stale_processing_return_to_pending');
 
   const holder = spawn('sudo', [
     '-u', 'postgres', 'psql', '-d', DB, '-X', '-v', 'ON_ERROR_STOP=1', '-q',

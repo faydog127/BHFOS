@@ -147,6 +147,18 @@ function composeHttpUrl(parts) {
   return `${parts.protocol}//${userinfo}${parts.hostname}${portSuffix}${pathname}`;
 }
 
+function rawRequestUrlProblem(url) {
+  const raw = String(url ?? '');
+  if (raw !== raw.trim()) return 'url_rejected';
+  const noQuery = raw.split('?')[0].split('#')[0];
+  const scheme = noQuery.indexOf('://');
+  const rest = scheme === -1 ? noQuery : noQuery.slice(scheme + 3);
+  const slash = rest.indexOf('/');
+  const pathname = slash === -1 ? '/' : rest.slice(slash);
+  if (pathname.includes('%') || /\s/.test(pathname)) return 'path_rejected';
+  return null;
+}
+
 function urlBuildFailureDetail(error) {
   const name = String(error && error.name ? error.name : 'Error').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40) || 'Error';
   const message = String(error && error.message ? error.message : 'url_build_failed')
@@ -167,6 +179,8 @@ export function assertHostingerGetRequest({
   if (String(method || '').toUpperCase() !== 'GET') {
     return { ok: false, reason: 'method_rejected' };
   }
+  const rawProblem = rawRequestUrlProblem(url);
+  if (rawProblem) return { ok: false, reason: rawProblem };
   let parsed;
   let base;
   try {
@@ -1041,6 +1055,8 @@ export function assertHostingerListRequest({
   liveFetchEnabled,
 }) {
   if (method !== 'GET') return { ok: false, reason: 'method_rejected' };
+  const rawProblem = rawRequestUrlProblem(url);
+  if (rawProblem) return { ok: false, reason: rawProblem };
   let parsed;
   let base;
   try {

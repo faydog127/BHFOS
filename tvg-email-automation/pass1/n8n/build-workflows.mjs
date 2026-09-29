@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const root = join(dir, '..');
+const outDir = process.env.TVG_N8N_OUT_DIR || dir;
 
 function embedModule(source) {
   return source
@@ -1325,6 +1326,6 @@ const files = {
 };
 
 for (const [name, value] of Object.entries(files)) {
-  writeFileSync(join(dir, name), `${JSON.stringify(value, null, 2)}\n`);
+  writeFileSync(join(outDir, name), `${JSON.stringify(value, null, 2)}\n`);
   process.stdout.write(`wrote ${name}\n`);
 }

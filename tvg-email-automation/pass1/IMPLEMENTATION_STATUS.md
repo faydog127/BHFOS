@@ -10,12 +10,12 @@ Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amend
 | Implementation commit | `b691f8c808ae029edca4ddcbfe13ba1adbe58551` |
 | Baseline | `a4511343fd8bd7380f82d7b887598c9ff906ff1e` (draft PR #161 head). PR #161 is not modified and is not merged. |
 | Authorization | CC builder release 2026-09-29. Precedence: CC addendum, then amendment v2.1, then packet v2. |
-| Evidence | **Locally verified** at 87 pass, 0 fail (`node --test tvg-email-automation/pass1/test/*.test.mjs`), including M1–M8 on throwaway local Postgres 16.15. **Not** applied to staging. **Not** imported into n8n. **Not** merged. **Not** production. |
+| Evidence | **Locally verified** at 94 pass, 0 fail (`node --test tvg-email-automation/pass1/test/*.test.mjs`) on throwaway local Postgres 16.15. M1–M8 executed (about 8s, not skipped). **Not** applied to staging. **Not** imported into n8n. **Not** merged. **Not** production. The D10 corrective commit is the child of `34bcaa8b4411f59e09f340e207c11d4e15155356`. |
 | D3 | `attempt_count` is not capped. `resolve_attempts` is the resolution-cycle counter (1/2/5/10/20, then `pointer_not_found`). |
 | D8 | `unseen_at_resolution` is not added. |
-| D10 | Challenge post-implementation review is still required. This slice does not perform it. |
+| D10 corrective | Workflow JSON regenerated from the current libraries, with a rebuild-and-compare parity test and a Fast ACK `Prepare intake` check for whitespace-only Message-ID. Both Hostinger guards reject a raw `%` in the pathname before decoding, and they reject leading, trailing, and in-path whitespace. Migration and rollback set `lock_timeout` to 5 seconds immediately after `BEGIN`. `resolve_max_attempts` stays 5; the controlled-live preflight fails otherwise. Stranded-row query and one-row `stale_processing` recovery template are files and runbook text only. No new alert, SMS, or heartbeat behavior. |
 | Missing Message-ID SLA | A NULL-Message-ID `pending` row is legitimately alertable. In-schedule unresolved rows are exempt via `pendingSlaExempt`. The health heartbeat still counts every pending row. |
-| Stale reconcile | Unchanged. A crashed `message_id_missing` claim can be held as `stale_processing`. Human return to `pending` is the recovery. The hold statement itself is atomic. |
+| Stale reconcile | The reconcile SQL is unchanged. The schedule node stays `disabled: true` and the workflow stays inactive. A reviewed one-row template, `apply/20260929_tvg_email_pass1_stale_processing_recovery.sql`, returns one `held` / `stale_processing` / `unresolved` / `uid IS NULL` row to `pending`. It is not auto-executed. The stranded-rows query is the observation control for the one-message window. |
 | Production | `wwyxohjnyqnegzbxtuxs` not queried and not modified. |
 | Staging project | `glkrykpksbsqmmilmjhs` not queried and not migrated by this slice. |
 

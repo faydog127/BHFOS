@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 import { planFastAck } from '../lib/pass1-intake-logic.mjs';
 import {
+  assertHostingerGetRequest,
   assertHostingerListRequest,
   buildListMessagesUrl,
   buildManualReresolveSql,
@@ -93,6 +97,152 @@ function asTextEnvelope(rendered) {
 function asBodyEnvelope(rendered) {
   return { statusCode: rendered.http_status, timeout: rendered.timeout, body: rendered.response_body };
 }
+
+test('T5 mixed-case and whitespace mailbox normalizes', () => {
+  const planned = planFastAck(envelope({}, { mailboxAddress: '  INFO@Vent-Guys.com ' }));
+  assert.equal(planned.http_status, 200);
+  assert.match(planned.sql, /'info@vent-guys.com'/);
+  assert.equal(planned.sql.includes('INFO@Vent-Guys.com'), false);
+});
+
+test('T7 midKey equivalence table', () => {
+  assert.equal(midKey('<A@B>'), 'a@b');
+  assert.equal(midKey('a@b'), 'a@b');
+  assert.equal(midKey(' <a@B> '), 'a@b');
+  assert.equal(midKey('<<a@b>>'), null);
+  assert.equal(midKey('a b@c'), null);
+  assert.equal(midKey(''), null);
+});
+
+test('T10 a resolved excluded uid holds pointer_excluded_uid', () => {
+  const page = asTextEnvelope({
+    http_status: 200,
+    timeout: false,
+    response_body: {
+      data: [{
+        uid: 3101,
+        path: 'INBOX',
+        messageId: '<mock-list@example.com>',
+        date: '2026-09-29T05:00:00.000Z',
+      }],
+      pagination: { page: 1, perPage: 100, total: 1, totalPages: 1 },
+    },
+  });
+  const evaluation = evaluateResolvePages({
+    pages: [page],
+    queueRow: queue({ webhook_message_id: '<mock-list@example.com>' }),
+    settings: { ...resolveSettings, hostinger_fetch_excluded_uids: [3101], resolve_max_pages: 1 },
+  });
+  assert.equal(evaluation.hold, true);
+  assert.equal(evaluation.excluded, true);
+  assert.equal(evaluation.resolved, false);
+  assert.equal(evaluation.error_code, 'pointer_excluded_uid');
+});
+
+test('T13 a mailbox-map change holds mailbox_map_changed before any URL', () => {
+  const routed = planWorkerRoute({
+    queueRow: queue({ mailbox_resource_id: 'mbx_old' }),
+    settings: {
+      ...resolveSettings,
+      hostinger_mailbox_map: { 'info@vent-guys.com': 'mbx_new' },
+    },
+  });
+  assert.equal(routed.route, 'hold');
+  assert.equal(routed.hold_reason, 'mailbox_map_changed');
+  assert.equal(routed.error_code, 'mailbox_map_changed');
+  assert.equal(routed.metadata_url, null);
+  assert.equal(routed.text_url, null);
+  assert.equal(routed.source_url, null);
+});
+
+function executePrepareIntake(messageId) {
+  const workflow = JSON.parse(readFileSync(join(root, 'n8n/tvg-email-intake-fast-ack.json'), 'utf8'));
+  const node = workflow.nodes.find((item) => item.name === 'Prepare intake');
+  assert.ok(node, 'Prepare intake node is present in the committed Fast ACK JSON');
+  const body = envelope({}, { messageId });
+  const planned = vm.runInNewContext(
+    `(function () {\n${node.parameters.jsCode}\n})()`,
+    { $input: { first() { return { json: body }; } } },
+    { timeout: 2000 },
+  );
+  assert.equal(Array.isArray(planned), true);
+  return planned[0].json;
+}
+
+test('committed Fast ACK Prepare intake stores NULL for whitespace-only Message-ID', () => {
+  for (const messageId of ['\r\n', '\t', ' \r\n\t ']) {
+    const fromNode = executePrepareIntake(messageId);
+    const fromLib = planFastAck(envelope({}, { messageId }));
+    assert.equal(fromNode.http_status, 200);
+    assert.equal(fromNode.http_status, fromLib.http_status);
+    assert.equal(fromNode.sql, fromLib.sql);
+    assert.match(fromNode.sql, /\n {4}NULL,\n {4}'unresolved',/);
+    assert.equal(fromNode.response_body.error, undefined);
+  }
+});
+
+test('committed workflow JSON matches a temp rebuild of build-workflows.mjs', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'tvg-n8n-parity-'));
+  try {
+    const result = spawnSync(process.execPath, [join(root, 'n8n/build-workflows.mjs')], {
+      env: { ...process.env, TVG_N8N_OUT_DIR: temp },
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    const names = [
+      'tvg-email-intake-fast-ack.json',
+      'tvg-email-intake-worker.json',
+      'tvg-email-hostinger-mock.json',
+      'tvg-email-intake-reconcile.json',
+      'tvg-email-daily-filtered-digest.json',
+      'tvg-email-notification-dispatcher.json',
+      'tvg-email-health-heartbeat.json',
+    ];
+    assert.deepEqual(readdirSync(temp).sort(), [...names].sort());
+    for (const name of names) {
+      assert.equal(
+        readFileSync(join(temp, name), 'utf8'),
+        readFileSync(join(root, 'n8n', name), 'utf8'),
+        name,
+      );
+    }
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test('operator templates stay unapplied and keep the one-row safeguards', () => {
+  const strip = (sql) => sql.replace(/--[^\n]*/g, '');
+  const stranded = readFileSync(join(root, 'apply/20260929_tvg_email_pass1_stranded_rows.sql'), 'utf8');
+  const recovery = readFileSync(join(root, 'apply/20260929_tvg_email_pass1_stale_processing_recovery.sql'), 'utf8');
+  const preflight = readFileSync(join(root, 'apply/20260929_tvg_email_pass1_resolve_max_attempts_preflight.sql'), 'utf8');
+  const migration = readFileSync(join(root, 'apply/20260929_tvg_email_pass1_pointer_contract.sql'), 'utf8');
+  const rollback = readFileSync(join(root, 'apply/20260929_tvg_email_pass1_pointer_contract_ROLLBACK.sql'), 'utf8');
+  const strandedExec = strip(stranded);
+  assert.match(strandedExec, /status IN \('held', 'error'\)/);
+  assert.match(strandedExec, /email_event_id/);
+  assert.equal(/\b(UPDATE|INSERT|DELETE|ALTER)\b/i.test(strandedExec), false);
+  assert.match(recovery, /q\.status = 'held'/);
+  assert.match(recovery, /q\.hold_reason = 'stale_processing'/);
+  assert.match(recovery, /q\.resolution_status = 'unresolved'/);
+  assert.match(recovery, /q\.uid IS NULL/);
+  assert.match(recovery, /locked_at = NULL/);
+  assert.match(recovery, /locked_by = NULL/);
+  assert.match(recovery, /placeholder refused/);
+  assert.match(recovery, /00000000-0000-4000-8000-000000000000/);
+  assert.match(preflight, /resolve_max_attempts must be exactly 5/);
+  assert.match(migration, /'resolve_max_attempts', '5'::jsonb/);
+  for (const sql of [migration, rollback]) {
+    const executable = strip(sql);
+    const beginAt = executable.indexOf('BEGIN;');
+    const timeoutAt = executable.indexOf("SET LOCAL lock_timeout = '5s';");
+    assert.ok(beginAt >= 0 && timeoutAt > beginAt && timeoutAt < executable.indexOf('LOCK TABLE'));
+  }
+  const workflows = readFileSync(join(root, 'n8n/build-workflows.mjs'), 'utf8');
+  assert.equal(workflows.includes('stale_processing_recovery'), false);
+  assert.equal(workflows.includes('stranded_rows'), false);
+  assert.equal(workflows.includes('resolve_max_attempts_preflight'), false);
+});
 
 test('T1 real-shape fixture keeps sentinels out of the planned SQL', () => {
   const planned = planFastAck(envelope());
@@ -287,6 +437,24 @@ test('T17b list guard rejects mutations, bad queries, and a disabled live host',
   assert.equal(reject(`${base}/api/v1/mailboxes/mbx_live/folders/INBOX/messages?page=1&perPage=50`).ok, false);
   assert.equal(reject(`${base}/api/v1/mailboxes/mbx_live/folders/INBOX/messages?page=1&perPage=100&extra=1`).ok, false);
   assert.equal(reject(`${base}/api/v1/mailboxes/mbx_live/folders/INBOX/%2e%2e/messages?page=1&perPage=100`).ok, false);
+  assert.equal(reject(`${base}/api/v1/mailboxes/mbx1%2Ffolders/INBOX/messages?page=1&perPage=100`).reason, 'path_rejected');
+  assert.equal(reject(`${base}/api/v1/mailboxes/mbx_live/folders/%49NBOX/messages?page=1&perPage=100`).reason, 'path_rejected');
+  assert.equal(reject(` ${good}`).reason, 'url_rejected');
+  assert.equal(reject(`${good} `).reason, 'url_rejected');
+  assert.equal(reject(`${base}/api/v1/mailboxes/mbx live/folders/INBOX/messages?page=1&perPage=100`).reason, 'path_rejected');
+  assert.equal(assertHostingerListRequest({
+    method: 'get', url: good, baseUrl: base, allowedHosts: allowed, liveFetchEnabled: true,
+  }).reason, 'method_rejected');
+  const goodGet = `${base}/api/v1/mailboxes/mbx_live/folders/INBOX/messages/123`;
+  const rejectGet = (url, method = 'GET') => assertHostingerGetRequest({
+    method, url, baseUrl: base, allowedHosts: allowed, liveFetchEnabled: true,
+  });
+  assert.equal(rejectGet(goodGet).ok, true);
+  assert.equal(rejectGet(goodGet, 'get').ok, true);
+  assert.equal(rejectGet(`${base}/api/v1/mailboxes/mbx1%2Ffolders/INBOX/messages/123`).reason, 'path_rejected');
+  assert.equal(rejectGet(`${base}/api/v1/mailboxes/mbx_live/folders/%49NBOX/messages/123`).reason, 'path_rejected');
+  assert.equal(rejectGet(` ${goodGet}`).reason, 'url_rejected');
+  assert.equal(rejectGet(`${goodGet} `).reason, 'url_rejected');
   assert.equal(reject(`https://user:secret@api.mail.hostinger.com/api/v1/mailboxes/mbx_live/folders/INBOX/messages?page=1&perPage=100`).ok, false);
   assert.equal(assertHostingerListRequest({
     method: 'GET', url: good, baseUrl: base, allowedHosts: ['example.test'], liveFetchEnabled: true,

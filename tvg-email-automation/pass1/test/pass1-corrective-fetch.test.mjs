@@ -383,6 +383,34 @@ function guardSample(baseUrl, urls) {
       allowedHosts: allowed,
       liveFetchEnabled: false,
     }).reason,
+    encodedSlash: assertHostingerGetRequest({
+      method: 'GET',
+      url: `${baseUrl}/api/v1/mailboxes/mbx1%2Ffolders/INBOX/messages/910001`,
+      baseUrl,
+      allowedHosts: allowed,
+      liveFetchEnabled: false,
+    }).reason,
+    encodedLetter: assertHostingerGetRequest({
+      method: 'GET',
+      url: `${baseUrl}/api/v1/mailboxes/mbx_mock/folders/%49NBOX/messages/910001`,
+      baseUrl,
+      allowedHosts: allowed,
+      liveFetchEnabled: false,
+    }).reason,
+    leadingSpace: assertHostingerGetRequest({
+      method: 'GET',
+      url: ` ${urls.source}`,
+      baseUrl,
+      allowedHosts: allowed,
+      liveFetchEnabled: false,
+    }).reason,
+    trailingSpace: assertHostingerGetRequest({
+      method: 'GET',
+      url: `${urls.source} `,
+      baseUrl,
+      allowedHosts: allowed,
+      liveFetchEnabled: false,
+    }).reason,
     live: assertHostingerGetRequest({
       method: 'GET',
       url: `https://${HOSTINGER_LIVE_HOST}/api/v1/mailboxes/mbx_mock/folders/INBOX/messages/910001/text`,
@@ -552,6 +580,10 @@ test('path injection and queue-supplied URLs do not pass the GET guard', () => {
   assert.equal(guards.scheme, 'scheme_rejected');
   assert.equal(guards.traversal, 'path_rejected');
   assert.equal(guards.encodedTraversal, 'path_rejected');
+  assert.equal(guards.encodedSlash, 'path_rejected');
+  assert.equal(guards.encodedLetter, 'path_rejected');
+  assert.equal(guards.leadingSpace, 'url_rejected');
+  assert.equal(guards.trailingSpace, 'url_rejected');
   assert.equal(guards.live, 'live_fetch_disabled');
   assert.equal(guards.get, true);
 });

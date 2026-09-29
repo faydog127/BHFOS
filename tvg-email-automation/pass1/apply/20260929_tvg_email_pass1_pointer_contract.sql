@@ -11,6 +11,9 @@
 
 BEGIN;
 
+-- Lock timeout aborts the whole transaction. A timeout is not a partial apply.
+SET LOCAL lock_timeout = '5s';
+
 DO $$
 BEGIN
   IF current_setting('tvg_email_pass1.target_project', true)
