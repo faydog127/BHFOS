@@ -234,20 +234,25 @@ test('webhook pointer fails closed when fields are missing', () => {
   assert.doesNotMatch(sql, /hostinger\.com/i);
 });
 
-test('malformed pointer plans a 400 and no insert', () => {
+test('malformed envelope plans a 400 and no insert', () => {
   const missing = planFastAck({ mailbox: 'info@vent-guys.com', folder: 'INBOX' });
   assert.equal(missing.http_status, 400);
-  assert.equal(missing.response_body.error, 'pointer_incomplete');
+  assert.equal(missing.response_body.error, 'envelope_malformed');
   assert.equal(missing.sql, null);
   assert.equal(missing.sample_sql, null);
   const ok = planFastAck({
-    mailboxResourceId: 'mbx_synth',
-    folder: 'INBOX',
-    uid: 42,
-    mailbox: 'info@vent-guys.com',
+    id: '245ea272-c21e-548a-b9dd-fea1ee0230fd',
+    event: 'message.received',
+    timestamp: '2026-09-26T04:20:52.000Z',
+    data: {
+      eventId: '245ea272-c21e-548a-b9dd-fea1ee0230fd',
+      mailboxAddress: 'info@vent-guys.com',
+      messageId: '<synth-pass1@example.com>',
+    },
   });
   assert.equal(ok.http_status, 200);
   assert.match(ok.sql, /INSERT INTO email_automation\.intake_queue/);
+  assert.match(ok.sql, /ON CONFLICT \(tenant_id, webhook_event_id\)/);
   assert.doesNotMatch(ok.sql, /email_events|email_responses|email_send_queue/);
 });
 

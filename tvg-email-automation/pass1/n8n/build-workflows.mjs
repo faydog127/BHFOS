@@ -104,18 +104,17 @@ return [{ json: planned }];
 `;
 
 const fastAckShape = `
-const prepared = $('Prepare intake').first().json;
-const rows = $input.all().map((item) => item.json).filter((row) => row && row.id);
-return [{
-  json: {
-    http_status: 200,
-    response_body: {
-      ok: true,
-      duplicate: rows.length === 0,
-      intake_id: rows[0] ? rows[0].id : null,
-    },
-  },
-}];
+const rows = $input.all().map((item) => item.json);
+const row = rows.find((item) => item && (item.mailbox_ok != null || item.intake_id)) || {};
+const mailboxOk = Number(row.mailbox_ok);
+const intakeId = row.intake_id || null;
+if (mailboxOk === 0) {
+  return [{ json: { http_status: 422, response_body: { ok: false, error: 'mailbox_not_configured' } } }];
+}
+if (!intakeId) {
+  return [{ json: { http_status: 200, response_body: { ok: true, duplicate: true, intake_id: null } } }];
+}
+return [{ json: { http_status: 200, response_body: { ok: true, duplicate: false, intake_id: intakeId } } }];
 `;
 
 const fastAck = workflow(
@@ -182,8 +181,15 @@ connect(fastMap, 'Insert pointer', 'Shape ack');
 connect(fastMap, 'Shape ack', 'Respond');
 connect(fastMap, 'Shape reject', 'Respond');
 fastAck.connections = fastMap;
+fastAck.settings = {
+  executionOrder: 'v1',
+  saveDataSuccessExecution: 'none',
+  saveDataErrorExecution: 'none',
+  saveManualExecutions: false,
+};
 fastAck.meta.auth_redesign = 'headerAuth-2026-09-24';
 fastAck.meta.hostinger = 'OFF';
+fastAck.meta.retention = 'success-none-error-none-manual-false';
 const authSample = fastAck.nodes.find((node) => node.name === 'Auth sample disconnected');
 authSample.disabled = true;
 delete authSample.parameters.options;
@@ -310,7 +316,16 @@ function nodeJson(name) {
     return { error: { message: 'node ' + name + ' did not run' } };
   }
 }
-const plan = nodeJson('Plan route') || {};
+function effectivePlan() {
+  try {
+    const replan = $('Replan').first();
+    if (replan && replan.json && replan.json.route === 'fetch') return replan.json;
+  } catch (error) {
+    /* resolution did not run */
+  }
+  return nodeJson('Plan route') || {};
+}
+const plan = effectivePlan();
 const decided = decideFetchedIntake({
   plan,
   metadataItem: nodeJson('Fetch metadata'),
@@ -328,7 +343,10 @@ ${fetchLogic}
 ${sqlGuard}
 
 const plan = $input.first().json || {};
-const sql = buildClosedHoldSql({
+const pointerHold = plan.hold_reason === 'message_id_missing' || plan.hold_reason === 'message_id_invalid';
+const sql = pointerHold
+  ? buildWorkerPointerHoldSql({ queue_id: plan.queue_row.id, hold_reason: plan.hold_reason })
+  : buildClosedHoldSql({
   queue_id: plan.queue_row.id,
   queue_status: plan.queue_status || 'held',
   hold_reason: plan.hold_reason,
@@ -356,6 +374,7 @@ WITH claim AS (
   FROM email_automation.intake_queue q
   WHERE q.tenant_id = 'tvg'
     AND q.status = 'pending'
+    AND (q.next_attempt_at IS NULL OR q.next_attempt_at <= now())
     AND (
       q.hostinger_pointers ? 'synthetic_message'
       OR (
@@ -606,11 +625,11 @@ function routeIf(id, name, x, y, route) {
 function hostingerGetNode(id, name, x, y, urlField) {
   return nodeBase(id, name, 'n8n-nodes-base.httpRequest', 4.2, x, y, {
     method: 'GET',
-    url: `={{ $('Plan route').first().json.${urlField} }}`,
+    url: `={{ $json.${urlField} }}`,
     authentication: 'genericCredentialType',
     genericAuthType: 'httpHeaderAuth',
     options: {
-      timeout: "={{ $('Plan route').first().json.timeout_ms }}",
+      timeout: '={{ $json.timeout_ms }}',
       redirect: { redirect: { followRedirects: false, maxRedirects: 0 } },
       response: {
         response: {
@@ -623,14 +642,200 @@ function hostingerGetNode(id, name, x, y, urlField) {
   }, {
     credentials: hostingerCredential,
     onError: 'continueRegularOutput',
-    notes: 'GET only. URL comes from Plan route after the host and path guard. No live token in this file.',
+    notes: 'GET only. URL comes from the guarded plan. After resolution that plan is Replan. No live token in this file.',
   });
 }
+
+function listPageNode(id, name, x, y) {
+  return nodeBase(id, name, 'n8n-nodes-base.httpRequest', 4.2, x, y, {
+    method: 'GET',
+    url: '={{ $json.list_url }}',
+    authentication: 'genericCredentialType',
+    genericAuthType: 'httpHeaderAuth',
+    options: {
+      timeout: '={{ $json.timeout_ms }}',
+      redirect: { redirect: { followRedirects: false, maxRedirects: 0 } },
+      response: {
+        response: {
+          fullResponse: true,
+          neverError: true,
+          responseFormat: 'text',
+        },
+      },
+    },
+  }, {
+    credentials: hostingerCredential,
+    onError: 'continueRegularOutput',
+    notes: 'GET only. Listing URL is page and perPage after Re-guard list. No live token in this file.',
+  });
+}
+
+const workerPlanResolve = `${logic}
+
+${fetchLogic}
+
+const plan = $input.first().json || {};
+if (!plan.queue_row || plan.route !== 'resolve') {
+  return [{ json: { route: plan.route || 'skip', list_url: null, guard_ok: false } }];
+}
+return [{ json: { ...plan, ...planResolveStart({ queueRow: plan.queue_row, settings: plan.settings || {} }) } }];
+`;
+
+const workerReguardList = `${logic}
+
+${fetchLogic}
+
+${sqlGuard}
+
+const planned = $('Plan resolve').first().json || {};
+const incoming = $input.first().json || {};
+const page = Number(incoming.page || planned.page || 1);
+const baseUrl = planned.base_url;
+let listUrl = null;
+let guard = { ok: false, reason: 'url_rejected' };
+try {
+  listUrl = buildListMessagesUrl(baseUrl, planned.mailbox_resource_id, page);
+  guard = assertHostingerListRequest({
+    method: 'GET',
+    url: listUrl,
+    baseUrl,
+    allowedHosts: planned.allowed_hosts || [],
+    liveFetchEnabled: planned.live_fetch === true,
+  });
+} catch (error) {
+  guard = { ok: false, reason: 'url_rejected' };
+}
+if (!guard.ok) {
+  const sql = buildClosedHoldSql({
+    queue_id: planned.queue_id,
+    queue_status: 'held',
+    hold_reason: 'hostinger_request_rejected',
+    error_code: guard.reason || 'url_rejected',
+    detail: guard.reason || 'url_rejected',
+    fetch_base_url: baseUrl || 'disabled',
+  });
+  refuseUnsafeSql(sql);
+  return [{ json: { guard_ok: false, sql, resume: false } }];
+}
+return [{
+  json: {
+    ...planned,
+    page,
+    list_url: listUrl,
+    guard_ok: true,
+    method: 'GET',
+    matches: incoming.matches || [],
+    pages_scanned: incoming.pages_scanned || 0,
+    items_seen: incoming.items_seen || 0,
+    invalid_items: incoming.invalid_items || 0,
+    total: incoming.total || 0,
+  },
+}];
+`;
+
+const workerEvaluateResolve = `${logic}
+
+${fetchLogic}
+
+const httpItem = $input.first().json || {};
+const guard = $('Re-guard list').item.json || {};
+const routePlan = $('Plan route').first().json || {};
+const evaluation = evaluateResolvePages({
+  pages: [httpItem],
+  queueRow: routePlan.queue_row,
+  settings: routePlan.settings || {},
+  prior: {
+    matches: guard.matches || [],
+    pages_scanned: guard.pages_scanned || 0,
+    items_seen: guard.items_seen || 0,
+    invalid_items: guard.invalid_items || 0,
+    total: guard.total || 0,
+  },
+});
+const maxPages = Number(guard.max_pages || 3);
+const scanned = Number(evaluation.pages_scanned || 0);
+const transportStop = ['rate_limited', 'timeout', 'upstream', 'auth', 'malformed'].includes(evaluation.stop_reason);
+const resume = !transportStop && evaluation.stop_reason !== 'time_window' && scanned < maxPages;
+if (resume) {
+  return [{
+    json: {
+      resume: true,
+      page: Number(guard.page || 1) + 1,
+      matches: evaluation.matches,
+      pages_scanned: evaluation.pages_scanned,
+      total: evaluation.total,
+      items_seen: evaluation.items_seen,
+      invalid_items: evaluation.invalid_items,
+      stop_reason: evaluation.stop_reason,
+    },
+  }];
+}
+return [{ json: evaluation }];
+`;
+
+const workerWriteResolve = `${logic}
+
+${fetchLogic}
+
+${sqlGuard}
+
+const evaluation = $input.first().json || {};
+const routePlan = $('Plan route').first().json || {};
+if (evaluation.sql) {
+  refuseUnsafeSql(evaluation.sql);
+  return [{ json: { sql: evaluation.sql, outcome: evaluation.outcome || 'held' } }];
+}
+const written = buildResolveWriteSql({
+  queueRow: routePlan.queue_row,
+  settings: routePlan.settings || {},
+  evaluation,
+});
+refuseUnsafeSql(written.sql);
+return [{ json: { sql: written.sql, outcome: written.outcome } }];
+`;
+
+const workerReplan = `${logic}
+
+${fetchLogic}
+
+const applied = $input.first().json || {};
+const routePlan = $('Plan route').first().json || {};
+const uid = applied.uid;
+const queue = {
+  ...(routePlan.queue_row || {}),
+  uid: uid == null ? null : String(uid),
+  resolution_status: 'resolved',
+};
+return [{
+  json: planWorkerRoute({
+    queueRow: queue,
+    settings: routePlan.settings || {},
+    filterRows: routePlan.filter_rows || [],
+    formSenders: routePlan.form_senders || [],
+    contacts: routePlan.contacts || [],
+    leads: routePlan.leads || [],
+  }),
+}];
+`;
 
 const workerMap = {};
 connect(workerMap, 'Manual start', 'Claim pending');
 connect(workerMap, 'Claim pending', 'Plan route');
-connect(workerMap, 'Plan route', 'Is fetch');
+connect(workerMap, 'Plan route', 'Needs resolve');
+connect(workerMap, 'Needs resolve', 'Plan resolve', 0);
+connect(workerMap, 'Needs resolve', 'Is fetch', 1);
+connect(workerMap, 'Plan resolve', 'Re-guard list');
+connect(workerMap, 'Re-guard list', 'List guard passed');
+connect(workerMap, 'List guard passed', 'List page', 0);
+connect(workerMap, 'List guard passed', 'Commit resolve', 1);
+connect(workerMap, 'List page', 'Evaluate resolve');
+connect(workerMap, 'Evaluate resolve', 'Another page');
+connect(workerMap, 'Another page', 'Re-guard list', 0);
+connect(workerMap, 'Another page', 'Write resolve', 1);
+connect(workerMap, 'Write resolve', 'Commit resolve');
+connect(workerMap, 'Commit resolve', 'Resolved row');
+connect(workerMap, 'Resolved row', 'Replan', 0);
+connect(workerMap, 'Replan', 'Is fetch');
 connect(workerMap, 'Is fetch', 'Re-guard GET', 0);
 connect(workerMap, 'Is fetch', 'Is closed hold', 1);
 connect(workerMap, 'Re-guard GET', 'Guard passed');
@@ -653,14 +858,64 @@ const worker = workflow(
   '[STAGING] TVG Email Intake — Worker',
   [
     nodeBase('bb000000-0000-4000-8000-000000000020', 'STAGING ONLY / HOSTINGER OFF', 'n8n-nodes-base.stickyNote', 1, 0, -280, {
-      content: 'Inactive. No schedule. Synthetic rows skip HTTP. Real pointers are GET metadata, text, and source only, after a host allowlist check. Base URL defaults to disabled, never the live API. api.mail.hostinger.com also requires hostinger_live_fetch_enabled. Non-synthetic uid 924150001 is excluded from claim and is not fetched. GET /text marks Seen on the live API per the Hostinger SDK; metadata and source docs do not say they change flags. No Twilio. No customer send.',
+      content: 'Inactive. No schedule. Synthetic rows skip HTTP. Unresolved rows are resolved with a literal GET list before metadata, text, and source. Base URL defaults to disabled, never the live API. api.mail.hostinger.com also requires hostinger_live_fetch_enabled. Listing and metadata do not mark Seen. GET /source does, so a fetched live message becomes Seen. /text stays. No unread restore. Non-synthetic uid 924150001 is excluded from claim and is not fetched. Manual executions may be saved on this staging build and must be turned off before controlled live activation. No Twilio. No customer send.',
       width: 760,
       height: 180,
     }),
     nodeBase('bb000000-0000-4000-8000-000000000001', 'Manual start', 'n8n-nodes-base.manualTrigger', 1, 0, 0, {}),
     postgresNode('bb000000-0000-4000-8000-000000000002', 'Claim pending', 280, 0, workerClaimSql),
     codeNode('bb000000-0000-4000-8000-000000000003', 'Plan route', 560, 0, workerPlan),
-    routeIf('bb000000-0000-4000-8000-000000000009', 'Is fetch', 840, 0, 'fetch'),
+    routeIf('bb000000-0000-4000-8000-000000000030', 'Needs resolve', 760, 0, 'resolve'),
+    codeNode('bb000000-0000-4000-8000-000000000031', 'Plan resolve', 980, -220, workerPlanResolve),
+    codeNode('bb000000-0000-4000-8000-000000000032', 'Re-guard list', 1200, -220, workerReguardList),
+    nodeBase('bb000000-0000-4000-8000-000000000033', 'List guard passed', 'n8n-nodes-base.if', 2.2, 1420, -220, {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        combinator: 'and',
+        conditions: [
+          {
+            id: 'list-guard-ok',
+            leftValue: '={{ $json.guard_ok }}',
+            rightValue: true,
+            operator: { type: 'boolean', operation: 'true', singleValue: true },
+          },
+        ],
+      },
+    }),
+    listPageNode('bb000000-0000-4000-8000-000000000034', 'List page', 1640, -300),
+    codeNode('bb000000-0000-4000-8000-000000000035', 'Evaluate resolve', 1880, -220, workerEvaluateResolve),
+    nodeBase('bb000000-0000-4000-8000-000000000036', 'Another page', 'n8n-nodes-base.if', 2.2, 2100, -220, {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        combinator: 'and',
+        conditions: [
+          {
+            id: 'resume-list',
+            leftValue: '={{ $json.resume }}',
+            rightValue: true,
+            operator: { type: 'boolean', operation: 'true', singleValue: true },
+          },
+        ],
+      },
+    }),
+    codeNode('bb000000-0000-4000-8000-000000000037', 'Write resolve', 2320, -80, workerWriteResolve),
+    postgresNode('bb000000-0000-4000-8000-000000000038', 'Commit resolve', 2560, -80, "={{ $json.sql || 'SELECT 1 WHERE false' }}"),
+    nodeBase('bb000000-0000-4000-8000-000000000039', 'Resolved row', 'n8n-nodes-base.if', 2.2, 2800, -80, {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        combinator: 'and',
+        conditions: [
+          {
+            id: 'resolved-outcome',
+            leftValue: '={{ $json.outcome }}',
+            rightValue: 'resolved',
+            operator: { type: 'string', operation: 'equals' },
+          },
+        ],
+      },
+    }),
+    codeNode('bb000000-0000-4000-8000-00000000003a', 'Replan', 3040, -160, workerReplan),
+    routeIf('bb000000-0000-4000-8000-000000000009', 'Is fetch', 3280, 0, 'fetch'),
     codeNode('bb000000-0000-4000-8000-00000000000a', 'Re-guard GET', 1120, -180, workerGuard),
     nodeBase('bb000000-0000-4000-8000-00000000000b', 'Guard passed', 'n8n-nodes-base.if', 2.2, 1400, -180, {
       conditions: {
@@ -694,6 +949,14 @@ const worker = workflow(
 worker.meta.tvgEmailPass1.hostingerFetch = 'get-only-mock-or-disabled';
 worker.meta.tvgEmailPass1.liveFetchDefault = false;
 worker.meta.hostinger = 'OFF';
+worker.meta.retention = 'success-none-error-none-manual-true-staging';
+worker.meta.readState = 'GET /source marks Seen; listing and metadata do not; no unread restore; /text kept';
+worker.settings = {
+  executionOrder: 'v1',
+  saveDataSuccessExecution: 'none',
+  saveDataErrorExecution: 'none',
+  saveManualExecutions: true,
+};
 
 const reconcileMap = {};
 connect(reconcileMap, 'Manual start', 'Resume deferred');
@@ -962,7 +1225,8 @@ const headers = item.headers && typeof item.headers === 'object' ? item.headers 
 const forwarded = headers['x-forwarded-path'] || headers['x-forwarded-uri'] || '';
 const pathOnly = String(item.webhookUrl || forwarded || '').split('?')[0].split('#')[0];
 let mock_kind = '';
-if (/\\/source$/.test(pathOnly)) mock_kind = 'source';
+if (/\\/folders\\/INBOX\\/messages$/.test(pathOnly)) mock_kind = 'list';
+else if (/\\/source$/.test(pathOnly)) mock_kind = 'source';
 else if (/\\/text$/.test(pathOnly)) mock_kind = 'text';
 else if (/\\/messages\\/[^/]+$/.test(pathOnly)) mock_kind = 'metadata';
 if (!mock_kind) {
@@ -983,6 +1247,14 @@ const mockRender = `${fetchLogic}
 const item = $input.first().json || {};
 const params = item.params || {};
 const query = item.query || {};
+if (item.mock_kind === 'list') {
+  const rendered = renderMockListMessages({
+    scenario: params.mailboxResourceId || '',
+    page: query.page || 1,
+    attempt: 1,
+  });
+  return [{ json: rendered }];
+}
 const uid = item.uid || params.uid || query.uid || '';
 const rendered = renderMockHostingerResponse({ uid, kind: item.mock_kind });
 return [{ json: rendered }];
@@ -992,6 +1264,7 @@ const mockMap = {};
 connect(mockMap, 'Mock metadata', 'Dispatch mock');
 connect(mockMap, 'Mock text', 'Dispatch mock');
 connect(mockMap, 'Mock source', 'Dispatch mock');
+connect(mockMap, 'Mock list', 'Dispatch mock');
 connect(mockMap, 'Dispatch mock', 'Render mock');
 connect(mockMap, 'Render mock', 'Is timeout');
 connect(mockMap, 'Is timeout', 'Wait for timeout case', 0);
@@ -1002,13 +1275,14 @@ const hostingerMock = workflow(
   '[STAGING] TVG Email — Hostinger Mock',
   [
     nodeBase('b1000000-0000-4000-8000-000000000020', 'STAGING ONLY / HOSTINGER OFF', 'n8n-nodes-base.stickyNote', 1, 0, -260, {
-      content: 'Inactive in this file. Not the live Hostinger API. One webhook id, three Hostinger path shapes, one dispatcher on the /text or /source suffix. A test listener accepts one call and then drops, so one worker run cannot hit metadata, /text, and /source until Command Center permits activating this mock only. UIDs: 910001 happy, 910404 not found, 910500 upstream, 910408 delay, 910601 missing Authentication-Results, 910602 missing Message-ID and Date, 910603 oversized text. This workflow does not read or flag a mailbox.',
+      content: 'Inactive in this file. Not the live Hostinger API. One webhook id. Message paths plus a listMessages path for INBOX. A test listener accepts one call and then drops, so one worker run cannot hit metadata, /text, and /source until Command Center permits activating this mock only. UIDs: 910001 happy, 910404 not found, 910500 upstream, 910408 delay, 910601 missing Authentication-Results, 910602 missing Message-ID and Date, 910603 oversized text. List scenarios are mailbox ids mbx_list_hit1, mbx_list_hit3, mbx_list_miss, mbx_list_ambiguous, mbx_list_delay, mbx_list_otherpath, mbx_list_nullmid, mbx_list_case, mbx_list_429, mbx_list_401, mbx_list_500, mbx_list_timeout, mbx_list_badpage, mbx_list_collision. This workflow does not read or flag a mailbox.',
       width: 760,
       height: 200,
     }),
     mockWebhook('b1000000-0000-4000-8000-000000000001', 'Mock metadata', 'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid', 0, 0),
     mockWebhook('b1000000-0000-4000-8000-000000000002', 'Mock text', 'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid/text', 0, 180),
     mockWebhook('b1000000-0000-4000-8000-000000000003', 'Mock source', 'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid/source', 0, 360),
+    mockWebhook('b1000000-0000-4000-8000-00000000000b', 'Mock list', 'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/INBOX/messages', 0, 540),
     codeNode('b1000000-0000-4000-8000-000000000004', 'Dispatch mock', 420, 180, mockDispatch),
     codeNode('b1000000-0000-4000-8000-000000000007', 'Render mock', 740, 180, mockRender),
     nodeBase('b1000000-0000-4000-8000-000000000008', 'Is timeout', 'n8n-nodes-base.if', 2.2, 960, 180, {

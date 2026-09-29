@@ -44,6 +44,14 @@ const HOLD_REASONS = new Set([
   'identity_uncertain',
   'stale_processing',
   'cross_tenant_match',
+  'mailbox_map_changed',
+  'message_id_missing',
+  'message_id_invalid',
+  'pointer_not_found',
+  'pointer_ambiguous',
+  'pointer_excluded_uid',
+  'resolve_response_malformed',
+  'hostinger_rate_limited',
 ]);
 
 function rotr(x, n) {
@@ -734,48 +742,147 @@ RETURNING q.id, q.status, q.email_event_id, chosen.was_existing,
 `.trim();
 }
 
+const ENVELOPE_TOKEN = /^[A-Za-z0-9._:-]{1,128}$/;
+const ENVELOPE_MAILBOX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+
+function envelopeMalformed() {
+  return { ok: false, reason: 'envelope_malformed' };
+}
+
+function classifyWebhookMessageId(value) {
+  if (value == null) return { ok: true, value: null };
+  if (typeof value !== 'string') return { ok: false };
+  // Whitespace-only, including CR/LF/TAB-only, is a missing Message-ID (stored NULL).
+  // Control characters inside a non-blank id are malformed.
+  if (value.trim() === '') return { ok: true, value: null };
+  if (value.length > 998) return { ok: false };
+  if (/[\u0000-\u001F\u007F]/.test(value)) return { ok: false };
+  return { ok: true, value: value.trim() };
+}
+
+function envelopeTimestamp(value) {
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return null;
+  const year = new Date(parsed).getUTCFullYear();
+  if (year < 2000 || year > 2100) return null;
+  return new Date(parsed).toISOString();
+}
+
+/**
+ * Hostinger message.received envelope. Stores event id, mailbox, message id,
+ * event, and timestamp only. Bodies and signed URLs are never copied.
+ * Order: object check, event check, then id / timestamp / data fields.
+ */
+export function normalizeWebhookEnvelope(body) {
+  if (body == null || typeof body !== 'object' || Array.isArray(body)) return envelopeMalformed();
+  if (!Object.prototype.hasOwnProperty.call(body, 'event') || typeof body.event !== 'string') {
+    return envelopeMalformed();
+  }
+  if (body.event !== 'message.received') {
+    return {
+      ok: true,
+      ignored: true,
+      http_status: 200,
+      response_body: { ok: true, ignored: 'unsupported_event' },
+    };
+  }
+  if (typeof body.id !== 'string' || !ENVELOPE_TOKEN.test(body.id)) return envelopeMalformed();
+  const eventAt = envelopeTimestamp(body.timestamp);
+  if (!eventAt) return envelopeMalformed();
+  const data = body.data;
+  if (data == null || typeof data !== 'object' || Array.isArray(data)) return envelopeMalformed();
+  if (typeof data.eventId !== 'string' || !ENVELOPE_TOKEN.test(data.eventId)) return envelopeMalformed();
+  if (typeof data.mailboxAddress !== 'string' || !ENVELOPE_MAILBOX.test(data.mailboxAddress.trim().toLowerCase())) {
+    return envelopeMalformed();
+  }
+  const messageId = classifyWebhookMessageId(data.messageId);
+  if (!messageId.ok) return envelopeMalformed();
+  return {
+    ok: true,
+    ignored: false,
+    envelope_id: body.id,
+    event_id: data.eventId,
+    mailbox: data.mailboxAddress.trim().toLowerCase(),
+    event_type: 'message.received',
+    event_at: eventAt,
+    message_id: messageId.value,
+  };
+}
+
+function buildEnvelopeInsertSql(envelope) {
+  const messageSql = envelope.message_id == null ? 'NULL' : quoteLiteral(envelope.message_id);
+  return `
+WITH cfg AS (
+  SELECT (s.value_json ->> ${quoteLiteral(envelope.mailbox)}) AS mailbox_resource_id
+  FROM email_automation.automation_settings s
+  WHERE s.tenant_id = 'tvg'
+    AND s.key = 'hostinger_mailbox_map'
+    AND jsonb_typeof(s.value_json) = 'object'
+),
+ins AS (
+  INSERT INTO email_automation.intake_queue (
+    tenant_id, mailbox, mailbox_resource_id, folder, uid,
+    webhook_event_id, webhook_envelope_id, event_type, webhook_event_at, webhook_message_id,
+    resolution_status, status, hostinger_pointers
+  )
+  SELECT
+    'tvg',
+    ${quoteLiteral(envelope.mailbox)},
+    cfg.mailbox_resource_id,
+    'INBOX',
+    NULL,
+    ${quoteLiteral(envelope.event_id)},
+    ${quoteLiteral(envelope.envelope_id)},
+    'message.received',
+    ${quoteLiteral(envelope.event_at)}::timestamptz,
+    ${messageSql},
+    'unresolved',
+    CASE
+      WHEN COALESCE((
+        SELECT s.value_json = 'true'::jsonb
+        FROM email_automation.automation_settings s
+        WHERE s.tenant_id = 'tvg' AND s.key = 'intake_processing_enabled'
+      ), false)
+        THEN 'pending'::email_automation.intake_queue_status
+      ELSE 'deferred_kill_switch'::email_automation.intake_queue_status
+    END,
+    jsonb_build_object('source', 'fast_ack_envelope_v2', 'resolution', 'unresolved')
+  FROM cfg
+  WHERE cfg.mailbox_resource_id ~ '^[A-Za-z0-9_-]{1,128}$'
+  ON CONFLICT (tenant_id, webhook_event_id) DO NOTHING
+  RETURNING id, status
+)
+SELECT
+  (SELECT count(*) FROM cfg WHERE mailbox_resource_id ~ '^[A-Za-z0-9_-]{1,128}$')::int AS mailbox_ok,
+  (SELECT id FROM ins) AS intake_id,
+  (SELECT status FROM ins) AS status;
+`.trim();
+}
+
 export function planFastAck(body) {
-  const pointer = normalizeWebhookPointer(body);
-  if (!pointer.ok) {
+  const envelope = normalizeWebhookEnvelope(body);
+  if (!envelope.ok) {
     return {
       http_status: 400,
-      response_body: { ok: false, error: pointer.reason },
+      response_body: { ok: false, error: 'envelope_malformed' },
       sql: null,
       sample_sql: null,
     };
   }
-  const killSwitchSql = `(
-  SELECT COALESCE((
-    SELECT value_json = 'true'::jsonb
-    FROM email_automation.automation_settings
-    WHERE tenant_id = 'tvg' AND key = 'intake_processing_enabled'
-  ), true)
-)`;
+  if (envelope.ignored) {
+    return {
+      http_status: 200,
+      response_body: envelope.response_body,
+      sql: null,
+      sample_sql: null,
+    };
+  }
   return {
     http_status: 200,
     response_body: { ok: true },
     sample_sql: null,
-    sql: `
-INSERT INTO email_automation.intake_queue (
-  tenant_id, mailbox, mailbox_resource_id, folder, uid, event_type, status, hostinger_pointers
-) VALUES (
-  'tvg',
-  ${quoteLiteral(pointer.mailbox)},
-  ${quoteLiteral(pointer.mailbox_resource_id)},
-  ${quoteLiteral(pointer.folder)},
-  ${quoteLiteral(pointer.uid)}::bigint,
-  ${pointer.event_type ? quoteLiteral(pointer.event_type) : 'NULL'},
-  CASE WHEN ${killSwitchSql} THEN 'pending'::email_automation.intake_queue_status
-       ELSE 'deferred_kill_switch'::email_automation.intake_queue_status END,
-  ${quoteLiteral(JSON.stringify({
-    mailbox_resource_id: pointer.mailbox_resource_id,
-    folder: pointer.folder,
-    uid: pointer.uid,
-    source: 'fast_ack_normalized',
-  }))}::jsonb
-)
-ON CONFLICT (tenant_id, mailbox_resource_id, folder, uid) DO NOTHING
-RETURNING id, status;`.trim(),
+    sql: buildEnvelopeInsertSql(envelope),
   };
 }
 

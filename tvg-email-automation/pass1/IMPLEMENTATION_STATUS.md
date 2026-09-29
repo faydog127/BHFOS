@@ -1,6 +1,24 @@
 # TVG Email Pass 1 — implementation status
 
-Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amendment, the 2026-09-24 consolidated staging directive, and the 2026-09-25 corrective fetch slice. Not Media Intelligence. `command-center/docs/media-intelligence/IMPLEMENTATION_STATUS.md` is unchanged on purpose.
+Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amendment, the 2026-09-24 consolidated staging directive, the 2026-09-25 corrective fetch slice, and the 2026-09-29 pointer-contract slice. Not Media Intelligence. `command-center/docs/media-intelligence/IMPLEMENTATION_STATUS.md` is unchanged on purpose.
+
+## Pointer-contract slice (2026-09-29)
+
+| Field | Value |
+|---|---|
+| Branch | `cursor/tvg-email-pass1-pointer-contract-7298` |
+| Baseline | `a4511343fd8bd7380f82d7b887598c9ff906ff1e` (draft PR #161 head). PR #161 is not modified and is not merged. |
+| Authorization | CC builder release 2026-09-29. Precedence: CC addendum, then amendment v2.1, then packet v2. |
+| Evidence | **Locally verified** by `node --test tvg-email-automation/pass1/test/*.test.mjs` on this worktree, including M1–M8 on throwaway local Postgres 16.15. **Not** applied to staging. **Not** imported into n8n. **Not** merged. **Not** production. |
+| D3 | `attempt_count` is not capped. `resolve_attempts` is the resolution-cycle counter (1/2/5/10/20, then `pointer_not_found`). |
+| D8 | `unseen_at_resolution` is not added. |
+| D10 | Challenge post-implementation review is still required. This slice does not perform it. |
+| Missing Message-ID SLA | A NULL-Message-ID `pending` row is legitimately alertable. In-schedule unresolved rows are exempt via `pendingSlaExempt`. The health heartbeat still counts every pending row. |
+| Stale reconcile | Unchanged. A crashed `message_id_missing` claim can be held as `stale_processing`. Human return to `pending` is the recovery. The hold statement itself is atomic. |
+| Production | `wwyxohjnyqnegzbxtuxs` not queried and not modified. |
+| Staging project | `glkrykpksbsqmmilmjhs` not queried and not migrated by this slice. |
+
+Runbook: [`POINTER_CONTRACT_RUNBOOK.md`](POINTER_CONTRACT_RUNBOOK.md). Decision: TVG-EMAIL-P1-D036.
 
 ## Corrective fetch slice (2026-09-25)
 

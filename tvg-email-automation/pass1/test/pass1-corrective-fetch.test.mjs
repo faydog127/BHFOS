@@ -276,20 +276,28 @@ test('worker HTTP nodes are GET-only and the mock workflow stays inactive', () =
   assert.equal(worker.active, false);
   assert.equal(mock.active, false);
   const httpNodes = worker.nodes.filter((node) => node.type === 'n8n-nodes-base.httpRequest');
-  assert.equal(httpNodes.length, 3);
+  assert.equal(httpNodes.length, 4);
   for (const node of httpNodes) {
     assert.equal(node.parameters.method, 'GET');
-    assert.match(node.parameters.url, /Plan route/);
+    assert.equal(typeof node.parameters.method, 'string');
     assert.doesNotMatch(node.parameters.url, /api\.mail\.hostinger\.com/);
     assert.equal(node.credentials.httpHeaderAuth.name, 'TVG Staging Hostinger Mail API');
     assert.equal(node.credentials.httpHeaderAuth.id, 'tvg-staging-hostinger-mail-api-placeholder');
   }
+  const listNode = httpNodes.find((node) => node.name === 'List page');
+  assert.equal(listNode.parameters.url, '={{ $json.list_url }}');
+  for (const node of httpNodes.filter((item) => item.name !== 'List page')) {
+    assert.match(node.parameters.url, /\$json\.(metadata_url|text_url|source_url)/);
+    assert.doesNotMatch(node.parameters.url, /\$\('Plan route'\)/);
+  }
+  assert.match(worker.nodes.find((node) => node.name === 'Normalize fetch').parameters.jsCode, /Replan/);
   assert.equal(mock.nodes.some((node) => node.type === 'n8n-nodes-base.httpRequest'), false);
   const mockHooks = mock.nodes.filter((node) => node.type === 'n8n-nodes-base.webhook');
-  assert.equal(mockHooks.length, 3);
+  assert.equal(mockHooks.length, 4);
   assert.deepEqual(
     mockHooks.map((node) => node.webhookId),
     [
+      'b1000000-0000-4000-8000-000000000001',
       'b1000000-0000-4000-8000-000000000001',
       'b1000000-0000-4000-8000-000000000001',
       'b1000000-0000-4000-8000-000000000001',
@@ -301,6 +309,7 @@ test('worker HTTP nodes are GET-only and the mock workflow stays inactive', () =
       'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid',
       'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid/source',
       'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/:folder/messages/:uid/text',
+      'tvg/staging-mock/mail/api/v1/mailboxes/:mailboxResourceId/folders/INBOX/messages',
     ],
   );
   for (const name of ['Mock metadata', 'Mock text', 'Mock source']) {
@@ -310,9 +319,10 @@ test('worker HTTP nodes are GET-only and the mock workflow stays inactive', () =
   assert.equal(mock.nodes.some((node) => node.name === 'Mark metadata'), false);
   assert.match(JSON.stringify(worker), /assertHostingerGetRequest/);
   assert.doesNotMatch(JSON.stringify(worker), /new URL\(|URLSearchParams/);
-  for (const node of httpNodes) {
-    assert.match(node.parameters.url, /\$\('Plan route'\)\.first\(\)\.json\.(metadata_url|text_url|source_url)/);
+  for (const node of httpNodes.filter((item) => item.name !== 'List page')) {
+    assert.match(node.parameters.url, /\$json\.(metadata_url|text_url|source_url)/);
     assert.doesNotMatch(node.parameters.url, /hostinger_pointers|queue_row/);
+    assert.doesNotMatch(node.parameters.url, /\$\('Plan route'\)/);
   }
   assert.match(worker.nodes.find((node) => node.name === 'Claim pending').parameters.query, /924150001/);
   const blob = `${JSON.stringify(worker)}\n${JSON.stringify(mock)}`;

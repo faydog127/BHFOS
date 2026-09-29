@@ -108,6 +108,10 @@ URL-encode folder segments. Token: `HOSTINGER_MAIL_API_TOKEN` in n8n Credentials
 
 Move and flag updates are separate operations (`POST .../move`, `PATCH` message, `POST .../flags`). The worker does not call them. A later live test must still confirm the two silent GETs before that window, and must treat `/text` as a read-flag change unless Hostinger documents otherwise. The corrective worker calls all three GETs only when the base URL and live flag allow it. The default base URL is `disabled`.
 
+### Pointer-contract read state (CC 2026-09-29, accepted)
+
+A live probe of uid 2279 (`TVG-READSTATE-PROBE-20260929-0022`) observed that `GET /source` marks the message `\Seen`. Command Center accepted that side effect. Pass 1 does not restore unread, does not call PATCH or a flags endpoint, and does not drop `GET /text`. Listing and metadata reads are not the Seen-marking call. Staff cannot treat bold/unread as "a human opened this" for any message the Worker fetched. `unseen_at_resolution` is deferred and is not a column.
+
 ---
 
 ## 6. List recent INBOX (reconcile gap-fill)

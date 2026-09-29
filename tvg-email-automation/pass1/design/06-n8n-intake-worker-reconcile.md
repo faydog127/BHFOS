@@ -137,6 +137,20 @@ RETURNING q.*;
 13. HOLD/error → internal notify (§7).  
 14. **No** AI, knowledge-for-draft, validation, send, `email_responses`, or `email_send_queue` (tables absent).
 
+### 4.4 Pointer contract (message.received, files only)
+
+Fast ACK stores `webhook_event_id`, mailbox, timestamp, and Message-ID (NULL when missing or whitespace-only) and returns 200. It does not hold `message_id_missing` and it does not call Hostinger. The row is `pending` or `deferred_kill_switch`, `resolution_status='unresolved'`, `uid` NULL.
+
+After claim, and before any URL is built, the Worker holds `message_id_missing` when `resolution_status='unresolved'` and `webhook_message_id` IS NULL. A legacy row with a NULL Message-ID and a real uid is not that case. The hold and its `automation_errors` row (`stage='worker'`, `retryable=false`) are one statement. A printable Message-ID that fails the match key is `message_id_invalid`, also with zero Hostinger calls.
+
+Otherwise an unresolved row takes `route='resolve'`: `GET /api/v1/mailboxes/{id}/folders/INBOX/messages?page=N&perPage=100` (literal GET, pages 1–5). Match is case-insensitive Message-ID in INBOX. Date only stops the scan. Attempts 1–5 wait 1/2/5/10/20 minutes via `resolve_attempts`. The sixth zero-match claim holds `pointer_not_found`. `attempt_count` stays cumulative and is not capped. Timeout and 5xx become `error` and are recovered by the manual re-resolve template, not by the schedule.
+
+Claim skips `pending` rows whose `next_attempt_at` is in the future. A missing-Message-ID row has no `next_attempt_at` and is legitimately alertable while it waits for a Worker run. Rows still inside the resolve window are exempt from that pending-SLA idea. The health heartbeat still counts every `pending` row; wiring the exemption into the heartbeat is outside this slice.
+
+Retention on the Worker JSON: automatic success and error saves are `none`. `saveManualExecutions` ships `true` for staging and must be set `false` before controlled live activation. Fast ACK ships manual saves `false`.
+
+Stale reconcile (`apply/reconcile_stale_to_hold.sql`) still holds a stale `processing` row as `stale_processing`. It does not return a crashed unresolved NULL-Message-ID claim to `pending`. That file is outside this slice. Recovery is a human return to `pending`; the next claim holds `message_id_missing` before any Hostinger call. The hold statement itself is atomic, so a failed error insert leaves the row `processing`.
+
 ---
 
 ## 5. Reconcile (10–15 min, same idempotent path)

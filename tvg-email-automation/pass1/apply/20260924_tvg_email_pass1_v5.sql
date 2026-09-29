@@ -282,7 +282,12 @@ COMMENT ON TABLE email_automation.intake_queue IS
   'Terminal statuses: done, duplicate; held/error terminal until ops; '
   'deferred_kill_switch resumes to pending.';
 COMMENT ON COLUMN email_automation.intake_queue.uid IS
-  'Hostinger message UID as bigint. Locator only — not durable identity.';
+  'Hostinger message UID as bigint. Locator only — not durable identity. '
+  'This design file keeps uid NOT NULL. The pointer-contract migration '
+  '(apply/20260929_tvg_email_pass1_pointer_contract.sql, not applied here) '
+  'drops NOT NULL so an unresolved message.received row can be stored before '
+  'listMessages resolution. unresolved <=> uid IS NULL. Existing rows become '
+  'legacy_pointer. attempt_count is not capped; resolve_attempts is the cycle counter.';
 COMMENT ON COLUMN email_automation.intake_queue.message_id IS
   'Nullable on insert; worker sets from authoritative fetch.';
 COMMENT ON COLUMN email_automation.intake_queue.fallback_hash IS

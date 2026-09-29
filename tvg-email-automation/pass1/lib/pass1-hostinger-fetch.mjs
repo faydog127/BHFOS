@@ -275,6 +275,60 @@ function holdPlan(common, fields) {
   };
 }
 
+/** Normalized Message-ID match key. Case-insensitive. Angle brackets are not part of the key. */
+export function midKey(value) {
+  if (value == null) return null;
+  let text = String(value).trim();
+  if (text.startsWith('<') && text.endsWith('>') && text.length >= 2) text = text.slice(1, -1).trim();
+  text = text.toLowerCase();
+  if (text === '' || !text.includes('@') || /[\s<>]/.test(text) || text.length > 998) return null;
+  return text;
+}
+
+function unresolvedPointerPlan(queueRow, settings, common) {
+  if (queueRow.resolution_status !== 'unresolved') return null;
+  const raw = queueRow.webhook_message_id;
+  if (raw == null || String(raw).trim() === '') {
+    return holdPlan(common, {
+      hold_reason: 'message_id_missing',
+      error_code: 'message_id_missing',
+      queue_status: 'held',
+      detail: 'webhook had no usable Message-ID; held by Worker; no Hostinger call made',
+    });
+  }
+  if (!midKey(raw)) {
+    return holdPlan(common, {
+      hold_reason: 'message_id_invalid',
+      error_code: 'message_id_invalid',
+      queue_status: 'held',
+      detail: 'webhook Message-ID failed the match key; held by Worker; no Hostinger call made',
+    });
+  }
+  const map = settings?.hostinger_mailbox_map;
+  if (map && typeof map === 'object' && !Array.isArray(map)) {
+    const mapped = map[String(queueRow.mailbox || '').toLowerCase()];
+    if (mapped == null || String(mapped) !== String(queueRow.mailbox_resource_id || '')) {
+      return holdPlan(common, {
+        hold_reason: 'mailbox_map_changed',
+        error_code: 'mailbox_map_changed',
+        queue_status: 'held',
+        detail: 'mailbox map no longer matches the stored resource id',
+      });
+    }
+  }
+  return {
+    ...common,
+    route: 'resolve',
+    metadata_url: null,
+    text_url: null,
+    source_url: null,
+    hold_reason: null,
+    error_code: null,
+    queue_status: null,
+    detail: null,
+  };
+}
+
 export function planWorkerRoute({
   queueRow,
   settings = {},
@@ -307,6 +361,8 @@ export function planWorkerRoute({
   if (!queueRow) return { ...common, route: 'skip' };
   const pointers = queueRow.hostinger_pointers || {};
   if (pointers.synthetic_message) return { ...common, route: 'synthetic' };
+  const unresolved = unresolvedPointerPlan(queueRow, settings, common);
+  if (unresolved) return unresolved;
   const excluded = new Set([
     STUCK_REAL_UID,
     ...settingsArray(settings, 'hostinger_fetch_excluded_uids').map((value) => String(value)),
@@ -852,7 +908,7 @@ export function decideFetchedIntake({ plan, metadataItem, textItem, sourceItem }
     };
   }
   if (!normalized.ok) {
-    return forcedUncertain(plan, normalized.partial || {
+    const uncertain = forcedUncertain(plan, normalized.partial || {
       mailbox: plan.queue_row.mailbox,
       from_raw: '',
       subject: '',
@@ -861,6 +917,25 @@ export function decideFetchedIntake({ plan, metadataItem, textItem, sourceItem }
       message_id: '',
       authentication_results: '',
     });
+    if (normalized.detail === 'message_id_mismatch') {
+      uncertain.decision = {
+        ...uncertain.decision,
+        error_code: 'message_id_mismatch',
+        detail: 'message_id_mismatch',
+      };
+    }
+    return uncertain;
+  }
+  const webhookKey = midKey(plan.queue_row?.webhook_message_id);
+  if (webhookKey) {
+    const metaRecord = metadataObject(meta.body);
+    const metaKey = midKey(metaRecord.messageId || metaRecord.message_id || '');
+    const sourceKey = midKey(normalized.message.message_id);
+    if ((metaKey && metaKey !== webhookKey) || (sourceKey && sourceKey !== webhookKey)) {
+      const uncertain = forcedUncertain(plan, { ...normalized.message, conflict: 'message_id_mismatch' });
+      uncertain.decision = { ...uncertain.decision, error_code: 'message_id_mismatch', detail: 'message_id_mismatch' };
+      return uncertain;
+    }
   }
   const decision = evaluateIntake({
     message: normalized.message,
@@ -943,4 +1018,689 @@ export function renderMockHostingerResponse({ uid, kind }) {
       data: happySource({ uid, subject, messageId, date, auth, from }),
     },
   };
+}
+
+const LIST_RELATIVE = /^\/api\/v1\/mailboxes\/[A-Za-z0-9_-]{1,128}\/folders\/INBOX\/messages$/;
+const RESOLVE_BACKOFF_DEFAULT = Object.freeze([1, 2, 5, 10, 20]);
+const RESOLVE_ERROR_CODES = new Set([
+  'pointer_not_found',
+  'pointer_ambiguous',
+  'pointer_excluded_uid',
+  'hostinger_rate_limited',
+  'resolve_response_malformed',
+  'hostinger_timeout',
+  'hostinger_upstream_error',
+  'hostinger_auth_rejected',
+]);
+
+export function assertHostingerListRequest({
+  method,
+  url,
+  baseUrl,
+  allowedHosts,
+  liveFetchEnabled,
+}) {
+  if (method !== 'GET') return { ok: false, reason: 'method_rejected' };
+  let parsed;
+  let base;
+  try {
+    parsed = parseHttpUrl(url);
+    base = parseHttpUrl(baseUrl);
+  } catch {
+    return { ok: false, reason: 'url_rejected' };
+  }
+  if (parsed.protocol !== 'https:') return { ok: false, reason: 'scheme_rejected' };
+  if (parsed.username || parsed.pass) return { ok: false, reason: 'url_rejected' };
+  if (parsed.origin !== base.origin) return { ok: false, reason: 'host_rejected' };
+  if (parsed.hash) return { ok: false, reason: 'query_rejected' };
+  const rawPath = String(url || '').split('?')[0].split('#')[0];
+  if (rawPath.includes('..') || /%2e/i.test(rawPath)) return { ok: false, reason: 'path_rejected' };
+  const basePath = base.pathname.replace(/\/+$/, '');
+  if (!parsed.pathname.startsWith(`${basePath}/`)) return { ok: false, reason: 'path_rejected' };
+  let relative;
+  try {
+    relative = decodeURIComponent(parsed.pathname.slice(basePath.length));
+  } catch {
+    return { ok: false, reason: 'path_rejected' };
+  }
+  if (relative.includes('..') || !LIST_RELATIVE.test(relative)) return { ok: false, reason: 'path_rejected' };
+  if (!/^page=[1-5]&perPage=100$/.test(String(parsed.search || '').replace(/^\?/, ''))) {
+    return { ok: false, reason: 'query_rejected' };
+  }
+  const host = parsed.hostname.toLowerCase();
+  const allowed = (allowedHosts || []).map((item) => String(item).trim().toLowerCase()).filter(Boolean);
+  if (!allowed.includes(host)) return { ok: false, reason: 'host_rejected' };
+  if (host === HOSTINGER_LIVE_HOST && liveFetchEnabled !== true) {
+    return { ok: false, reason: 'live_fetch_disabled' };
+  }
+  return { ok: true, host, path: relative };
+}
+
+export function buildListMessagesUrl(baseUrl, mailboxResourceId, page) {
+  const pageNum = Number(page);
+  if (!Number.isInteger(pageNum) || pageNum < 1 || pageNum > 5) throw new TypeError('page rejected');
+  const base = parseHttpUrl(baseUrl);
+  const id = encodePathSegment(mailboxResourceId, MAILBOX_ID_PATTERN);
+  const prefix = base.pathname.replace(/\/+$/, '');
+  const pathname = `${prefix}/api/v1/mailboxes/${id}/folders/INBOX/messages`;
+  const relative = pathname.slice(prefix.length);
+  if (relative.includes('..') || !LIST_RELATIVE.test(relative)) throw new TypeError('path segment rejected');
+  return `${composeHttpUrl({
+    protocol: base.protocol,
+    username: '',
+    pass: '',
+    hostname: base.hostname,
+    port: base.port,
+    pathname,
+  })}?page=${pageNum}&perPage=100`;
+}
+
+function resolveBackoff(settings) {
+  const raw = settings?.resolve_backoff_minutes;
+  if (!Array.isArray(raw) || raw.length !== 5) return RESOLVE_BACKOFF_DEFAULT;
+  const minutes = raw.map((value) => Number(value));
+  if (minutes.some((value) => !Number.isInteger(value) || value <= 0 || value > 24 * 60)) {
+    return RESOLVE_BACKOFF_DEFAULT;
+  }
+  return minutes;
+}
+
+export function resolveScheduleLimit(settings) {
+  const backoff = resolveBackoff(settings);
+  const configured = Number(settings?.resolve_max_attempts);
+  const fromSetting = Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : backoff.length;
+  return Math.max(backoff.length, fromSetting);
+}
+
+function clampedResolvePages(settings) {
+  const configured = Number(settings?.resolve_max_pages);
+  const chosen = Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : 3;
+  return Math.min(Math.max(chosen, 1), 5);
+}
+
+function clampedLookbackHours(settings) {
+  const configured = Number(settings?.resolve_lookback_hours);
+  const chosen = Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : 48;
+  return Math.min(Math.max(chosen, 1), 168);
+}
+
+export function buildWorkerPointerHoldSql(input) {
+  const queueId = requireUuid(input.queue_id);
+  const reason = input.hold_reason === 'message_id_invalid' ? 'message_id_invalid' : 'message_id_missing';
+  const message = reason === 'message_id_invalid'
+    ? 'webhook Message-ID failed the match key; held by Worker; no Hostinger call made'
+    : 'webhook had no usable Message-ID; held by Worker; no Hostinger call made';
+  const messagePredicate = reason === 'message_id_missing'
+    ? 'q.webhook_message_id IS NULL'
+    : 'q.webhook_message_id IS NOT NULL';
+  return `
+WITH held AS (
+  UPDATE email_automation.intake_queue q
+     SET status = 'held'::email_automation.intake_queue_status,
+         hold_reason = ${quoteLiteral(reason)},
+         locked_at = NULL,
+         locked_by = NULL
+   WHERE q.id = ${quoteLiteral(queueId)}::uuid
+     AND q.tenant_id = 'tvg'
+     AND q.status = 'processing'
+     AND q.resolution_status = 'unresolved'
+     AND ${messagePredicate}
+  RETURNING q.id
+)
+INSERT INTO email_automation.automation_errors (
+  tenant_id, intake_queue_id, stage, error_code, error_message, context_json, retryable
+)
+SELECT
+  'tvg',
+  held.id,
+  'worker',
+  ${quoteLiteral(reason)},
+  ${quoteLiteral(message)},
+  '{}'::jsonb,
+  false
+FROM held
+RETURNING intake_queue_id;
+`.trim();
+}
+
+function rescheduleResolveSql(queueId, minutes, rateConsumed) {
+  const mins = Number(minutes);
+  if (!Number.isInteger(mins) || mins <= 0) throw new Error('backoff rejected');
+  const pointerSql = rateConsumed == null
+    ? ''
+    : `,
+      hostinger_pointers = COALESCE(q.hostinger_pointers, '{}'::jsonb) || jsonb_build_object(
+        'resolution', COALESCE(q.hostinger_pointers->'resolution', '{}'::jsonb) || jsonb_build_object(
+          'rate_limit_consumed', ${Number(rateConsumed)}::int
+        )
+      )`;
+  return `
+UPDATE email_automation.intake_queue q
+SET status = 'pending'::email_automation.intake_queue_status,
+    resolve_attempts = q.resolve_attempts + 1,
+    next_attempt_at = now() + make_interval(mins => ${mins}),
+    locked_at = NULL,
+    locked_by = NULL${pointerSql}
+WHERE q.id = ${quoteLiteral(queueId)}::uuid
+  AND q.tenant_id = 'tvg'
+  AND q.status = 'processing'
+RETURNING 'rescheduled'::text AS outcome,
+  q.id,
+  q.status,
+  q.resolve_attempts,
+  q.attempt_count,
+  q.locked_at,
+  q.locked_by;
+`.trim();
+}
+
+export function zeroMatchAction(queueRow, settings) {
+  const completed = Number(queueRow?.resolve_attempts || 0);
+  const thisAttempt = (Number.isFinite(completed) ? completed : 0) + 1;
+  const limit = resolveScheduleLimit(settings);
+  if (thisAttempt > limit) {
+    return { action: 'hold', error_code: 'pointer_not_found', queue_status: 'held' };
+  }
+  const backoff = resolveBackoff(settings);
+  return { action: 'reschedule', minutes: backoff[thisAttempt - 1], thisAttempt };
+}
+
+export function rateLimitAction(queueRow, settings) {
+  const consumed = Number(queueRow?.hostinger_pointers?.resolution?.rate_limit_consumed || 0);
+  const capRaw = Number(settings?.resolve_429_max_consumed);
+  const cap = Number.isFinite(capRaw) && capRaw >= 0 ? Math.floor(capRaw) : 2;
+  const completed = Number(queueRow?.resolve_attempts || 0);
+  const thisAttempt = (Number.isFinite(completed) ? completed : 0) + 1;
+  const limit = resolveScheduleLimit(settings);
+  if ((Number.isFinite(consumed) ? consumed : 0) >= cap || thisAttempt > limit) {
+    return { action: 'hold', error_code: 'hostinger_rate_limited', queue_status: 'held' };
+  }
+  const backoff = resolveBackoff(settings);
+  return {
+    action: 'reschedule',
+    minutes: backoff[Math.min(thisAttempt, backoff.length) - 1],
+    rate_limit_consumed: (Number.isFinite(consumed) ? consumed : 0) + 1,
+  };
+}
+
+export function insideResolveSchedule(row, now = new Date()) {
+  if (!row || row.status !== 'pending' || row.next_attempt_at == null) return false;
+  const at = new Date(row.next_attempt_at).getTime();
+  return Number.isFinite(at) && at > now.getTime();
+}
+
+/**
+ * Rows still waiting on the 1/2/5/10/20 schedule are exempt from a pending-SLA alert.
+ * A missing-Message-ID row has no next_attempt_at and is legitimately alertable:
+ * it is pending until a Worker run, and nothing is fetched in that window.
+ */
+export function pendingSlaExempt(row, now = new Date(), slackMinutes = 5) {
+  if (!row || row.status !== 'pending') return false;
+  if (row.webhook_message_id == null || String(row.webhook_message_id).trim() === '') return false;
+  if (insideResolveSchedule(row, now)) return true;
+  if (row.resolution_status !== 'unresolved' || row.created_at == null) return false;
+  const slack = Number(slackMinutes);
+  const extra = Number.isFinite(slack) && slack >= 0 ? slack : 0;
+  const deadline = new Date(row.created_at).getTime() + (38 + extra) * 60 * 1000;
+  return Number.isFinite(deadline) && now.getTime() < deadline;
+}
+
+const MANUAL_RERESOLVE_REFUSE = new Set([
+  'message_id_missing',
+  'message_id_invalid',
+  'pointer_ambiguous',
+  'identity_uncertain',
+  'pointer_excluded_uid',
+  'mailbox_map_changed',
+]);
+
+export function manualReresolveAllowed(row) {
+  if (!row || row.tenant_id !== 'tvg') return false;
+  if (row.resolution_status !== 'unresolved') return false;
+  if (row.webhook_message_id == null || String(row.webhook_message_id).trim() === '') return false;
+  if (row.status !== 'held' && row.status !== 'error') return false;
+  if (MANUAL_RERESOLVE_REFUSE.has(row.hold_reason)) return false;
+  if (row.hold_reason === 'pointer_not_found' || row.hold_reason === 'hostinger_rate_limited') return true;
+  return /^(hostinger_timeout|hostinger_upstream_error)/.test(String(row.last_error || ''));
+}
+
+export function buildManualReresolveSql(queueId) {
+  const id = requireUuid(queueId);
+  return `
+UPDATE email_automation.intake_queue q
+   SET status = 'pending'::email_automation.intake_queue_status,
+       resolve_attempts = 0,
+       next_attempt_at = NULL,
+       hold_reason = NULL,
+       locked_at = NULL,
+       locked_by = NULL,
+       hostinger_pointers = COALESCE(q.hostinger_pointers, '{}'::jsonb)
+         || jsonb_build_object(
+              'resolution',
+              COALESCE(q.hostinger_pointers->'resolution', '{}'::jsonb)
+                || jsonb_build_object(
+                     'manual_resets',
+                     COALESCE((q.hostinger_pointers->'resolution'->>'manual_resets')::int, 0) + 1
+                   )
+            )
+ WHERE q.id = ${quoteLiteral(id)}::uuid
+   AND q.tenant_id = 'tvg'
+   AND q.resolution_status = 'unresolved'
+   AND q.webhook_message_id IS NOT NULL
+   AND q.status IN ('held', 'error')
+   AND (
+     q.hold_reason IN ('pointer_not_found', 'hostinger_rate_limited')
+     OR q.last_error ~ '^(hostinger_timeout|hostinger_upstream_error)'
+   )
+RETURNING q.id, q.status, q.resolve_attempts, q.attempt_count;
+`.trim();
+}
+
+function listHttpStatus(item) {
+  if (item == null) return { status: 0, timedOut: true };
+  if (typeof item !== 'object') return { status: 200, timedOut: false };
+  if (item.timeout === true) return { status: 0, timedOut: true };
+  if (item.error) {
+    const message = String(item.error.message || item.error.description || item.error);
+    return {
+      status: Number(item.error.status || item.error.httpCode || 0),
+      timedOut: /timeout|timed out|etimedout|econnaborted|aborted/i.test(message),
+    };
+  }
+  const status = Number(item.statusCode || item.status || item.http_status || 0) || 200;
+  return { status, timedOut: false };
+}
+
+export function parseListEnvelope(item) {
+  let parsed = null;
+  if (item && typeof item === 'object' && !Array.isArray(item) && typeof item.data === 'string') {
+    try {
+      parsed = JSON.parse(item.data);
+    } catch {
+      return { ok: false, reason: 'resolve_response_malformed' };
+    }
+  } else if (item && typeof item === 'object' && item.body && typeof item.body === 'object' && !Array.isArray(item.body)) {
+    parsed = item.body;
+  } else if (item && typeof item === 'object' && item.response_body && typeof item.response_body === 'object' && !Array.isArray(item.response_body)) {
+    parsed = item.response_body;
+  } else if (item && typeof item === 'object' && Array.isArray(item.data) && item.pagination) {
+    parsed = item;
+  } else {
+    return { ok: false, reason: 'resolve_response_malformed' };
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.data)) {
+    return { ok: false, reason: 'resolve_response_malformed' };
+  }
+  const pagination = parsed.pagination;
+  if (!pagination || typeof pagination !== 'object' || Array.isArray(pagination)) {
+    return { ok: false, reason: 'resolve_response_malformed' };
+  }
+  for (const key of ['page', 'perPage', 'total', 'totalPages']) {
+    if (!Number.isInteger(pagination[key])) return { ok: false, reason: 'resolve_response_malformed' };
+  }
+  return { ok: true, items: parsed.data, pagination };
+}
+
+function blankEvaluation(overrides = {}) {
+  return {
+    matches: [],
+    pages_scanned: 0,
+    total: 0,
+    items_seen: 0,
+    invalid_items: 0,
+    stop_reason: 'max_pages',
+    zero_match: false,
+    ambiguous: false,
+    excluded: false,
+    resolved: false,
+    retry: false,
+    hold: false,
+    error: false,
+    error_code: null,
+    ...overrides,
+  };
+}
+
+function listItemUid(item) {
+  const uid = item?.uid;
+  if (typeof uid === 'number' && Number.isInteger(uid) && uid > 0) return uid;
+  if (typeof uid === 'string' && /^\d{1,18}$/.test(uid)) return Number(uid);
+  return null;
+}
+
+function itemOlderThan(item, cutoffMs) {
+  const raw = item?.date;
+  if (typeof raw !== 'string' || raw.trim() === '') return false;
+  const parsed = Date.parse(raw);
+  if (!Number.isFinite(parsed)) return false;
+  return parsed < cutoffMs;
+}
+
+function finishMatchEvaluation(counts, queueRow, settings) {
+  const excluded = new Set((counts.excludedUids || []).map((value) => String(value)));
+  const unique = [];
+  for (const uid of counts.matches) {
+    if (!unique.includes(uid)) unique.push(uid);
+  }
+  const base = {
+    matches: unique,
+    pages_scanned: counts.pages_scanned,
+    total: counts.total,
+    items_seen: counts.items_seen,
+    invalid_items: counts.invalid_items,
+    stop_reason: counts.stop_reason,
+    zero_match: false,
+    ambiguous: false,
+    excluded: false,
+    resolved: false,
+    retry: false,
+    hold: false,
+    error: false,
+    error_code: null,
+  };
+  if (unique.length > 1) {
+    return { ...base, ambiguous: true, hold: true, error_code: 'pointer_ambiguous' };
+  }
+  if (unique.length === 1 && excluded.has(String(unique[0]))) {
+    return { ...base, excluded: true, hold: true, error_code: 'pointer_excluded_uid' };
+  }
+  if (unique.length === 1) {
+    return { ...base, resolved: true, stop_reason: counts.stop_reason };
+  }
+  const action = zeroMatchAction(queueRow, settings);
+  if (action.action === 'hold') {
+    return { ...base, zero_match: true, hold: true, error_code: action.error_code };
+  }
+  return { ...base, zero_match: true, retry: true, error_code: null };
+}
+
+export function evaluateResolvePages({ pages, queueRow, settings, prior }) {
+  const maxPages = clampedResolvePages(settings);
+  const lookbackHours = clampedLookbackHours(settings);
+  const eventAt = Date.parse(queueRow?.webhook_event_at || '');
+  const cutoffMs = Number.isFinite(eventAt) ? eventAt - lookbackHours * 60 * 60 * 1000 : null;
+  const wanted = midKey(queueRow?.webhook_message_id);
+  const excludedUids = [
+    STUCK_REAL_UID,
+    ...settingsArray(settings, 'hostinger_fetch_excluded_uids').map((value) => String(value)),
+  ];
+  const counts = {
+    matches: Array.isArray(prior?.matches) ? prior.matches.filter((uid) => Number.isInteger(uid)) : [],
+    pages_scanned: Number(prior?.pages_scanned || 0),
+    items_seen: Number(prior?.items_seen || 0),
+    invalid_items: Number(prior?.invalid_items || 0),
+    total: Number(prior?.total || 0),
+    stop_reason: 'max_pages',
+    excludedUids,
+  };
+  const list = Array.isArray(pages) ? pages : [];
+  for (let index = 0; index < list.length && counts.pages_scanned < maxPages; index += 1) {
+    const status = listHttpStatus(list[index]);
+    if (status.timedOut) {
+      return blankEvaluation({
+        ...counts,
+        matches: [],
+        stop_reason: 'timeout',
+        error: true,
+        hold: false,
+        error_code: 'hostinger_timeout',
+      });
+    }
+    if (status.status === 429) {
+      const action = rateLimitAction(queueRow, settings);
+      return blankEvaluation({
+        pages_scanned: counts.pages_scanned,
+        total: counts.total,
+        items_seen: counts.items_seen,
+        invalid_items: counts.invalid_items,
+        stop_reason: 'rate_limited',
+        retry: action.action === 'reschedule',
+        hold: action.action === 'hold',
+        error_code: action.action === 'hold' ? 'hostinger_rate_limited' : null,
+      });
+    }
+    if (status.status >= 500) {
+      return blankEvaluation({
+        stop_reason: 'upstream',
+        error: true,
+        error_code: 'hostinger_upstream_error',
+        pages_scanned: counts.pages_scanned,
+        items_seen: counts.items_seen,
+        invalid_items: counts.invalid_items,
+        total: counts.total,
+      });
+    }
+    if (status.status === 401 || status.status === 403) {
+      return blankEvaluation({
+        stop_reason: 'auth',
+        error: true,
+        error_code: 'hostinger_auth_rejected',
+        pages_scanned: counts.pages_scanned,
+      });
+    }
+    const parsed = parseListEnvelope(list[index]);
+    if (!parsed.ok) {
+      return blankEvaluation({
+        stop_reason: 'malformed',
+        hold: true,
+        error_code: 'resolve_response_malformed',
+        pages_scanned: counts.pages_scanned,
+        items_seen: counts.items_seen,
+        invalid_items: counts.invalid_items,
+        total: counts.total,
+      });
+    }
+    counts.pages_scanned += 1;
+    counts.total = parsed.pagination.total;
+    let allOlder = parsed.items.length > 0 && cutoffMs != null;
+    for (const item of parsed.items) {
+      counts.items_seen += 1;
+      if (item == null || typeof item !== 'object' || Array.isArray(item)) {
+        counts.invalid_items += 1;
+        allOlder = false;
+        continue;
+      }
+      if (cutoffMs == null || !itemOlderThan(item, cutoffMs)) allOlder = false;
+      const uid = listItemUid(item);
+      if (uid == null) {
+        counts.invalid_items += 1;
+        continue;
+      }
+      const path = item.path == null ? 'INBOX' : String(item.path);
+      const key = midKey(item.messageId);
+      if (wanted && key && key === wanted && path === 'INBOX') counts.matches.push(uid);
+    }
+    if (allOlder) {
+      counts.stop_reason = 'time_window';
+      break;
+    }
+    if (counts.pages_scanned >= maxPages) {
+      counts.stop_reason = 'max_pages';
+      break;
+    }
+  }
+  const evaluation = finishMatchEvaluation(counts, queueRow, settings);
+  if (evaluation.error_code && !RESOLVE_ERROR_CODES.has(evaluation.error_code)) {
+    return blankEvaluation({ hold: true, error_code: 'resolve_response_malformed', stop_reason: 'malformed' });
+  }
+  return evaluation;
+}
+
+export function buildResolveWriteSql({ queueRow, settings, evaluation }) {
+  const queueId = requireUuid(queueRow.id);
+  const outcome = evaluation || blankEvaluation();
+  if (outcome.resolved && outcome.matches.length === 1) {
+    const uid = outcome.matches[0];
+    const pages = Number(outcome.pages_scanned || 0);
+    const total = Number(outcome.total || 0);
+    return {
+      outcome: 'resolved',
+      sql: `
+SELECT email_automation.resolve_intake_uid(
+  ${quoteLiteral(queueId)}::uuid,
+  ${uid}::bigint,
+  ${pages}::int,
+  ${total}::int
+) AS outcome,
+${uid}::bigint AS uid;
+`.trim(),
+    };
+  }
+  if (outcome.retry) {
+    const action = outcome.stop_reason === 'rate_limited'
+      ? rateLimitAction(queueRow, settings)
+      : zeroMatchAction(queueRow, settings);
+    if (action.action !== 'reschedule') {
+      return {
+        outcome: 'held',
+        sql: buildClosedHoldSql({
+          queue_id: queueId,
+          queue_status: 'held',
+          hold_reason: action.error_code,
+          error_code: action.error_code,
+          detail: action.error_code,
+          fetch_base_url: 'resolve',
+        }).replace(
+          /RETURNING intake_queue_id AS id,/,
+          "RETURNING 'held'::text AS outcome, intake_queue_id AS id,",
+        ),
+      };
+    }
+    return {
+      outcome: 'rescheduled',
+      sql: rescheduleResolveSql(queueId, action.minutes, action.rate_limit_consumed ?? null),
+    };
+  }
+  const reason = outcome.error_code || 'resolve_response_malformed';
+  const queueStatus = outcome.error ? 'error' : 'held';
+  const detail = reason === 'hostinger_timeout' || reason === 'hostinger_upstream_error' ? reason : reason;
+  return {
+    outcome: outcome.error ? 'error' : 'held',
+    sql: buildClosedHoldSql({
+      queue_id: queueId,
+      queue_status: queueStatus,
+      hold_reason: reason,
+      error_code: reason,
+      detail,
+      fetch_base_url: 'resolve',
+    }).replace(
+      /RETURNING intake_queue_id AS id,/,
+      `RETURNING '${outcome.error ? 'error' : 'held'}'::text AS outcome, intake_queue_id AS id,`,
+    ),
+  };
+}
+
+export function planResolveStart({ queueRow, settings }) {
+  const baseUrl = settingsString(settings, 'hostinger_mail_api_base_url', DISABLED_BASE_URL);
+  const page = 1;
+  let listUrl = null;
+  if (baseUrl !== DISABLED_BASE_URL && baseUrl !== 'off' && baseUrl !== 'mock') {
+    listUrl = buildListMessagesUrl(baseUrl, queueRow.mailbox_resource_id, page);
+  }
+  return {
+    queue_id: queueRow.id,
+    webhook_message_id: queueRow.webhook_message_id,
+    mailbox_resource_id: queueRow.mailbox_resource_id,
+    page,
+    max_pages: clampedResolvePages(settings),
+    lookback_hours: clampedLookbackHours(settings),
+    event_at: queueRow.webhook_event_at || null,
+    base_url: baseUrl,
+    timeout_ms: settingsInt(settings, 'hostinger_fetch_timeout_ms', DEFAULT_TIMEOUT_MS, 20000),
+    allowed_hosts: settingsArray(settings, 'hostinger_mail_api_allowed_hosts'),
+    live_fetch: settings?.hostinger_live_fetch_enabled === true,
+    list_url: listUrl,
+    method: 'GET',
+  };
+}
+
+const LIST_TARGET_MESSAGE_ID = '<mock-list@example.com>';
+
+function mockListItem({ uid, messageId, path, date }) {
+  return {
+    uid,
+    path: path === undefined ? 'INBOX' : path,
+    date: date === undefined ? '2026-09-29T05:00:00.000Z' : date,
+    flags: [],
+    unseen: true,
+    size: 120,
+    subject: 'Mock list item',
+    from: { name: 'Pat Customer', address: 'pat@example.com' },
+    to: [{ name: 'TVG', address: 'info@vent-guys.com' }],
+    messageId: messageId === undefined ? `<other-${uid}@example.com>` : messageId,
+  };
+}
+
+function mockListPage(items, page, totalPages) {
+  const total = totalPages * 1;
+  return {
+    http_status: 200,
+    timeout: false,
+    response_body: {
+      data: items,
+      pagination: { page, perPage: 100, total, totalPages },
+    },
+  };
+}
+
+export function renderMockListMessages({ scenario, page = 1, attempt = 1 }) {
+  const pageNum = Number(page) || 1;
+  const name = String(scenario || '');
+  if (name === 'mbx_list_429') {
+    return { http_status: 429, timeout: false, response_body: { error: 'rate_limited' } };
+  }
+  if (name === 'mbx_list_401') {
+    return { http_status: 401, timeout: false, response_body: { error: 'auth' } };
+  }
+  if (name === 'mbx_list_500') {
+    return { http_status: 500, timeout: false, response_body: { error: 'upstream' } };
+  }
+  if (name === 'mbx_list_timeout') {
+    return { http_status: 200, timeout: true, response_body: { error: 'delayed' } };
+  }
+  if (name === 'mbx_list_badpage') {
+    return {
+      http_status: 200,
+      timeout: false,
+      response_body: { data: { unexpected: true }, pagination: { page: pageNum, perPage: '100', total: 1, totalPages: 1 } },
+    };
+  }
+  const hit = (uid, messageId, path) => mockListItem({ uid, messageId, path });
+  if (name === 'mbx_list_hit1') {
+    return mockListPage([
+      hit(3101, LIST_TARGET_MESSAGE_ID),
+      hit(3102),
+    ], pageNum, 1);
+  }
+  if (name === 'mbx_list_hit3') {
+    if (pageNum < 3) return mockListPage([hit(3200 + pageNum)], pageNum, 3);
+    return mockListPage([hit(3303, LIST_TARGET_MESSAGE_ID)], pageNum, 3);
+  }
+  if (name === 'mbx_list_miss') {
+    if (pageNum >= 4) return mockListPage([hit(3404, LIST_TARGET_MESSAGE_ID)], pageNum, 4);
+    return mockListPage([hit(3400 + pageNum)], pageNum, 4);
+  }
+  if (name === 'mbx_list_ambiguous') {
+    return mockListPage([
+      hit(3501, LIST_TARGET_MESSAGE_ID),
+      hit(3502, LIST_TARGET_MESSAGE_ID),
+    ], pageNum, 1);
+  }
+  if (name === 'mbx_list_delay') {
+    if (Number(attempt) >= 2) return mockListPage([hit(3601, LIST_TARGET_MESSAGE_ID)], pageNum, 1);
+    return mockListPage([hit(3600)], pageNum, 1);
+  }
+  if (name === 'mbx_list_otherpath') {
+    return mockListPage([hit(3701, LIST_TARGET_MESSAGE_ID, 'Sent')], pageNum, 1);
+  }
+  if (name === 'mbx_list_nullmid') {
+    return mockListPage([hit(3801, null)], pageNum, 1);
+  }
+  if (name === 'mbx_list_case') {
+    return mockListPage([hit(3901, '<Mock-List@Example.com>')], pageNum, 1);
+  }
+  if (name === 'mbx_list_collision') {
+    return mockListPage([hit(2279, LIST_TARGET_MESSAGE_ID)], pageNum, 1);
+  }
+  return mockListPage([], pageNum, 1);
 }

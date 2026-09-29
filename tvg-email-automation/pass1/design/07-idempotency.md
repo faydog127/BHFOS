@@ -27,6 +27,10 @@
 3. **No** Hostinger fetch; **no** Message-ID/fallback computation on fast path.  
 4. Never invent identity from pointer alone for `email_events`.
 
+### 2.1 Envelope event id (pointer contract)
+
+`message.received` Fast ACK also inserts on `(tenant_id, webhook_event_id)`. A redelivered `eventId` is a 200 duplicate and does not reset a held row. Many legacy rows keep `webhook_event_id` NULL, and many unresolved rows keep `uid` NULL; NULLs are distinct in the plain unique indexes, so both populations coexist. The legacy pointer unique index is unchanged. A resolution write that collides on that pointer index marks the new row `duplicate` and does not fetch. Any other unique violation is re-raised. Date is never an identity or match key.
+
 ---
 
 ## 3. Primary durable identity: Message-ID on `email_events`
