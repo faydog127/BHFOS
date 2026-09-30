@@ -1,0 +1,107 @@
+# TVG Email Pass 1 — implementation status
+
+Workstream: TVG Email Automation pass1-v5, the Founder-locked internal SMS amendment, the 2026-09-24 consolidated staging directive, the 2026-09-25 corrective fetch slice, and the 2026-09-29 pointer-contract slice. Not Media Intelligence. `command-center/docs/media-intelligence/IMPLEMENTATION_STATUS.md` is unchanged on purpose.
+
+## Pointer-contract slice (2026-09-29)
+
+| Field | Value |
+|---|---|
+| Branch | `cursor/tvg-email-pass1-pointer-contract-7298` |
+| Implementation commit | `b691f8c808ae029edca4ddcbfe13ba1adbe58551` |
+| Baseline | `a4511343fd8bd7380f82d7b887598c9ff906ff1e` (draft PR #161 head). PR #161 is not modified and is not merged. |
+| Authorization | CC builder release 2026-09-29. Precedence: CC addendum, then amendment v2.1, then packet v2. |
+| Evidence | **Locally verified** at 107 pass, 0 fail, 0 skipped (`node --test tvg-email-automation/pass1/test/*.test.mjs`, duration_ms 8837.624421) on throwaway local Postgres 16.15. M1–M8 executed (not skipped). Worker `saveManualExecutions` ships **false**. The two identity-compat tests start from the recorded 20260927 statement. **Not** applied to staging. **Not** imported into n8n. **Not** merged. **Not** production. Parent of this corrective is `04514e47e7ce1144b5974c0a043c329ef2006839`. |
+| D3 | `attempt_count` is not capped. `resolve_attempts` is the resolution-cycle counter (1/2/5/10/20, then `pointer_not_found`). |
+| D8 | `unseen_at_resolution` is not added. |
+| D10 corrective | Workflow JSON regenerated from the current libraries, with a rebuild-and-compare parity test and a Fast ACK `Prepare intake` check for whitespace-only Message-ID. Both Hostinger guards reject a raw `%` in the pathname before decoding, and they reject leading, trailing, and in-path whitespace. Migration and rollback set `lock_timeout` to 5 seconds immediately after `BEGIN`. `resolve_max_attempts` stays 5; the controlled-live preflight fails otherwise. Stranded-row query and one-row `stale_processing` recovery template are files and runbook text only. No new alert, SMS, or heartbeat behavior. |
+| Missing Message-ID SLA | A NULL-Message-ID `pending` row is legitimately alertable. In-schedule unresolved rows are exempt via `pendingSlaExempt`. The health heartbeat still counts every pending row. |
+| Stale reconcile | A stale `processing` row becomes `held` / `stale_processing` and that write clears `locked_at` and `locked_by`. The schedule node stays `disabled: true` and the workflow stays inactive. A reviewed one-row template, `apply/20260929_tvg_email_pass1_stale_processing_recovery.sql`, returns one `held` / `stale_processing` / `unresolved` / `uid IS NULL` row to `pending`. It is not auto-executed. The stranded-rows query is the observation control for the one-message window. |
+| Production | `wwyxohjnyqnegzbxtuxs` not queried and not modified. |
+| Identity compat | `webhook_event_id` is the event-identity column (20260929, `uq_intake_queue_webhook_event`). `webhook_message_id` is the 20260927 Message-ID and stays nullable. Compat replaces `intake_queue_pointer_or_webhook_identity` only. Fast ACK still inserts `folder='INBOX'` and `uid` NULL. The revised rollback restores the post-20260927 schema and does not set `uid` NOT NULL. Of the eight columns named in the 20260929 file, only `webhook_message_id` pre-existed. |
+| Expression transport | Live n8n deletes `$'` when a Code node passes SQL through `={{ $json.sql }}`. The mailbox check is still `^[A-Za-z0-9_-]{1,128}$`, written as `~ ('^[A-Za-z0-9_-]{1,128}' || chr(36))`. `quoteLiteral` emits any data `$` as `chr(36)`. There is no `SHA256SUMS` file in this repo. **Locally verified** only. Not re-imported into n8n. Not staging. Not production. |
+| Message-ID duplicate | Fast ACK uses `ON CONFLICT DO NOTHING`, so a later `eventId` for the same tenant, mailbox, and non-NULL `webhook_message_id` inserts no second row and Shape ack returns HTTP 200 `{ ok: true, duplicate: true, intake_id: null }`. Same-`eventId` duplicates stay that shape. Different mailboxes stay independent. NULL Message-IDs are not collapsed. A check failure still aborts and is not reported as a duplicate. **Locally verified** on the throwaway schema after creating `uq_intake_queue_webhook_message`. Not applied to staging. Not imported into n8n. |
+| Mock list dispatch | `Dispatch mock` accepts `list` and falls back to `$('Mock list').isExecuted` before the metadata default. Metadata, text, and source are unchanged. **Locally verified** on the committed mock JSON for `mbx_list_hit1`, `mbx_list_hit3` (including `?page=3&perPage=100`), miss, ambiguous, and the 429 mailbox. Not imported into n8n. |
+| A1 (recorded, not fixed) | Worker hold SQL for `message_id_missing` requires `q.webhook_message_id IS NULL`. A non-NULL whitespace Message-ID would miss that predicate and stay `processing`. Fast ACK stores a blank Message-ID as NULL, so this is a non-blocking defensive defect. |
+| 429 counter | Fast ACK stores `hostinger_pointers.resolution` as the JSON string `"unresolved"`. A 429 reschedule now writes an object counter: 1, then 2, then hold `hostinger_rate_limited`. A string, null, missing, or non-object resolution does not become an array. An object resolution keeps its other keys. A non-429 reschedule does not touch `hostinger_pointers`. **Locally verified** on throwaway Postgres. Not applied to staging. |
+| Worker fetch wiring | `Fetch metadata` still reads `$json.metadata_url` and `$json.timeout_ms` from the Guard passed item. `Fetch text` and `Fetch source` read URL and timeout from `$('Re-guard GET').first().json`, because their input is the previous HTTP fullResponse and has neither field. GET-only, redirect, credential, allowlist, and the live-fetch gate are unchanged. **Locally verified** against the committed worker JSON. Not imported into n8n. |
+| Staging project | Read-only catalog check on 2026-09-30: `20260927154647` and `20260929231456` are recorded on `glkrykpksbsqmmilmjhs`. This compat file is not applied. Production `wwyxohjnyqnegzbxtuxs` was not queried. |
+
+Runbook: [`POINTER_CONTRACT_RUNBOOK.md`](POINTER_CONTRACT_RUNBOOK.md). Decision: TVG-EMAIL-P1-D036.
+
+## Corrective fetch slice (2026-09-25)
+
+| Field | Value |
+|---|---|
+| Branch | `cursor/tvg-email-pass1-corrective-fetch-fff2` |
+| Implementation commit | `5b1b3c04fcd6a39fe37c65d1b77a90154659f954` |
+| Defect-fix commit | `b4f8351b5ffc3f705c53af9d2d695c8330192536` |
+| Baseline | `cursor/tvg-email-pass1-v5-3e46` at `a81b067c1c621a53d2a6a3522fe4da3b5e036478` |
+| Authorization | CC 2026-09-25 14:14 ET. Challenge `CHALLENGE_CONCERNS`, proceed, six acceptance criteria |
+| Evidence | First slice **locally verified** at 57 pass. Defect fix below is **locally verified** at 59 pass, 0 fail (`node --test tvg-email-automation/pass1/test/*.test.mjs`). **Not** re-run on staging. **Not** merged. Real Hostinger retrieval is **not** verified. |
+| Defect fix | After staging smoke execution 3444 (`url_build_failed`, mock 0 requests). URL build and the GET guard no longer use `URL` / `URLSearchParams` / `TextEncoder` / `Buffer`. Mock webhook id is shared (`b1000000-0000-4000-8000-000000000001`); `Dispatch mock` reads the path suffix. Mock JSON stays inactive. One worker run hits all three paths only if Command Center permits activating the mock. |
+| Live fetch | Default base URL `disabled`. `hostinger_live_fetch_enabled` seeds false. GET `/text` marks `\Seen` per Hostinger SDK 1.1.0. |
+| Stuck uid 924150001 | Excluded from claim and left `pending`. Not fetched. |
+| Production | `wwyxohjnyqnegzbxtuxs` not queried and not modified |
+
+Report: [`STAGING_CORRECTIVE_REPORT.md`](STAGING_CORRECTIVE_REPORT.md). Coordinator procedure: [`STAGING_CORRECTIVE_SMOKE_RUNBOOK.md`](STAGING_CORRECTIVE_SMOKE_RUNBOOK.md).
+
+| Field | Value |
+|---|---|
+| Branch | `cursor/tvg-email-pass1-v5-3e46` |
+| Consolidated slice | `417e6a773909151f812d0db9ca0dcef7ee860069` |
+| Consolidated challenge notes | `4b4b1dee6b8f7fabfd6201710cee8862269780f5` |
+| Coordinator register and directive | `00effebf7ca3f0e5c4cf322cc21984c2c58163db` |
+| Operator-preference recipient model | `8666bde7a6a5ec9a5825916ad8f6aaeef240e69d` |
+| Internal SMS amendment | `e0e1b755d81f048bcaa50a789a9780f644b1f361` |
+| Challenge notes | `22084ee8b241a708571078c41e6c4387efc0c27a` |
+| Pass 1 pack | `b2cddc8bee25f36b1b22d81060defe9847f68aa2` |
+| Baseline | `main` at `17f9228951d74824d9b6fb0eb704832befed2afc` |
+| Evidence | **Locally verified** on disposable Postgres 16.15. Staging is 17.6. The incremental file was not applied to staging by this session. Not merged. Not deployed. |
+| Base staging apply | Coordinator evidence in `staging-apply/APPLY_REPORT.md`: `apply/20260924_tvg_email_pass1_v5.sql` applied on `glkrykpksbsqmmilmjhs` on 2026-09-24. Production not touched. This session did not re-query that database and did not re-apply the base file. Incremental SQL is not in that report. |
+| Staging reads | 2026-09-24 read-only SQL on `glkrykpksbsqmmilmjhs` predates the reported base apply. |
+| Production | `wwyxohjnyqnegzbxtuxs` not queried and not modified |
+| Hostinger | Off |
+| Pre-webhook | Closed. See `PRE_WEBHOOK_OPEN_ITEMS.md` |
+| Production gate | Closed |
+
+## Local verification (not staging)
+
+- `node --test tvg-email-automation/pass1/test/*.test.mjs` — 49 pass, including Decision ID status lock TVG-EMAIL-P1-D001 through D035. D029–D035 are documentation. Pass 1 SQL and n8n do not implement send-anyway, a fallback customer send, outbound observation, Handled UI, or IMAP.
+- Disposable Postgres 16.15: base file, then incremental file, then `fixtures/sql/local-smoke.sql` (`SMOKE_OK`), then a second incremental apply (`REAPPLY_OK`). Claims stayed 1. Founder recipients stayed 1. Subscriptions with null escalation stayed 7. `internal_sms_enabled` stayed false. Staging was not queried.
+- Disposable database `tvg_email_pass1` on local PostgreSQL 16.15: stub CRM + base `apply/20260924_tvg_email_pass1_v5.sql` + `apply/20260924_tvg_email_pass1_incremental.sql` + `fixtures/sql/local-smoke.sql` exited 0 (`SMOKE_OK`)
+- Second apply of the incremental file on that database exited 0 (`REAPPLY_OK`). `network_os_assurance_delivery_claims` still had 1 row. `internal_sms_enabled` stayed `false`. `live_notification_started_at` stayed null. `health_alerts_enabled` stayed `false`. `health_checks` had 2 rows. `email_responses` and `email_send_queue` were absent
+- Docker smoke script was not the runner. Staging project was not migrated
+
+## Challenge PASS notes folded
+
+- Hostinger newer-mail and intake-lag checks are mock and dormant until Pre-webhook. The heartbeat does not call the Hostinger API.
+- Unset `live_notification_started_at` records no per-message SMS and at most one backlog summary.
+- `TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md` stays in the repo pack and the return packet.
+- `n8n_email_automation` password was not set at apply. Approved path is the staging SQL editor, then the n8n credential only.
+- Form-filter ordering and open-lead production evidence stay on the Pre-webhook gate. They are not staging blockers.
+- Pass 1 keeps one Founder destination, `founder_mobile_ref`, until the Founder authorizes more recipients.
+- Quiet hours, urgency detection, draft review, and reply voice stay Pass 2 inputs. Urgent candidates stay design notes. Pass 1 has no keyword rules.
+- After-hours acknowledgement stays disabled. That is not permission for general auto-send.
+
+## Decision register
+
+[`decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md`](decision-register/TVG_EMAIL_AUTOMATION_DECISION_REGISTER.md)
+
+Decision IDs TVG-EMAIL-P1-D001 through D035 were copied from the coordinator file. Their statuses were not edited. The full directive is [`directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md`](directives/CC_DIRECTIVE_PASS1_STAGING_CONSOLIDATED_2026-09-24.md). The Founder operator-preference addendum is [`directives/CC_ADDENDUM_FOUNDER_OPERATOR_PREFERENCES_2026-09-24.md`](directives/CC_ADDENDUM_FOUNDER_OPERATOR_PREFERENCES_2026-09-24.md). The unapproved-by-deadline addendum is [`directives/CC_ADDENDUM_UNAPPROVED_BY_DEADLINE_ESCALATION_2026-09-24.md`](directives/CC_ADDENDUM_UNAPPROVED_BY_DEADLINE_ESCALATION_2026-09-24.md). Its challenge verdict is [`directives/CHALLENGE_VERDICT_UNAPPROVED_BY_DEADLINE.md`](directives/CHALLENGE_VERDICT_UNAPPROVED_BY_DEADLINE.md): CHALLENGE_CONCERNS / proceed-with-concerns. D035 is [`directives/CC_ADDENDUM_D035_AUTHORITATIVE_OUTBOUND_OBSERVATION_2026-09-24.md`](directives/CC_ADDENDUM_D035_AUTHORITATIVE_OUTBOUND_OBSERVATION_2026-09-24.md). Its challenge verdict is [`directives/CHALLENGE_VERDICT_D035_OUTBOUND_OBSERVATION.md`](directives/CHALLENGE_VERDICT_D035_OUTBOUND_OBSERVATION.md): CHALLENGE_PASS. Neither verdict authorizes implementation. The operator-preference challenge verdict is [`directives/CHALLENGE_VERDICT_OPERATOR_PREFERENCES.md`](directives/CHALLENGE_VERDICT_OPERATOR_PREFERENCES.md): CHALLENGE_PASS. It does not authorize Hostinger, credential attach, customer SMS, or production mutation. The pack index is [`INDEX.md`](INDEX.md). Coordinator evidence of the base SQL apply is [`staging-apply/APPLY_REPORT.md`](staging-apply/APPLY_REPORT.md): applied on `glkrykpksbsqmmilmjhs` on 2026-09-24; production `wwyxohjnyqnegzbxtuxs` not touched; Hostinger off; PR not merged. This session did not re-apply that SQL and did not re-query staging. The incremental file is not covered by that report. Index copies now present: [`amendments/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md`](amendments/CC_AMENDMENT_INTERNAL_SMS_2026-09-24.md), [`amendments/CHALLENGE_VERDICT_INTERNAL_SMS.md`](amendments/CHALLENGE_VERDICT_INTERNAL_SMS.md), [`CHALLENGE_VERDICT.md`](CHALLENGE_VERDICT.md), and [`CC_VERDICT.md`](CC_VERDICT.md). They were copied as given. This session did not apply SQL, activate Hostinger or n8n, attach SMS, or touch production.
+
+D023 Active is the Pass 1 recipient and configuration model already in this pack: one Founder destination and `configuration_audit`. D024 through D028 stay documentation in [`PASS2_DESIGN_INPUTS.md`](PASS2_DESIGN_INPUTS.md). D028 is Open / Proposed. D029 through D034 are Pass 2 policy and gates. D035 is a Pass 2 observation dependency. Pass 1 impact is none. No eligible-class list, fallback template, escalation, send-anyway path, observation job, Handled UI, or IMAP path was added.
+
+DECISION_REQUIRED:
+
+1. Exact backlog summary sentence. Code uses an implement reading.
+2. Retention of excerpts and attachment metadata. No retention job exists.
+
+OPEN and still Founder-only: SMS credential attach (including proof it cannot send unrestricted customer SMS), A2P 10DLC versus verified toll-free, cost, and the mobile number stays out of git.
+
+## Next action
+
+The corrective SQL is already applied on staging. Re-import `n8n/tvg-email-intake-worker.json` and `n8n/tvg-email-hostinger-mock.json` and follow `STAGING_CORRECTIVE_SMOKE_RUNBOOK.md` section B. Leave the Worker inactive. Do not activate the mock unless Command Center says yes for that window; then deactivate it, set `hostinger_mail_api_base_url` back to `"disabled"`, and set `hostinger_mail_api_allowed_hosts` back to `[]`. The temporary allowlist host is `bhfos.app.n8n.cloud`, not `api.mail.hostinger.com`. `hostinger_live_fetch_enabled` stays false. Do not register a Hostinger webhook. Do not merge.
+
+## Authorization boundary
+
+This change does not merge, does not deploy, does not enable Hostinger, does not activate n8n schedules, does not activate the mock, does not send SMS, and does not create CRM leads. Mock activation for the three-request smoke is a separate Command Center decision.

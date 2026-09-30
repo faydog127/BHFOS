@@ -1,0 +1,112 @@
+{
+  "description": "n8n HTTP Request fullResponse:true responseFormat:text item shape. diag-3445.txt was not in the workspace. The string inside data is JSON.stringify of renderMockHostingerResponse().response_body (the mock Respond-to-Webhook body). Metadata and text strings are the API envelope {\"data\":{...}}. Source string is {\"data\":\"<rfc822>\"}. source_raw_rfc822_application_json keeps that rfc822 string while the header still says application/json.",
+  "exec": 3445,
+  "wrapper_keys": [
+    "data",
+    "headers",
+    "statusCode",
+    "statusMessage"
+  ],
+  "happy_910001": {
+    "metadata": {
+      "data": "{\"data\":{\"uid\":910001,\"path\":\"INBOX\",\"date\":\"Thu, 25 Sep 2026 14:00:00 +0000\",\"flags\":[],\"unseen\":true,\"size\":400,\"subject\":\"Synthetic mock inquiry\",\"from\":{\"name\":\"Pat Customer\",\"address\":\"pat@example.com\"},\"to\":[{\"name\":\"TVG\",\"address\":\"info@vent-guys.com\"}],\"cc\":[],\"bcc\":[],\"messageId\":\"<mock-910001@example.com>\",\"inReplyTo\":null,\"attachments\":[]}}",
+      "headers": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "statusCode": 200,
+      "statusMessage": "OK"
+    },
+    "text": {
+      "data": "{\"data\":{\"text\":\"Hello from mock uid 910001.\",\"html\":\"\"}}",
+      "headers": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "statusCode": 200,
+      "statusMessage": "OK"
+    },
+    "source": {
+      "data": "{\"data\":\"Message-ID: <mock-910001@example.com>\\r\\nDate: Thu, 25 Sep 2026 14:00:00 +0000\\r\\nFrom: Pat Customer <pat@example.com>\\r\\nReply-To: Pat Customer <pat@example.com>\\r\\nTo: TVG <info@vent-guys.com>\\r\\nSubject: Synthetic mock inquiry\\r\\nAuthentication-Results: mock.example; spf=pass smtp.mailfrom=example.com; dkim=pass header.d=example.com; dmarc=pass header.from=example.com\\r\\nMIME-Version: 1.0\\r\\nContent-Type: text/plain; charset=utf-8\\r\\n\\r\\nHello from mock uid 910001.\"}",
+      "headers": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "statusCode": 200,
+      "statusMessage": "OK"
+    },
+    "source_raw_rfc822_application_json": {
+      "data": "Message-ID: <mock-910001@example.com>\r\nDate: Thu, 25 Sep 2026 14:00:00 +0000\r\nFrom: Pat Customer <pat@example.com>\r\nReply-To: Pat Customer <pat@example.com>\r\nTo: TVG <info@vent-guys.com>\r\nSubject: Synthetic mock inquiry\r\nAuthentication-Results: mock.example; spf=pass smtp.mailfrom=example.com; dkim=pass header.d=example.com; dmarc=pass header.from=example.com\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHello from mock uid 910001.",
+      "headers": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "statusCode": 200,
+      "statusMessage": "OK"
+    }
+  },
+  "missing_auth_910601": {
+    "metadata": {
+      "data": "{\"data\":{\"uid\":910601,\"path\":\"INBOX\",\"date\":\"Thu, 25 Sep 2026 14:00:00 +0000\",\"flags\":[],\"unseen\":true,\"size\":400,\"subject\":\"Synthetic mock inquiry\",\"from\":{\"name\":\"Pat Customer\",\"address\":\"pat@example.com\"},\"to\":[{\"name\":\"TVG\",\"address\":\"info@vent-guys.com\"}],\"cc\":[],\"bcc\":[],\"messageId\":\"<mock-910601@example.com>\",\"inReplyTo\":null,\"attachments\":[]}}",
+      "headers": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "statusCode": 200,
+      "statusMessage": "OK"
+    },
+    "text": {
+      "data": "{\"data\":{\"text\":\"Hello from mock uid 910601.\",\"html\":\"\"}}",
+      "headers": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "statusCode": 200,
+      "statusMessage": "OK"
+    },
+    "source": {
+      "data": "{\"data\":\"Message-ID: <mock-910601@example.com>\\r\\nDate: Thu, 25 Sep 2026 14:00:00 +0000\\r\\nFrom: Pat Customer <pat@example.com>\\r\\nReply-To: Pat Customer <pat@example.com>\\r\\nTo: TVG <info@vent-guys.com>\\r\\nSubject: Synthetic mock inquiry\\r\\nMIME-Version: 1.0\\r\\nContent-Type: text/plain; charset=utf-8\\r\\n\\r\\nHello from mock uid 910601.\"}",
+      "headers": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "statusCode": 200,
+      "statusMessage": "OK"
+    },
+    "source_raw_rfc822_application_json": {
+      "data": "Message-ID: <mock-910601@example.com>\r\nDate: Thu, 25 Sep 2026 14:00:00 +0000\r\nFrom: Pat Customer <pat@example.com>\r\nReply-To: Pat Customer <pat@example.com>\r\nTo: TVG <info@vent-guys.com>\r\nSubject: Synthetic mock inquiry\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHello from mock uid 910601.",
+      "headers": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "statusCode": 200,
+      "statusMessage": "OK"
+    }
+  },
+  "missing_message_id_and_date_910602": {
+    "metadata": {
+      "data": "{\"data\":{\"uid\":910602,\"path\":\"INBOX\",\"date\":null,\"flags\":[],\"unseen\":true,\"size\":400,\"subject\":\"Synthetic mock inquiry\",\"from\":{\"name\":\"Pat Customer\",\"address\":\"pat@example.com\"},\"to\":[{\"name\":\"TVG\",\"address\":\"info@vent-guys.com\"}],\"cc\":[],\"bcc\":[],\"messageId\":null,\"inReplyTo\":null,\"attachments\":[]}}",
+      "headers": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "statusCode": 200,
+      "statusMessage": "OK"
+    },
+    "text": {
+      "data": "{\"data\":{\"text\":\"Hello from mock uid 910602.\",\"html\":\"\"}}",
+      "headers": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "statusCode": 200,
+      "statusMessage": "OK"
+    },
+    "source": {
+      "data": "{\"data\":\"From: Pat Customer <pat@example.com>\\r\\nReply-To: Pat Customer <pat@example.com>\\r\\nTo: TVG <info@vent-guys.com>\\r\\nSubject: Synthetic mock inquiry\\r\\nAuthentication-Results: mock.example; spf=pass smtp.mailfrom=example.com; dkim=pass header.d=example.com; dmarc=pass header.from=example.com\\r\\nMIME-Version: 1.0\\r\\nContent-Type: text/plain; charset=utf-8\\r\\n\\r\\nHello from mock uid 910602.\"}",
+      "headers": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "statusCode": 200,
+      "statusMessage": "OK"
+    },
+    "source_raw_rfc822_application_json": {
+      "data": "From: Pat Customer <pat@example.com>\r\nReply-To: Pat Customer <pat@example.com>\r\nTo: TVG <info@vent-guys.com>\r\nSubject: Synthetic mock inquiry\r\nAuthentication-Results: mock.example; spf=pass smtp.mailfrom=example.com; dkim=pass header.d=example.com; dmarc=pass header.from=example.com\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHello from mock uid 910602.",
+      "headers": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "statusCode": 200,
+      "statusMessage": "OK"
+    }
+  }
+}

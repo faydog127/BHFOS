@@ -131,6 +131,38 @@ jobs:
       - name: Control-plane lane activation self-tests
         run: npm run test:control-plane-lane
 
+  tvg_email_pass1:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch the Pass 1 regression commit
+        run: |
+          if ! git cat-file -e 'df42e8ffeccc25a864c8e388b83bc34ea051f6bb^{commit}'; then
+            git fetch --no-tags origin df42e8ffeccc25a864c8e388b83bc34ea051f6bb
+          fi
+          git cat-file -e 'df42e8ffeccc25a864c8e388b83bc34ea051f6bb^{commit}'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.1
+
+      - name: Install PostgreSQL 16
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-16
+          if ! sudo pg_isready -q; then
+            sudo pg_ctlcluster 16 main start
+          fi
+          sudo -u postgres psql -v ON_ERROR_STOP=1 -tAc 'SHOW server_version;'
+
+      - name: TVG Email Pass 1 inactive-workflow and decision tests
+        run: node --test tvg-email-automation/pass1/test/*.test.mjs
+
   build:
     runs-on: ubuntu-latest
     needs: lint

@@ -1,0 +1,140 @@
+{
+  "name": "[STAGING] TVG Email — Notification Dispatcher",
+  "nodes": [
+    {
+      "id": "ee000000-0000-4000-8000-000000000020",
+      "name": "STAGING ONLY / HOSTINGER OFF",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -260
+      ],
+      "parameters": {
+        "content": "Inactive outbox dispatcher. Worker does not send SMS. One-way outbound only: no inbound command path. Twilio node is disabled and disconnected. to reads internal_sms_destination_ref. No phone number in this JSON. Staging credential placeholder only.",
+        "width": 680,
+        "height": 140
+      }
+    },
+    {
+      "id": "ee000000-0000-4000-8000-000000000001",
+      "name": "Manual start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "ee000000-0000-4000-8000-000000000002",
+      "name": "Select queued internal SMS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        280,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  n.id,\n  n.notification_kind,\n  (\n    SELECT s.value_json #>> '{}'\n    FROM email_automation.automation_settings s\n    WHERE s.tenant_id = 'tvg' AND s.key = 'internal_sms_destination_ref'\n  ) AS destination_ref,\n  n.payload_summary,\n  n.delivery_state,\n  NULL::text AS sms_from_credential_only\nFROM email_automation.notification_log n\nWHERE n.tenant_id = 'tvg'\n  AND n.channel = 'internal_sms'\n  AND n.delivery_state = 'queued'\n  AND (n.dispatch_after IS NULL OR n.dispatch_after <= now())\n  AND COALESCE((\n    SELECT s.value_json = 'true'::jsonb\n    FROM email_automation.automation_settings s\n    WHERE s.tenant_id = 'tvg' AND s.key = 'internal_sms_enabled'\n  ), false);",
+        "options": {
+          "alwaysOutputData": true
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "tvg-staging-n8n-email-automation",
+          "name": "TVG Staging n8n_email_automation"
+        }
+      }
+    },
+    {
+      "id": "ee000000-0000-4000-8000-000000000003",
+      "name": "Credential guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        0
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.id);\nif (rows.length) {\n  throw new Error('INTERNAL_SMS_CREDENTIAL_NOT_APPROVED: refusing to hand queued rows to Twilio. Founder approval is required before this guard is removed.');\n}\nreturn [{ json: { handed_to_twilio: false, queued_rows: 0 } }];\n"
+      }
+    },
+    {
+      "id": "ee000000-0000-4000-8000-000000000004",
+      "name": "Twilio send disabled",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        900,
+        220
+      ],
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $json.sms_from_credential_only }}",
+        "to": "={{ $json.destination_ref }}",
+        "message": "={{ $json.payload_summary && $json.payload_summary.sms_text }}",
+        "options": {}
+      },
+      "disabled": true,
+      "credentials": {
+        "twilioApi": {
+          "id": "tvg-internal-sms-twilio-placeholder",
+          "name": "TVG Internal SMS Twilio"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual start": {
+      "main": [
+        [
+          {
+            "node": "Select queued internal SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select queued internal SMS": {
+      "main": [
+        [
+          {
+            "node": "Credential guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "tvgEmailPass1": {
+      "label": "TVG Email Pass 1",
+      "hostinger": "OFF",
+      "schedulesEnabled": false,
+      "projectRef": "glkrykpksbsqmmilmjhs",
+      "productionRefForbidden": "wwyxohjnyqnegzbxtuxs",
+      "credentialScope": "staging-only",
+      "namePrefix": "[STAGING]",
+      "internalSms": "placeholder-credential-not-attached",
+      "smsTransportIsNotSoR": true,
+      "smsDirection": "one-way-outbound",
+      "outbox": "email_automation.notification_log"
+    }
+  },
+  "tags": []
+}

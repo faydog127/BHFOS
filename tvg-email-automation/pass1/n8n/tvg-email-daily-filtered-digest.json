@@ -1,0 +1,152 @@
+{
+  "name": "[STAGING] TVG Email — Daily Filtered Digest",
+  "nodes": [
+    {
+      "id": "dd000000-0000-4000-8000-000000000020",
+      "name": "STAGING ONLY / HOSTINGER OFF",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -240
+      ],
+      "parameters": {
+        "content": "Schedule disabled. No email, Slack, or HTTP send node. Writes a suppressed audit row only. Customer addresses are out of scope.",
+        "width": 560,
+        "height": 120
+      }
+    },
+    {
+      "id": "dd000000-0000-4000-8000-000000000001",
+      "name": "Schedule disabled",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        160
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "disabled": true
+    },
+    {
+      "id": "dd000000-0000-4000-8000-000000000002",
+      "name": "Manual start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "dd000000-0000-4000-8000-000000000003",
+      "name": "Count filtered",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        300,
+        40
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT count(*) FROM email_automation.email_events\n    WHERE tenant_id = 'tvg' AND status IN ('filtered', 'system_lessen')\n      AND created_at > now() - interval '1 day') AS filtered_count,\n  (SELECT value_json FROM email_automation.automation_settings\n    WHERE tenant_id = 'tvg' AND key = 'daily_filtered_digest_enabled') AS digest_enabled,\n  (SELECT value_json FROM email_automation.automation_settings\n    WHERE tenant_id = 'tvg' AND key = 'daily_filtered_digest_destination') AS destination;",
+        "options": {
+          "alwaysOutputData": true
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "tvg-staging-n8n-email-automation",
+          "name": "TVG Staging n8n_email_automation"
+        }
+      }
+    },
+    {
+      "id": "dd000000-0000-4000-8000-000000000004",
+      "name": "Record suppressed digest",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        620,
+        40
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO email_automation.notification_log (\n  tenant_id, kind, notification_kind, channel, destination_ref, payload_summary, status, delivery_state\n)\nSELECT\n  'tvg',\n  'daily_filtered_digest',\n  'daily_filtered_digest',\n  'internal_digest',\n  'suppressed_pre_webhook',\n  jsonb_build_object('delivery', 'not_sent', 'reason', 'pre_webhook_closed'),\n  'suppressed_pre_webhook',\n  'recorded_not_sent'\nWHERE (\n  SELECT value_json FROM email_automation.automation_settings\n  WHERE tenant_id = 'tvg' AND key = 'daily_filtered_digest_enabled'\n) IS DISTINCT FROM 'true'::jsonb\nOR (\n  SELECT value_json FROM email_automation.automation_settings\n  WHERE tenant_id = 'tvg' AND key = 'daily_filtered_digest_destination'\n) = 'null'::jsonb\nOR (\n  SELECT value_json FROM email_automation.automation_settings\n  WHERE tenant_id = 'tvg' AND key = 'daily_filtered_digest_destination'\n) IS NULL;",
+        "options": {
+          "alwaysOutputData": true
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "tvg-staging-n8n-email-automation",
+          "name": "TVG Staging n8n_email_automation"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual start": {
+      "main": [
+        [
+          {
+            "node": "Count filtered",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule disabled": {
+      "main": [
+        [
+          {
+            "node": "Count filtered",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count filtered": {
+      "main": [
+        [
+          {
+            "node": "Record suppressed digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "tvgEmailPass1": {
+      "label": "TVG Email Pass 1",
+      "hostinger": "OFF",
+      "schedulesEnabled": false,
+      "projectRef": "glkrykpksbsqmmilmjhs",
+      "productionRefForbidden": "wwyxohjnyqnegzbxtuxs",
+      "credentialScope": "staging-only",
+      "namePrefix": "[STAGING]"
+    }
+  },
+  "tags": []
+}
