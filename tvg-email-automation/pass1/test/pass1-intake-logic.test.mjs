@@ -252,7 +252,7 @@ test('malformed envelope plans a 400 and no insert', () => {
   });
   assert.equal(ok.http_status, 200);
   assert.match(ok.sql, /INSERT INTO email_automation\.intake_queue/);
-  assert.match(ok.sql, /ON CONFLICT \(tenant_id, webhook_event_id\)/);
+  assert.match(ok.sql, /ON CONFLICT DO NOTHING/);
   assert.doesNotMatch(ok.sql, /email_events|email_responses|email_send_queue/);
 });
 

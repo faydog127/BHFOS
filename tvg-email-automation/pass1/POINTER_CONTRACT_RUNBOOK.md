@@ -51,7 +51,7 @@ The Reconcile workflow stays inactive. Its schedule node is `disabled: true` (`S
 
 - [ ] Founder sends one email. CC re-enables the webhook.
 - [ ] At every checkpoint in this window, run the read-only query `apply/20260929_tvg_email_pass1_stranded_rows.sql` and paste the result on the card. It lists held rows, error rows, processing rows past `stale_processing_ttl_minutes`, and pending rows with `next_attempt_at` NULL older than 10 minutes, including rows whose `email_event_id` is NULL. Manual observation is the control for this one-message window. Do not add a Founder notification from this query.
-- [ ] Checkpoint 1: exactly one new `intake_queue` row, `resolution_status='unresolved'`, `webhook_event_id` set. A duplicate `eventId` adds no row.
+- [ ] Checkpoint 1: exactly one new `intake_queue` row, `resolution_status='unresolved'`, `webhook_event_id` set. A duplicate `eventId` adds no row. A later `eventId` for the same mailbox and non-NULL Message-ID also adds no row.
 - [ ] If a missing-Message-ID row exists, it stays `pending` until the manual Worker run, then `held` / `message_id_missing`, one `automation_errors` row, and zero Hostinger calls.
 - [ ] One manual Worker run: resolved uid matches the Hostinger UI, and the existing fetch path completes.
 - [ ] If any checkpoint fails, CC disables the webhook first.

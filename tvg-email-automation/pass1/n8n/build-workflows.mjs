@@ -1236,8 +1236,11 @@ if (!mock_kind) {
 if (!mock_kind) {
   try { if ($('Mock text').isExecuted) mock_kind = 'text'; } catch (error) { /* parent not run */ }
 }
+if (!mock_kind) {
+  try { if ($('Mock list').isExecuted) mock_kind = 'list'; } catch (error) { /* parent not run */ }
+}
 if (!mock_kind) mock_kind = 'metadata';
-if (mock_kind !== 'metadata' && mock_kind !== 'text' && mock_kind !== 'source') {
+if (mock_kind !== 'metadata' && mock_kind !== 'text' && mock_kind !== 'source' && mock_kind !== 'list') {
   return [{ json: { http_status: 404, response_body: { error: 'not_found' }, timeout: false, mock_kind: 'rejected' } }];
 }
 return [{ json: { ...item, params, mock_kind, uid: params.uid || '' } }];

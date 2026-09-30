@@ -865,7 +865,11 @@ ins AS (
     jsonb_build_object('source', 'fast_ack_envelope_v2', 'resolution', 'unresolved')
   FROM cfg
   WHERE ${mailboxResourceIdAcceptedSql('cfg.mailbox_resource_id')}
-  ON CONFLICT (tenant_id, webhook_event_id) DO NOTHING
+  -- One INSERT can name only one conflict target. Omitting the target
+  -- covers uq_intake_queue_webhook_event and the partial
+  -- uq_intake_queue_webhook_message. Check failures still abort.
+  -- uid stays NULL, so the pointer unique index does not apply.
+  ON CONFLICT DO NOTHING
   RETURNING id, status
 )
 SELECT

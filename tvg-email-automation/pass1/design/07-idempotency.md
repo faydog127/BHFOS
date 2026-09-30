@@ -29,7 +29,7 @@
 
 ### 2.1 Envelope event id (pointer contract)
 
-`message.received` Fast ACK also inserts on `(tenant_id, webhook_event_id)`. A redelivered `eventId` is a 200 duplicate and does not reset a held row. Many legacy rows keep `webhook_event_id` NULL, and many unresolved rows keep `uid` NULL; NULLs are distinct in the plain unique indexes, so both populations coexist. The legacy pointer unique index is unchanged. A resolution write that collides on that pointer index marks the new row `duplicate` and does not fetch. Any other unique violation is re-raised. Date is never an identity or match key.
+`message.received` Fast ACK also inserts on `(tenant_id, webhook_event_id)`. A redelivered `eventId` is a 200 duplicate and does not reset a held row. A later `eventId` for the same tenant, mailbox, and non-NULL `webhook_message_id` is the same 200 duplicate and does not insert a second row. NULL Message-IDs stay distinct. A check failure or other non-unique error still aborts. Many legacy rows keep `webhook_event_id` NULL, and many unresolved rows keep `uid` NULL; NULLs are distinct in the plain unique indexes, so both populations coexist. The legacy pointer unique index is unchanged. A resolution write that collides on that pointer index marks the new row `duplicate` and does not fetch. Any other unique violation is re-raised. Date is never an identity or match key.
 
 ---
 

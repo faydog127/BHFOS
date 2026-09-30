@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 import { planFastAck } from '../lib/pass1-intake-logic.mjs';
 import {
   buildManualReresolveSql,
@@ -598,6 +599,121 @@ SELECT count(*) FROM pg_proc p
   JOIN pg_namespace n ON n.oid = p.pronamespace
  WHERE n.nspname = 'email_automation' AND p.proname = 'resolve_intake_uid';
 `), '1');
+
+  must(DB, `
+UPDATE email_automation.automation_settings
+   SET value_json = '{"info@vent-guys.com":"mbx_fast","other@vent-guys.com":"mbx_other"}'::jsonb
+ WHERE tenant_id = 'tvg' AND key = 'hostinger_mailbox_map';
+UPDATE email_automation.intake_queue AS q
+   SET webhook_message_id = NULL
+  FROM (
+    SELECT id
+      FROM (
+        SELECT id,
+               row_number() OVER (
+                 PARTITION BY tenant_id, mailbox, webhook_message_id
+                 ORDER BY id
+               ) AS rn
+          FROM email_automation.intake_queue
+         WHERE webhook_message_id IS NOT NULL
+      ) ranked
+     WHERE rn > 1
+  ) extra
+ WHERE q.id = extra.id;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_intake_queue_webhook_message
+  ON email_automation.intake_queue (tenant_id, mailbox, webhook_message_id)
+  WHERE webhook_message_id IS NOT NULL;
+`);
+  const shapeCode = JSON.parse(readFileSync(join(root, 'n8n/tvg-email-intake-fast-ack.json'), 'utf8'))
+    .nodes.find((node) => node.name === 'Shape ack').parameters.jsCode;
+  const shapeAck = (sqlResult) => {
+    const [mailboxOk, intakeId, status] = sqlResult.split('|');
+    const row = {
+      mailbox_ok: Number(mailboxOk),
+      intake_id: intakeId || null,
+      status: status || null,
+    };
+    const out = vm.runInNewContext(`(function () {\n${shapeCode}\n})()`, {
+      $input: { all() { return [{ json: row }]; } },
+    }, { timeout: 2000 });
+    return out[0].json;
+  };
+  const assertRespondShape = (shaped, { duplicate, intakeId }) => {
+    assert.equal(typeof shaped.http_status, 'number');
+    assert.equal(shaped.http_status, 200);
+    assert.equal(typeof shaped.response_body, 'object');
+    assert.equal(shaped.response_body.ok, true);
+    assert.equal(shaped.response_body.duplicate, duplicate);
+    assert.equal(shaped.response_body.intake_id, intakeId);
+  };
+  const first = must(DB, planFastAck(envelope({
+    eventId: 'evt-f14-a',
+    envelopeId: 'env-f14-a',
+    messageId: '<f14-same@example.com>',
+  })).sql);
+  const firstId = first.split('|')[1];
+  assertRespondShape(shapeAck(first), { duplicate: false, intakeId: firstId });
+  const sameEvent = must(DB, planFastAck(envelope({
+    eventId: 'evt-f14-a',
+    envelopeId: 'env-f14-a-again',
+    messageId: '<f14-same@example.com>',
+  })).sql);
+  assertRespondShape(shapeAck(sameEvent), { duplicate: true, intakeId: null });
+  const otherEvent = must(DB, planFastAck(envelope({
+    eventId: 'evt-f14-b',
+    envelopeId: 'env-f14-b',
+    messageId: '<f14-same@example.com>',
+  })).sql);
+  assertRespondShape(shapeAck(otherEvent), { duplicate: true, intakeId: null });
+  assert.equal(must(DB, `
+SELECT count(*) FROM email_automation.intake_queue
+ WHERE mailbox = 'info@vent-guys.com' AND webhook_message_id = '<f14-same@example.com>';
+`), '1');
+  const otherBox = must(DB, planFastAck({
+    event: 'message.received',
+    id: 'env-f14-other',
+    timestamp: '2026-09-29T12:00:00.000Z',
+    data: {
+      eventId: 'evt-f14-other-box',
+      mailboxAddress: 'other@vent-guys.com',
+      messageId: '<f14-same@example.com>',
+    },
+  }).sql);
+  assert.equal(otherBox.split('|')[0], '1');
+  assert.ok(otherBox.split('|')[1]);
+  assert.equal(must(DB, `
+SELECT count(*) FROM email_automation.intake_queue
+ WHERE webhook_message_id = '<f14-same@example.com>';
+`), '2');
+  must(DB, planFastAck(envelope({
+    eventId: 'evt-f14-null-1',
+    envelopeId: 'env-f14-null-1',
+  })).sql);
+  must(DB, planFastAck(envelope({
+    eventId: 'evt-f14-null-2',
+    envelopeId: 'env-f14-null-2',
+    messageId: '   ',
+  })).sql);
+  assert.equal(must(DB, `
+SELECT count(*) FROM email_automation.intake_queue
+ WHERE webhook_event_id IN ('evt-f14-null-1', 'evt-f14-null-2')
+   AND webhook_message_id IS NULL;
+`), '2');
+  must(DB, `
+ALTER TABLE email_automation.intake_queue
+  ADD CONSTRAINT f14_test_reject_boom CHECK (webhook_event_id IS DISTINCT FROM 'evt-f14-boom');
+`);
+  const boom = mustFail(DB, planFastAck(envelope({
+    eventId: 'evt-f14-boom',
+    envelopeId: 'env-f14-boom',
+    messageId: '<f14-boom@example.com>',
+  })).sql);
+  assert.match(boom, /f14_test_reject_boom/);
+  assert.doesNotMatch(boom, /duplicate: true/);
+  assert.equal(must(DB, `
+SELECT count(*) FROM email_automation.intake_queue WHERE webhook_event_id = 'evt-f14-boom';
+`), '0');
+  must(DB, 'ALTER TABLE email_automation.intake_queue DROP CONSTRAINT f14_test_reject_boom;');
 
   must(DB, 'DELETE FROM email_automation.intake_queue WHERE uid IS NULL;');
   must(DB, rollbackSql, [LATCH]);

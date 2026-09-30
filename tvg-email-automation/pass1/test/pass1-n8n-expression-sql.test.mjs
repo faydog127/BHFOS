@@ -226,7 +226,7 @@ test('generated SQL from the Pass 1 builders survives n8n expression transport',
   assert.match(fast, /'INBOX'/);
   assert.match(fast, /\n {4}NULL,\n {4}'/);
   assert.match(fast, /webhook_event_id/);
-  assert.match(fast, /ON CONFLICT \(tenant_id, webhook_event_id\)/);
+  assert.match(fast, /ON CONFLICT DO NOTHING/);
   const reresolve = fixtures.find(([label]) => label === 'manual reresolve')[1];
   assert.match(reresolve, /hostinger_timeout\|hostinger_upstream_error/);
   assert.equal(reresolve.includes('$'), false);
