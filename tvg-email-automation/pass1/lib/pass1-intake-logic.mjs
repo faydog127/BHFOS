@@ -739,7 +739,9 @@ SET ${pointerMerge}
       WHEN chosen.was_existing THEN 'duplicate'::email_automation.intake_queue_status
       ELSE ${quoteLiteral(input.queue_status)}::email_automation.intake_queue_status
     END,
-    hold_reason = ${input.hold_reason ? quoteLiteral(input.hold_reason) : 'NULL'}
+    hold_reason = ${input.hold_reason ? quoteLiteral(input.hold_reason) : 'NULL'},
+    locked_at = NULL,
+    locked_by = NULL
 FROM chosen
 WHERE q.id = ${quoteLiteral(queueId)}::uuid
   AND q.tenant_id = 'tvg'

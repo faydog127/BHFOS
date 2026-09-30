@@ -26,8 +26,8 @@ Execution 3520 (Fast ACK, 2026-09-26 00:42:37 ET, HTTP 400 `pointer_incomplete`)
 
 - [ ] Fast ACK: success none, error none, manual none. Read back after import.
 - [ ] Worker automatic success and error saves are none.
-- [ ] **Activation-gate item:** set the Worker's `saveManualExecutions` to **false** in the live workflow UI and in the repo JSON for the activation build. Read it back and screenshot it. The staging JSON in this slice ships `true` on purpose.
-- [ ] Re-read `saveManualExecutions` after any later re-import of the Worker JSON. A re-import of the staging JSON can restore `true`.
+- [ ] Worker `saveManualExecutions` ships **false** in the repo JSON. Read it back after import. It is already false.
+- [ ] Re-read `saveManualExecutions` after any later re-import of the Worker JSON. This artifact keeps it false.
 - [ ] The Worker execution list is empty, or every listed manual run is under 24 hours old, with an ID-only purge record.
 - [ ] Any manual or debug Worker run is purged within 24 hours. A saved manual run holds PII (list envelopes and fetched bodies).
 - [ ] 3520 purge confirmed done (ID-only record). No inspection step.

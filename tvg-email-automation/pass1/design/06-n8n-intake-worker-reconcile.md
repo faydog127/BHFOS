@@ -147,7 +147,7 @@ Otherwise an unresolved row takes `route='resolve'`: `GET /api/v1/mailboxes/{id}
 
 Claim skips `pending` rows whose `next_attempt_at` is in the future. A missing-Message-ID row has no `next_attempt_at` and is legitimately alertable while it waits for a Worker run. Rows still inside the resolve window are exempt from that pending-SLA idea. The health heartbeat still counts every `pending` row; wiring the exemption into the heartbeat is outside this slice.
 
-Retention on the Worker JSON: automatic success and error saves are `none`. `saveManualExecutions` ships `true` for staging and must be set `false` before controlled live activation. Fast ACK ships manual saves `false`.
+Retention on the Worker JSON: automatic success and error saves are `none`. `saveManualExecutions` ships `false`. Fast ACK ships manual saves `false`.
 
 Stale reconcile (`apply/reconcile_stale_to_hold.sql`) still holds a stale `processing` row as `stale_processing`. It does not return a crashed unresolved NULL-Message-ID claim to `pending`. That file is outside this slice. Recovery is a human return to `pending`; the next claim holds `message_id_missing` before any Hostinger call. The hold statement itself is atomic, so a failed error insert leaves the row `processing`.
 

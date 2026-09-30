@@ -7,7 +7,9 @@
 WITH stale AS (
   UPDATE email_automation.intake_queue q
   SET status = 'held',
-      hold_reason = 'stale_processing'
+      hold_reason = 'stale_processing',
+      locked_at = NULL,
+      locked_by = NULL
   WHERE q.tenant_id = 'tvg'
     AND q.status = 'processing'
     AND q.locked_at IS NOT NULL
