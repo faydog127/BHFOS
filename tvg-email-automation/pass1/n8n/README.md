@@ -16,6 +16,8 @@ Every workflow name starts with `[STAGING] `. This pack has no `[PROD]` workflow
 
 Regenerate JSON with `node tvg-email-automation/pass1/n8n/build-workflows.mjs` after changing `lib/pass1-intake-logic.mjs`, `lib/pass1-internal-sms.mjs`, or `lib/pass1-ops-policy.mjs`.
 
+SQL that a Code node returns into a Postgres `={{ $json.sql }}` query must not contain `$`. n8n applies JavaScript replacement patterns on that path, so `$'` is deleted before Postgres parses the text. The mailbox-id check is still `^[A-Za-z0-9_-]{1,128}$`, written as `~ ('^[A-Za-z0-9_-]{1,128}' || chr(36))`. Data values that contain `$` are quoted with `chr(36)` as well.
+
 Import into n8n and leave every workflow inactive. Do not register the webhook with Hostinger. Do not enable the schedule nodes.
 
 Credential name expected after a future staging setup: `TVG Staging n8n_email_automation`. The JSON does not contain a password. Webhook bearer comparison reads `HOSTINGER_WEBHOOK_SECRET` from the n8n environment and fails closed when it is unset. Do not put that secret in git.

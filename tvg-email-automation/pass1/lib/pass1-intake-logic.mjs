@@ -139,7 +139,13 @@ export function quoteLiteral(value) {
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
   const text = String(value);
   if (text.includes('\u0000')) throw new Error('NUL not allowed');
-  return `'${text.replace(/'/g, "''")}'`;
+  const quoted = (part) => `'${part.replace(/'/g, "''")}'`;
+  if (!text.includes('$')) return quoted(text);
+  // n8n substitutes Code-node SQL with JavaScript replacement patterns.
+  // $$ $& $` $' and $n are rewritten before Postgres sees the query.
+  // A value ending in $ becomes $' once the closing quote is added.
+  // chr(36) keeps the same text and leaves no $ character in the SQL.
+  return `(${text.split('$').map(quoted).join(' || chr(36) || ')})`;
 }
 
 function requireUuid(value) {
@@ -810,6 +816,15 @@ export function normalizeWebhookEnvelope(body) {
   };
 }
 
+// Same rule as ^[A-Za-z0-9_-]{1,128}$. The anchor is chr(36), not a $
+// sitting immediately before the closing quote. n8n deletes that $'.
+function mailboxResourceIdAcceptedSql(columnSql) {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/.test(columnSql)) {
+    throw new Error('mailbox column sql must be a bare identifier');
+  }
+  return `${columnSql} ~ ('^[A-Za-z0-9_-]{1,128}' || chr(36))`;
+}
+
 function buildEnvelopeInsertSql(envelope) {
   const messageSql = envelope.message_id == null ? 'NULL' : quoteLiteral(envelope.message_id);
   return `
@@ -849,12 +864,12 @@ ins AS (
     END,
     jsonb_build_object('source', 'fast_ack_envelope_v2', 'resolution', 'unresolved')
   FROM cfg
-  WHERE cfg.mailbox_resource_id ~ '^[A-Za-z0-9_-]{1,128}$'
+  WHERE ${mailboxResourceIdAcceptedSql('cfg.mailbox_resource_id')}
   ON CONFLICT (tenant_id, webhook_event_id) DO NOTHING
   RETURNING id, status
 )
 SELECT
-  (SELECT count(*) FROM cfg WHERE mailbox_resource_id ~ '^[A-Za-z0-9_-]{1,128}$')::int AS mailbox_ok,
+  (SELECT count(*) FROM cfg WHERE ${mailboxResourceIdAcceptedSql('mailbox_resource_id')})::int AS mailbox_ok,
   (SELECT id FROM ins) AS intake_id,
   (SELECT status FROM ins) AS status;
 `.trim();
