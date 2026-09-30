@@ -863,7 +863,7 @@ const worker = workflow(
   '[STAGING] TVG Email Intake — Worker',
   [
     nodeBase('bb000000-0000-4000-8000-000000000020', 'STAGING ONLY / HOSTINGER OFF', 'n8n-nodes-base.stickyNote', 1, 0, -280, {
-      content: 'Inactive. No schedule. Synthetic rows skip HTTP. Unresolved rows are resolved with a literal GET list before metadata, text, and source. Base URL defaults to disabled, never the live API. api.mail.hostinger.com also requires hostinger_live_fetch_enabled. Listing and metadata do not mark Seen. GET /source does, so a fetched live message becomes Seen. /text stays. No unread restore. Non-synthetic uid 924150001 is excluded from claim and is not fetched. Manual executions may be saved on this staging build and must be turned off before controlled live activation. No Twilio. No customer send.',
+      content: 'Inactive. No schedule. Synthetic rows skip HTTP. Unresolved rows are resolved with a literal GET list before metadata, text, and source. Base URL defaults to disabled, never the live API. api.mail.hostinger.com also requires hostinger_live_fetch_enabled. Listing and metadata do not mark Seen. GET /source does, so a fetched live message becomes Seen. /text stays. No unread restore. Non-synthetic uid 924150001 is excluded from claim and is not fetched. Manual execution saving is off. No Twilio. No customer send.',
       width: 760,
       height: 180,
     }),
@@ -954,13 +954,13 @@ const worker = workflow(
 worker.meta.tvgEmailPass1.hostingerFetch = 'get-only-mock-or-disabled';
 worker.meta.tvgEmailPass1.liveFetchDefault = false;
 worker.meta.hostinger = 'OFF';
-worker.meta.retention = 'success-none-error-none-manual-true-staging';
+worker.meta.retention = 'success-none-error-none-manual-false';
 worker.meta.readState = 'GET /source marks Seen; listing and metadata do not; no unread restore; /text kept';
 worker.settings = {
   executionOrder: 'v1',
   saveDataSuccessExecution: 'none',
   saveDataErrorExecution: 'none',
-  saveManualExecutions: true,
+  saveManualExecutions: false,
 };
 
 const reconcileMap = {};

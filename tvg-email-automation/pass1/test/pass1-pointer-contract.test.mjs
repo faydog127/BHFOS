@@ -529,7 +529,17 @@ test('T19 retention settings', () => {
   assert.equal(fast.settings.saveManualExecutions, false);
   assert.equal(worker.settings.saveDataSuccessExecution, 'none');
   assert.equal(worker.settings.saveDataErrorExecution, 'none');
-  assert.equal(worker.settings.saveManualExecutions, true);
+  assert.equal(worker.settings.saveManualExecutions, false);
+  assert.equal(worker.meta.retention, 'success-none-error-none-manual-false');
+  const note = worker.nodes.find((node) => node.name === 'STAGING ONLY / HOSTINGER OFF').parameters.content;
+  assert.match(note, /Manual execution saving is off/);
+  assert.equal(note.includes('must be turned off'), false);
+});
+
+test('Worker artifact does not emit saveManualExecutions true', () => {
+  const worker = JSON.parse(readFileSync(join(root, 'n8n/tvg-email-intake-worker.json'), 'utf8'));
+  assert.equal(worker.settings.saveManualExecutions, false);
+  assert.equal(JSON.stringify(worker.settings).includes('"saveManualExecutions":true'), false);
 });
 
 test('T21 schedule is not preempted by attempt_count and future retries are skipped', () => {

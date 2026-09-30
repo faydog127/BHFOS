@@ -466,6 +466,8 @@ WITH closed AS (
   SET status = ${quoteLiteral(queueStatus)}::email_automation.intake_queue_status,
       hold_reason = ${quoteLiteral(holdReason)},
       last_error = ${quoteLiteral(detail)},
+      locked_at = NULL,
+      locked_by = NULL,
       hostinger_pointers = COALESCE(q.hostinger_pointers, '{}'::jsonb) || jsonb_build_object(
         'fetch_base_url', ${quoteLiteral(fetchBaseUrl)}::text,
         'fetch_mode', 'closed'::text,
