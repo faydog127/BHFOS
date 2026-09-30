@@ -1182,14 +1182,23 @@ RETURNING intake_queue_id;
 function rescheduleResolveSql(queueId, minutes, rateConsumed) {
   const mins = Number(minutes);
   if (!Number.isInteger(mins) || mins <= 0) throw new Error('backoff rejected');
-  const pointerSql = rateConsumed == null
-    ? ''
-    : `,
+  let pointerSql = '';
+  if (rateConsumed != null) {
+    const consumed = Number(rateConsumed);
+    if (!Number.isInteger(consumed) || consumed < 0) throw new Error('rate limit counter rejected');
+    // A string (Fast ACK stores "unresolved") is not an object. jsonb || would
+    // wrap it into a growing array, and the cap would never see the counter.
+    pointerSql = `,
       hostinger_pointers = COALESCE(q.hostinger_pointers, '{}'::jsonb) || jsonb_build_object(
-        'resolution', COALESCE(q.hostinger_pointers->'resolution', '{}'::jsonb) || jsonb_build_object(
-          'rate_limit_consumed', ${Number(rateConsumed)}::int
+        'resolution', CASE
+          WHEN jsonb_typeof(q.hostinger_pointers->'resolution') = 'object'
+            THEN q.hostinger_pointers->'resolution'
+          ELSE '{}'::jsonb
+        END || jsonb_build_object(
+          'rate_limit_consumed', ${consumed}::int
         )
       )`;
+  }
   return `
 UPDATE email_automation.intake_queue q
 SET status = 'pending'::email_automation.intake_queue_status,

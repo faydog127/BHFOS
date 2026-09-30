@@ -623,14 +623,16 @@ function routeIf(id, name, x, y, route) {
   });
 }
 
-function hostingerGetNode(id, name, x, y, urlField) {
+function hostingerGetNode(id, name, x, y, urlField, planFrom = 'input') {
+  const fromReguard = planFrom === 'reguard';
+  const plan = fromReguard ? "$('Re-guard GET').first().json" : '$json';
   return nodeBase(id, name, 'n8n-nodes-base.httpRequest', 4.2, x, y, {
     method: 'GET',
-    url: `={{ $json.${urlField} }}`,
+    url: `={{ ${plan}.${urlField} }}`,
     authentication: 'genericCredentialType',
     genericAuthType: 'httpHeaderAuth',
     options: {
-      timeout: '={{ $json.timeout_ms }}',
+      timeout: `={{ ${plan}.timeout_ms }}`,
       redirect: { redirect: { followRedirects: false, maxRedirects: 0 } },
       response: {
         response: {
@@ -643,7 +645,9 @@ function hostingerGetNode(id, name, x, y, urlField) {
   }, {
     credentials: hostingerCredential,
     onError: 'continueRegularOutput',
-    notes: 'GET only. URL comes from the guarded plan. After resolution that plan is Replan. No live token in this file.',
+    notes: fromReguard
+      ? 'GET only. URL and timeout come from Re-guard GET. The previous HTTP item has neither. No live token in this file.'
+      : 'GET only. URL comes from the guarded plan on this item. No live token in this file.',
   });
 }
 
@@ -933,8 +937,8 @@ const worker = workflow(
       },
     }),
     hostingerGetNode('bb000000-0000-4000-8000-00000000000c', 'Fetch metadata', 1680, -300, 'metadata_url'),
-    hostingerGetNode('bb000000-0000-4000-8000-00000000000d', 'Fetch text', 1960, -300, 'text_url'),
-    hostingerGetNode('bb000000-0000-4000-8000-00000000000e', 'Fetch source', 2240, -300, 'source_url'),
+    hostingerGetNode('bb000000-0000-4000-8000-00000000000d', 'Fetch text', 1960, -300, 'text_url', 'reguard'),
+    hostingerGetNode('bb000000-0000-4000-8000-00000000000e', 'Fetch source', 2240, -300, 'source_url', 'reguard'),
     codeNode('bb000000-0000-4000-8000-00000000000f', 'Normalize fetch', 2520, -300, workerNormalize),
     routeIf('bb000000-0000-4000-8000-000000000010', 'Is closed hold', 1120, 180, 'hold'),
     codeNode('bb000000-0000-4000-8000-000000000011', 'Closed hold', 1400, 180, workerClosed),

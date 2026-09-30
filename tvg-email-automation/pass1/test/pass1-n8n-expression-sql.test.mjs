@@ -161,6 +161,15 @@ function generatedSqlFixtures() {
       settings: resolveSettings,
       evaluation: { resolved: false, retry: true, matches: [], stop_reason: 'no_match', pages_scanned: 1, total: 0 },
     }).sql],
+    ['resolve 429 reschedule', buildResolveWriteSql({
+      queueRow: {
+        id: QUEUE,
+        resolve_attempts: 0,
+        hostinger_pointers: { resolution: 'unresolved' },
+      },
+      settings: resolveSettings,
+      evaluation: { resolved: false, retry: true, matches: [], stop_reason: 'rate_limited', pages_scanned: 1, total: 0 },
+    }).sql],
     ['resolve hold', buildResolveWriteSql({
       queueRow: { id: QUEUE, resolve_attempts: 5, hostinger_pointers: {} },
       settings: resolveSettings,

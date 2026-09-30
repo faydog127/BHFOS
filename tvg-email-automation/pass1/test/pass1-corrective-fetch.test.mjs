@@ -286,9 +286,14 @@ test('worker HTTP nodes are GET-only and the mock workflow stays inactive', () =
   }
   const listNode = httpNodes.find((node) => node.name === 'List page');
   assert.equal(listNode.parameters.url, '={{ $json.list_url }}');
-  for (const node of httpNodes.filter((item) => item.name !== 'List page')) {
-    assert.match(node.parameters.url, /\$json\.(metadata_url|text_url|source_url)/);
-    assert.doesNotMatch(node.parameters.url, /\$\('Plan route'\)/);
+  const metadataNode = httpNodes.find((node) => node.name === 'Fetch metadata');
+  assert.equal(metadataNode.parameters.url, '={{ $json.metadata_url }}');
+  assert.equal(metadataNode.parameters.options.timeout, '={{ $json.timeout_ms }}');
+  for (const [name, field] of [['Fetch text', 'text_url'], ['Fetch source', 'source_url']]) {
+    const node = httpNodes.find((item) => item.name === name);
+    assert.equal(node.parameters.url, `={{ $('Re-guard GET').first().json.${field} }}`);
+    assert.equal(node.parameters.options.timeout, "={{ $('Re-guard GET').first().json.timeout_ms }}");
+    assert.doesNotMatch(node.parameters.url, /\$json\./);
   }
   assert.match(worker.nodes.find((node) => node.name === 'Normalize fetch').parameters.jsCode, /Replan/);
   assert.equal(mock.nodes.some((node) => node.type === 'n8n-nodes-base.httpRequest'), false);
@@ -320,9 +325,9 @@ test('worker HTTP nodes are GET-only and the mock workflow stays inactive', () =
   assert.match(JSON.stringify(worker), /assertHostingerGetRequest/);
   assert.doesNotMatch(JSON.stringify(worker), /new URL\(|URLSearchParams/);
   for (const node of httpNodes.filter((item) => item.name !== 'List page')) {
-    assert.match(node.parameters.url, /\$json\.(metadata_url|text_url|source_url)/);
     assert.doesNotMatch(node.parameters.url, /hostinger_pointers|queue_row/);
     assert.doesNotMatch(node.parameters.url, /\$\('Plan route'\)/);
+    assert.match(node.parameters.url, /metadata_url|text_url|source_url/);
   }
   assert.match(worker.nodes.find((node) => node.name === 'Claim pending').parameters.query, /924150001/);
   const blob = `${JSON.stringify(worker)}\n${JSON.stringify(mock)}`;
