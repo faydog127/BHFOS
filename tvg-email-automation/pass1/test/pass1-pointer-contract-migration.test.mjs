@@ -159,6 +159,7 @@ test('M1–M8 and SQL-backed pointer-contract checks on throwaway Postgres', () 
   assert.equal((rollbackSql.match(/^BEGIN;/m) || []).length, 1);
   assert.equal((rollbackSql.match(/^COMMIT;/m) || []).length, 1);
   assert.equal(/attempt_count\s*<=/.test(migrationSql.replace(/--[^\n]*/g, '')), false);
+  assert.equal(/SET\s+NOT\s+NULL/i.test(rollbackExecutable), false);
 
   recreate(DB_M1);
   must(DB_M1, STUB);
@@ -606,7 +607,8 @@ SELECT count(*) FROM pg_proc p
   assert.equal(must(DB, `
 SELECT is_nullable FROM information_schema.columns
  WHERE table_schema = 'email_automation' AND table_name = 'intake_queue' AND column_name = 'uid';
-`), 'NO');
+`), 'YES');
+  assert.equal(columnExists(DB, 'webhook_message_id'), true);
   assert.equal(must(DB, `
 SELECT count(*) FROM pg_proc p
   JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -617,11 +619,11 @@ SELECT count(*) FROM email_automation.automation_settings
  WHERE key IN ('hostinger_mailbox_map','resolve_max_pages','resolve_lookback_hours',
                'resolve_max_attempts','resolve_backoff_minutes','resolve_429_max_consumed');
 `), '0');
-  assert.match(must(DB, `
+  assert.equal(must(DB, `
 SELECT col_description('email_automation.intake_queue'::regclass,
   (SELECT attnum FROM pg_attribute
     WHERE attrelid = 'email_automation.intake_queue'::regclass AND attname = 'uid'));
-`), /Locator only, not durable identity/);
+`), 'Hostinger message UID as bigint. Locator only — not durable identity.');
   assert.equal(must(DB, `
 SELECT count(*) FROM email_automation.intake_queue WHERE uid IS NOT NULL;
 `), '6');

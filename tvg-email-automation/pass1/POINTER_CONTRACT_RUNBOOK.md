@@ -12,7 +12,8 @@ Execution 3520 (Fast ACK, 2026-09-26 00:42:37 ET, HTTP 400 `pointer_incomplete`)
 
 ## Gate 1 — staging database (⛔)
 
-- [ ] Apply `apply/20260929_tvg_email_pass1_pointer_contract.sql` only on `glkrykpksbsqmmilmjhs`, with the staging latch set. Counts stay 19 / 10 / 13, and all 19 existing queue rows are `legacy_pointer`.
+- [ ] Apply `apply/20260929_tvg_email_pass1_pointer_contract.sql` only on `glkrykpksbsqmmilmjhs`, with the staging latch set, if it is not already recorded. A read-only catalog check on 2026-09-30 found staging migration `20260929231456` (`tvg_email_pass1_pointer_contract_20260929`) already recorded. Counts stay 19 / 10 / 13, and all 19 existing queue rows are `legacy_pointer`.
+- [ ] Then apply `apply/20260929b_tvg_email_pass1_pointer_identity_compat.sql` in the same kind of latched session. It replaces `intake_queue_pointer_or_webhook_identity` only. Fast ACK SQL is unchanged: it still inserts `folder='INBOX'` and `uid` NULL. That row is legal when `webhook_event_id` is present, including a missing Message-ID. The validated check does not use `NOT VALID`. A lock timeout or a violating row fails the whole transaction.
 - [ ] `hostinger_mailbox_map` is `{}`. A Fast ACK dry check returns 422.
 - [ ] No dry check may send a missing-Message-ID payload to a real (non-mock) endpoint. That payload creates a `pending` row and is not held until a Worker run.
 - [ ] ⛔ Seed the map before Fast ACK is published and before the webhook is re-enabled: `{"info@vent-guys.com":"AC8c52a994840722513e7cf775afb3"}`. Read it back. The migration must not be the thing that writes this value.
@@ -72,7 +73,11 @@ A row that does not match is left unchanged and the transaction rolls back.
 
 ## Rollback
 
-`apply/20260929_tvg_email_pass1_pointer_contract_ROLLBACK.sql` is one transaction. Immediately after `BEGIN` it sets `lock_timeout` to 5 seconds. It locks `intake_queue` in `ACCESS EXCLUSIVE` mode before it checks for NULL uids, and it locks `automation_settings` before it deletes the six migration-owned keys. It refuses while any `uid` is NULL.
+The earlier rollback text is superseded. Do not run a rollback that drops `webhook_message_id` or executes `ALTER COLUMN uid SET NOT NULL`. That would destroy the 2026-09-27 identity column and the nullable folder/uid pair that staging already had.
+
+`apply/20260929_tvg_email_pass1_pointer_contract_ROLLBACK.sql` is the one rollback for both the 2026-09-29 pointer-contract migration and `apply/20260929b_tvg_email_pass1_pointer_identity_compat.sql`. It returns the schema to the post-20260927 / pre-20260929 state. It is one transaction. Immediately after `BEGIN` it sets `lock_timeout` to 5 seconds. It locks `intake_queue` in `ACCESS EXCLUSIVE` mode before it checks for NULL uids, and it locks `automation_settings` before it deletes the six migration-owned keys. It refuses while any `uid` is NULL.
+
+It preserves `webhook_message_id`, `uq_intake_queue_webhook_message`, and `uq_intake_queue_webhook_pointer`. It removes `uq_intake_queue_webhook_event` because that index is from 2026-09-29. Folder and uid stay nullable. It restores the 2026-09-27 definition of `intake_queue_pointer_or_webhook_identity` and the 2026-09-27 `webhook_message_id` comment. It removes only the seven columns added in 2026-09-29 (`webhook_event_id`, `webhook_envelope_id`, `webhook_event_at`, `resolution_status`, `resolved_at`, `resolve_attempts`, `next_attempt_at`), the four constraints those columns required, `idx_intake_queue_next_attempt`, `resolve_intake_uid`, and the six settings. `webhook_message_id` already existed in `20260927154647` and is not one of those seven.
 
 A lock timeout fails closed. The transaction rolls back. Do not assume a partial rollback. Reconcile the live state and retry only in a quiescent window: no `processing` rows, Worker and Fast ACK inactive, webhook disabled.
 

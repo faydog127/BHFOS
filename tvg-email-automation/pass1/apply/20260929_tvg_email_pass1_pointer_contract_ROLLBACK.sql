@@ -1,10 +1,17 @@
 -- =============================================================================
--- NOT APPLIED. Files only. Rollback for 20260929_tvg_email_pass1_pointer_contract.sql.
+-- NOT APPLIED. Rollback for 20260929_tvg_email_pass1_pointer_contract.sql
+-- and 20260929b_tvg_email_pass1_pointer_identity_compat.sql together.
+-- Returns the database to the post-20260927 / pre-20260929 shape.
 -- STAGING ONLY. One atomic transaction.
+-- SUPERSEDES the earlier text of this file. Do not run a rollback that
+-- DROP COLUMN webhook_message_id or ALTER COLUMN uid SET NOT NULL.
 -- ACCESS EXCLUSIVE on intake_queue is taken BEFORE the NULL-uid check and held
 -- until the transaction ends. automation_settings is locked before the settings delete.
--- Refuses to run while any row has uid IS NULL (an unresolved pointer would be lost or
--- violate NOT NULL). Export those rows, then resolve or delete them by explicit CC action.
+-- Refuses to run while any row has uid IS NULL. Export those rows first.
+-- Preserves webhook_message_id, uq_intake_queue_webhook_message,
+-- uq_intake_queue_webhook_pointer, and nullable folder and uid.
+-- Restores the 20260927 intake_queue_pointer_or_webhook_identity definition
+-- and the 20260927 webhook_message_id comment, both verbatim.
 -- =============================================================================
 
 BEGIN;
@@ -40,19 +47,29 @@ ALTER TABLE email_automation.intake_queue
   DROP CONSTRAINT IF EXISTS intake_queue_resolution_status_chk;
 
 ALTER TABLE email_automation.intake_queue
+  DROP CONSTRAINT IF EXISTS intake_queue_pointer_or_webhook_identity;
+
+ALTER TABLE email_automation.intake_queue
+  ADD CONSTRAINT intake_queue_pointer_or_webhook_identity
+  CHECK (
+    (folder IS NULL) = (uid IS NULL)
+    AND (folder IS NOT NULL OR webhook_message_id IS NOT NULL)
+  );
+
+ALTER TABLE email_automation.intake_queue
   DROP COLUMN IF EXISTS next_attempt_at,
   DROP COLUMN IF EXISTS resolve_attempts,
   DROP COLUMN IF EXISTS resolved_at,
   DROP COLUMN IF EXISTS resolution_status,
-  DROP COLUMN IF EXISTS webhook_message_id,
   DROP COLUMN IF EXISTS webhook_event_at,
   DROP COLUMN IF EXISTS webhook_envelope_id,
   DROP COLUMN IF EXISTS webhook_event_id;
 
-ALTER TABLE email_automation.intake_queue ALTER COLUMN uid SET NOT NULL;
-
 COMMENT ON COLUMN email_automation.intake_queue.uid IS
-  'Hostinger message UID as bigint. Locator only, not durable identity.';
+  'Hostinger message UID as bigint. Locator only — not durable identity.';
+COMMENT ON COLUMN email_automation.intake_queue.webhook_message_id IS
+  'Exact RFC Message-ID from an authenticated webhook, before folder/UID resolution. '
+  'Not a Hostinger API pointer. Worker resolves and verifies one match before content fetch.';
 
 LOCK TABLE email_automation.automation_settings IN ACCESS EXCLUSIVE MODE;
 
