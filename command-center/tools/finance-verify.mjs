@@ -69,6 +69,29 @@ function report(id, pass) {
   if (!pass) failed += 1;
 }
 
+function expectationCount(expected) {
+  if (!expected || typeof expected !== 'object' || Array.isArray(expected)) return 0;
+  let count = 0;
+  const groups = [expected.stages, expected.services];
+  for (const group of groups) {
+    if (!group || typeof group !== 'object' || Array.isArray(group)) continue;
+    for (const entry of Object.values(group)) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+      count += Object.keys(entry).length;
+    }
+  }
+  const controls = expected.controls;
+  if (controls && typeof controls === 'object' && !Array.isArray(controls)) {
+    count += Object.keys(controls).length;
+  }
+  return count;
+}
+
+function finish() {
+  process.stdout.write(`${lines.join('\n')}\n`);
+  process.exit(failed === 0 ? 0 : 1);
+}
+
 async function main() {
   const filePath = process.argv[2];
   lines.push('finance:verify');
@@ -77,21 +100,23 @@ async function main() {
   lines.push(`tolerance.hours=${HOURS}`);
   if (!filePath) {
     report('section15.input_path', false);
-    process.stdout.write(`${lines.join('\n')}\n`);
-    process.exit(1);
+    finish();
   }
   let document;
   try {
     document = JSON.parse(readFileSync(filePath, 'utf8'));
   } catch {
     report('section15.input_parse', false);
-    process.stdout.write(`${lines.join('\n')}\n`);
-    process.exit(1);
+    finish();
   }
-  if (!document || typeof document !== 'object' || !document.inputs || !document.expected) {
+  if (!document || typeof document !== 'object' || Array.isArray(document) || !document.inputs) {
     report('section15.document_shape', false);
-    process.stdout.write(`${lines.join('\n')}\n`);
-    process.exit(1);
+    finish();
+  }
+  if (expectationCount(document.expected) === 0) {
+    report('section15.expected_nonempty', false);
+    lines.push('section15.expected_nonempty reason=empty_or_missing');
+    finish();
   }
   const require = createRequire(import.meta.url);
   const calculateUrl = pathToFileURL(require.resolve('../src/lib/finance/calculate.js')).href;
@@ -150,8 +175,7 @@ async function main() {
     report(`section15.control.${metric}`, valuesMatch(controls[metric], expectedValue, metric));
   }
   report('section15.summary', failed === 0);
-  process.stdout.write(`${lines.join('\n')}\n`);
-  process.exit(failed === 0 ? 0 : 1);
+  finish();
 }
 
 main();

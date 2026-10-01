@@ -1,10 +1,11 @@
 /**
  * Synthetic planning checks. Values are the illustration fixture, not workbook seeds.
- * Run: node --test tests/unit/finance-planning.test.mjs
+ * Run: npm run test:finance
  */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -221,11 +222,17 @@ describe('readiness and variance', () => {
 });
 
 describe('finance authorization', () => {
-  function token(appRole, appTenant, userRole) {
+  function token(appRole, appTenant, userRole, userTenant) {
     const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+    const appMetadata = {};
+    if (appRole !== undefined) appMetadata.role = appRole;
+    if (appTenant !== undefined) appMetadata.tenant_id = appTenant;
+    const userMetadata = {};
+    if (userRole !== undefined) userMetadata.role = userRole;
+    if (userTenant !== undefined) userMetadata.tenant_id = userTenant;
     return `${encode({ alg: 'none', typ: 'JWT' })}.${encode({
-      app_metadata: { role: appRole, tenant_id: appTenant },
-      user_metadata: { role: userRole },
+      app_metadata: appMetadata,
+      user_metadata: userMetadata,
     })}.sig`;
   }
 
@@ -245,6 +252,40 @@ describe('finance authorization', () => {
     const decoded = jwtDecode(token('owner', 'tvg', 'admin'));
     assert.equal(decoded.user_metadata.role, 'admin');
     assert.equal(evaluateFinanceAccess({ accessToken: token('owner', 'tvg', 'admin'), routeTenantId: 'tvg' }).allowed, false);
+  });
+
+  it('does not fall back to user_metadata.role', () => {
+    for (const appRole of [undefined, '']) {
+      const access = evaluateFinanceAccess({
+        accessToken: token(appRole, 'tvg', 'admin'),
+        routeTenantId: 'tvg',
+      });
+      assert.equal(access.allowed, false);
+      assert.notEqual(access.role, 'admin');
+    }
+  });
+
+  it('does not fall back to user_metadata.tenant_id', () => {
+    for (const appTenant of [undefined, '']) {
+      const access = evaluateFinanceAccess({
+        accessToken: token('admin', appTenant, 'viewer', 'tvg'),
+        routeTenantId: 'tvg',
+      });
+      assert.equal(access.allowed, false);
+      assert.notEqual(access.sessionTenantId, 'tvg');
+    }
+  });
+
+  it('rejects an array-valued role', () => {
+    for (const appRole of [['admin'], ['super_admin', 'admin']]) {
+      const access = evaluateFinanceAccess({
+        accessToken: token(appRole, 'tvg', 'viewer'),
+        routeTenantId: 'tvg',
+      });
+      assert.equal(access.allowed, false);
+      assert.notEqual(access.role, 'admin');
+      assert.notEqual(access.role, 'super_admin');
+    }
   });
 
   it('refuses the illustration unless both tenants are tvg', () => {
@@ -294,6 +335,31 @@ describe('verify script and source guards', () => {
     assert.match(run.stdout, /section15\.summary PASS/);
     assert.equal(run.stdout.includes('1490.476'), false);
     assert.equal(run.stdout.includes('3104.761'), false);
+  });
+
+  it('fails when expectations are empty or missing', () => {
+    const script = path.join(root, 'tools/finance-verify.mjs');
+    const source = JSON.parse(readFileSync(path.join(root, 'src/lib/finance/synthetic-planning.json'), 'utf8'));
+    const dir = mkdtempSync(path.join(tmpdir(), 'finance-verify-'));
+    const cases = [
+      { name: 'missing', document: { inputs: source.inputs } },
+      { name: 'empty', document: { inputs: source.inputs, expected: {} } },
+      { name: 'empty-groups', document: { inputs: source.inputs, expected: { stages: {}, services: {}, controls: {} } } },
+      { name: 'empty-stage', document: { inputs: source.inputs, expected: { stages: { stage_0: {} } } } },
+    ];
+    try {
+      for (const item of cases) {
+        const file = path.join(dir, `${item.name}.json`);
+        writeFileSync(file, JSON.stringify(item.document));
+        const run = spawnSync(process.execPath, [script, file], { encoding: 'utf8' });
+        assert.notEqual(run.status, 0, item.name);
+        assert.match(run.stdout, /section15\.expected_nonempty FAIL/, item.name);
+        assert.match(run.stdout, /reason=empty_or_missing/, item.name);
+        assert.equal(run.stdout.includes('section15.summary PASS'), false, item.name);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('keeps finance authority off client role and tenant helpers', () => {
