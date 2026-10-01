@@ -7,6 +7,7 @@
     "dev": "vite --host :: --port 3000",
     "prebuild": "node tools/generate-llms.js || node -e \"process.exit(0)\"",
     "lint": "eslint src",
+    "finance:verify": "node tools/finance-verify.mjs",
     "build": "node tools/build-production.mjs && node tools/generate-build-info.mjs --environment=production",
     "build:prod": "node tools/build-production.mjs && node tools/generate-build-info.mjs --environment=production",
     "build:local": "vite build && node tools/generate-build-info.mjs",

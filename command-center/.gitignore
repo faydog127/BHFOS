@@ -43,6 +43,9 @@ test-results/
 # Local scratch / artifacts (do not version)
 ########################################
 tmp/
+# Private finance verification JSON. Real workbook values never belong in git.
+tmp/finance-private/
+*.finance-private.json
 archive/
 artifacts/*
 !artifacts/runs/
