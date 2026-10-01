@@ -50,6 +50,22 @@ The escalation packet must identify:
 
 Do not send a generic "what next?" or "please ACK" request.
 
+
+
+## 2A. Approval routing to Founder
+
+Grok / Coordinator must not send approval candidates directly to the Founder by default.
+
+Approval routing is:
+
+**Builder / Reviewer → Grok / Coordinator → Command Center → Founder only when Command Center determines Founder authority is required.**
+
+Founder-required decisions should be batched whenever delay does not create immediate material risk.
+
+See `FOUNDER_APPROVAL_ROUTING_AND_BATCHING_PROTOCOL_DRAFT.md`.
+
+A repeated request for a decision that is already durably recorded is a process defect, not a new approval gate.
+
 ## 3. Localized blocking
 
 A blocked decision pauses only the work that actually depends on that decision.
