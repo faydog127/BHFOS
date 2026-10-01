@@ -255,3 +255,24 @@ For every finding include:
 6. whether existing authority can resolve it without Founder escalation.
 
 Do not request Founder input for routine architecture or wording choices that can be resolved under existing governance.
+
+
+### 14. Repository / supply-chain / malware security
+
+Review `SECURITY_BASELINE_DRAFT.md` and pressure-test:
+
+- repository privacy and the security-feature tradeoffs of moving a personal-account repository from public to private;
+- branch protection and required security checks;
+- immutable SHA pinning for GitHub Actions;
+- minimal workflow token permissions;
+- dependency and package-supply-chain controls;
+- secret scanning / push protection equivalents if GitHub-native private-repo features are unavailable;
+- SAST / CodeQL or equivalent;
+- file / attachment quarantine and malware scanning;
+- inbound email / prompt-injection boundaries;
+- auth, RBAC, RLS / data scope, and domain authorization;
+- connector credential storage;
+- financial-security controls;
+- incident response, backup and restore.
+
+A functional PASS is not sufficient if the security baseline is materially unmet.
