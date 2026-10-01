@@ -3,7 +3,8 @@
 Steps 1–6 of the TVG financial planning model, under the 2026-10-01 Command Center Option B ruling.
 
 - Branch: `cursor/tvg-finance-steps-1-6-a117`
-- Baseline: `17f9228951d74824d9b6fb0eb704832befed2afc` (`origin/main` at start; no drift)
+- Baseline: `17f9228951d74824d9b6fb0eb704832befed2afc` (ancestor of this branch)
+- Code commit: `d8ce7d97a29c66b109722022bab107486aca3528`
 - Evidence tier: **locally verified** on synthetic fixtures. Not deployed, not staging-verified, not merged, not production-verified.
 - Route: `/:tenantId/finance/*` → `TenantGuard` → `FinanceGuard` → `FinanceShell`. The shell is not inside `BHFCrmLayout`.
 - Data: synthetic illustration only (`SYNTHETIC — NOT TVG DATA`). No workbook seeds in git.
