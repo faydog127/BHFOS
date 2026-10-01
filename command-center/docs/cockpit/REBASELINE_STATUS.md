@@ -65,6 +65,22 @@ It remains historical approved evidence of the prior direction until formally su
 15. New implementation packet
 16. Explicit coding activation before Cursor implementation
 
+## Founder attention
+
+**Current status: NONE REQUIRED.**
+
+No unresolved Founder decision is blocking the Cockpit re-baseline at this time.
+
+Current lane posture:
+
+- Cockpit PR #165: draft planning/governance re-baseline; no implementation code authorized yet.
+- Finance PR #164: draft / DO NOT MERGE; Steps 1-6 only; no persistence or production activation.
+- Email PR #162: draft / unmerged; no assumption of live customer-send capability.
+
+Next work may continue without Founder interruption: product-definition rewrite, workflow/domain modeling, Finance and Communications contracts, connector feasibility, challenge review, and Definition of Ready preparation.
+
+Founder escalation is required only if a later issue crosses the governed Founder-only boundary.
+
 ## Command Center process correction
 
 Command Center shall be treated as a decision authority, not a synchronous ACK dependency.
