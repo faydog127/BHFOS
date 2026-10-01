@@ -86,3 +86,18 @@ Founder escalation is required only if a later issue crosses the governed Founde
 Command Center shall be treated as a decision authority, not a synchronous ACK dependency.
 
 See `COMMAND_CENTER_CONTINUITY_PROTOCOL_DRAFT.md`.
+
+
+## Security workstream
+
+Security is now a first-class Cockpit release gate.
+
+Current verified repo visibility: **public**.
+
+Founder intent: move `faydog127/BHFOS` to **private** if feasible and preserve or replace the security controls that public visibility currently provides.
+
+Current connector limitation: ChatGPT's GitHub connector does not expose repository-visibility mutation, so the visibility change cannot be executed from this interface.
+
+Security baseline: `SECURITY_BASELINE_DRAFT.md`.
+
+Before production authorization, require evidence for supply-chain security, dependency scanning, secret scanning, SAST, attachment malware handling, auth / RBAC / RLS, connector credential protection, financial controls, audit, backups, and incident response.
