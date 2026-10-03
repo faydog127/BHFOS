@@ -551,7 +551,7 @@ export default function FinanceShell({ grantedAccess }) {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h1 className="text-2xl font-semibold">{section === 'checkin' ? 'Monthly Check-In' : mode === 'executive' ? 'Executive' : mode === 'advanced' ? 'Advanced Analytics' : FINANCE_SECTIONS.find((item) => (item.path || 'overview') === section)?.label}</h1>
-              <p className="mt-1 text-sm text-slate-600">{mode === 'guided' ? 'What this section is, what you can change, and what the formulas return.' : 'Read from the plan on this screen and Monthly Check-In. Switching mode does not save.'}</p>
+              <p className="mt-1 text-sm text-slate-600" data-testid="finance-header-copy">{mode === 'guided' || section === 'checkin' ? 'What this section is, what you can change, and what the formulas return.' : 'Read from the plan on this screen and Monthly Check-In. Switching mode does not save.'}</p>
             </div>
             {planReady && section !== 'checkin' ? (
               <label className="text-sm text-slate-600">
@@ -586,9 +586,11 @@ export default function FinanceShell({ grantedAccess }) {
           {planReady && section !== 'checkin' && mode !== 'guided' && (dirty || conflict) ? (
             <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" data-testid="finance-unsaved-in-readonly-mode">
               {conflict
-                ? 'Changed elsewhere. Your unsaved edits are kept in Guided. These figures include them.'
+                ? (dirty
+                  ? 'Changed elsewhere. Your unsaved edits are kept in Guided. These figures include them.'
+                  : 'Changed elsewhere. Return to Guided to reload the latest plan.')
                 : 'These figures include unsaved edits. Return to Guided to save or discard them.'}
-              <button type="button" className="ml-3 underline" onClick={() => selectFinanceMode('guided')}>Open Guided</button>
+              <button type="button" className="ml-3 inline-flex min-h-11 items-center underline" onClick={() => selectFinanceMode('guided')}>Open Guided</button>
             </div>
           ) : null}
           {planReady && section !== 'checkin' && mode === 'executive' ? (
@@ -631,8 +633,10 @@ export default function FinanceShell({ grantedAccess }) {
           </label>
           {conflict ? (
             <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" data-testid="finance-version-conflict">
-              Changed elsewhere. Your unsaved edits are still on this screen.
-              <button type="button" className="ml-3 underline" data-testid="finance-reload" onClick={refreshPlans}>Reload</button>
+              {dirty
+                ? 'Changed elsewhere. Your unsaved edits are still on this screen.'
+                : 'Changed elsewhere. Reload to replace this screen with the latest plan.'}
+              <button type="button" className="ml-3 inline-flex min-h-11 items-center underline" data-testid="finance-reload" onClick={refreshPlans}>Reload</button>
             </div>
           ) : null}
           {saveCode ? <p className="mb-4 text-sm text-red-700" data-testid="finance-save-error">{saveCode}</p> : null}
@@ -658,7 +662,7 @@ export default function FinanceShell({ grantedAccess }) {
           </fieldset>
           </>
           ) : null}
-          {mode === 'guided' ? (
+          {mode === 'guided' || section === 'checkin' ? (
             <div className="mt-8 flex justify-between text-sm">
               <SectionLink sections={FINANCE_SECTIONS} current={section} base={base} direction={-1} label="Back" />
               <SectionLink sections={FINANCE_SECTIONS} current={section} base={base} direction={1} label="Next" />

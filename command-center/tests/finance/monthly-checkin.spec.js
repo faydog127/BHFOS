@@ -16,6 +16,15 @@ async function shot(page, name) {
   await page.screenshot({ path: `${out}/${name}.png`, fullPage: true });
 }
 
+async function assertNoDocumentOverflow(page) {
+  const widths = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    innerWidth: window.innerWidth,
+  }));
+  expect(widths.scrollWidth).toBeLessThanOrEqual(widths.innerWidth);
+  return widths;
+}
+
 async function assertModeSwitchWritesNothing(page) {
   const writes = [];
   const onRequest = (request) => {
@@ -135,6 +144,7 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: `${out}/mobile-checkin.png`, fullPage: true });
+  await assertNoDocumentOverflow(page);
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/tvg/finance');
@@ -158,6 +168,8 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await shot(page, 'dirty-executive-desktop');
   await page.setViewportSize({ width: 390, height: 844 });
   await shot(page, 'dirty-executive-mobile');
+  const dirtyBanner = await page.getByTestId('finance-unsaved-in-readonly-mode').getByRole('button', { name: 'Open Guided' }).boundingBox();
+  expect(dirtyBanner.height).toBeGreaterThanOrEqual(44);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByTestId('finance-mode-advanced').click();
   await expect(page.getByTestId('finance-unsaved-in-readonly-mode')).toContainText('These figures include unsaved edits');
@@ -196,12 +208,27 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await page.screenshot({ path: `${out}/desktop-partial-basis.png`, fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: `${out}/mobile-partial-basis.png`, fullPage: true });
+  await assertNoDocumentOverflow(page);
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/tvg/finance');
   await expect(page.getByTestId('finance-shell')).toHaveAttribute('data-mode', 'guided');
   await assertModeSwitchWritesNothing(page);
   await page.getByTestId('finance-mode-executive').click();
+  await page.getByRole('navigation', { name: 'Planning sections' }).getByRole('link', { name: 'Monthly Check-In' }).click();
+  await expect(page).toHaveURL(/\/finance\/checkin$/);
+  await expect(page.getByTestId('finance-shell')).toHaveAttribute('data-mode', 'executive');
+  await expect(page.getByTestId('finance-mode')).toHaveCount(0);
+  await expect(page.getByTestId('finance-header-copy')).toContainText('What this section is, what you can change, and what the formulas return.');
+  await expect(page.getByTestId('finance-header-copy')).not.toContainText('Switching mode does not save');
+  await shot(page, 'checkin-after-executive-desktop');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await shot(page, 'checkin-after-executive-mobile');
+  await assertNoDocumentOverflow(page);
+  await page.locator('aside label select').selectOption('');
+  await expect(page).toHaveURL(/\/finance$/);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.getByTestId('finance-shell')).toHaveAttribute('data-mode', 'executive');
   await expect(page.getByTestId('finance-save')).toHaveCount(0);
   await expect(page.getByTestId('finance-unsaved-in-readonly-mode')).toHaveCount(0);
   await expect(page.getByTestId('finance-edit-in-guided')).toContainText('approved plan: use New draft to edit');
@@ -250,6 +277,31 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await other.getByTestId('finance-save').click();
   await otherSave;
   await other.close();
+  await page.getByTestId('finance-approve').click();
+  await expect(page.getByTestId('finance-version-conflict')).toBeVisible();
+  await expect(page.getByTestId('finance-version-conflict')).not.toContainText('unsaved edits');
+  await page.getByTestId('finance-mode-executive').click();
+  await expect(page.getByTestId('finance-unsaved-in-readonly-mode')).toContainText('Return to Guided to reload the latest plan');
+  await expect(page.getByTestId('finance-unsaved-in-readonly-mode')).not.toContainText('unsaved edits');
+  await shot(page, 'conflict-clean-executive-desktop');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await shot(page, 'conflict-clean-executive-mobile');
+  const cleanBanner = await page.getByTestId('finance-unsaved-in-readonly-mode').getByRole('button', { name: 'Open Guided' }).boundingBox();
+  expect(cleanBanner.height).toBeGreaterThanOrEqual(44);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole('button', { name: 'Open Guided' }).click();
+  await expect(page.getByTestId('finance-version-conflict')).toBeVisible();
+  await page.getByTestId('finance-reload').click();
+  await expect(page.getByTestId('finance-version-conflict')).toHaveCount(0);
+  await expect(page.locator('textarea')).toHaveValue('server note');
+  const later = await page.context().newPage();
+  await later.goto('/tvg/finance');
+  await expect(later.getByTestId('finance-save')).toBeVisible();
+  await later.locator('textarea').fill('server note 2');
+  const laterSave = later.waitForResponse((res) => res.url().includes('/finance_plans') && res.request().method() === 'PATCH' && res.ok());
+  await later.getByTestId('finance-save').click();
+  await laterSave;
+  await later.close();
   await page.locator('textarea').fill('local note');
   await page.getByTestId('finance-save').click();
   await expect(page.getByTestId('finance-version-conflict')).toBeVisible();
@@ -262,14 +314,14 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   };
   page.on('request', onConflictRequest);
   await page.getByTestId('finance-mode-executive').click();
-  await expect(page.getByTestId('finance-unsaved-in-readonly-mode')).toContainText('Changed elsewhere');
+  await expect(page.getByTestId('finance-unsaved-in-readonly-mode')).toContainText('Your unsaved edits are kept in Guided');
   await expect(page.getByTestId('finance-version-conflict')).toHaveCount(0);
-  await shot(page, 'conflict-executive-desktop');
+  await shot(page, 'conflict-dirty-executive-desktop');
   await page.setViewportSize({ width: 390, height: 844 });
-  await shot(page, 'conflict-executive-mobile');
+  await shot(page, 'conflict-dirty-executive-mobile');
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByTestId('finance-mode-advanced').click();
-  await expect(page.getByTestId('finance-unsaved-in-readonly-mode')).toContainText('Changed elsewhere');
+  await expect(page.getByTestId('finance-unsaved-in-readonly-mode')).toContainText('Your unsaved edits are kept in Guided');
   await page.getByRole('button', { name: 'Open Guided' }).click();
   await expect(page.getByTestId('finance-version-conflict')).toBeVisible();
   await expect(page.locator('textarea')).toHaveValue('local note');
