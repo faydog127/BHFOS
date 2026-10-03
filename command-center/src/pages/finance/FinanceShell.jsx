@@ -273,6 +273,7 @@ export default function FinanceShell({ grantedAccess }) {
       setActualsCode(null);
       setActuals(actualList.actuals);
     }
+    return actualList;
   }
 
   async function onCreateActual(payload) {

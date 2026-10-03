@@ -7,13 +7,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/components/ui/use-toast";
 import { 
     Loader2, TrendingUp, TrendingDown, DollarSign, Users, Briefcase, 
-    Star, ThumbsUp, AlertTriangle, Calendar, Download, PieChart, BarChart2 
+    Star, Calendar, Download
 } from "lucide-react";
-import { format, subDays, startOfMonth, startOfYear, endOfDay, isWithinInterval, parseISO } from 'date-fns';
+import { format, subDays, startOfYear, endOfDay, parseISO } from 'date-fns';
 import {
-    LineChart, Line, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell,
-    XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+    LineChart, Line, BarChart, Bar,
+    XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
+
+const NOT_CONNECTED = 'unavailable / not connected';
 
 const MetricCard = ({ title, value, subtext, trend, icon: Icon, trendValue, color = "blue" }) => {
     const isPositive = trend === 'up';
@@ -59,19 +61,14 @@ export default function AnalyticsDashboard() {
     const tenantId = getTenantId();
     
     const [metrics, setMetrics] = useState({
-        revenue: { total: 0, growth: 0 },
-        jobs: { count: 0, avgDuration: 0 },
-        leads: { total: 0, conversionRate: 0 },
-        reviews: { avgRating: 0, count: 0 },
-        sentiment: { healthScore: 0, breakdown: [] },
-        customers: { total: 0, repeatRate: 0 }
+        revenue: { total: 0 },
+        jobs: { count: 0 },
+        leads: { total: 0, conversionRate: 0 }
     });
 
     const [charts, setCharts] = useState({
         revenueTrend: [],
         jobsByStatus: [],
-        leadSource: [],
-        sentimentDist: [],
         partnerPerformance: []
     });
 
@@ -126,16 +123,9 @@ export default function AnalyticsDashboard() {
             const revenueTotal = completedJobs.reduce((sum, job) => sum + (job.pricing_snapshot?.price || 0), 0);
             
             const jobsCount = completedJobs.length;
-            const avgDuration = completedJobs.length > 0 ? 75 : 0; 
 
             const totalLeads = leads?.length || 0;
             const conversionRate = totalLeads > 0 ? ((jobsCount / totalLeads) * 100).toFixed(1) : 0;
-
-            const sentimentData = [
-                { name: 'Promoter', value: 65, color: '#22c55e' },
-                { name: 'Neutral', value: 25, color: '#eab308' },
-                { name: 'Detractor', value: 10, color: '#ef4444' }
-            ];
 
             const partnerStats = {};
             referrals?.forEach(ref => {
@@ -154,18 +144,14 @@ export default function AnalyticsDashboard() {
             const revenueTrendData = Object.entries(revenueByDay).map(([date, amount]) => ({ date, amount }));
 
             setMetrics({
-                revenue: { total: revenueTotal, growth: 12.5 },
-                jobs: { count: jobsCount, avgDuration },
-                leads: { total: totalLeads, conversionRate },
-                reviews: { avgRating: 4.8, count: 24 },
-                sentiment: { healthScore: 88, breakdown: sentimentData },
-                customers: { total: 1250, repeatRate: 32 }
+                revenue: { total: revenueTotal },
+                jobs: { count: jobsCount },
+                leads: { total: totalLeads, conversionRate }
             });
 
             setCharts({
                 revenueTrend: revenueTrendData,
                 partnerPerformance: partnerChartData,
-                sentimentDist: sentimentData,
                 jobsByStatus: [
                     { name: 'Completed', value: jobsCount },
                     { name: 'Cancelled', value: appointments?.filter(a => a.status === 'cancelled').length || 0 },
@@ -183,7 +169,7 @@ export default function AnalyticsDashboard() {
 
     const handleExport = () => {
         const headers = ["Date", "Metric", "Value"];
-        const rows = charts.revenueTrend.map(r => [r.date, "Revenue", r.amount]);
+        const rows = charts.revenueTrend.map(r => [r.date, "Scheduled appointment price", r.amount]);
         
         let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
         const encodedUri = encodeURI(csvContent);
@@ -233,20 +219,20 @@ export default function AnalyticsDashboard() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <MetricCard 
-                    title="Total Revenue" 
+                    title="Scheduled appointment price" 
                     value={`$${metrics.revenue.total.toLocaleString()}`} 
-                    subtext="vs previous period"
-                    trend="up"
-                    trendValue={`${metrics.revenue.growth}%`}
+                    subtext="Completed appointments by scheduled date. Not earned operating revenue."
+                    trend={null}
+                    trendValue={NOT_CONNECTED}
                     icon={DollarSign}
                     color="green"
                 />
                 <MetricCard 
                     title="Work Orders Completed" 
                     value={metrics.jobs.count} 
-                    subtext="Avg duration: 75m"
-                    trend="up"
-                    trendValue="+8%"
+                    subtext={`Average duration: ${NOT_CONNECTED}`}
+                    trend={null}
+                    trendValue={NOT_CONNECTED}
                     icon={Briefcase}
                     color="blue"
                 />
@@ -254,17 +240,17 @@ export default function AnalyticsDashboard() {
                     title="New Leads" 
                     value={metrics.leads.total} 
                     subtext={`Conv. Rate: ${metrics.leads.conversionRate}%`}
-                    trend="down"
-                    trendValue="-2.5%"
+                    trend={null}
+                    trendValue={NOT_CONNECTED}
                     icon={Users}
                     color="purple"
                 />
                 <MetricCard 
                     title="Avg Rating" 
-                    value={metrics.reviews.avgRating} 
-                    subtext={`From ${metrics.reviews.count} reviews`}
-                    trend="up"
-                    trendValue="+0.2"
+                    value={NOT_CONNECTED}
+                    subtext={NOT_CONNECTED}
+                    trend={null}
+                    trendValue={NOT_CONNECTED}
                     icon={Star}
                     color="yellow"
                 />
@@ -273,8 +259,8 @@ export default function AnalyticsDashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <Card className="lg:col-span-2">
                     <CardHeader>
-                        <CardTitle>Revenue Trend</CardTitle>
-                        <CardDescription>Daily revenue performance over selected period.</CardDescription>
+                        <CardTitle>Scheduled appointment price</CardTitle>
+                        <CardDescription>Completed appointment prices by scheduled date. Not earned operating revenue. Period comparison is {NOT_CONNECTED}.</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -284,7 +270,7 @@ export default function AnalyticsDashboard() {
                                 <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
                                 <Tooltip 
                                     contentStyle={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px' }}
-                                    formatter={(value) => [`$${value}`, 'Revenue']}
+                                    formatter={(value) => [`$${value}`, 'Scheduled appointment price']}
                                 />
                                 <Line type="monotone" dataKey="amount" stroke="#2563eb" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
                             </LineChart>
@@ -292,37 +278,13 @@ export default function AnalyticsDashboard() {
                     </CardContent>
                 </Card>
 
-                <Card>
+                <Card data-testid="analytics-sentiment">
                     <CardHeader>
                         <CardTitle>Customer Sentiment</CardTitle>
-                        <CardDescription>Health score based on reviews & feedback.</CardDescription>
+                        <CardDescription>Reviews and feedback are not connected.</CardDescription>
                     </CardHeader>
-                    <CardContent className="h-[300px] flex flex-col items-center justify-center relative">
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="text-center">
-                                <span className="text-4xl font-bold text-slate-800">{metrics.sentiment.healthScore}</span>
-                                <p className="text-xs text-muted-foreground uppercase tracking-wide">Health Score</p>
-                            </div>
-                        </div>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <RechartsPieChart>
-                                <Pie
-                                    data={charts.sentimentDist}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={60}
-                                    outerRadius={80}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                >
-                                    {charts.sentimentDist.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.color} />
-                                    ))}
-                                </Pie>
-                                <Tooltip />
-                                <Legend verticalAlign="bottom" height={36}/>
-                            </RechartsPieChart>
-                        </ResponsiveContainer>
+                    <CardContent className="h-[300px] flex items-center justify-center">
+                        <p className="text-sm text-muted-foreground">{NOT_CONNECTED}</p>
                     </CardContent>
                 </Card>
             </div>

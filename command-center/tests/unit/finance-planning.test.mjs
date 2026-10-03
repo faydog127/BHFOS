@@ -19,6 +19,7 @@ import { blankPlanInputs, validateNotes, validatePlanInputs } from '../../src/li
 import { approvePlan, associateComparisonPlan, correctMonthlyActual, createBlankPlan, createMonthlyActual, openDraftFromApproved, saveDraft, selectVisiblePlan } from '../../src/lib/finance/persistence.js';
 import { actualFactsFromForm, channelRevenueIssue, declaredMonthlyBasis, derivedActualMetrics, formatStoredDecimal, parseActualDecimal, parseActualInteger } from '../../src/lib/finance/actuals.js';
 import { FINANCE_WRITES_DISABLED, financeWritesEnabled } from '../../src/lib/finance/writeGate.js';
+import { CHECKIN_CONFLICT_COPY, nextCheckinCorrection, reloadCheckinFromServer } from '../../src/lib/finance/checkinConflict.js';
 import { getSyntheticPlanningFixture } from '../../src/lib/finance/syntheticFixture.js';
 import { buildFinanceView } from '../../src/lib/finance/viewModel.js';
 import { HVAC_REVENUE_MISSING_COPY } from '../../src/lib/finance/calculate.js';
@@ -662,6 +663,7 @@ describe('verify script and source guards', () => {
       'src/pages/finance/FinanceShell.jsx',
       'src/pages/finance/MonthlyCheckIn.jsx',
       'src/lib/finance/actuals.js',
+      'src/lib/finance/checkinConflict.js',
       'src/components/finance/FinanceGuard.jsx',
     ]) {
       assert.equal(readFileSync(path.join(root, relative), 'utf8').includes('user_metadata'), false, relative);
@@ -678,6 +680,10 @@ describe('verify script and source guards', () => {
     assert.match(checkin, /does not invent a monthly plan series/);
     assert.match(actuals, /not the invoices issued this month/);
     assert.match(checkin, /checkin-no-plan/);
+    assert.match(checkin, /nextCheckinCorrection/);
+    assert.match(checkin, /reloadCheckinFromServer/);
+    assert.match(checkin, /disabled=\{!writesEnabled \|\| saving \|\| conflict\}/);
+    assert.match(checkin, /CHECKIN_CONFLICT_COPY/);
     assert.equal(checkin.includes('Housecall'), false);
     assert.match(shell, /finance-writes-disabled/);
     assert.match(shell, /Finance writes are disabled/);
@@ -685,5 +691,91 @@ describe('verify script and source guards', () => {
     assert.match(guard, /<FinanceShell grantedAccess=\{access\} \/>/);
     assert.equal(existsSync(path.join(root, 'finance-preview.html')), false);
     assert.equal(existsSync(path.join(root, 'src/financePreviewMain.jsx')), false);
+  });
+});
+
+describe('check-in conflict reload', () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+
+  it('blocks save after a stale conflict until reload replaces the form with the server row', async () => {
+    const staleFacts = { total_revenue: 99, cash_reserve: 1, total_jobs: 7 };
+    const calls = [];
+    const row = {
+      update(patch) { calls.push(patch); return row; },
+      eq() { return row; },
+      select() { return row; },
+      maybeSingle: async () => ({ data: null, error: null }),
+    };
+    const conflict = await correctMonthlyActual({ from: () => row }, {
+      id,
+      expectedVersion: 1,
+      facts: staleFacts,
+    }, { MODE: 'test' });
+    assert.equal(conflict.code, 'version_conflict');
+    assert.equal(calls[0].total_revenue, 99);
+
+    const staleForm = {
+      total_revenue: '99.00',
+      cash_reserve: '1.00',
+      total_jobs: '7',
+      notes: 'local edit',
+      source_note: '',
+    };
+    const selected = { id, version: 1, month: '2026-01-01' };
+    const blocked = nextCheckinCorrection({
+      conflict: true,
+      saving: false,
+      writesEnabled: true,
+      selected: { ...selected, version: 2 },
+      form: staleForm,
+    });
+    assert.equal(blocked.code, 'conflict_unresolved');
+
+    const serverRow = {
+      id,
+      version: 2,
+      month: '2026-01-01',
+      total_revenue: 9,
+      direct_residential_revenue: null,
+      commercial_direct_revenue: null,
+      portal_revenue: null,
+      total_jobs: 2,
+      dryer_vent_jobs: null,
+      duct_jobs: null,
+      ahu_jobs: null,
+      productive_unit_hours: 1.5,
+      field_payroll: null,
+      indirect_cash_costs: null,
+      ar_ending: null,
+      cash_reserve: 0,
+      notes: 'server note',
+      source_note: 'server source',
+    };
+    const listed = { ok: true, actuals: [serverRow] };
+    const applied = reloadCheckinFromServer(listed.actuals, id);
+    assert.equal(applied.ok, true);
+    assert.equal(applied.expectedVersion, 2);
+    assert.equal(applied.form.total_revenue, '9.00');
+    assert.equal(applied.form.cash_reserve, '0.00');
+    assert.equal(applied.form.total_jobs, '2');
+    assert.equal(applied.form.notes, 'server note');
+    assert.equal(applied.form.total_revenue === staleForm.total_revenue, false);
+
+    const saved = nextCheckinCorrection({
+      conflict: false,
+      saving: false,
+      writesEnabled: true,
+      selected: applied.actual,
+      form: applied.form,
+    });
+    assert.equal(saved.ok, true);
+    assert.equal(saved.payload.expectedVersion, 2);
+    assert.equal(saved.payload.facts.total_revenue, 9);
+    assert.equal(saved.payload.facts.cash_reserve, 0);
+    assert.equal(saved.payload.facts.total_jobs, 2);
+    assert.equal(saved.payload.facts.notes, 'server note');
+    assert.equal(saved.payload.facts.total_revenue === staleFacts.total_revenue, false);
+    assert.match(CHECKIN_CONFLICT_COPY, /discards the unsaved edits/);
+    assert.match(CHECKIN_CONFLICT_COPY, /no merge/i);
   });
 });

@@ -11,9 +11,13 @@ import {
   actualFactsFromForm,
   declaredMonthlyBasis,
   derivedActualMetrics,
-  formatStoredDecimal,
-  parseActualMonth,
 } from '@/lib/finance/actuals';
+import {
+  CHECKIN_CONFLICT_COPY,
+  formFromActual,
+  nextCheckinCorrection,
+  reloadCheckinFromServer,
+} from '@/lib/finance/checkinConflict';
 import { FAVORABLE_DIRECTION, variance } from '@/lib/finance/variance';
 import { formatCurrencyCents, formatHours, formatNumber, formatPercentFromFraction } from '@/lib/finance/format';
 import { MISSING_MARK } from '@/lib/finance/viewModel';
@@ -31,23 +35,7 @@ const DERIVED = Object.freeze([
 ]);
 
 function blankForm() {
-  const form = { notes: '', source_note: '' };
-  for (const field of CHECKIN_FIELDS) form[field.key] = '';
-  return form;
-}
-
-function formFromActual(row) {
-  const form = blankForm();
-  for (const field of CHECKIN_FIELDS) {
-    if (field.kind === 'count') {
-      form[field.key] = row[field.key] === null || row[field.key] === undefined ? '' : String(row[field.key]);
-    } else {
-      form[field.key] = formatStoredDecimal(row[field.key], 2);
-    }
-  }
-  form.notes = row.notes || '';
-  form.source_note = row.source_note || '';
-  return form;
+  return formFromActual({});
 }
 
 function monthLabel(value) {
@@ -74,7 +62,7 @@ function showDerived(kind, value) {
 
 function messageFor(result) {
   if (!result) return 'The month could not be saved.';
-  if (result.code === 'version_conflict') return 'Changed elsewhere. Your edits are still on this screen. Reload the month before saving again.';
+  if (result.code === 'version_conflict') return CHECKIN_CONFLICT_COPY;
   if (result.code === '23505' || String(result.detail || '').includes('finance_actuals_month_key')) {
     return 'This month already has an actual. Open that month to correct it.';
   }
@@ -145,25 +133,22 @@ export default function MonthlyCheckIn({
   }
 
   async function onSave() {
-    if (!writesEnabled || saving) return;
-    const month = selected ? { ok: true, value: String(selected.month).slice(0, 10) } : parseActualMonth(monthInput);
-    if (!month.ok) {
-      setMessage(messageFor(month));
-      return;
-    }
-    const parsed = actualFactsFromForm(form);
-    if (!parsed.ok) {
-      setMessage(messageFor(parsed));
+    const gate = nextCheckinCorrection({
+      conflict,
+      saving,
+      writesEnabled,
+      selected,
+      form,
+      monthInput,
+      associateOnCreate,
+      approved,
+    });
+    if (!gate.ok) {
+      if (gate.code !== 'checkin_busy' && gate.code !== 'conflict_unresolved') setMessage(messageFor(gate));
       return;
     }
     setSaving(true);
-    const result = selected
-      ? await onCorrect({ id: selected.id, expectedVersion: selected.version, facts: parsed.facts })
-      : await onCreate({
-        month: month.value,
-        facts: parsed.facts,
-        comparisonPlanId: associateOnCreate && approved ? approved.id : null,
-      });
+    const result = gate.mode === 'correct' ? await onCorrect(gate.payload) : await onCreate(gate.payload);
     setSaving(false);
     if (!result?.ok) {
       setConflict(result?.code === 'version_conflict');
@@ -178,8 +163,21 @@ export default function MonthlyCheckIn({
     setAssociateOnCreate(false);
   }
 
+  async function onReloadClick() {
+    const listed = await onReload();
+    const applied = reloadCheckinFromServer(listed?.actuals, selectedId);
+    if (!listed?.ok || !applied.ok) {
+      setConflict(true);
+      setMessage(`${CHECKIN_CONFLICT_COPY} The saved month could not be reloaded.`);
+      return;
+    }
+    setForm(applied.form);
+    setConflict(false);
+    setMessage(null);
+  }
+
   async function onAssociateClick() {
-    if (!writesEnabled || !selected || !approved || basisLocked || saving) return;
+    if (!writesEnabled || !selected || !approved || basisLocked || saving || conflict) return;
     setSaving(true);
     const result = await onAssociate({
       id: selected.id,
@@ -299,7 +297,7 @@ export default function MonthlyCheckIn({
               selected ? (
                 <div className="space-y-2">
                   <p>No comparison plan is associated, so Plan and Variance stay blank. Associating the current approved plan is optional and can be done only once.</p>
-                  <button type="button" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:text-slate-400" data-testid="checkin-associate" onClick={onAssociateClick} disabled={!writesEnabled || saving}>Associate the approved plan</button>
+                  <button type="button" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:text-slate-400" data-testid="checkin-associate" onClick={onAssociateClick} disabled={!writesEnabled || saving || conflict}>Associate the approved plan</button>
                 </div>
               ) : (
                 <label className="flex items-start gap-2">
@@ -321,12 +319,12 @@ export default function MonthlyCheckIn({
           </section>
           {conflict ? (
             <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" data-testid="checkin-version-conflict">
-              {message}
-              <button type="button" className="ml-3 underline" data-testid="checkin-reload" onClick={onReload}>Reload</button>
+              {message || CHECKIN_CONFLICT_COPY}
+              <button type="button" className="ml-3 underline" data-testid="checkin-reload" onClick={onReloadClick}>Reload saved month</button>
             </div>
           ) : null}
           {message && !conflict ? <p className="text-sm text-red-700" data-testid="checkin-error">{message}</p> : null}
-          <button type="submit" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="checkin-save" disabled={!writesEnabled || saving}>
+          <button type="submit" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="checkin-save" disabled={!writesEnabled || saving || conflict}>
             {selected ? 'Save correction' : 'Save month'}
           </button>
           {selected ? <p className="text-xs text-slate-500" data-testid="checkin-version">Edit version {selected.version}. There is no delete.</p> : null}
