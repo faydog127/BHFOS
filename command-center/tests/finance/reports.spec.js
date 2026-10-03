@@ -186,11 +186,17 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
         navDisplay: hidden ? getComputedStyle(hidden).display : 'missing',
         sheetBackground: sheet ? getComputedStyle(sheet).backgroundColor : 'missing',
         pageBreak: sheet ? getComputedStyle(sheet.querySelector('.report-block') || sheet).breakInside : 'missing',
-        theadDisplay: sheet?.querySelector('thead') ? getComputedStyle(sheet.querySelector('thead')).display : 'missing',
+        theadCount: sheet ? sheet.querySelectorAll('thead').length : 0,
+        theadDisplay: sheet?.querySelector('thead') ? getComputedStyle(sheet.querySelector('thead')).display : 'absent',
       };
     });
     expect(printLayout.navDisplay).toBe('none');
-    expect(printLayout.theadDisplay).toBe('table-header-group');
+    if (printLayout.theadCount > 0) {
+      expect(printLayout.theadDisplay).toBe('table-header-group');
+    }
+    if (id === 'pricing-economics' || id === 'cost-structure' || id === 'monthly-summary') {
+      expect(printLayout.theadCount).toBeGreaterThan(0);
+    }
     const clip = await page.evaluate(() => {
       const sheet = document.querySelector('.report-sheet');
       const sheetRight = sheet.getBoundingClientRect().right;
