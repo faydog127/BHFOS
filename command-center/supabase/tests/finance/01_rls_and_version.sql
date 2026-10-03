@@ -9,6 +9,8 @@ select 'finance_actuals_before' as check_name, count(*) as row_count from public
 
 begin;
 
+\ir plan_document_fixture.sql
+
 create function pg_temp.finance_become(p_uid uuid, p_tenant text, p_role jsonb)
 returns void
 language plpgsql
@@ -265,7 +267,7 @@ begin
     raise exception 'FAIL: admin helper';
   end if;
   insert into public.finance_plans (tenant_id, status, version, schema_version, inputs, approved_by)
-  values ('tvg', 'approved', 9, 1, '{"structural":{}}'::jsonb, v_admin)
+  values ('tvg', 'approved', 9, 1, pg_temp.finance_v1_document(), v_admin)
   returning id, version, status, approved_by into v_plan, v_version, v_status, v_approved_by;
   if v_version <> 1 or v_status <> 'draft' or v_approved_by is not null then
     raise exception 'FAIL: insert trigger did not force draft';

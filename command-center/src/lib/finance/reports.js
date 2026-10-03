@@ -5,6 +5,7 @@
  * existing display helpers. This module does not define a metric.
  */
 import { CHECKIN_FIELDS, REVENUE_DEFINITION, plannedFactsForMonth } from './actuals.js';
+import { FINANCE_MONTHLY_BASIS_SCHEMA, planHasMonthlyBasis } from './schemaContract.js';
 import { BASIS_COPY, displayCheckinValue } from './modes.js';
 import { presentLabel } from './presentLabel.js';
 import { EXPLANATIONS, MISSING_MARK, showCents, showMoney } from './viewModel.js';
@@ -120,14 +121,14 @@ function noteBlock(textValue) {
 }
 
 function storedBasis(record, inputs) {
-  if (!record || record.schema_version !== 2) {
+  if (!record || !planHasMonthlyBasis(record.schema_version)) {
     return { copy: BASIS_COPY.no_monthly_basis, months: [] };
   }
   const keys = Object.keys(inputs?.monthly_basis || {}).sort();
   return {
     copy: BASIS_COPY.declared_monthly_basis,
     months: keys.map((month) => {
-      const facts = plannedFactsForMonth({ schema_version: 2, inputs }, month) || {};
+      const facts = plannedFactsForMonth({ schema_version: FINANCE_MONTHLY_BASIS_SCHEMA, inputs }, month) || {};
       return {
         month,
         label: String(month).slice(0, 7),

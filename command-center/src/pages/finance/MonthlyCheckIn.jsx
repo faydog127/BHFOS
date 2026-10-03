@@ -14,6 +14,7 @@ import {
   normalizeActualMonth,
   plannedFactsForMonth,
 } from '@/lib/finance/actuals';
+import { planHasMonthlyBasis } from '@/lib/finance/schemaContract';
 import {
   CHECKIN_CONFLICT_COPY,
   formFromActual,
@@ -323,7 +324,7 @@ export default function MonthlyCheckIn({
             ) : (
               <p data-testid="checkin-no-plan">No approved plan is available. This month can be saved without one. Plan and variance stay blank.</p>
             )}
-            {!basisPlan || basisPlan.schema_version !== 2 ? <p className="mt-2 text-xs text-slate-500" data-testid="checkin-no-monthly-basis">No declared monthly basis. Plan and variance are not zero.</p> : <p className="mt-2 text-xs text-slate-500" data-testid="checkin-partial-basis">Only a planned figure has a plan and a variance. A blank plan figure is not zero.</p>}
+            {!basisPlan || !planHasMonthlyBasis(basisPlan.schema_version) ? <p className="mt-2 text-xs text-slate-500" data-testid="checkin-no-monthly-basis">No declared monthly basis. Plan and variance are not zero.</p> : <p className="mt-2 text-xs text-slate-500" data-testid="checkin-partial-basis">Only a planned figure has a plan and a variance. A blank plan figure is not zero.</p>}
           </section>
           {conflict ? (
             <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" data-testid="checkin-version-conflict">

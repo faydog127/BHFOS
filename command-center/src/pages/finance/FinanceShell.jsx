@@ -24,6 +24,9 @@ import { FINANCE_NOTES_MAX } from '@/lib/finance/blankPlan';
 import { financeWritesEnabled } from '@/lib/finance/writeGate';
 import { EXPLANATIONS, FINANCE_SECTIONS, buildFinanceView, showCents, showMoney } from '@/lib/finance/viewModel';
 import { buildDecisionSupport, normalizeFinanceMode } from '@/lib/finance/modes';
+import { presentLabel } from '@/lib/finance/presentLabel';
+import { FINANCE_PLAN_SCHEMA_WITHOUT_MONTHLY_BASIS, planHasMonthlyBasis } from '@/lib/finance/schemaContract';
+import EntityBrandIdentity from '@/components/finance/EntityBrandIdentity';
 import { AdvancedView, ExecutiveView, GuidedBrief, ModeSwitch } from '@/pages/finance/FinanceModes';
 import FinanceReportScreen from '@/pages/finance/FinanceReports';
 import MonthlyCheckIn from '@/pages/finance/MonthlyCheckIn';
@@ -172,6 +175,7 @@ export default function FinanceShell({ grantedAccess }) {
   const [conflict, setConflict] = useState(false);
   const [selectedStage, setSelectedStage] = useState('stage_2');
   const [mode, setMode] = useState('guided');
+  const [leavePrompt, setLeavePrompt] = useState(null);
   const section = sectionIdFromPath(location.pathname);
   const reportId = reportIdFromPath(location.pathname);
 
@@ -269,6 +273,49 @@ export default function FinanceShell({ grantedAccess }) {
     () => buildDecisionSupport({ view, result, inputs, actuals, plans }),
     [view, result, inputs, actuals, plans],
   );
+
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const prefix = `/${routeTenantId}/finance`;
+    const onClick = (event) => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const anchor = event.target.closest?.('a[href]');
+      if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+      let url;
+      try {
+        url = new URL(anchor.href, window.location.href);
+      } catch {
+        return;
+      }
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname === prefix || url.pathname.startsWith(`${prefix}/`)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setLeavePrompt(`${url.pathname}${url.search}${url.hash}`);
+    };
+    const onBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    document.addEventListener('click', onClick, true);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      document.removeEventListener('click', onClick, true);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
+  }, [dirty, routeTenantId]);
+
+  function stayOnFinance() {
+    setLeavePrompt(null);
+  }
+
+  function discardAndLeave() {
+    const next = leavePrompt;
+    setLeavePrompt(null);
+    setDirty(false);
+    if (next) navigate(next);
+  }
 
   function selectFinanceMode(next) {
     setMode(normalizeFinanceMode(next));
@@ -389,7 +436,7 @@ export default function FinanceShell({ grantedAccess }) {
   }
 
   async function onUpgradeSchema() {
-    if (!writesEnabled || !record || record.status !== 'draft' || record.schema_version !== 1) return;
+    if (!writesEnabled || !record || record.status !== 'draft' || record.schema_version !== FINANCE_PLAN_SCHEMA_WITHOUT_MONTHLY_BASIS) return;
     const upgraded = await upgradeDraftSchema(supabase, { id: record.id, expectedVersion: record.version });
     if (!upgraded.ok) {
       if (upgraded.code === 'version_conflict') setConflict(true);
@@ -464,17 +511,20 @@ export default function FinanceShell({ grantedAccess }) {
   }
   if (reportId) {
     return (
-      <FinanceReportScreen
-        reportId={reportId}
-        base={`/${routeTenantId}/finance`}
-        support={support}
-        view={view}
-        result={result}
-        inputs={inputs}
-        record={record}
-        dirty={dirty}
-        conflict={conflict}
-      />
+      <>
+        <FinanceReportScreen
+          reportId={reportId}
+          base={`/${routeTenantId}/finance`}
+          support={support}
+          view={view}
+          result={result}
+          inputs={inputs}
+          record={record}
+          dirty={dirty}
+          conflict={conflict}
+        />
+        <LeaveFinanceDialog prompt={leavePrompt} onStay={stayOnFinance} onDiscard={discardAndLeave} />
+      </>
     );
   }
   if (!record && section !== 'checkin') {
@@ -539,6 +589,7 @@ export default function FinanceShell({ grantedAccess }) {
         <aside className="border-b border-slate-200 bg-slate-900 text-slate-100 lg:min-h-screen lg:border-b-0 lg:border-r">
           <div className="px-4 py-4">
             <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Planning</div>
+            <EntityBrandIdentity entityId={routeTenantId} className="mt-2 text-sm text-slate-100" />
             <div className="mt-1 text-lg font-semibold">Financial model</div>
           </div>
           <label className="block px-4 pb-3 lg:hidden">
@@ -629,7 +680,7 @@ export default function FinanceShell({ grantedAccess }) {
           <>
           <GuidedBrief section={section} />
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            {record.status === 'draft' && record.schema_version === 1 ? (
+            {record.status === 'draft' && record.schema_version === FINANCE_PLAN_SCHEMA_WITHOUT_MONTHLY_BASIS ? (
               <button type="button" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:text-slate-400" data-testid="finance-upgrade-schema" onClick={onUpgradeSchema} disabled={!writesEnabled || dirty}>Use monthly plan basis</button>
             ) : null}
             {record.status === 'draft' ? (
@@ -672,7 +723,7 @@ export default function FinanceShell({ grantedAccess }) {
             </div>
           ) : null}
           <fieldset disabled={draftLocked || !writesEnabled} className="min-w-0 border-0 p-0">
-          {record?.schema_version === 2 && record.status === 'draft' && section === 'overview' ? (
+          {planHasMonthlyBasis(record?.schema_version) && record.status === 'draft' && section === 'overview' ? (
             <MonthlyBasisEditor inputs={inputs} onPatch={patchMonthlyBasis} />
           ) : null}
           {section === 'overview' ? <Overview view={view} inputs={inputs} /> : null}
@@ -695,6 +746,24 @@ export default function FinanceShell({ grantedAccess }) {
             </div>
           ) : null}
         </main>
+      </div>
+      <LeaveFinanceDialog prompt={leavePrompt} onStay={stayOnFinance} onDiscard={discardAndLeave} />
+    </div>
+  );
+}
+
+function LeaveFinanceDialog({ prompt, onStay, onDiscard }) {
+  if (!prompt) return null;
+  return (
+    <div role="dialog" aria-modal="true" data-testid="finance-leave-dialog" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div className="max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
+        <h2 className="text-lg font-semibold text-slate-950">Leave without saving?</h2>
+        <p className="mt-2 text-sm text-slate-700">This draft has unsaved edits. Leaving Finance discards them. Staying keeps them on this screen. Nothing is saved automatically.</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" className="inline-flex min-h-11 items-center rounded bg-slate-900 px-3 text-sm font-medium text-white" data-testid="finance-leave-stay" onClick={onStay}>Stay</button>
+          <button type="button" className="inline-flex min-h-11 items-center rounded border border-slate-300 bg-white px-3 text-sm" data-testid="finance-leave-cancel" onClick={onStay}>Cancel</button>
+          <button type="button" className="inline-flex min-h-11 items-center rounded border border-red-300 bg-white px-3 text-sm text-red-800" data-testid="finance-leave-discard" onClick={onDiscard}>Discard</button>
+        </div>
       </div>
     </div>
   );
@@ -740,7 +809,7 @@ function Overview({ view, inputs }) {
         <div className="space-y-3">
           <Explain title="How is this calculated?">Required revenue is economic operating cost divided by one minus the retention hurdle. Economic cost is cash operating cost plus the owner field replacement reserve. Empty inputs stay blank. Divide-by-zero shows --.</Explain>
           <Explain title="Key takeaways">Readiness stays Incomplete / Needs review until practical billable capacity and projected results are supplied. {view.advisory}</Explain>
-          <p className="text-xs text-slate-500" data-testid="capacity-missing">Practical billable capacity: {view.missing.practicalBillableCapacity}. Utilization band: {view.utilizationBand}.</p>
+          <p className="text-xs text-slate-500" data-testid="capacity-missing">Practical billable capacity: {view.missing.practicalBillableCapacity}. Utilization band: {presentLabel(view.utilizationBand)}.</p>
         </div>
       </div>
     </div>
@@ -863,18 +932,13 @@ function Office({ inputs, result, onPatch }) {
             key={key}
             label={`${inputs.stages[key].label} G&A`}
             value={showMoney(result.stages[key].ga)}
-            note={`Share of required revenue: ${share(result.stages[key].ga, result.stages[key].requiredMonthlyRevenue)}`}
+            note="Office cost pool for this stage."
           />
         ))}
       </div>
       <p className="text-xs text-slate-500">{EXPLANATIONS.balancing}</p>
     </div>
   );
-}
-
-function share(part, total) {
-  if (part === null || total === null || total === 0) return '--';
-  return `${((part / total) * 100).toFixed(2)}%`;
 }
 
 function Growth({ inputs, view, result, onStage, onChannel }) {

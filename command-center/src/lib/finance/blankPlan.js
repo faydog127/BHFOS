@@ -4,8 +4,9 @@
  */
 import { validateMonthlyBasis } from './actuals.js';
 import { POOL_GROUPS, STAGE_KEYS } from './calculate.js';
+import { FINANCE_PLAN_SCHEMA_WITHOUT_MONTHLY_BASIS, isSupportedPlanSchema, planHasMonthlyBasis } from './schemaContract.js';
 
-export const FINANCE_PLAN_SCHEMA_VERSION = 1;
+export const FINANCE_PLAN_SCHEMA_VERSION = FINANCE_PLAN_SCHEMA_WITHOUT_MONTHLY_BASIS;
 export const FINANCE_NOTES_MAX = 2000;
 
 const STAGE_NUMBER_FIELDS = [
@@ -211,11 +212,11 @@ function assertShape(template, value, path) {
   }
 }
 
-export function validatePlanInputs(inputs, schemaVersion = 1) {
-  if (schemaVersion !== 1 && schemaVersion !== 2) return { ok: false, code: 'finance_schema_unsupported' };
+export function validatePlanInputs(inputs, schemaVersion = FINANCE_PLAN_SCHEMA_WITHOUT_MONTHLY_BASIS) {
+  if (!isSupportedPlanSchema(schemaVersion)) return { ok: false, code: 'finance_schema_unsupported' };
   if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) return { ok: false, code: 'invalid_inputs' };
   const hasBasis = Object.prototype.hasOwnProperty.call(inputs, 'monthly_basis');
-  if (schemaVersion === 1) {
+  if (!planHasMonthlyBasis(schemaVersion)) {
     if (hasBasis) return { ok: false, code: 'invalid_inputs' };
     try {
       assertShape(blankPlanInputs(), inputs, 'inputs');

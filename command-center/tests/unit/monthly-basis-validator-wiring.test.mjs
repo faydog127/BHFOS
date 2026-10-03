@@ -31,6 +31,10 @@ describe('validateMonthlyBasis mirrors the database check', () => {
     bad({ [M]: { total_jobs: 1.5 } });
     bad({ [M]: { total_revenue: 1e12 } });
     bad({ '2026-02-15': {} }); bad({ '2026-13-01': {} }); bad({ '2026-02': {} });
+    bad({ '0000-01-01': { total_revenue: 1 } });
+    bad({ [M]: { total_revenue: -0 } });
+    good({ [M]: { total_revenue: 1234567.89 } });
+    bad({ [M]: { total_revenue: 1234567.891 } });
     bad({ [M]: { bogus: 1 } });
   });
   it('rejects amounts of 21 or more whole digits like the database (FAILS on 60773aa: finding F2)', () => {
@@ -77,8 +81,8 @@ describe('check-in and shell wiring (source level; Playwright is not in CI)', ()
   });
   it('shell passes the record schema version on save and gates the upgrade to v1 drafts', () => {
     assert.match(shell, /schemaVersion: record\.schema_version/);
-    assert.match(shell, /record\.status !== 'draft' \|\| record\.schema_version !== 1\) return;/);
-    assert.match(shell, /record\.status === 'draft' && record\.schema_version === 1/);
-    assert.match(shell, /record\?\.schema_version === 2 && record\.status === 'draft' && section === 'overview'/);
+    assert.match(shell, /record\.status !== 'draft' \|\| record\.schema_version !== FINANCE_PLAN_SCHEMA_WITHOUT_MONTHLY_BASIS\) return;/);
+    assert.match(shell, /record\.status === 'draft' && record\.schema_version === FINANCE_PLAN_SCHEMA_WITHOUT_MONTHLY_BASIS/);
+    assert.match(shell, /planHasMonthlyBasis\(record\?\.schema_version\) && record\.status === 'draft' && section === 'overview'/);
   });
 });

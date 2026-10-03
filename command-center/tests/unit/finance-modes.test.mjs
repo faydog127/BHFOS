@@ -225,7 +225,7 @@ describe('finance presentation modes', () => {
     for (const forbidden of ['saveDraft', 'approvePlan', 'createBlankPlan', 'createMonthlyActual', 'supabase', 'setInputs', 'setDirty', 'setNotes', 'rpc', 'editInputs']) {
       assert.equal(body.includes(forbidden), false, forbidden);
     }
-    assert.match(shell, /record\?\.schema_version === 2 && record\.status === 'draft' && section === 'overview'/);
+    assert.match(shell, /planHasMonthlyBasis\(record\?\.schema_version\) && record\.status === 'draft' && section === 'overview'/);
     assert.match(ui, /FINANCE_MODES\.map/);
     assert.equal(ui.includes('Advisor'), false);
     assert.equal(ui.includes('healthScore'), false);

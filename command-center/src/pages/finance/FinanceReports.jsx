@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
+import EntityBrandIdentity from '@/components/finance/EntityBrandIdentity';
 import { FINANCE_REPORT_PRESETS, buildFinanceReport } from '@/lib/finance/reports';
 
 const PRINT_CSS = `
@@ -13,14 +14,15 @@ const PRINT_CSS = `
   thead { display: table-header-group; }
   tr, th, td { break-inside: avoid; page-break-inside: avoid; }
   th, td { border-bottom: 1px solid #cbd5e1; padding: 4px 6px !important; text-align: left; vertical-align: top; font-size: 10px !important; white-space: normal !important; overflow-wrap: anywhere; }
+  th { overflow-wrap: normal !important; word-break: normal !important; hyphens: manual !important; }
   .report-value { overflow-wrap: normal !important; word-break: normal !important; hyphens: manual !important; }
 }
-@media print and (orientation: portrait) {
+@media print {
   table:has(th:nth-child(10)) th, table:has(th:nth-child(10)) td { font-size: 8px !important; padding: 2px 1px !important; }
   table:has(th:nth-child(10)) th:first-child, table:has(th:nth-child(10)) td:first-child { width: 11%; }
   table:has(th:nth-child(10)) th:not(:first-child) { overflow-wrap: normal !important; word-break: normal !important; hyphens: manual !important; }
 }
-@page { size: letter; margin: 12mm; }
+@page { margin: 12mm; }
 `;
 
 function FactTable({ title, rows, testId }) {
@@ -196,10 +198,11 @@ export default function FinanceReportScreen({
         {report ? (
           <>
             <header className="report-block border-b border-slate-300 pb-4">
-              <h1 className="text-2xl font-semibold" data-testid="finance-report-title">{report.title}</h1>
+              <EntityBrandIdentity entityId="tvg" />
+              <h1 className="mt-2 text-2xl font-semibold" data-testid="finance-report-title">{report.title}</h1>
               <p className="mt-2 text-sm text-slate-700">Reporting period <span data-testid="finance-report-period">{report.context.period}</span></p>
               <p className="mt-1 text-sm text-slate-700" data-testid="finance-report-basis">{report.context.basis}</p>
-              <p className="mt-1 text-sm text-slate-700">Generated <time data-testid="finance-report-generated-at" dateTime={report.generatedAt}>{report.generatedAt}</time></p>
+              <p className="mt-1 text-sm text-slate-700">Generated <time data-testid="finance-report-generated-at" dateTime={report.generatedAt}>{report.generatedAt}</time> UTC</p>
               <p className="mt-1 text-sm text-slate-700" data-testid="finance-report-plan-context">{report.context.plan} Selected stage {report.context.stage}. Latest comparison plan {report.context.comparisonPlan}. Latest schema {report.context.schemaVersion}.</p>
               {report.notice ? <p className="mt-3 text-sm text-slate-800" data-testid="finance-report-notice">{report.notice}</p> : null}
             </header>
@@ -208,8 +211,9 @@ export default function FinanceReportScreen({
         ) : (
           <>
             <header className="report-block border-b border-slate-300 pb-4">
-              <h1 className="text-2xl font-semibold" data-testid="finance-report-title">Reports</h1>
-              <p className="mt-2 text-sm text-slate-700">Generated <time data-testid="finance-report-generated-at" dateTime={generatedAt}>{generatedAt}</time></p>
+              <EntityBrandIdentity entityId="tvg" />
+              <h1 className="mt-2 text-2xl font-semibold" data-testid="finance-report-title">Reports</h1>
+              <p className="mt-2 text-sm text-slate-700">Generated <time data-testid="finance-report-generated-at" dateTime={generatedAt}>{generatedAt}</time> UTC</p>
               <p className="mt-2 text-sm leading-6 text-slate-700">Eight reports. They read the plan on this screen and Monthly Check-In. They do not save.</p>
             </header>
             <ol className="mt-4 list-decimal pl-5 text-sm leading-7">

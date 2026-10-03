@@ -5,6 +5,8 @@
 
 begin;
 
+\ir plan_document_fixture.sql
+
 create function pg_temp.finance_become(p_uid uuid, p_tenant text, p_role jsonb)
 returns void
 language plpgsql
@@ -112,8 +114,34 @@ begin
 
   perform pg_temp.finance_become(v_admin, 'tvg', '"admin"'::jsonb);
 
+  if public.finance_plan_document_ok(2, '{"monthly_basis":{}}'::jsonb) then
+    raise exception 'FAIL: minimal v2 accepted';
+  end if;
+  if public.finance_plan_document_ok(2, '{"structural":{},"stages":{},"staffing":[],"owner_field_replacement":{},"cost_pools":{},"channels":[],"services":{},"monthly_basis":{}}'::jsonb) then
+    raise exception 'FAIL: malformed v2 sections accepted';
+  end if;
+  if public.finance_plan_document_ok(2, pg_temp.finance_v2_document('{"0000-01-01":{}}'::jsonb)) then
+    raise exception 'FAIL: year 0000 accepted';
+  end if;
+  if ('-0'::jsonb #>> '{}') ~ '^-0' then
+    if public.finance_plan_document_ok(2, pg_temp.finance_v2_document(jsonb_build_object('2026-06-01', jsonb_build_object('total_revenue', '-0'::jsonb)))) then
+      raise exception 'FAIL: negative zero accepted';
+    end if;
+  elsif ('-0'::jsonb #>> '{}') is distinct from '0' then
+    raise exception 'FAIL: negative zero text %', '-0'::jsonb #>> '{}';
+  end if;
+  if public.finance_plan_document_ok(1, pg_temp.finance_v1_document()) is not true then
+    raise exception 'FAIL: full historical v1 rejected';
+  end if;
+  if public.finance_plan_document_ok(1, '{"kept":true}'::jsonb) is not true then
+    raise exception 'FAIL: historical v1 without sections rejected';
+  end if;
+  if public.finance_plan_document_ok(2, pg_temp.finance_v2_document('{}'::jsonb)) is not true then
+    raise exception 'FAIL: full v2 rejected';
+  end if;
+
   insert into public.finance_plans (tenant_id, schema_version, inputs, notes)
-  values ('tvg', 1, '{"kept":true}'::jsonb, 'preserve-me')
+  values ('tvg', 1, pg_temp.finance_v1_document(), 'preserve-me')
   returning id into v_hist;
 
   begin
@@ -180,7 +208,7 @@ begin
   select id into v_from_v1 from public.finance_approve_plan(v_from_v1, v_version);
 
   insert into public.finance_plans (tenant_id, schema_version, inputs, notes)
-  values ('tvg', 1, '{"kept":true}'::jsonb, 'upgrade-me')
+  values ('tvg', 1, pg_temp.finance_v1_document(), 'upgrade-me')
   returning id, version into v_rich, v_version;
 
   begin
@@ -281,9 +309,7 @@ begin
   end;
 
   update public.finance_plans
-  set inputs = jsonb_build_object(
-    'kept', true,
-    'monthly_basis', jsonb_build_object(
+  set inputs = pg_temp.finance_v2_document(jsonb_build_object(
       '2026-02-01', jsonb_build_object(
         'total_revenue', 10.00,
         'cash_reserve', 0,
@@ -293,8 +319,7 @@ begin
         'portal_revenue', 3.00
       ),
       '2026-03-01', jsonb_build_object('total_revenue', 0)
-    )
-  )
+    ))
   where id = v_rich
   returning (inputs -> 'monthly_basis' -> '2026-02-01' -> 'total_jobs'),
     (inputs -> 'monthly_basis' -> '2026-02-01' ->> 'cash_reserve')::numeric,
@@ -417,7 +442,7 @@ begin
   end;
 
   insert into public.finance_plans (tenant_id, schema_version, inputs, notes)
-  values ('tvg', 1, '{"kept":true}'::jsonb, 'living-v1')
+  values ('tvg', 1, pg_temp.finance_v1_document(), 'living-v1')
   returning id into v_living;
   select id, schema_version, notes, inputs -> 'monthly_basis'
   into v_again, v_schema, v_notes, v_basis

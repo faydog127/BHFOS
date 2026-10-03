@@ -5,6 +5,7 @@
 import { channelRevenueIssue } from './actuals.js';
 import { FINANCE_ROUTE_TENANT } from './authz.js';
 import { blankPlanInputs, validateNotes, validatePlanInputs } from './blankPlan.js';
+import { isSupportedPlanSchema, planHasMonthlyBasis } from './schemaContract.js';
 import { FINANCE_WRITES_DISABLED, financeWritesEnabled } from './writeGate.js';
 
 const PLAN_COLUMNS = 'id, version, status, schema_version, inputs, notes, approved_at, approved_by, updated_at';
@@ -236,8 +237,8 @@ export async function readPlan(client, id) {
     .maybeSingle();
   if (error) return { ok: false, code: codeFrom(error, 'finance_read_failed') };
   if (!data) return { ok: false, code: 'finance_not_found' };
-  if (data.schema_version !== 1 && data.schema_version !== 2) return { ok: false, code: 'finance_schema_unsupported' };
-  if (data.schema_version === 2) {
+  if (!isSupportedPlanSchema(data.schema_version)) return { ok: false, code: 'finance_schema_unsupported' };
+  if (planHasMonthlyBasis(data.schema_version)) {
     const basis = validatePlanInputs(data.inputs, 2);
     if (!basis.ok) return { ok: false, code: 'finance_schema_unsupported' };
   }

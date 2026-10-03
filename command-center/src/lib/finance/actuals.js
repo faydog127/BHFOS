@@ -3,6 +3,7 @@
  * Blank stays null. Zero stays zero. Stage revenue is not a monthly plan basis.
  */
 import { div } from './nullMath.js';
+import { planHasMonthlyBasis } from './schemaContract.js';
 
 export const ACTUAL_MONEY_KEYS = Object.freeze([
   'total_revenue',
@@ -140,7 +141,7 @@ export function channelRevenueIssue(facts) {
  * Stage required revenue and scenario figures are not used.
  * This helper stays null. Version 2 values are read by plannedFactsForMonth.
  */
-const MONTH_KEY = /^(\d{4})-(0[1-9]|1[0-2])-01$/;
+const MONTH_KEY = /^(?!0000)(\d{4})-(0[1-9]|1[0-2])-01$/;
 
 export function declaredMonthlyBasis(plan) {
   if (!plan || plan.schema_version !== 1) return null;
@@ -156,8 +157,13 @@ export function normalizeActualMonth(value) {
 }
 
 function hasAtMostTwoDecimals(value) {
-  const scaled = value * 100;
-  return Math.abs(scaled - Math.round(scaled)) < 1e-8;
+  if (typeof value !== 'number' || !Number.isFinite(value) || Object.is(value, -0)) return false;
+  if (Math.abs(value) >= 1e21) return false;
+  const text = value.toString();
+  if (/[eE]/.test(text)) return false;
+  const body = text.startsWith('-') ? text.slice(1) : text;
+  const fraction = body.includes('.') ? body.split('.')[1] : '';
+  return fraction.length <= 2;
 }
 
 function wholeDigitCount(value) {
@@ -204,7 +210,7 @@ export function validateMonthlyBasis(basis) {
         facts[key] = null;
         continue;
       }
-      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+      if (typeof value !== 'number' || !Number.isFinite(value) || Object.is(value, -0) || value < 0) {
         return { ok: false, code: 'invalid_monthly_basis' };
       }
       if (field.kind === 'count') {
@@ -227,7 +233,7 @@ export function validateMonthlyBasis(basis) {
 }
 
 export function plannedFactsForMonth(plan, month) {
-  if (!plan || plan.schema_version !== 2) return null;
+  if (!plan || !planHasMonthlyBasis(plan.schema_version)) return null;
   const key = normalizeActualMonth(month);
   const row = key ? plan.inputs?.monthly_basis?.[key] : null;
   const facts = {};

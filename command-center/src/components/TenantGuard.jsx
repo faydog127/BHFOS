@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -15,6 +15,8 @@ const TenantGuard = ({ children }) => {
   const { session, loading: authLoading, signOut } = useSupabaseAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const locationRef = useRef(location);
+  locationRef.current = location;
   const [isChecking, setIsChecking] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
 
@@ -50,7 +52,8 @@ const TenantGuard = ({ children }) => {
 
         // 1. Not Logged In
         if (!session) {
-          const next = encodeURIComponent(location.pathname + location.search);
+          const current = locationRef.current;
+          const next = encodeURIComponent(current.pathname + current.search);
           const loginPath = `/${urlTenant || 'tvg'}/login?next=${next}`;
           navigate(loginPath, { replace: true });
           return;
@@ -127,7 +130,9 @@ const TenantGuard = ({ children }) => {
     return () => {
       mounted = false;
     };
-  }, [session, authLoading, urlTenant, navigate, location]);
+    // Location is read through locationRef. Repeating this effect on every
+    // same-tenant navigation set isChecking and unmounted the Finance shell.
+  }, [session, authLoading, urlTenant, navigate]);
 
   if (authLoading || isChecking) {
     return (

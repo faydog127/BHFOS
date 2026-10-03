@@ -6,6 +6,8 @@
 
 begin;
 
+\ir plan_document_fixture.sql
+
 create function pg_temp.finance_become(p_uid uuid, p_tenant text, p_role jsonb)
 returns void
 language plpgsql
@@ -55,7 +57,7 @@ begin
   perform pg_temp.finance_become(v_admin, 'tvg', '"admin"'::jsonb);
 
   insert into public.finance_plans (tenant_id, schema_version, inputs)
-  values ('tvg', 1, '{}'::jsonb)
+  values ('tvg', 1, pg_temp.finance_v1_document())
   returning id into v_plan;
 
   begin

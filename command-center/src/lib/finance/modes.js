@@ -5,6 +5,7 @@
  * Mode is not an input to the figures: factsForMode returns the same object.
  */
 import { CHECKIN_FIELDS, derivedActualMetrics, plannedFactsForMonth } from './actuals.js';
+import { planHasMonthlyBasis } from './schemaContract.js';
 import { formatNumber, formatPercentFromFraction } from './format.js';
 import { READINESS_INCOMPLETE, READINESS_READY } from './readiness.js';
 import { variance, variancePct } from './variance.js';
@@ -139,7 +140,7 @@ function factCell(kind, value) {
 function basisKind(actual, plan) {
   if (!actual) return 'no_actual';
   if (!plan) return 'no_comparison_plan';
-  if (plan.schema_version !== 2) return 'no_monthly_basis';
+  if (!planHasMonthlyBasis(plan.schema_version)) return 'no_monthly_basis';
   return 'declared_monthly_basis';
 }
 

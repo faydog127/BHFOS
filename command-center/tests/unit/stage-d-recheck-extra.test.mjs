@@ -157,7 +157,8 @@ describe('stage D recheck: pricing columns, timestamp, print css', () => {
     assert.equal(/nowrap/.test(css), false, 'cells must wrap in print');
     assert.match(css, /white-space:\s*normal/);
     assert.match(css, /overflow-wrap:\s*anywhere|word-break:\s*break-word|overflow-wrap:\s*break-word/);
-    assert.match(read('src/pages/finance/FinanceReports.jsx'), /@page\s*\{\s*size:\s*letter;\s*margin:\s*12mm;\s*\}/);
+    assert.match(read('src/pages/finance/FinanceReports.jsx'), /@page\s*\{\s*margin:\s*12mm;\s*\}/);
+    assert.equal(/@page\s*\{[^}]*size\s*:/.test(css), false, 'paper size is chosen by the print job, not forced to letter');
     assert.equal(/font-size:\s*([0-9]|1[0-1])(\.\d+)?px/.test(css) && /font-size:\s*([0-7])(\.\d+)?px/.test(css), false, 'print cells are not below 8px');
     assert.match(css, /font-size:\s*(9|10|11|12)px/);
   });
