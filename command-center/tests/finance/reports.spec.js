@@ -73,7 +73,18 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
   seedHistoricalV1();
   await page.reload();
   await expect(page.getByTestId('canonical-required-revenue')).toBeVisible();
+  await page.evaluate(() => {
+    const financeUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    history.pushState({ financeHold: true }, '', '/tvg/crm/dashboard');
+    history.pushState({ financeHold: true }, '', financeUrl);
+  });
   await page.locator('textarea').fill('unsaved hardening note');
+  await expect(page.locator('textarea')).toHaveValue('unsaved hardening note');
+  await page.goBack();
+  await expect(page.getByTestId('finance-leave-dialog')).toBeVisible();
+  await expect(page).toHaveURL(/\/finance\/?$/);
+  await expect(page.locator('textarea')).toHaveValue('unsaved hardening note');
+  await page.keyboard.press('Escape');
   const dirtyWrites = [];
   const onDirtyRequest = (request) => {
     const method = request.method();
@@ -121,12 +132,8 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
   await expect(page.getByTestId('finance-leave-dialog')).toHaveCount(0);
   await page.goBack();
   await expect(page.getByTestId('finance-leave-dialog')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/finance\/?$/);
   await expect(page.locator('textarea')).toHaveValue('unsaved hardening note');
-  await page.goBack();
-  await expect(page.getByTestId('finance-leave-dialog')).toBeVisible();
-  await expect(page).toHaveURL(/\/finance/);
-  await expect(page.locator('textarea')).toHaveValue('unsaved hardening note');
-  await page.keyboard.press('Escape');
   expect(dirtyWrites.some((line) => /finance_plans|finance_monthly_actuals|finance_approve|finance_open_draft|finance_upgrade/.test(line))).toBe(false);
   page.off('request', onDirtyRequest);
   page.once('dialog', (dialog) => dialog.accept());
