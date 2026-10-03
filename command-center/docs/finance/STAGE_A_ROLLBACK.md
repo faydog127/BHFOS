@@ -2,7 +2,7 @@
 
 This rollback drops the Stage A finance tables and functions. It does not touch `enforce_tenant_id_immutability()`.
 
-Do not run this against a linked, staging, or production database. Production project `wwyxohjnyqnegzbxtuxs` and staging project `glkrykpksbsqmmilmjhs` are out of scope. There is no finance seed to restore.
+Do not run this against a linked, staging, or production database. Production project `wwyxohjnyqnegzbxtuxs`, BHFOS n8n Assurance Preview `glkrykpksbsqmmilmjhs`, and Command Center staging `exwochkjngdztrdtxnsa` are out of scope. There is no finance seed to restore.
 
 No real TVG data may be entered in any Vercel Preview or staging environment. The finance migration is not applied to any remote project by PR #164. Preview must use a non-production Supabase project, or none. Applying the migration anywhere requires explicit Command Center authorization.
 
