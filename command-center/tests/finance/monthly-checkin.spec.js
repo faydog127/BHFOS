@@ -46,11 +46,14 @@ async function cycleModes(page, prefix) {
   await page.getByTestId('finance-mode-advanced').click();
   await expect(page.getByTestId('finance-mode')).toHaveAttribute('data-mode', 'advanced');
   await expect(page.getByTestId('canonical-required-revenue')).toHaveText(required);
+  if (prefix === 'empty') await expect(page.getByTestId('advanced-cost-chart-empty')).toHaveText('No data');
   await shot(page, `${prefix}-advanced-desktop`);
   await page.setViewportSize({ width: 390, height: 844 });
   await shot(page, `${prefix}-advanced-mobile`);
   await page.getByTestId('finance-mode-executive').click();
   await expect(page.getByTestId('canonical-required-revenue')).toHaveText(required);
+  const editBox = await page.getByTestId('finance-edit-in-guided').boundingBox();
+  expect(editBox.height).toBeGreaterThanOrEqual(44);
   await shot(page, `${prefix}-executive-mobile`);
   await page.getByTestId('finance-mode-guided').click();
   await expect(page.getByTestId('canonical-required-revenue')).toHaveText(required);
@@ -60,7 +63,7 @@ async function cycleModes(page, prefix) {
 }
 
 test('monthly check-in entry, history, and comparison basis', async ({ page }) => {
-  test.setTimeout(240000);
+  test.setTimeout(300000);
   test.skip(!process.env.FINANCE_CHECKIN_EMAIL || !process.env.FINANCE_CHECKIN_PASSWORD, 'local check-in credentials were not provided');
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/tvg/login?next=%2Ftvg%2Ffinance%2Fcheckin');
@@ -69,6 +72,7 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await page.locator('button[type="submit"]').click();
   await page.waitForURL('**/finance/checkin');
   await expect(page.getByTestId('finance-checkin')).toBeVisible();
+  await expect(page.getByTestId('finance-mode')).toHaveCount(0);
   await expect(page.getByTestId('checkin-empty')).toBeVisible();
   await expect(page.getByTestId('checkin-no-plan')).toBeVisible();
   await expect(page.getByTestId('checkin-revenue-definition')).toContainText('not the invoices issued');
@@ -140,6 +144,28 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await basisRevenue.click();
   await basisRevenue.pressSequentially('10.50');
   await expect(basisRevenue).toHaveValue('10.50');
+  const dirtyWrites = [];
+  const onDirtyRequest = (request) => {
+    const method = request.method();
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return;
+    if (request.url().includes('/auth/v1/token')) return;
+    dirtyWrites.push(`${method} ${request.url()}`);
+  };
+  page.on('request', onDirtyRequest);
+  await page.getByTestId('finance-mode-executive').click();
+  await expect(page.getByTestId('finance-unsaved-in-readonly-mode')).toContainText('These figures include unsaved edits');
+  await expect(page.getByTestId('finance-save')).toHaveCount(0);
+  await shot(page, 'dirty-executive-desktop');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await shot(page, 'dirty-executive-mobile');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByTestId('finance-mode-advanced').click();
+  await expect(page.getByTestId('finance-unsaved-in-readonly-mode')).toContainText('These figures include unsaved edits');
+  await page.getByRole('button', { name: 'Open Guided' }).click();
+  await expect(page.getByTestId('finance-basis-total-revenue')).toHaveValue(/^10\.50?$/);
+  await page.waitForTimeout(400);
+  page.off('request', onDirtyRequest);
+  expect(dirtyWrites).toEqual([]);
   await page.getByTestId('finance-basis-cash-reserve').fill('0.00');
   const saveDone = page.waitForResponse((res) => res.url().includes('/finance_plans') && res.request().method() === 'PATCH' && res.ok());
   await page.getByTestId('finance-save').click();
@@ -177,6 +203,8 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await assertModeSwitchWritesNothing(page);
   await page.getByTestId('finance-mode-executive').click();
   await expect(page.getByTestId('finance-save')).toHaveCount(0);
+  await expect(page.getByTestId('finance-unsaved-in-readonly-mode')).toHaveCount(0);
+  await expect(page.getByTestId('finance-edit-in-guided')).toContainText('approved plan: use New draft to edit');
   await expect(page.getByTestId('finance-approve')).toHaveCount(0);
   await expect(page.getByTestId('decision-latest-month')).toHaveText('2026-02');
   await expect(page.getByTestId('decision-basis-state')).toContainText('blank plan figure is not zero');
@@ -203,10 +231,49 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await expect(page.getByTestId('finance-monthly-basis')).toHaveCount(0);
   await cycleModes(page, 'populated');
   await page.goto('/tvg/finance/checkin');
+  await expect(page.getByTestId('finance-mode')).toHaveCount(0);
   await page.getByTestId('checkin-history-2026-01').click();
   await expect(page.getByTestId('checkin-plan-total-revenue')).toHaveText('--');
   await expect(page.getByTestId('checkin-variance-total-revenue')).toHaveText('--');
   await expect(page.getByTestId('checkin-partial-basis')).toBeVisible();
   await expect(page.getByTestId('checkin-no-monthly-basis')).toHaveCount(0);
   await page.screenshot({ path: `${out}/desktop-historical-locked-basis.png`, fullPage: true });
+
+  await page.goto('/tvg/finance');
+  await page.getByTestId('finance-new-draft').click();
+  await expect(page.getByTestId('finance-save')).toBeVisible();
+  const other = await page.context().newPage();
+  await other.goto('/tvg/finance');
+  await expect(other.getByTestId('finance-save')).toBeVisible();
+  await other.locator('textarea').fill('server note');
+  const otherSave = other.waitForResponse((res) => res.url().includes('/finance_plans') && res.request().method() === 'PATCH' && res.ok());
+  await other.getByTestId('finance-save').click();
+  await otherSave;
+  await other.close();
+  await page.locator('textarea').fill('local note');
+  await page.getByTestId('finance-save').click();
+  await expect(page.getByTestId('finance-version-conflict')).toBeVisible();
+  const conflictWrites = [];
+  const onConflictRequest = (request) => {
+    const method = request.method();
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return;
+    if (request.url().includes('/auth/v1/token')) return;
+    conflictWrites.push(`${method} ${request.url()}`);
+  };
+  page.on('request', onConflictRequest);
+  await page.getByTestId('finance-mode-executive').click();
+  await expect(page.getByTestId('finance-unsaved-in-readonly-mode')).toContainText('Changed elsewhere');
+  await expect(page.getByTestId('finance-version-conflict')).toHaveCount(0);
+  await shot(page, 'conflict-executive-desktop');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await shot(page, 'conflict-executive-mobile');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByTestId('finance-mode-advanced').click();
+  await expect(page.getByTestId('finance-unsaved-in-readonly-mode')).toContainText('Changed elsewhere');
+  await page.getByRole('button', { name: 'Open Guided' }).click();
+  await expect(page.getByTestId('finance-version-conflict')).toBeVisible();
+  await expect(page.locator('textarea')).toHaveValue('local note');
+  await page.waitForTimeout(400);
+  page.off('request', onConflictRequest);
+  expect(conflictWrites).toEqual([]);
 });

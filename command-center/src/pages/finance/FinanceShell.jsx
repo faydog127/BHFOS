@@ -547,11 +547,11 @@ export default function FinanceShell({ grantedAccess }) {
         </aside>
         <main className="px-4 py-6 lg:px-8">
           <header className="mb-6 flex flex-col gap-3">
-            <ModeSwitch mode={mode} onMode={selectFinanceMode} />
+            {section !== 'checkin' ? <ModeSwitch mode={mode} onMode={selectFinanceMode} /> : null}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h1 className="text-2xl font-semibold">{section === 'checkin' ? 'Monthly Check-In' : mode === 'executive' ? 'Executive' : mode === 'advanced' ? 'Advanced Analytics' : FINANCE_SECTIONS.find((item) => (item.path || 'overview') === section)?.label}</h1>
-              <p className="mt-1 text-sm text-slate-600">{mode === 'guided' ? 'What this section is, what you can change, and what the formulas return.' : 'Read from the stored plan and Monthly Check-In. Switching mode does not save.'}</p>
+              <p className="mt-1 text-sm text-slate-600">{mode === 'guided' ? 'What this section is, what you can change, and what the formulas return.' : 'Read from the plan on this screen and Monthly Check-In. Switching mode does not save.'}</p>
             </div>
             {planReady && section !== 'checkin' ? (
               <label className="text-sm text-slate-600">
@@ -583,11 +583,19 @@ export default function FinanceShell({ grantedAccess }) {
           ) : null}
           {loadCode ? <p className="mb-4 text-sm text-red-700" data-testid="finance-load-error">{loadErrorCopy(loadCode)}</p> : null}
           {actualsCode && section === 'checkin' ? <p className="mb-4 text-sm text-red-700" data-testid="checkin-load-error">{actualsCode}</p> : null}
+          {planReady && section !== 'checkin' && mode !== 'guided' && (dirty || conflict) ? (
+            <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" data-testid="finance-unsaved-in-readonly-mode">
+              {conflict
+                ? 'Changed elsewhere. Your unsaved edits are kept in Guided. These figures include them.'
+                : 'These figures include unsaved edits. Return to Guided to save or discard them.'}
+              <button type="button" className="ml-3 underline" onClick={() => selectFinanceMode('guided')}>Open Guided</button>
+            </div>
+          ) : null}
           {planReady && section !== 'checkin' && mode === 'executive' ? (
-            <ExecutiveView support={support} onEdit={() => selectFinanceMode('guided')} checkinHref={`/${routeTenantId}/finance/checkin`} />
+            <ExecutiveView support={support} planStatus={record.status} onEdit={() => selectFinanceMode('guided')} checkinHref={`/${routeTenantId}/finance/checkin`} />
           ) : null}
           {planReady && section !== 'checkin' && mode === 'advanced' ? (
-            <AdvancedView support={support} onEdit={() => selectFinanceMode('guided')} checkinHref={`/${routeTenantId}/finance/checkin`} />
+            <AdvancedView support={support} planStatus={record.status} onEdit={() => selectFinanceMode('guided')} checkinHref={`/${routeTenantId}/finance/checkin`} />
           ) : null}
           {planReady && section !== 'checkin' && mode === 'guided' ? (
           <>
@@ -650,10 +658,12 @@ export default function FinanceShell({ grantedAccess }) {
           </fieldset>
           </>
           ) : null}
-          <div className="mt-8 flex justify-between text-sm">
-            <SectionLink sections={FINANCE_SECTIONS} current={section} base={base} direction={-1} label="Back" />
-            <SectionLink sections={FINANCE_SECTIONS} current={section} base={base} direction={1} label="Next" />
-          </div>
+          {mode === 'guided' ? (
+            <div className="mt-8 flex justify-between text-sm">
+              <SectionLink sections={FINANCE_SECTIONS} current={section} base={base} direction={-1} label="Back" />
+              <SectionLink sections={FINANCE_SECTIONS} current={section} base={base} direction={1} label="Next" />
+            </div>
+          ) : null}
         </main>
       </div>
     </div>

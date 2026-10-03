@@ -161,6 +161,58 @@ describe('finance presentation modes', () => {
     assert.equal(support.assumptions.every((item) => item.display === '--'), true);
   });
 
+  it('treats blank and non-numeric measure inputs as unknown, not zero', () => {
+    const plan = {
+      id: 'p',
+      schema_version: 2,
+      status: 'approved',
+      inputs: {
+        monthly_basis: {
+          '2026-02-01': {
+            total_revenue: ' ',
+            cash_reserve: false,
+            total_jobs: [],
+            productive_unit_hours: '   ',
+            direct_residential_revenue: '4.00',
+            portal_revenue: ' 4.00 ',
+            ar_ending: 10,
+          },
+        },
+      },
+    };
+    const actual = {
+      month: '2026-02-01',
+      comparison_plan_id: 'p',
+      total_revenue: ' ',
+      cash_reserve: false,
+      total_jobs: [],
+      productive_unit_hours: '   ',
+      direct_residential_revenue: '4.00',
+      portal_revenue: ' 4.00 ',
+      ar_ending: 10,
+    };
+    const support = buildDecisionSupport({ view: null, result: null, inputs: null, plans: [plan], actuals: [actual] });
+    const row = (key) => support.latest.rows.find((item) => item.key === key);
+    assert.equal(row('total_revenue').actual.display, '--');
+    assert.equal(row('total_revenue').actual.value, null);
+    assert.equal(row('total_revenue').plan.display, '--');
+    assert.equal(row('total_revenue').plan.value, null);
+    assert.equal(row('cash_reserve').actual.display, '--');
+    assert.equal(row('cash_reserve').plan.display, '--');
+    assert.equal(row('total_jobs').actual.display, '--');
+    assert.equal(row('total_jobs').actual.value, null);
+    assert.equal(row('total_jobs').plan.display, '--');
+    assert.equal(row('productive_unit_hours').actual.display, '--');
+    assert.equal(row('productive_unit_hours').plan.display, '--');
+    assert.equal(row('direct_residential_revenue').actual.display, '$4.00');
+    assert.equal(row('direct_residential_revenue').plan.display, '$4.00');
+    assert.equal(row('portal_revenue').actual.display, '$4.00');
+    assert.equal(row('portal_revenue').plan.display, '$4.00');
+    assert.equal(row('ar_ending').actual.display, '$10.00');
+    assert.equal(row('ar_ending').plan.display, '$10.00');
+    assert.equal(row('ar_ending').plan.value, 10);
+  });
+
   it('keeps mode switching out of the write path and out of chart formulas', () => {
     const shell = readFileSync(path.join(root, 'src/pages/finance/FinanceShell.jsx'), 'utf8');
     const modes = readFileSync(path.join(root, 'src/lib/finance/modes.js'), 'utf8');

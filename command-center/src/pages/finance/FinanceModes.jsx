@@ -2,7 +2,25 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { FINANCE_MODES, GUIDED_BRIEFS } from '@/lib/finance/modes';
-import { showMoney } from '@/lib/finance/viewModel';
+import { showCents, showMoney } from '@/lib/finance/viewModel';
+
+const TOKEN_LABELS = {
+  NotReady: 'Not ready',
+  below_near: 'Below near capacity',
+  near_capacity: 'Near capacity',
+  at_or_over_capacity: 'At or over capacity',
+};
+
+function presentLabel(value) {
+  if (typeof value !== 'string' || value === '') return value;
+  let next = value;
+  for (const [token, label] of Object.entries(TOKEN_LABELS)) next = next.replaceAll(token, label);
+  if (/^[a-z][a-z0-9_]*$/.test(next)) {
+    const parts = next.split('_');
+    return parts.map((part, index) => (index === 0 && part ? part.charAt(0).toUpperCase() + part.slice(1) : part)).join(' ');
+  }
+  return next;
+}
 
 const STEPS = [
   ['what', 'What this is'],
@@ -55,10 +73,15 @@ export function GuidedBrief({ section }) {
   );
 }
 
-function EditInGuided({ onEdit }) {
+function EditInGuided({ onEdit, planStatus }) {
+  const label = planStatus === 'draft'
+    ? 'Edit assumptions in Guided'
+    : planStatus
+      ? 'Open Guided — approved plan: use New draft to edit'
+      : 'Open Guided';
   return (
-    <button type="button" className="rounded border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900" data-testid="finance-edit-in-guided" onClick={onEdit}>
-      Edit assumptions in Guided
+    <button type="button" className="min-h-11 w-full whitespace-normal rounded border border-slate-300 bg-white px-3 py-2 text-left text-sm font-medium text-slate-900 sm:w-auto" data-testid="finance-edit-in-guided" onClick={onEdit}>
+      {label}
     </button>
   );
 }
@@ -102,19 +125,23 @@ function ComparisonTable({ rows, prefix }) {
   );
 }
 
-function SeriesChart({ rows, bars, testId }) {
+function SeriesChart({ rows, bars, testId, formatValue = showMoney }) {
+  const empty = !rows.length || rows.every((row) => bars.every((bar) => row[bar.key] === null || row[bar.key] === undefined));
   return (
-    <div className="mt-3 h-52 w-full min-w-0" data-testid={testId}>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-          <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} />
-          <YAxis tick={{ fontSize: 11 }} width={48} />
-          <Tooltip formatter={(value) => showMoney(value)} />
-          {bars.map((bar) => (
-            <Bar key={bar.key} dataKey={bar.key} name={bar.name} fill={bar.fill} />
-          ))}
-        </BarChart>
-      </ResponsiveContainer>
+    <div className="mt-3 w-full min-w-0" data-testid={testId}>
+      {empty ? <p className="mb-2 text-sm text-slate-600" data-testid={`${testId}-empty`}>No data</p> : null}
+      <div className="h-52 w-full min-w-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} />
+            <YAxis tick={{ fontSize: 11 }} width={48} />
+            <Tooltip formatter={(value) => formatValue(value)} />
+            {bars.map((bar) => (
+              <Bar key={bar.key} dataKey={bar.key} name={bar.name} fill={bar.fill} />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }
@@ -139,13 +166,13 @@ function StageFacts({ support }) {
       <FactLine label="Owner field reserve" value={support.ownerFieldReserve} />
       <FactLine label="Productive unit-hours" value={support.productiveHours} />
       <FactLine label="Revenue per productive unit-hour" value={support.perHour} />
-      <FactLine label="Readiness" value={support.readiness} note={support.advisory} />
-      <FactLine label="Utilization band" value={support.utilizationBand} />
+      <FactLine label="Readiness" value={presentLabel(support.readiness)} note={support.advisory} />
+      <FactLine label="Utilization band" value={presentLabel(support.utilizationBand)} />
     </dl>
   );
 }
 
-export function ExecutiveView({ support, onEdit, checkinHref }) {
+export function ExecutiveView({ support, onEdit, checkinHref, planStatus }) {
   return (
     <div className="space-y-6" data-testid="finance-executive">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -153,7 +180,7 @@ export function ExecutiveView({ support, onEdit, checkinHref }) {
           <h2 className="text-lg font-semibold text-slate-950">Decision view</h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">How the selected stage stands, and how the latest Monthly Check-In compares with the plan that month was associated to.</p>
         </div>
-        <EditInGuided onEdit={onEdit} />
+        <EditInGuided onEdit={onEdit} planStatus={planStatus} />
       </div>
       <section className="rounded border border-slate-200 bg-white px-3 sm:px-4">
         <h3 className="border-b border-slate-200 py-3 text-sm font-semibold">Selected stage</h3>
@@ -175,7 +202,7 @@ export function ExecutiveView({ support, onEdit, checkinHref }) {
         <h3 className="text-sm font-semibold">Needs attention</h3>
         <ul className="mt-2 divide-y divide-slate-100">
           {support.exceptions.map((item) => (
-            <li key={item.id} className="py-2 text-sm leading-6 text-slate-800">{item.text}</li>
+            <li key={item.id} className="py-2 text-sm leading-6 text-slate-800">{presentLabel(item.text)}</li>
           ))}
         </ul>
         {support.stage3Caveat ? <p className="mt-2 text-xs leading-5 text-slate-600">{support.stage3Caveat}</p> : null}
@@ -197,7 +224,7 @@ export function ExecutiveView({ support, onEdit, checkinHref }) {
             <tbody>
               {support.services.map((service) => (
                 <tr key={service.key} className="border-t border-slate-100">
-                  <th className="py-2 pr-3 text-left font-normal">{service.label}</th>
+                  <th className="py-2 pr-3 text-left font-normal">{presentLabel(service.label)}</th>
                   <td className="py-2 pr-3">{service.plannedPrice}</td>
                   <td className="py-2 pr-3">{service.stage2Capacity}</td>
                   <td className="py-2 pr-3">{service.variance}</td>
@@ -221,7 +248,7 @@ function Block({ title, testId, children }) {
   );
 }
 
-export function AdvancedView({ support, onEdit, checkinHref }) {
+export function AdvancedView({ support, onEdit, checkinHref, planStatus }) {
   return (
     <div className="space-y-4" data-testid="finance-advanced">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -229,7 +256,7 @@ export function AdvancedView({ support, onEdit, checkinHref }) {
           <h2 className="text-lg font-semibold text-slate-950">Advanced analytics</h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">The same stage results and the same check-in comparison. Charts plot those figures and do not calculate new ones.</p>
         </div>
-        <EditInGuided onEdit={onEdit} />
+        <EditInGuided onEdit={onEdit} planStatus={planStatus} />
       </div>
       <Block title="Cost structure by stage" testId="advanced-cost">
         <div className="mt-2 overflow-x-auto">
@@ -258,7 +285,7 @@ export function AdvancedView({ support, onEdit, checkinHref }) {
         <SeriesChart
           testId="advanced-cost-chart"
           rows={support.stageSeries.map((row) => ({
-            label: row.label,
+            label: presentLabel(row.label),
             cashOperatingCost: row.cashOperatingCost,
             economicOperatingCost: row.economicOperatingCost,
           }))}
@@ -273,7 +300,7 @@ export function AdvancedView({ support, onEdit, checkinHref }) {
           <FactLine label="Productive unit-hours" value={support.productiveHours} />
           <FactLine label="Field headcount" value={support.fieldHeadcount} />
           <FactLine label="Revenue per productive unit-hour" value={support.perHour} />
-          <FactLine label="Utilization band" value={support.utilizationBand} />
+          <FactLine label="Utilization band" value={presentLabel(support.utilizationBand)} />
           <FactLine label="Actual revenue per productive hour" value={support.actualDerived.revenuePerHour} note="From the latest check-in" />
           <FactLine label="Actual jobs per productive hour" value={support.actualDerived.jobsPerHour} />
         </dl>
@@ -291,7 +318,7 @@ export function AdvancedView({ support, onEdit, checkinHref }) {
             <tbody>
               {support.services.map((service) => (
                 <tr key={service.key} className="border-t border-slate-100">
-                  <th className="py-2 pr-3 text-left font-normal">{service.label}</th>
+                  <th className="py-2 pr-3 text-left font-normal">{presentLabel(service.label)}</th>
                   <td className="py-2 pr-3">{service.directJobCost}</td>
                   <td className="py-2 pr-3">{service.fullySupported}</td>
                   <td className="py-2 pr-3">{service.plannedPrice}</td>
@@ -304,8 +331,9 @@ export function AdvancedView({ support, onEdit, checkinHref }) {
         </div>
         <SeriesChart
           testId="advanced-price-chart"
-          rows={support.services.map((service) => ({ label: service.label, variance: service.varianceRaw }))}
+          rows={support.services.map((service) => ({ label: presentLabel(service.label), variance: service.varianceRaw }))}
           bars={[{ key: 'variance', name: 'Variance vs stage 2', fill: '#334155' }]}
+          formatValue={showCents}
         />
       </Block>
       <Block title="Working capital" testId="advanced-working-capital">
@@ -335,6 +363,7 @@ export function AdvancedView({ support, onEdit, checkinHref }) {
             { key: 'plan', name: 'Plan revenue', fill: '#334155' },
             { key: 'actual', name: 'Actual earned operating revenue', fill: '#94a3b8' },
           ]}
+          formatValue={showCents}
         />
         <NavLink className="mt-2 inline-flex min-h-11 items-center text-sm font-medium underline" to={checkinHref}>Open Monthly Check-In</NavLink>
       </Block>
@@ -344,15 +373,16 @@ export function AdvancedView({ support, onEdit, checkinHref }) {
         <ul className="mt-2 divide-y divide-slate-100 text-sm">
           {support.channels.map((channel) => (
             <li key={channel.key} className="flex justify-between gap-3 py-2">
-              <span>{channel.label}</span>
+              <span>{presentLabel(channel.label)}</span>
               <span>Share {channel.share} · DSO {channel.dso}</span>
             </li>
           ))}
         </ul>
         <SeriesChart
           testId="advanced-channel-chart"
-          rows={support.channelActuals.map((row) => ({ label: row.label, value: row.value }))}
+          rows={support.channelActuals.map((row) => ({ label: presentLabel(row.label), value: row.value }))}
           bars={[{ key: 'value', name: 'Actual channel revenue', fill: '#334155' }]}
+          formatValue={showCents}
         />
       </Block>
       <Block title="Labor efficiency and cost burden" testId="advanced-labor">
@@ -374,7 +404,7 @@ export function AdvancedView({ support, onEdit, checkinHref }) {
             <tbody>
               {support.burden.map((role) => (
                 <tr key={role.key} className="border-t border-slate-100">
-                  <th className="py-2 pr-3 text-left font-normal">{role.label}</th>
+                  <th className="py-2 pr-3 text-left font-normal">{presentLabel(role.label)}</th>
                   <td className="py-2 pr-3">{role.wage}</td>
                   <td className="py-2 pr-3">{role.burden}</td>
                 </tr>
@@ -396,13 +426,13 @@ export function AdvancedView({ support, onEdit, checkinHref }) {
           {support.stageSeries.map((row) => (
             <li key={row.key} className="flex justify-between gap-3 py-2">
               <span>{row.label}</span>
-              <span>{row.readiness}</span>
+              <span>{presentLabel(row.readiness)}</span>
             </li>
           ))}
         </ul>
         <SeriesChart
           testId="advanced-revenue-chart"
-          rows={support.stageSeries.map((row) => ({ label: row.label, requiredMonthlyRevenue: row.requiredMonthlyRevenue }))}
+          rows={support.stageSeries.map((row) => ({ label: presentLabel(row.label), requiredMonthlyRevenue: row.requiredMonthlyRevenue }))}
           bars={[{ key: 'requiredMonthlyRevenue', name: 'Required monthly revenue', fill: '#334155' }]}
         />
       </Block>
