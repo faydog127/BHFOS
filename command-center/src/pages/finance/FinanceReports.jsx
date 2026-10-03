@@ -13,6 +13,12 @@ const PRINT_CSS = `
   thead { display: table-header-group; }
   tr, th, td { break-inside: avoid; page-break-inside: avoid; }
   th, td { border-bottom: 1px solid #cbd5e1; padding: 4px 6px !important; text-align: left; vertical-align: top; font-size: 10px !important; white-space: normal !important; overflow-wrap: anywhere; }
+  .report-value { overflow-wrap: normal !important; word-break: normal !important; hyphens: manual !important; }
+}
+@media print and (orientation: portrait) {
+  table:has(th:nth-child(10)) th, table:has(th:nth-child(10)) td { font-size: 8px !important; padding: 2px 1px !important; }
+  table:has(th:nth-child(10)) th:first-child, table:has(th:nth-child(10)) td:first-child { width: 11%; }
+  table:has(th:nth-child(10)) th:not(:first-child) { overflow-wrap: normal !important; word-break: normal !important; hyphens: manual !important; }
 }
 @page { size: letter; margin: 12mm; }
 `;
@@ -27,7 +33,7 @@ function FactTable({ title, rows, testId }) {
             {rows.map((row) => (
               <tr key={row.testId || row.label} className="border-t border-slate-200">
                 <th className="py-2 pr-3 text-left font-medium text-slate-600" scope="row">{row.label}</th>
-                <td className="py-2 font-medium text-slate-950" data-testid={row.testId}>{row.value}</td>
+                <td className="report-value py-2 font-medium text-slate-950" data-testid={row.testId}>{row.value}</td>
               </tr>
             ))}
           </tbody>
@@ -53,7 +59,7 @@ function GridTable({ title, columns, rows, testId }) {
               <tr key={row.label} className="border-t border-slate-200">
                 <th className="px-2 py-2 text-left font-medium text-slate-800" scope="row">{row.label}</th>
                 {row.cells.map((cell, index) => (
-                  <td key={`${row.label}-${columns[index + 1] || index}`} className="px-2 py-2 font-medium text-slate-950">{cell}</td>
+                  <td key={`${row.label}-${columns[index + 1] || index}`} className="report-value px-2 py-2 font-medium text-slate-950">{cell}</td>
                 ))}
               </tr>
             ))}
@@ -79,10 +85,10 @@ function Comparison({ block }) {
             {block.rows.map((row) => (
               <tr key={row.key} className="border-t border-slate-200">
                 <th className="px-2 py-2 text-left font-medium text-slate-800" scope="row">{row.label}</th>
-                <td className="px-2 py-2 font-medium" data-testid={`${block.prefix}-plan-${row.key.replaceAll('_', '-')}`}>{row.plan}</td>
-                <td className="px-2 py-2 font-medium" data-testid={`${block.prefix}-actual-${row.key.replaceAll('_', '-')}`}>{row.actual}</td>
-                <td className="px-2 py-2 font-medium" data-testid={`${block.prefix}-variance-${row.key.replaceAll('_', '-')}`}>{row.variance}</td>
-                <td className="px-2 py-2 font-medium">{row.variancePct}</td>
+                <td className="report-value px-2 py-2 font-medium" data-testid={`${block.prefix}-plan-${row.key.replaceAll('_', '-')}`}>{row.plan}</td>
+                <td className="report-value px-2 py-2 font-medium" data-testid={`${block.prefix}-actual-${row.key.replaceAll('_', '-')}`}>{row.actual}</td>
+                <td className="report-value px-2 py-2 font-medium" data-testid={`${block.prefix}-variance-${row.key.replaceAll('_', '-')}`}>{row.variance}</td>
+                <td className="report-value px-2 py-2 font-medium">{row.variancePct}</td>
               </tr>
             ))}
           </tbody>

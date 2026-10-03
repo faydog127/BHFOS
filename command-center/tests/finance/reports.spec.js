@@ -101,6 +101,7 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
   await expect(page.getByTestId('report-hvac-name')).toHaveText('Future/Licensing Dependent HVAC');
   await expect(page.getByTestId('report-hvac-revenue')).toContainText('not provided');
 
+  let shippedPrintCss = '';
   for (const id of presets) {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.emulateMedia({ media: 'screen' });
@@ -144,10 +145,17 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     });
     expect(clip.every((row) => row.overflow === 'visible')).toBe(true);
     expect(clip.every((row) => row.clipped === false)).toBe(true);
+    const valueSplit = await page.evaluate(() => [...document.querySelectorAll('.report-value')].filter((el) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      return range.getClientRects().length > 1 || el.scrollWidth > el.clientWidth + 1;
+    }).map((el) => el.textContent));
+    expect(valueSplit).toEqual([]);
     writeFileSync(`${out}/${id}-print-layout.json`, JSON.stringify({ ...printLayout, clip }, null, 2));
     if (id === 'pricing-economics') {
       await expect(page.getByRole('columnheader', { name: 'Signed variance' })).toBeVisible();
       await expect(page.getByRole('columnheader', { name: 'Stage 2 capacity' })).toBeVisible();
+      shippedPrintCss = await page.locator('style').first().evaluate((el) => el.textContent || '');
     }
     if (id === 'cost-structure') {
       await expect(page.getByRole('columnheader', { name: /Future\/Licensing Dependent HVAC/ })).toBeVisible();
@@ -156,7 +164,9 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     expect(printed).not.toContain('NotReady');
     expect(printed).not.toContain('below_near');
     await page.screenshot({ path: `${out}/${id}-print.png`, fullPage: true });
-    await page.pdf({ path: `${out}/${id}.pdf`, printBackground: true });
+    await page.pdf({ path: `${out}/${id}.pdf`, format: 'Letter', printBackground: true });
+    await page.pdf({ path: `${out}/${id}-a4.pdf`, format: 'A4', printBackground: true });
+    await page.pdf({ path: `${out}/${id}-landscape.pdf`, format: 'Letter', landscape: true, printBackground: true });
     await page.emulateMedia({ media: 'screen' });
     await page.setViewportSize({ width: 1280, height: 900 });
   }
@@ -167,6 +177,44 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     await expect(page.getByTestId(`finance-report-${id}`)).toBeVisible();
     await page.screenshot({ path: `${out}/${id}-mobile.png`, fullPage: true });
     await assertNoDocumentOverflow(page);
+  }
+
+  expect(shippedPrintCss).toContain('.report-value');
+  const big = '-$1,234,567.89';
+  const headers = ['Service', 'Planned price', 'Direct labor', 'Materials', 'Dispatch', 'Direct job cost', 'Indirect', 'Fully supported', 'Stage 2 capacity', 'Signed variance'];
+  const cells = ['duct_plus_ahu_package', '$2,345,678.90', '$123,456.78', '$12,345.67', '$1,234.56', '$234,567.89', '$12.50', '0.00%', '40.00', big];
+  await page.setContent(`<!doctype html><html><head><style>${shippedPrintCss}</style></head><body><article class="report-sheet"><h1>Pricing & Service Economics</h1><section class="report-block"><div class="overflow-x-auto"><table><thead><tr>${headers.map((header) => `<th>${header}</th>`).join('')}</tr></thead><tbody><tr>${cells.map((cell, index) => (index === 0 ? `<th>${cell}</th>` : `<td class="report-value">${cell}</td>`)).join('')}</tr></tbody></table></div></section></article></body>`);
+  for (const setup of [
+    ['pricing-7digit-letter', { width: 725, height: 960 }, { format: 'Letter' }],
+    ['pricing-7digit-a4', { width: 703, height: 1000 }, { format: 'A4' }],
+    ['pricing-7digit-landscape', { width: 965, height: 700 }, { format: 'Letter', landscape: true }],
+  ]) {
+    const [name, viewport, pdf] = setup;
+    await page.setViewportSize(viewport);
+    await page.emulateMedia({ media: 'print' });
+    const fit = await page.evaluate((signed) => {
+      const sheet = document.querySelector('.report-sheet');
+      const table = document.querySelector('table');
+      const signedCell = [...document.querySelectorAll('.report-value')].find((el) => el.textContent === signed);
+      const range = document.createRange();
+      range.selectNodeContents(signedCell);
+      const sheetBox = sheet.getBoundingClientRect();
+      const tableBox = table.getBoundingClientRect();
+      return {
+        lines: range.getClientRects().length,
+        overflow: signedCell.scrollWidth > signedCell.clientWidth + 1,
+        clipped: tableBox.right > sheetBox.right + 1,
+        font: getComputedStyle(signedCell).fontSize,
+        headers: document.querySelectorAll('thead th').length,
+      };
+    }, big);
+    expect(fit.headers).toBe(10);
+    expect(fit.lines).toBe(1);
+    expect(fit.overflow).toBe(false);
+    expect(fit.clipped).toBe(false);
+    writeFileSync(`${out}/${name}-layout.json`, JSON.stringify(fit, null, 2));
+    await page.screenshot({ path: `${out}/${name}.png`, fullPage: true });
+    await page.pdf({ path: `${out}/${name}.pdf`, printBackground: true, ...pdf });
   }
 
   expect(writes.every((line) => line.includes('/rpc/check_is_superuser'))).toBe(true);
