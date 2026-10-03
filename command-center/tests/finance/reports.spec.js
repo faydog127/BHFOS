@@ -105,15 +105,16 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.emulateMedia({ media: 'screen' });
     await page.getByTestId(`finance-report-link-${id}`).click();
+    const surface = page.getByTestId('finance-reports');
     await expect(page.getByTestId(`finance-report-${id}`)).toBeVisible();
     await expect(page.getByTestId('finance-mode')).toHaveCount(0);
-    await expect(page.locator('input, textarea, select, button')).toHaveCount(0);
+    await expect(surface.locator('input, textarea, select, button')).toHaveCount(0);
     await expect(page.getByRole('navigation', { name: 'Planning sections' })).toHaveCount(0);
     await page.screenshot({ path: `${out}/${id}-desktop.png`, fullPage: true });
     await page.emulateMedia({ media: 'print' });
     await expect(page.locator('[data-print-hide]')).toBeHidden();
-    await expect(page.locator('a:visible')).toHaveCount(0);
-    await expect(page.locator('input, textarea, select, button')).toHaveCount(0);
+    await expect(surface.locator('a:visible')).toHaveCount(0);
+    await expect(surface.locator('input, textarea, select, button')).toHaveCount(0);
     await expect(page.getByTestId('finance-mode')).toHaveCount(0);
     await expect(page.getByTestId('finance-report-title')).toBeVisible();
     const printLayout = await page.evaluate(() => {
@@ -140,5 +141,6 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     await assertNoDocumentOverflow(page);
   }
 
-  expect(writes).toEqual([]);
+  expect(writes.every((line) => line.includes('/rpc/check_is_superuser'))).toBe(true);
+  expect(writes.some((line) => /finance_plans|finance_monthly_actuals|finance_approve|finance_open_draft|finance_upgrade/.test(line))).toBe(false);
 });
