@@ -6,6 +6,8 @@ Steps 1–6 of the TVG financial planning model, under the 2026-10-01 Command Ce
 - Baseline: `17f9228951d74824d9b6fb0eb704832befed2afc` (ancestor of this branch)
 - Steps 1–6 code commit: `d8ce7d97a29c66b109722022bab107486aca3528`
 - Guard/test commit: `7c272fe4b8d07beead373d7a0ba48297429b1a68`
+- Stage A harness removal: `66f441d663fac1e9f2018df40d51072dc12988db`
+- Stage A persistence: `243f2081bcee8bed254176a87c48f0f6fc7dc839`
 - Draft PR: https://github.com/faydog127/BHFOS/pull/164 (do not merge)
 - Evidence tier: **locally verified**. Not deployed, not staging-verified, not merged, not production-verified.
 - Route: `/:tenantId/finance/*` → `TenantGuard` → `FinanceGuard` → `FinanceShell`. The shell is not inside `BHFCrmLayout`.
