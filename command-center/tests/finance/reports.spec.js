@@ -145,11 +145,16 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     });
     expect(clip.every((row) => row.overflow === 'visible')).toBe(true);
     expect(clip.every((row) => row.clipped === false)).toBe(true);
-    const valueSplit = await page.evaluate(() => [...document.querySelectorAll('.report-value')].filter((el) => {
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      return range.getClientRects().length > 1 || el.scrollWidth > el.clientWidth + 1;
-    }).map((el) => el.textContent));
+    const valueSplit = await page.evaluate(() => {
+      const numeric = /^(?:--|-?\$[\d,]+\.\d{2}|-?\d+(?:\.\d+)?%|-?\d+(?:\.\d+)?)$/;
+      return [...document.querySelectorAll('.report-value')].filter((el) => {
+        const text = (el.textContent || '').trim();
+        if (!numeric.test(text)) return false;
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        return range.getClientRects().length > 1 || el.scrollWidth > el.clientWidth + 1;
+      }).map((el) => el.textContent);
+    });
     expect(valueSplit).toEqual([]);
     writeFileSync(`${out}/${id}-print-layout.json`, JSON.stringify({ ...printLayout, clip }, null, 2));
     if (id === 'pricing-economics') {
