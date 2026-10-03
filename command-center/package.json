@@ -8,7 +8,7 @@
     "prebuild": "node tools/generate-llms.js || node -e \"process.exit(0)\"",
     "lint": "eslint src",
     "finance:verify": "node tools/finance-verify.mjs",
-    "test:finance": "node --test tests/unit/finance-planning.test.mjs tests/unit/analytics-dashboard-guard.test.mjs tests/unit/analytics-dashboard-guard-structural.test.mjs tests/unit/l4-wiring-asserts.test.mjs tests/unit/analytics-integrity.test.mjs tests/unit/monthly-basis-validator-wiring.test.mjs tests/unit/analytics-dashboard-wiring.test.mjs tests/unit/c1-recheck-extra.test.mjs tests/unit/finance-modes.test.mjs tests/unit/c2-extra.test.mjs tests/unit/c2-recheck-extra.test.mjs",
+    "test:finance": "node --test tests/unit/finance-planning.test.mjs tests/unit/analytics-dashboard-guard.test.mjs tests/unit/analytics-dashboard-guard-structural.test.mjs tests/unit/l4-wiring-asserts.test.mjs tests/unit/analytics-integrity.test.mjs tests/unit/monthly-basis-validator-wiring.test.mjs tests/unit/analytics-dashboard-wiring.test.mjs tests/unit/c1-recheck-extra.test.mjs tests/unit/finance-modes.test.mjs tests/unit/c2-extra.test.mjs tests/unit/c2-recheck-extra.test.mjs tests/unit/c2-closeout-extra.test.mjs tests/unit/finance-reports.test.mjs",
     "build": "node tools/build-production.mjs && node tools/generate-build-info.mjs --environment=production",
     "build:prod": "node tools/build-production.mjs && node tools/generate-build-info.mjs --environment=production",
     "build:local": "vite build && node tools/generate-build-info.mjs",

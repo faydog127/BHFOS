@@ -25,6 +25,7 @@ import { financeWritesEnabled } from '@/lib/finance/writeGate';
 import { EXPLANATIONS, FINANCE_SECTIONS, buildFinanceView, showCents, showMoney } from '@/lib/finance/viewModel';
 import { buildDecisionSupport, normalizeFinanceMode } from '@/lib/finance/modes';
 import { AdvancedView, ExecutiveView, GuidedBrief, ModeSwitch } from '@/pages/finance/FinanceModes';
+import FinanceReportScreen from '@/pages/finance/FinanceReports';
 import MonthlyCheckIn from '@/pages/finance/MonthlyCheckIn';
 
 function MonthlyBasisEditor({ inputs, onPatch }) {
@@ -104,6 +105,13 @@ function sectionIdFromPath(pathname) {
   return FINANCE_SECTIONS.some((section) => section.path === id) ? (id || 'overview') : 'overview';
 }
 
+function reportIdFromPath(pathname) {
+  const parts = pathname.split('/').filter(Boolean);
+  const financeIndex = parts.indexOf('finance');
+  if (financeIndex < 0 || parts[financeIndex + 1] !== 'reports') return null;
+  return parts[financeIndex + 2] || 'index';
+}
+
 function NumberField({ label, value, onChange }) {
   return (
     <label className="block text-xs text-slate-600">
@@ -165,6 +173,7 @@ export default function FinanceShell({ grantedAccess }) {
   const [selectedStage, setSelectedStage] = useState('stage_2');
   const [mode, setMode] = useState('guided');
   const section = sectionIdFromPath(location.pathname);
+  const reportId = reportIdFromPath(location.pathname);
 
   function applyPlan(plan, basis) {
     const decision = storedPlanDecision(plan);
@@ -453,6 +462,21 @@ export default function FinanceShell({ grantedAccess }) {
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading plan…</div>;
   }
+  if (reportId) {
+    return (
+      <FinanceReportScreen
+        reportId={reportId}
+        base={`/${routeTenantId}/finance`}
+        support={support}
+        view={view}
+        result={result}
+        inputs={inputs}
+        record={record}
+        dirty={dirty}
+        conflict={conflict}
+      />
+    );
+  }
   if (!record && section !== 'checkin') {
     return (
       <div className="min-h-screen bg-slate-100 p-4 sm:p-8" data-testid="finance-empty" data-mode={mode}>
@@ -471,6 +495,7 @@ export default function FinanceShell({ grantedAccess }) {
               <div className="mt-4 flex flex-wrap gap-2">
                 <button type="button" className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-create-plan" onClick={onCreate} disabled={!writesEnabled}>Create plan</button>
                 <NavLink className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium" data-testid="finance-open-checkin" to={`/${routeTenantId}/finance/checkin`}>Monthly Check-In</NavLink>
+                <NavLink className="inline-flex min-h-11 items-center rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium" data-testid="finance-open-reports" to={`/${routeTenantId}/finance/reports`}>Reports</NavLink>
               </div>
             </div>
           ) : null}
@@ -544,6 +569,7 @@ export default function FinanceShell({ grantedAccess }) {
               </NavLink>
             ))}
           </nav>
+          <NavLink className="mx-4 mb-4 inline-flex min-h-11 items-center text-sm font-medium text-slate-100 underline" data-testid="finance-open-reports" to={`${base}/reports`}>Reports</NavLink>
         </aside>
         <main className="min-w-0 px-4 py-6 lg:px-8">
           <header className="mb-6 flex flex-col gap-3">

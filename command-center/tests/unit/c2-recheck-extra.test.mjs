@@ -1,8 +1,7 @@
 /**
- * Proposed Stage C2 RECHECK tests (Challenge re-check of 7f4bce3a / impl 122a000c).
- * Drop into command-center/tests/unit/ and append to test:finance.
- * Kills the F1/F4/F5/F6/F7 mutants that the shipped unit tests let survive
- * (they were covered only by the Playwright spec, which is not in CI).
+ * Stage C2 recheck coverage for the presentation closeout.
+ * These tests run under test:finance.
+ * They guard the banner, the Check-In header, the touch target, the chart empty state, and measure().
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -54,7 +53,7 @@ describe('C2 recheck extra: F4 mode switch and Back/Next placement', () => {
     assert.match(shell, /\{section !== 'checkin' \? <ModeSwitch mode=\{mode\} onMode=\{selectFinanceMode\} \/> : null\}/);
   });
 
-  it('Back and Next render only in Guided', () => {
+  it('Back and Next render only in Guided or on Check-In', () => {
     const at = shell.indexOf('label="Back"');
     assert.ok(at > 0);
     const before = shell.slice(Math.max(0, at - 400), at);

@@ -24,7 +24,7 @@ export const UNCONNECTED_FACTS = Object.freeze([
 export const APPOINTMENT_PRICE_BOUNDARY =
   'Scheduled appointment price is not earned operating revenue. This screen does not use it.';
 
-const BASIS_COPY = Object.freeze({
+export const BASIS_COPY = Object.freeze({
   no_actual: 'No monthly actual yet. Plan and variance stay blank.',
   no_comparison_plan: 'No comparison plan. Plan and variance stay blank.',
   no_monthly_basis: 'No declared monthly basis. Plan and variance are not zero.',
@@ -172,6 +172,36 @@ function monthStamp(value) {
   return String(value || '').slice(0, 7);
 }
 
+export function displayCheckinValue(kind, value) {
+  return factCell(kind, value).display;
+}
+
+function measuredFacts(row) {
+  const facts = {};
+  for (const field of CHECKIN_FIELDS) facts[field.key] = row ? measure(row[field.key]) : null;
+  return facts;
+}
+
+function formatDerived(metrics) {
+  return {
+    averageTicket: showCents(metrics.average_ticket),
+    revenuePerHour: showCents(metrics.revenue_per_productive_hour),
+    jobsPerHour: showPlainNumber(metrics.jobs_per_productive_hour),
+    fieldPayrollShare: showFraction(metrics.field_payroll_pct_of_revenue),
+    indirectCostShare: showFraction(metrics.indirect_cost_pct_of_revenue),
+    portalShare: showFraction(metrics.portal_share),
+    directShare: showFraction(metrics.direct_share),
+    arOverRevenue: showFraction(metrics.ar_over_revenue),
+    cashReserveOverRevenue: showFraction(metrics.cash_reserve_over_revenue),
+  };
+}
+
+function storedText(value) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text === '' ? null : text;
+}
+
 export function buildDecisionSupport({ view, result, inputs, actuals, plans }) {
   const planRows = Array.isArray(plans) ? plans : [];
   const actualRows = (Array.isArray(actuals) ? actuals : [])
@@ -185,6 +215,7 @@ export function buildDecisionSupport({ view, result, inputs, actuals, plans }) {
   const history = actualRows.map((row) => {
     const plan = comparisonPlan(row, planRows);
     const kind = basisKind(row, plan);
+    const plannedFacts = plan ? plannedFactsForMonth(plan, row.month) : null;
     return {
       month: String(row.month),
       label: monthStamp(row.month),
@@ -192,7 +223,11 @@ export function buildDecisionSupport({ view, result, inputs, actuals, plans }) {
       schemaVersion: plan ? plan.schema_version : null,
       basisKind: kind,
       basisCopy: BASIS_COPY[kind],
+      source: storedText(row.source),
+      sourceNote: storedText(row.source_note),
       rows: comparisonRows(row, plan),
+      derived: formatDerived(derivedActualMetrics(measuredFacts(row))),
+      plannedDerived: plan ? formatDerived(derivedActualMetrics(plannedFacts || {})) : null,
     };
   });
 
@@ -317,18 +352,8 @@ export function buildDecisionSupport({ view, result, inputs, actuals, plans }) {
     channelShareTotal: view?.channelShareTotalDisplay || MISSING_MARK,
     assumptions,
     burden,
-    actualDerived: {
-      revenuePerHour: showCents(actualDerived.revenue_per_productive_hour),
-      jobsPerHour: actualDerived.jobs_per_productive_hour === null ? MISSING_MARK : showPlainNumber(actualDerived.jobs_per_productive_hour),
-      fieldPayrollShare: showFraction(actualDerived.field_payroll_pct_of_revenue),
-      portalShare: showFraction(actualDerived.portal_share),
-      directShare: showFraction(actualDerived.direct_share),
-    },
-    plannedDerived: plannedDerived ? {
-      revenuePerHour: showCents(plannedDerived.revenue_per_productive_hour),
-      portalShare: showFraction(plannedDerived.portal_share),
-      directShare: showFraction(plannedDerived.direct_share),
-    } : null,
+    actualDerived: formatDerived(actualDerived),
+    plannedDerived: plannedDerived ? formatDerived(plannedDerived) : null,
     latest: {
       month: latest ? String(latest.month) : null,
       label: latest ? monthStamp(latest.month) : null,
