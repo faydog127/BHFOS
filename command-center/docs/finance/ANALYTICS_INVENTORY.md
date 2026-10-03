@@ -1,10 +1,10 @@
 # Business Analytics inventory
 
-Active surface: `/:tenantId/crm/reporting` (`App.jsx` route `reporting`, also `Crm.jsx`). `Reporting.jsx` renders `AnalyticsDashboard` and does not calculate metrics. This inventory is that dashboard as of Stage C0.
+Scope is only the live `/crm/reporting` tree. `App.jsx` route `reporting` renders `Reporting.jsx`, which renders `AnalyticsDashboard` and does not calculate metrics. `pages/crm/Crm.jsx` also contains a `reporting` route, and nothing imports that file. It is not an active surface. This inventory is the live dashboard as of Stage C0.
 
 Date window for every queried series: the selected range (`7d`, `30d`, `90d`, `ytd`, `12m`), default 30 days, ending at the end of the current local day. That window is not the Finance reporting month.
 
-Hard-coded measurements are not Finance authority and must not be copied into Finance Advanced Analytics.
+Hard-coded measurements are not Finance authority and must not be copied into Finance Advanced Analytics. A source grep cannot catch a derived fabrication such as `0.3 * revenueTotal`.
 
 | Metric | Source | Calculation | Date basis | Class | Domain | Disposition |
 |---|---|---|---|---|---|---|

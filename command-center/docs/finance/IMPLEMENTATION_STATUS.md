@@ -12,6 +12,7 @@ Steps 1–6 of the TVG financial planning model, under the 2026-10-01 Command Ce
 - Stage B starts from accepted Stage A `7d643f0a25cb9418dc99f6f2b07401e3e1afc7b5`. Monthly Check-In: `5df5090a4a6a89381fb7a3711e53d8dbe7293286`. Challenge correction: `2d41b3a60eec71fea0de97a54101e952e84ee444`. Docs HEAD reviewed by Command Center: `1d631e88f8e171f8039024ab29dc074b5207b41e`.
 - Stage B final Playwright gate passed on that exact SHA with no code change: `npx supabase db reset --local --yes`, then `npx playwright test tests/finance/monthly-checkin.spec.js --config=playwright.finance-checkin.config.js` (1 passed). Screenshots are outside git at `/opt/cursor/artifacts/finance-stage-b-1d631e8/`. The spec is not in CI.
 - Stage C0 implementation: `58c86e47bd0c832c13a6be02320e8adb3d7b2653`. It adds the analytics inventory, metric dictionary, and plan-basis design, retires hard-coded Business Analytics figures, and blocks check-in Save after a version conflict until Reload replaces the form from the server row. Full Stage C and Stage D are not started. The plan-basis design is not implemented.
+- Stage C0 correction is on top of `f75ca9c9c1f5d55a33ed230481d2e3df035f496c`. It adds a structural analytics guard and L4 wiring asserts, and extends the plan-basis contract and metric dictionary. It does not change check-in or dashboard behavior.
 - Draft PR: https://github.com/faydog127/BHFOS/pull/164 (do not merge)
 - Evidence tier: **locally verified**. Not deployed, not staging-verified, not merged, not production-verified.
 - Clean local reset: `npx supabase db reset --local` on an unlinked stack exited 0 and applied through `20261003145000_finance_actuals_known_channel_ceiling.sql`. Finance SQL tests 01, 02, 03, 04, and 05 then passed and rolled back. That stack was not linked to a remote project.
@@ -43,7 +44,12 @@ No real TVG data may be entered in any Vercel Preview or staging environment. Th
 - `version_conflict` is also returned when row level security hides the row. The client does not distinguish a hidden row from a stale version.
 - After a check-in `version_conflict`, Save stays blocked until Reload. Reload loads the latest server row and replaces the form with that row. Unsaved edits are discarded. There is no merge. The plan editor's own Reload already replaces plan inputs from the server and was not part of this change.
 - The Playwright check-in spec is not part of CI. It needs a freshly reset local database.
+- Business Analytics conversion rate shows `0%` when there are no leads. A null denominator is rendered as zero. The ratio also mixes appointment `scheduled_start` with lead `created_at`. Not fixed. Pending a Command Center ruling.
+- Business Analytics ignores a Supabase query error unless the client throws. A failed appointments, leads, or referrals read can display `$0` or `0` as if it were measured. Not fixed. Pending a Command Center ruling.
+- A missing `pricing_snapshot.price` on a completed appointment is coerced to 0 in the scheduled-price sum. Not fixed. Pending a Command Center ruling.
+- The scheduled-price card still uses the green dollar styling. The label says it is not earned operating revenue. The styling was not changed. Pending a Command Center ruling.
+- Selecting a check-in history month clears a version conflict and loads the row already in memory. The next Save sends that stale version, the server returns `version_conflict` again, and the stale facts are not written. Not fixed. Pending a Command Center ruling on the Stage C UX.
 
 ## Next action
 
-Challenge review of Stage C0 on draft PR https://github.com/faydog127/BHFOS/pull/164. Full Stage C and Stage D stay held. Do not implement the plan-basis contract until Command Center approves it. Staging apply requires separate Command Center authorization; the staging ref is `exwochkjngdztrdtxnsa`.
+Challenge re-review of the Stage C0 correction on draft PR https://github.com/faydog127/BHFOS/pull/164. Full Stage C and Stage D stay held. Do not implement the plan-basis contract until Command Center approves it. Staging apply requires separate Command Center authorization; the staging ref is `exwochkjngdztrdtxnsa`.
