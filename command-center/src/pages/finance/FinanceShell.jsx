@@ -47,6 +47,7 @@ function MonthlyBasisEditor({ inputs, onPatch }) {
     const text = draft[key];
     if (text === undefined) return;
     if (/^\d+\.$/.test(text)) onPatch(month, key, text.slice(0, -1));
+    if (text === '.') onPatch(month, key, '');
     setDraft((current) => {
       const next = { ...current };
       delete next[key];
@@ -355,8 +356,10 @@ export default function FinanceShell({ grantedAccess }) {
         if (!/^\d+$/.test(String(raw).trim())) return current;
         row[key] = Number(raw);
       } else {
-        if (!/^\d+(\.\d{1,2})?$/.test(String(raw).trim())) return current;
-        row[key] = Number(raw);
+        const trimmed = String(raw).trim();
+        const withLeadingZero = /^\.\d{1,2}$/.test(trimmed) ? `0${trimmed}` : trimmed;
+        if (!/^\d+(\.\d{1,2})?$/.test(withLeadingZero)) return current;
+        row[key] = Number(withLeadingZero);
       }
       if (Object.keys(row).length === 0) delete basis[monthKey];
       else basis[monthKey] = row;
