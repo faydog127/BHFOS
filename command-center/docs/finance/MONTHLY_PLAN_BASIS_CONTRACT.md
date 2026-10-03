@@ -1,6 +1,16 @@
 # Monthly plan-basis contract
 
-Design only. This slice does not add a schema, a migration, or plan-basis code. Command Center must approve this design before any of it is implemented.
+Stage C1 implements this contract in `20261003180000_finance_plan_monthly_basis.sql`. Command Center accepted the shape in the Stage C ruling. The sections below that describe a version-1-only check are the pre-C1 constraints that the migration replaces.
+
+Implemented behavior:
+
+- `finance_plans.schema_version` may be 1 or 2. `finance_monthly_actuals.schema_version` stays 1.
+- Version 2 stores `inputs.monthly_basis`. A missing month, a missing metric, and JSON null mean not planned. Zero is a planned zero. The map has only the 13 check-in fact fields. Derived figures are calculated, not stored.
+- Known planned channels cannot exceed planned Total Revenue. When all three channels are present they must equal that total. The database check rejects an invalid map, including a raw authenticated write.
+- Version 1 never has `monthly_basis`. An ordinary update cannot change `schema_version`.
+- `finance_upgrade_draft_schema` is the only transition from a version 1 draft to a version 2 draft. It requires the expected version, keeps the other inputs and notes, and adds an empty map. Approved and superseded version 1 rows stay version 1.
+- `finance_open_draft` returns an existing version 2 draft. If the existing draft is version 1, it upgrades that same row. Otherwise it inserts a new version 2 draft: an empty map when the approved plan is version 1, or a copy of `monthly_basis` when the approved plan is version 2.
+- Check-in Plan and Variance read the plan named by `comparison_plan_id` for that month. A version 1 plan stays `--`. A later approved plan does not replace that id.
 
 ## What is true now (schema version 1)
 
@@ -27,7 +37,7 @@ Design only. This slice does not add a schema, a migration, or plan-basis code. 
 
 ## Schema change required
 
-Yes, before any storage. Nothing in this section is implemented.
+The pre-C1 constraints below are what Stage C1 replaced. They are not the live rules after `20261003180000_finance_plan_monthly_basis.sql`.
 
 Recommended shape: put the map on the existing plan document as `inputs.monthly_basis` at schema version 2, because `comparison_plan_id` already snapshots that row. A separate table is not proposed.
 
@@ -40,17 +50,6 @@ Verified against the current migrations and `persistence.js`:
 - The database check on plan inputs is `jsonb_typeof(inputs) = 'object'` (`finance_plans_inputs_object`). It does not inspect keys. Today `monthly_basis` validation is JavaScript only.
 - `finance_plans` and `finance_monthly_actuals` already use `enable row level security` and `force row level security`. This shape adds no table, so it needs no RLS change.
 
-Rules the design adds, still not implemented:
+The Stage C ruling answered the open questions. Version 2 uses `inputs.monthly_basis` for the 13 fact fields only. Version 1 stays without a monthly basis. A living version 1 draft is upgraded in place, not copied into a second draft. Approved and superseded rows are not upgraded in place. The database check is the gate for a raw write. Non-monthly inputs and notes are copied. An empty map is not inferred from stage figures.
 
-1. Widen `finance_plans.schema_version` in a new forward migration. Keep the update trigger's `new.schema_version := old.schema_version`. Do not upgrade a version 1 row in place.
-2. Replace `finance_open_draft` in that same forward migration. A version 2 draft is a new insert with `schema_version` 2, and only when no draft exists. The approved version 1 row stays version 1. `monthly_basis` on the new draft starts absent or null. It is not copied from stage scenario values and not inferred from the version 1 document. Non-monthly inputs may be copied only if Command Center says so when it approves this design.
-3. Do not leave `monthly_basis` as a JavaScript-only check. The forward migration adds a database check, or a trigger function that is `security invoker` with a fixed `search_path`, so a raw insert cannot store an unvalidated map. The JavaScript validator remains the app gate. The exact SQL expression is part of the later implementation review, not this slice.
-4. An actual whose `comparison_plan_id` points at a version 1 plan shows an explicit no-basis state. Plan and Variance stay `--`. They are never 0. That stays true after other plans are version 2. `declaredMonthlyBasis` already returns null for schema version 1, and the check-in already renders that as not zero.
-
-## Unresolved questions for Command Center
-
-- Approve or reject `inputs.monthly_basis` at schema version 2 as the storage shape.
-- Confirm planned values are only the check-in fact fields, and that derived metrics never receive their own planned numbers.
-- Confirm version 1 plans stay permanently without a monthly basis, including after this design is approved.
-- If a version 1 draft already exists, the current RPC returns it and a second draft cannot be inserted. This design does not add a delete. How is that draft finished before a version 2 draft can be opened?
-- Confirm the database check, rather than JavaScript alone, is the required gate for `monthly_basis`.
+An actual whose `comparison_plan_id` points at a version 1 plan shows `checkin-no-monthly-basis`. Plan and Variance stay `--`. They are never 0. That stays true after a newer plan is version 2.

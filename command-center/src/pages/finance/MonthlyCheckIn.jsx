@@ -9,8 +9,10 @@ import {
   CHECKIN_FIELDS,
   REVENUE_DEFINITION,
   actualFactsFromForm,
-  declaredMonthlyBasis,
+  comparisonPlanForCheckin,
   derivedActualMetrics,
+  normalizeActualMonth,
+  plannedFactsForMonth,
 } from '@/lib/finance/actuals';
 import {
   CHECKIN_CONFLICT_COPY,
@@ -90,6 +92,7 @@ function messageFor(result) {
 
 export default function MonthlyCheckIn({
   actuals,
+  plans,
   approvedPlan,
   writesEnabled,
   onCreate,
@@ -108,7 +111,6 @@ export default function MonthlyCheckIn({
   const selected = rows.find((row) => row.id === selectedId) || null;
   const approved = approvedPlan && approvedPlan.status === 'approved' ? approvedPlan : null;
   const basisLocked = Boolean(selected?.comparison_plan_id);
-  const planBasis = declaredMonthlyBasis(approved);
 
   function openNew() {
     setSelectedId(null);
@@ -120,6 +122,7 @@ export default function MonthlyCheckIn({
   }
 
   function openRow(row) {
+    if (conflict) return;
     setSelectedId(row.id);
     setMonthInput(String(row.month || '').slice(0, 7));
     setForm(formFromActual(row));
@@ -198,6 +201,10 @@ export default function MonthlyCheckIn({
   const parsedPreview = actualFactsFromForm(form);
   const previewFacts = parsedPreview.ok ? parsedPreview.facts : null;
   const derived = derivedActualMetrics(previewFacts || {});
+  const monthKey = selected ? normalizeActualMonth(selected.month) : normalizeActualMonth(monthInput);
+  const basisPlan = comparisonPlanForCheckin({ selected, plans, approved, associateOnCreate });
+  const planned = plannedFactsForMonth(basisPlan, monthKey);
+  const plannedDerived = planned ? derivedActualMetrics(planned) : null;
 
   return (
     <div className="space-y-4" data-testid="finance-checkin">
@@ -292,7 +299,7 @@ export default function MonthlyCheckIn({
           </label>
           <section className="rounded border border-slate-200 bg-slate-50 p-3 text-sm" data-testid="checkin-basis">
             {basisLocked ? (
-              <p>Comparison basis is locked to the approved plan recorded for this month. A newer plan does not replace it. Plan and variance stay blank because that plan has no declared monthly figure.</p>
+              <p>Comparison basis is locked to the approved plan recorded for this month. A newer plan does not replace it.</p>
             ) : approved ? (
               selected ? (
                 <div className="space-y-2">
@@ -315,7 +322,7 @@ export default function MonthlyCheckIn({
             ) : (
               <p data-testid="checkin-no-plan">No approved plan is available. This month can be saved without one. Plan and variance stay blank.</p>
             )}
-            {planBasis === null ? <p className="mt-2 text-xs text-slate-500" data-testid="checkin-no-monthly-basis">No declared monthly basis. Plan and variance are not zero.</p> : null}
+            {!basisPlan || basisPlan.schema_version !== 2 ? <p className="mt-2 text-xs text-slate-500" data-testid="checkin-no-monthly-basis">No declared monthly basis. Plan and variance are not zero.</p> : <p className="mt-2 text-xs text-slate-500" data-testid="checkin-partial-basis">Only a planned figure has a plan and a variance. A blank plan figure is not zero.</p>}
           </section>
           {conflict ? (
             <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" data-testid="checkin-version-conflict">
@@ -342,12 +349,16 @@ export default function MonthlyCheckIn({
               <tbody>
                 {CHECKIN_FIELDS.map((field) => {
                   const actual = previewFacts ? previewFacts[field.key] : null;
-                  const delta = variance(actual === null ? null : Number(actual), null);
+                  const planValue = planned ? planned[field.key] : null;
+                  const delta = variance(
+                    actual === null || actual === undefined ? null : Number(actual),
+                    planValue === null || planValue === undefined ? null : Number(planValue),
+                  );
                   const direction = FAVORABLE_DIRECTION[field.key];
                   return (
                     <tr key={field.key} className="border-t border-slate-100" data-testid={`checkin-row-${field.key.replaceAll('_', '-')}`}>
                       <td className="px-2 py-2">{field.guided}</td>
-                      <td className="px-2 py-2" data-testid={`checkin-plan-${field.key.replaceAll('_', '-')}`}>{MISSING_MARK}</td>
+                      <td className="px-2 py-2" data-testid={`checkin-plan-${field.key.replaceAll('_', '-')}`}>{planValue === null || planValue === undefined ? MISSING_MARK : showFact(field.kind, planValue)}</td>
                       <td className="px-2 py-2" data-testid={`checkin-actual-${field.key.replaceAll('_', '-')}`}>{showFact(field.kind, actual)}</td>
                       <td className="px-2 py-2" data-testid={`checkin-variance-${field.key.replaceAll('_', '-')}`}>{delta === null ? MISSING_MARK : showFact(field.kind, delta)}</td>
                       <td className="px-2 py-2">{direction === 'higher' ? 'Higher is favorable' : direction === 'lower' ? 'Lower is favorable' : 'Not declared'}</td>
@@ -365,6 +376,7 @@ export default function MonthlyCheckIn({
                 <div key={item.key} className="rounded border border-slate-100 px-2 py-2" data-testid={`checkin-derived-${item.key.replaceAll('_', '-')}`}>
                   <dt className="text-xs text-slate-500">{item.label}</dt>
                   <dd className="text-sm font-medium">{showDerived(item.kind, derived[item.key])}</dd>
+                  {plannedDerived ? <dd className="text-xs text-slate-500" data-testid={`checkin-planned-${item.key.replaceAll('_', '-')}`}>Plan {showDerived(item.kind, plannedDerived[item.key])}</dd> : null}
                   <dd className="text-[11px] uppercase tracking-wide text-slate-400">{item.technical}</dd>
                 </div>
               ))}

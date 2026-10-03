@@ -67,4 +67,50 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: `${out}/mobile-checkin.png`, fullPage: true });
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/tvg/finance');
+  await page.getByTestId('finance-new-draft').click();
+  await expect(page.getByTestId('finance-monthly-basis')).toBeVisible();
+  await page.getByTestId('finance-basis-total-revenue').fill('10.00');
+  await page.getByTestId('finance-basis-cash-reserve').fill('0.00');
+  await expect(page.getByTestId('finance-basis-total-revenue')).toHaveValue('10');
+  await expect(page.getByTestId('finance-basis-cash-reserve')).toHaveValue('0');
+  const saveDone = page.waitForResponse((res) => res.url().includes('/finance_plans') && res.request().method() === 'PATCH' && res.ok());
+  await page.getByTestId('finance-save').click();
+  await saveDone;
+  await expect(page.getByTestId('finance-save-error')).toHaveCount(0);
+  const approveDone = page.waitForResponse((res) => res.url().includes('finance_approve_plan') && res.ok());
+  await page.getByTestId('finance-approve').click();
+  await approveDone;
+  await expect(page.getByTestId('plan-banner')).toContainText('approved');
+
+  await page.goto('/tvg/finance/checkin');
+  await page.getByTestId('checkin-new').click();
+  await page.getByTestId('checkin-month').fill('2026-02');
+  await page.getByTestId('checkin-total-revenue').fill('4.00');
+  await page.getByTestId('checkin-cash-reserve').fill('0.00');
+  await page.getByTestId('checkin-total-jobs').fill('2');
+  await page.getByTestId('checkin-associate-on-create').check();
+  await page.getByTestId('checkin-save').click();
+  await expect(page.getByTestId('checkin-history-2026-02')).toBeVisible();
+  await expect(page.getByTestId('checkin-partial-basis')).toBeVisible();
+  await expect(page.getByTestId('checkin-no-monthly-basis')).toHaveCount(0);
+  await expect(page.getByTestId('checkin-plan-total-revenue')).toHaveText('$10.00');
+  await expect(page.getByTestId('checkin-plan-cash-reserve')).toHaveText('$0.00');
+  await expect(page.getByTestId('checkin-plan-total-jobs')).toHaveText('--');
+  await expect(page.getByTestId('checkin-variance-total-revenue')).toHaveText('-$6.00');
+  await expect(page.getByTestId('checkin-variance-cash-reserve')).toHaveText('$0.00');
+  await expect(page.getByTestId('checkin-variance-total-jobs')).toHaveText('--');
+  await page.screenshot({ path: `${out}/desktop-partial-basis.png`, fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: `${out}/mobile-partial-basis.png`, fullPage: true });
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByTestId('checkin-history-2026-01').click();
+  await expect(page.getByTestId('checkin-plan-total-revenue')).toHaveText('--');
+  await expect(page.getByTestId('checkin-variance-total-revenue')).toHaveText('--');
+  await expect(page.getByTestId('checkin-no-monthly-basis')).toBeVisible();
+  await expect(page.getByTestId('checkin-partial-basis')).toHaveCount(0);
+  await page.screenshot({ path: `${out}/desktop-historical-v1-basis.png`, fullPage: true });
 });

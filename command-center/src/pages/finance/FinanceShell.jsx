@@ -15,11 +15,41 @@ import {
   openDraftFromApproved,
   saveDraft,
   selectVisiblePlan,
+  upgradeDraftSchema,
 } from '@/lib/finance/persistence';
+import { CHECKIN_FIELDS } from '@/lib/finance/actuals';
 import { FINANCE_NOTES_MAX } from '@/lib/finance/blankPlan';
 import { financeWritesEnabled } from '@/lib/finance/writeGate';
 import { EXPLANATIONS, FINANCE_SECTIONS, buildFinanceView, showCents, showMoney } from '@/lib/finance/viewModel';
 import MonthlyCheckIn from '@/pages/finance/MonthlyCheckIn';
+
+function MonthlyBasisEditor({ inputs, onPatch }) {
+  const [month, setMonth] = useState('2026-02');
+  const row = inputs?.monthly_basis?.[`${month}-01`] || {};
+  return (
+    <section className="mb-4 rounded border border-slate-200 bg-white p-4" data-testid="finance-monthly-basis">
+      <h2 className="text-sm font-semibold">Monthly plan basis</h2>
+      <p className="mt-1 text-xs text-slate-500">Blank means not planned. Zero means a planned zero. A stage figure is not copied in.</p>
+      <label className="mt-3 block text-xs text-slate-600">
+        Month
+        <input className="mt-1 rounded border border-slate-300 px-2 py-1.5 text-sm" type="month" data-testid="finance-basis-month" value={month} onChange={(event) => setMonth(event.target.value)} />
+      </label>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        {CHECKIN_FIELDS.map((field) => (
+          <label key={field.key} className="block text-xs text-slate-600">
+            {field.technical}
+            <input
+              className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+              data-testid={`finance-basis-${field.key.replaceAll('_', '-')}`}
+              value={row[field.key] === null || row[field.key] === undefined ? '' : String(row[field.key])}
+              onChange={(event) => onPatch(month, field.key, event.target.value)}
+            />
+          </label>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 function sectionIdFromPath(pathname) {
   const parts = pathname.split('/').filter(Boolean);
@@ -81,6 +111,7 @@ export default function FinanceShell({ grantedAccess }) {
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(allowed);
   const [loadCode, setLoadCode] = useState(null);
+  const [plans, setPlans] = useState([]);
   const [actuals, setActuals] = useState([]);
   const [actualsCode, setActualsCode] = useState(null);
   const [saveCode, setSaveCode] = useState(null);
@@ -96,6 +127,7 @@ export default function FinanceShell({ grantedAccess }) {
     setDirty(false);
     setConflict(false);
     setSaveCode(null);
+    setPlans((current) => [plan, ...(Array.isArray(current) ? current.filter((row) => row.id !== plan.id) : [])]);
   }
 
   async function refreshPlans() {
@@ -113,6 +145,7 @@ export default function FinanceShell({ grantedAccess }) {
       setLoadCode(listed.code);
     } else {
       const choice = selectVisiblePlan(listed.plans);
+      setPlans(listed.plans || []);
       setLoadCode(null);
       if (!choice.visible) {
         setRecord(null);
@@ -138,6 +171,7 @@ export default function FinanceShell({ grantedAccess }) {
       if (!listed.ok) setLoadCode(listed.code);
       else {
         const choice = selectVisiblePlan(listed.plans);
+        setPlans(listed.plans || []);
         if (choice.visible) applyPlan(choice.visible, choice.draft ? choice.approved : null);
       }
       if (!actualList.ok) setActualsCode(actualList.code);
@@ -242,6 +276,7 @@ export default function FinanceShell({ grantedAccess }) {
       expectedVersion: record.version,
       inputs,
       notes,
+      schemaVersion: record.schema_version,
     });
     if (!saved.ok) {
       if (saved.code === 'version_conflict') setConflict(true);
@@ -249,6 +284,40 @@ export default function FinanceShell({ grantedAccess }) {
       return;
     }
     applyPlan(saved.plan, approvedBasis);
+  }
+
+  function patchMonthlyBasis(month, key, raw) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return;
+    const monthKey = `${month}-01`;
+    editInputs((current) => {
+      const next = structuredClone(current);
+      const basis = next.monthly_basis && typeof next.monthly_basis === 'object' ? { ...next.monthly_basis } : {};
+      const row = { ...(basis[monthKey] || {}) };
+      if (String(raw).trim() === '') {
+        delete row[key];
+      } else if (key.endsWith('_jobs') || key === 'total_jobs') {
+        if (!/^\d+$/.test(String(raw).trim())) return current;
+        row[key] = Number(raw);
+      } else {
+        if (!/^\d+(\.\d{1,2})?$/.test(String(raw).trim())) return current;
+        row[key] = Number(raw);
+      }
+      if (Object.keys(row).length === 0) delete basis[monthKey];
+      else basis[monthKey] = row;
+      next.monthly_basis = basis;
+      return next;
+    });
+  }
+
+  async function onUpgradeSchema() {
+    if (!writesEnabled || !record || record.status !== 'draft' || record.schema_version !== 1) return;
+    const upgraded = await upgradeDraftSchema(supabase, { id: record.id, expectedVersion: record.version });
+    if (!upgraded.ok) {
+      if (upgraded.code === 'version_conflict') setConflict(true);
+      setSaveCode(upgraded.code);
+      return;
+    }
+    applyPlan(upgraded.plan, approvedBasis);
   }
 
   async function onApprove() {
@@ -412,6 +481,7 @@ export default function FinanceShell({ grantedAccess }) {
           {section === 'checkin' ? (
             <MonthlyCheckIn
               actuals={actuals}
+              plans={plans}
               approvedPlan={comparisonPlan}
               writesEnabled={writesEnabled}
               onCreate={onCreateActual}
@@ -425,6 +495,9 @@ export default function FinanceShell({ grantedAccess }) {
           {planReady && section !== 'checkin' ? (
           <>
           <div className="mb-4 flex flex-wrap items-center gap-2">
+            {record.status === 'draft' && record.schema_version === 1 ? (
+              <button type="button" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:text-slate-400" data-testid="finance-upgrade-schema" onClick={onUpgradeSchema} disabled={!writesEnabled || dirty}>Use monthly plan basis</button>
+            ) : null}
             {record.status === 'draft' ? (
               <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-save" onClick={onSave} disabled={!writesEnabled}>Save draft</button>
             ) : null}
@@ -463,6 +536,9 @@ export default function FinanceShell({ grantedAccess }) {
             </div>
           ) : null}
           <fieldset disabled={draftLocked || !writesEnabled} className="min-w-0 border-0 p-0">
+          {record?.schema_version === 2 && record.status === 'draft' && section === 'overview' ? (
+            <MonthlyBasisEditor inputs={inputs} onPatch={patchMonthlyBasis} />
+          ) : null}
           {section === 'overview' ? <Overview view={view} inputs={inputs} /> : null}
           {section === 'people' ? (
             <People inputs={inputs} result={result} onRole={patchRole} onHeadcount={patchHeadcount} onStage={patchStage} onOwner={patchOwner} />

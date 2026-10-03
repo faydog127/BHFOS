@@ -16,8 +16,9 @@ import { nearCapacityBand, stageReadiness, READINESS_INCOMPLETE, READINESS_NOT_R
 import { variance, variancePct } from '../../src/lib/finance/variance.js';
 import { evaluateFinanceAccess, roleHasFinanceCapability, FINANCE_ALLOWED_ROLES, FINANCE_CAPABILITIES } from '../../src/lib/finance/authz.js';
 import { blankPlanInputs, validateNotes, validatePlanInputs } from '../../src/lib/finance/blankPlan.js';
-import { approvePlan, associateComparisonPlan, correctMonthlyActual, createBlankPlan, createMonthlyActual, openDraftFromApproved, saveDraft, selectVisiblePlan } from '../../src/lib/finance/persistence.js';
-import { actualFactsFromForm, channelRevenueIssue, declaredMonthlyBasis, derivedActualMetrics, formatStoredDecimal, parseActualDecimal, parseActualInteger } from '../../src/lib/finance/actuals.js';
+import { approvePlan, associateComparisonPlan, correctMonthlyActual, createBlankPlan, createMonthlyActual, openDraftFromApproved, readPlan, saveDraft, selectVisiblePlan, upgradeDraftSchema } from '../../src/lib/finance/persistence.js';
+import { actualFactsFromForm, channelRevenueIssue, comparisonPlanForCheckin, declaredMonthlyBasis, derivedActualMetrics, plannedFactsForMonth, validateMonthlyBasis } from '../../src/lib/finance/actuals.js';
+import { formatStoredDecimal, parseActualDecimal, parseActualInteger } from '../../src/lib/finance/actuals.js';
 import { FINANCE_WRITES_DISABLED, financeWritesEnabled } from '../../src/lib/finance/writeGate.js';
 import { CHECKIN_CONFLICT_COPY, nextCheckinCorrection, reloadCheckinFromServer } from '../../src/lib/finance/checkinConflict.js';
 import { getSyntheticPlanningFixture } from '../../src/lib/finance/syntheticFixture.js';
@@ -478,6 +479,7 @@ describe('verify script and source guards', () => {
     const created = await createBlankPlan(client, preview);
     const approved = await approvePlan(client, { id: '11111111-1111-4111-8111-111111111111', expectedVersion: 1 }, preview);
     const opened = await openDraftFromApproved(client, { id: '11111111-1111-4111-8111-111111111111' }, preview);
+    const upgraded = await upgradeDraftSchema(client, { id: '11111111-1111-4111-8111-111111111111', expectedVersion: 1 }, preview);
     const month = await createMonthlyActual(client, { month: '2026-01-01', facts: {} }, preview);
     const linked = await associateComparisonPlan(client, {
       id: '11111111-1111-4111-8111-111111111111',
@@ -488,6 +490,7 @@ describe('verify script and source guards', () => {
     assert.equal(created.code, FINANCE_WRITES_DISABLED);
     assert.equal(approved.code, FINANCE_WRITES_DISABLED);
     assert.equal(opened.code, FINANCE_WRITES_DISABLED);
+    assert.equal(upgraded.code, FINANCE_WRITES_DISABLED);
     assert.equal(month.code, FINANCE_WRITES_DISABLED);
     assert.equal(linked.code, FINANCE_WRITES_DISABLED);
     assert.equal(called, false);
@@ -777,5 +780,241 @@ describe('check-in conflict reload', () => {
     assert.equal(saved.payload.facts.total_revenue === staleFacts.total_revenue, false);
     assert.match(CHECKIN_CONFLICT_COPY, /discards the unsaved edits/);
     assert.match(CHECKIN_CONFLICT_COPY, /no merge/i);
+  });
+});
+
+describe('monthly plan basis', () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  const olderId = '22222222-2222-4222-8222-222222222222';
+  const newerId = '33333333-3333-4333-8333-333333333333';
+
+  it('keeps version 1 free of a monthly basis and accepts a partial version 2 map', () => {
+    const v1 = blankPlanInputs();
+    v1.monthly_basis = {};
+    assert.equal(validatePlanInputs(v1).code, 'invalid_inputs');
+    assert.equal(validatePlanInputs(blankPlanInputs(), 1).ok, true);
+    assert.equal(validatePlanInputs(blankPlanInputs(), 3).code, 'finance_schema_unsupported');
+    const empty = blankPlanInputs();
+    empty.monthly_basis = {};
+    const accepted = validatePlanInputs(empty, 2);
+    assert.equal(accepted.ok, true);
+    assert.deepEqual(accepted.inputs.monthly_basis, {});
+    const partial = blankPlanInputs();
+    partial.monthly_basis = {
+      '2026-02-01': { total_revenue: 10, cash_reserve: 0, total_jobs: null },
+    };
+    const before = structuredClone(partial);
+    const normalized = validatePlanInputs(partial, 2);
+    assert.equal(normalized.ok, true);
+    assert.equal(normalized.inputs.monthly_basis['2026-02-01'].total_revenue, 10);
+    assert.equal(normalized.inputs.monthly_basis['2026-02-01'].cash_reserve, 0);
+    assert.equal(normalized.inputs.monthly_basis['2026-02-01'].total_jobs, null);
+    assert.equal(Object.prototype.hasOwnProperty.call(normalized.inputs.monthly_basis['2026-02-01'], 'dryer_vent_jobs'), false);
+    assert.deepEqual(partial, before);
+    const missing = blankPlanInputs();
+    assert.equal(validatePlanInputs(missing, 2).code, 'invalid_monthly_basis');
+    assert.equal(validateMonthlyBasis({ '2026-02-15': { total_revenue: 1 } }).ok, false);
+    assert.equal(validateMonthlyBasis({ '2026-02-01': { note: 1 } }).ok, false);
+    assert.equal(validateMonthlyBasis({ '2026-02-01': { total_revenue: -1 } }).ok, false);
+    assert.equal(validateMonthlyBasis({ '2026-02-01': { total_jobs: 1.5 } }).ok, false);
+    assert.equal(validateMonthlyBasis({
+      '2026-02-01': { total_revenue: 4, direct_residential_revenue: 5 },
+    }).code, 'known_channels_exceed_total');
+    assert.equal(validateMonthlyBasis({
+      '2026-02-01': {
+        total_revenue: 4,
+        direct_residential_revenue: 1,
+        commercial_direct_revenue: 1,
+        portal_revenue: 1,
+      },
+    }).code, 'channels_must_equal_total');
+    assert.equal(validateMonthlyBasis({
+      '2026-02-01': {
+        direct_residential_revenue: 1,
+        commercial_direct_revenue: 1,
+        portal_revenue: 1,
+      },
+    }).code, 'channels_require_total');
+    assert.equal(validateMonthlyBasis({
+      '2026-02-01': {
+        total_revenue: 3,
+        direct_residential_revenue: 1,
+        commercial_direct_revenue: 1,
+        portal_revenue: 1,
+      },
+    }).ok, true);
+  });
+
+  it('shows plan and variance only for an explicit figure on the associated plan', () => {
+    const v1 = {
+      id: olderId,
+      schema_version: 1,
+      status: 'approved',
+      inputs: { stages: { stage_2: { scenario: { projected_revenue: 100 } } } },
+    };
+    assert.equal(declaredMonthlyBasis(v1), null);
+    assert.equal(plannedFactsForMonth(v1, '2026-02'), null);
+    const v2 = {
+      id: newerId,
+      schema_version: 2,
+      status: 'approved',
+      inputs: {
+        monthly_basis: {
+          '2026-02-01': { total_revenue: 10, cash_reserve: 0 },
+          '2026-03-01': { total_revenue: 0, total_jobs: 2, cash_reserve: null },
+        },
+      },
+    };
+    const february = plannedFactsForMonth(v2, '2026-02-01');
+    assert.equal(february.total_revenue, 10);
+    assert.equal(february.cash_reserve, 0);
+    assert.equal(february.total_jobs, null);
+    const februaryDerived = derivedActualMetrics(february);
+    assert.equal(februaryDerived.average_ticket, null);
+    assert.equal(februaryDerived.cash_reserve_over_revenue, 0);
+    assert.equal(februaryDerived.portal_share, null);
+    const march = plannedFactsForMonth(v2, '2026-03');
+    assert.equal(march.total_revenue, 0);
+    assert.equal(march.total_jobs, 2);
+    assert.equal(march.cash_reserve, null);
+    assert.equal(derivedActualMetrics(march).average_ticket, 0);
+    const full = plannedFactsForMonth({
+      schema_version: 2,
+      inputs: {
+        monthly_basis: {
+          '2026-04-01': {
+            total_revenue: 10,
+            direct_residential_revenue: 3,
+            commercial_direct_revenue: 3,
+            portal_revenue: 4,
+            total_jobs: 2,
+            productive_unit_hours: 1.5,
+            field_payroll: 1,
+            indirect_cash_costs: 0,
+            ar_ending: 0,
+            cash_reserve: 0,
+          },
+        },
+      },
+    }, '2026-04-01');
+    assert.equal(derivedActualMetrics(full).portal_share, 0.4);
+    assert.equal(derivedActualMetrics(full).average_ticket, 5);
+    assert.equal(variance(4, february.total_revenue), -6);
+    assert.equal(variance(0, february.cash_reserve), 0);
+    assert.equal(variance(2, february.total_jobs), null);
+    assert.equal(variance(4, null), null);
+    const historical = {
+      comparison_plan_id: olderId,
+      month: '2026-01-01',
+    };
+    const plans = [v2, v1];
+    assert.equal(comparisonPlanForCheckin({
+      selected: historical,
+      plans,
+      approved: v2,
+      associateOnCreate: true,
+    }).id, olderId);
+    assert.equal(comparisonPlanForCheckin({
+      selected: { comparison_plan_id: 'missing', month: '2026-01-01' },
+      plans,
+      approved: v2,
+      associateOnCreate: true,
+    }), null);
+    assert.equal(comparisonPlanForCheckin({
+      selected: null,
+      plans,
+      approved: v2,
+      associateOnCreate: true,
+    }).id, newerId);
+    assert.equal(comparisonPlanForCheckin({
+      selected: null,
+      plans,
+      approved: v2,
+      associateOnCreate: false,
+    }), null);
+  });
+
+  it('persists version 2 only when the caller names that schema', async () => {
+    const updates = [];
+    const row = {
+      update(payload) { updates.push(payload); return row; },
+      eq() { return row; },
+      select() { return row; },
+      maybeSingle: async () => ({ data: { id, schema_version: 2, version: 2 }, error: null }),
+    };
+    const inputs = blankPlanInputs();
+    inputs.monthly_basis = { '2026-02-01': { total_revenue: 10, cash_reserve: 0 } };
+    const saved = await saveDraft({ from: () => row }, {
+      id,
+      expectedVersion: 1,
+      inputs,
+      notes: 'keep',
+      schemaVersion: 2,
+    }, { MODE: 'test' });
+    assert.equal(saved.ok, true);
+    assert.equal(updates[0].inputs.monthly_basis['2026-02-01'].total_revenue, 10);
+    assert.equal(updates[0].inputs.monthly_basis['2026-02-01'].cash_reserve, 0);
+    assert.equal(updates[0].notes, 'keep');
+    let called = false;
+    const rejected = await saveDraft({
+      from() { called = true; return {}; },
+    }, {
+      id,
+      expectedVersion: 1,
+      inputs,
+      notes: null,
+    }, { MODE: 'test' });
+    assert.equal(rejected.code, 'invalid_inputs');
+    assert.equal(called, false);
+    const inserts = [];
+    const insertRow = {
+      insert(payload) { inserts.push(payload); return insertRow; },
+      select() { return insertRow; },
+      maybeSingle: async () => ({ data: { id, schema_version: 1 }, error: null }),
+    };
+    const created = await createBlankPlan({ from: () => insertRow }, { MODE: 'test' });
+    assert.equal(created.ok, true);
+    assert.equal(inserts[0].schema_version, 1);
+    assert.equal(Object.prototype.hasOwnProperty.call(inserts[0].inputs, 'monthly_basis'), false);
+  });
+
+  it('reads version 2 and upgrades a draft only through the server RPC', async () => {
+    function reader(data) {
+      const row = {
+        select() { return row; },
+        eq() { return row; },
+        maybeSingle: async () => ({ data, error: null }),
+      };
+      return { from: () => row };
+    }
+    const inputs = blankPlanInputs();
+    inputs.monthly_basis = { '2026-02-01': { cash_reserve: 0 } };
+    const read = await readPlan(reader({ id, schema_version: 2, inputs }), id);
+    assert.equal(read.ok, true);
+    assert.equal(read.plan.inputs.monthly_basis['2026-02-01'].cash_reserve, 0);
+    const unsupported = await readPlan(reader({ id, schema_version: 3, inputs: blankPlanInputs() }), id);
+    assert.equal(unsupported.code, 'finance_schema_unsupported');
+    const invalid = await readPlan(reader({
+      id,
+      schema_version: 2,
+      inputs: { monthly_basis: { '2026-02-01': { total_revenue: -1 } } },
+    }), id);
+    assert.equal(invalid.code, 'finance_schema_unsupported');
+    const v1 = await readPlan(reader({ id, schema_version: 1, inputs: blankPlanInputs() }), id);
+    assert.equal(v1.ok, true);
+    const calls = [];
+    const upgraded = await upgradeDraftSchema({
+      rpc(name, args) {
+        calls.push({ name, args });
+        return { data: { id, schema_version: 2, version: 5 }, error: null };
+      },
+    }, { id, expectedVersion: 4 }, { MODE: 'test' });
+    assert.equal(upgraded.ok, true);
+    assert.equal(calls[0].name, 'finance_upgrade_draft_schema');
+    assert.deepEqual(calls[0].args, { p_plan_id: id, p_expected_version: 4 });
+    const conflict = await upgradeDraftSchema({
+      rpc() { return { data: null, error: { code: '40001', message: 'finance_version_conflict' } }; },
+    }, { id, expectedVersion: 1 }, { MODE: 'test' });
+    assert.equal(conflict.code, 'version_conflict');
   });
 });

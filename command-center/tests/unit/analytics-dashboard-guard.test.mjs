@@ -16,7 +16,10 @@ describe('business analytics hard-coded retirement', () => {
   it('keeps Reporting as a wrapper and drops fabricated measurements', () => {
     assert.match(reporting, /AnalyticsDashboard/);
     assert.match(dashboard, /unavailable \/ not connected/);
-    assert.match(dashboard, /Not earned operating revenue/);
+    assert.match(dashboard, /Scheduled appointment price — not earned operating revenue/);
+    assert.equal(dashboard.includes('color="green"'), false);
+    assert.equal(dashboard.includes('Conv. Rate'), false);
+    assert.equal(dashboard.includes('pricing_snapshot?.price || 0'), false);
     assert.match(dashboard, /Scheduled appointment price/);
     assert.equal(dashboard.includes('Total Revenue'), false);
     for (const fabricated of ['12.5', '4.8', '+8%', '-2.5%', '75m', '+0.2', 'healthScore', '1250', 'repeatRate']) {

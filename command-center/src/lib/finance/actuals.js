@@ -138,9 +138,89 @@ export function channelRevenueIssue(facts) {
 /**
  * Schema version 1 stores no monthly check-in series.
  * Stage required revenue and scenario figures are not used.
+ * This helper stays null. Version 2 values are read by plannedFactsForMonth.
  */
+const MONTH_KEY = /^(\d{4})-(0[1-9]|1[0-2])-01$/;
+
 export function declaredMonthlyBasis(plan) {
   if (!plan || plan.schema_version !== 1) return null;
+  return null;
+}
+
+export function normalizeActualMonth(value) {
+  const text = String(value || '').trim();
+  if (MONTH_KEY.test(text.slice(0, 10)) && text.slice(0, 10) === text) return text;
+  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(text);
+  if (!match) return null;
+  return `${match[1]}-${match[2]}-01`;
+}
+
+function hasAtMostTwoDecimals(value) {
+  const scaled = value * 100;
+  return Math.abs(scaled - Math.round(scaled)) < 1e-8;
+}
+
+function wholeDigitCount(value) {
+  const whole = Math.trunc(Math.abs(value));
+  if (whole === 0) return 1;
+  return String(whole).length;
+}
+
+export function validateMonthlyBasis(basis) {
+  if (!basis || typeof basis !== 'object' || Array.isArray(basis)) {
+    return { ok: false, code: 'invalid_monthly_basis' };
+  }
+  const normalized = {};
+  for (const [month, row] of Object.entries(basis)) {
+    if (!MONTH_KEY.test(month)) return { ok: false, code: 'invalid_monthly_basis' };
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return { ok: false, code: 'invalid_monthly_basis' };
+    const facts = {};
+    for (const [key, value] of Object.entries(row)) {
+      const field = CHECKIN_FIELDS.find((item) => item.key === key);
+      if (!field) return { ok: false, code: 'invalid_monthly_basis' };
+      if (value === null) {
+        facts[key] = null;
+        continue;
+      }
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+        return { ok: false, code: 'invalid_monthly_basis' };
+      }
+      if (field.kind === 'count') {
+        if (!Number.isInteger(value) || value > 2147483647) return { ok: false, code: 'invalid_monthly_basis' };
+      } else if (!hasAtMostTwoDecimals(value) || wholeDigitCount(value) > (field.kind === 'hours' ? 8 : 12)) {
+        return { ok: false, code: 'invalid_monthly_basis' };
+      }
+      facts[key] = value;
+    }
+    const issue = channelRevenueIssue({
+      total_revenue: facts.total_revenue ?? null,
+      direct_residential_revenue: facts.direct_residential_revenue ?? null,
+      commercial_direct_revenue: facts.commercial_direct_revenue ?? null,
+      portal_revenue: facts.portal_revenue ?? null,
+    });
+    if (issue) return { ok: false, code: issue };
+    normalized[month] = facts;
+  }
+  return { ok: true, basis: normalized };
+}
+
+export function plannedFactsForMonth(plan, month) {
+  if (!plan || plan.schema_version !== 2) return null;
+  const key = normalizeActualMonth(month);
+  const row = key ? plan.inputs?.monthly_basis?.[key] : null;
+  const facts = {};
+  for (const field of CHECKIN_FIELDS) {
+    const value = row?.[field.key];
+    facts[field.key] = value === null || value === undefined ? null : value;
+  }
+  return facts;
+}
+
+export function comparisonPlanForCheckin({ selected, plans, approved, associateOnCreate }) {
+  if (selected?.comparison_plan_id) {
+    return (Array.isArray(plans) ? plans : []).find((plan) => plan.id === selected.comparison_plan_id) || null;
+  }
+  if (!selected && associateOnCreate && approved?.status === 'approved') return approved;
   return null;
 }
 

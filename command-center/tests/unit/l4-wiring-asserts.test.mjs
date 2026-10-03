@@ -24,6 +24,14 @@ describe('MonthlyCheckIn L4 wiring', () => {
     assert.match(src, /disabled=\{!writesEnabled \|\| saving \|\| conflict\}>\s*Associate|disabled=\{!writesEnabled \|\| saving \|\| conflict\}>Associate/);
     assert.match(src, /data-testid="checkin-save" disabled=\{!writesEnabled \|\| saving \|\| conflict\}/);
   });
+  it('history selection does not clear a conflict or load the cached row', () => {
+    const openRow = src.match(/function openRow\(row\) \{[\s\S]*?\n  \}\n/)?.[0] ?? '';
+    assert.match(openRow, /if \(conflict\) return;/);
+    const guard = openRow.indexOf('if (conflict) return;');
+    assert.ok(guard > -1);
+    assert.equal(openRow.slice(0, guard).includes('setConflict(false)'), false);
+    assert.equal(openRow.slice(0, guard).includes('formFromActual'), false);
+  });
   it('no console.* in check-in and conflict modules', () => {
     assert.equal(/console\./.test(src), false);
     assert.equal(/console\./.test(readFileSync(path.join(root, 'src/lib/finance/checkinConflict.js'), 'utf8')), false);

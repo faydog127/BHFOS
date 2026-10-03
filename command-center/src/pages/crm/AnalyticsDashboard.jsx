@@ -10,6 +10,7 @@ import {
     Star, Calendar, Download
 } from "lucide-react";
 import { format, subDays, startOfYear, endOfDay, parseISO } from 'date-fns';
+import { queryRows, summarizeScheduledPrices } from '@/lib/crm/analyticsIntegrity';
 import {
     LineChart, Line, BarChart, Bar,
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -28,7 +29,8 @@ const MetricCard = ({ title, value, subtext, trend, icon: Icon, trendValue, colo
         purple: "bg-purple-50 text-purple-600",
         orange: "bg-orange-50 text-orange-600",
         red: "bg-red-50 text-red-600",
-        yellow: "bg-yellow-50 text-yellow-600"
+        yellow: "bg-yellow-50 text-yellow-600",
+        slate: "bg-slate-100 text-slate-700"
     };
 
     return (
@@ -61,9 +63,10 @@ export default function AnalyticsDashboard() {
     const tenantId = getTenantId();
     
     const [metrics, setMetrics] = useState({
-        revenue: { total: 0 },
-        jobs: { count: 0 },
-        leads: { total: 0, conversionRate: 0 }
+        revenue: { total: null, state: 'unavailable' },
+        jobs: { count: null, state: 'unavailable' },
+        leads: { total: null, state: 'unavailable' },
+        referrals: { state: 'unavailable' }
     });
 
     const [charts, setCharts] = useState({
@@ -96,71 +99,77 @@ export default function AnalyticsDashboard() {
             const { start, end } = getDateInterval();
             
             // 1. Fetch Appointments
-            const { data: appointments } = await supabase
+            const appointmentResult = queryRows(await supabase
                 .from('appointments')
                 .select('*')
                 .eq('tenant_id', tenantId)
                 .gte('scheduled_start', start.toISOString())
-                .lte('scheduled_start', end.toISOString());
+                .lte('scheduled_start', end.toISOString()));
 
-            // 2. Fetch Leads
-            const { data: leads } = await supabase
+            const leadResult = queryRows(await supabase
                 .from('leads')
                 .select('*')
                 .eq('tenant_id', tenantId)
                 .gte('created_at', start.toISOString())
-                .lte('created_at', end.toISOString());
-            
-            // 3. Fetch Referrals
-            const { data: referrals } = await supabase
+                .lte('created_at', end.toISOString()));
+
+            const referralResult = queryRows(await supabase
                 .from('referrals')
                 .select('*, referral_partners(name)')
                 .eq('tenant_id', tenantId)
                 .gte('created_at', start.toISOString())
-                .lte('created_at', end.toISOString());
+                .lte('created_at', end.toISOString()));
 
-            const completedJobs = appointments?.filter(a => a.status === 'completed') || [];
-            const revenueTotal = completedJobs.reduce((sum, job) => sum + (job.pricing_snapshot?.price || 0), 0);
-            
-            const jobsCount = completedJobs.length;
-
-            const totalLeads = leads?.length || 0;
-            const conversionRate = totalLeads > 0 ? ((jobsCount / totalLeads) * 100).toFixed(1) : 0;
+            const completedJobs = appointmentResult.ok ? appointmentResult.rows.filter(a => a.status === 'completed') : [];
+            const prices = appointmentResult.ok ? summarizeScheduledPrices(completedJobs) : { ok: false, code: 'unavailable' };
+            const jobsCount = appointmentResult.ok ? completedJobs.length : null;
 
             const partnerStats = {};
-            referrals?.forEach(ref => {
-                const name = ref.referral_partners?.name || 'Unknown';
-                if (!partnerStats[name]) partnerStats[name] = { name, referrals: 0, commissions: 0 };
-                partnerStats[name].referrals += 1;
-                partnerStats[name].commissions += Number(ref.commission_amount || 0);
-            });
+            if (referralResult.ok) {
+                referralResult.rows.forEach(ref => {
+                    const name = ref.referral_partners?.name || 'Unknown';
+                    if (!partnerStats[name]) partnerStats[name] = { name, referrals: 0, commissions: 0 };
+                    partnerStats[name].referrals += 1;
+                    partnerStats[name].commissions += Number(ref.commission_amount || 0);
+                });
+            }
             const partnerChartData = Object.values(partnerStats).sort((a,b) => b.referrals - a.referrals).slice(0, 5);
 
             const revenueByDay = {};
-            completedJobs.forEach(job => {
-                const day = format(parseISO(job.scheduled_start), 'MMM d');
-                revenueByDay[day] = (revenueByDay[day] || 0) + (job.pricing_snapshot?.price || 0);
-            });
+            if (prices.ok) {
+                prices.prices.forEach((row) => {
+                    if (!row.at) return;
+                    const day = format(parseISO(row.at), 'MMM d');
+                    revenueByDay[day] = (revenueByDay[day] || 0) + row.amount;
+                });
+            }
             const revenueTrendData = Object.entries(revenueByDay).map(([date, amount]) => ({ date, amount }));
 
             setMetrics({
-                revenue: { total: revenueTotal },
-                jobs: { count: jobsCount },
-                leads: { total: totalLeads, conversionRate }
+                revenue: { total: prices.ok ? prices.total : null, state: !appointmentResult.ok ? 'unavailable' : (prices.ok ? 'ok' : 'incomplete') },
+                jobs: { count: jobsCount, state: appointmentResult.ok ? 'ok' : 'unavailable' },
+                leads: { total: leadResult.ok ? leadResult.rows.length : null, state: leadResult.ok ? 'ok' : 'unavailable' },
+                referrals: { state: referralResult.ok ? 'ok' : 'unavailable' }
             });
 
             setCharts({
-                revenueTrend: revenueTrendData,
-                partnerPerformance: partnerChartData,
-                jobsByStatus: [
+                revenueTrend: prices.ok ? revenueTrendData : [],
+                partnerPerformance: referralResult.ok ? partnerChartData : [],
+                jobsByStatus: appointmentResult.ok ? [
                     { name: 'Completed', value: jobsCount },
-                    { name: 'Cancelled', value: appointments?.filter(a => a.status === 'cancelled').length || 0 },
-                    { name: 'No Show', value: appointments?.filter(a => a.status === 'no_show').length || 0 }
-                ]
+                    { name: 'Cancelled', value: appointmentResult.rows.filter(a => a.status === 'cancelled').length },
+                    { name: 'No Show', value: appointmentResult.rows.filter(a => a.status === 'no_show').length }
+                ] : []
             });
 
         } catch (error) {
-            console.error(error);
+            setMetrics({
+                revenue: { total: null, state: 'unavailable' },
+                jobs: { count: null, state: 'unavailable' },
+                leads: { total: null, state: 'unavailable' },
+                referrals: { state: 'unavailable' }
+            });
+            setCharts({ revenueTrend: [], partnerPerformance: [], jobsByStatus: [] });
             toast({ variant: "destructive", title: "Error", description: "Failed to load analytics data." });
         } finally {
             setLoading(false);
@@ -168,6 +177,10 @@ export default function AnalyticsDashboard() {
     };
 
     const handleExport = () => {
+        if (metrics.revenue.state !== 'ok') {
+            toast({ title: "Export unavailable", description: NOT_CONNECTED });
+            return;
+        }
         const headers = ["Date", "Metric", "Value"];
         const rows = charts.revenueTrend.map(r => [r.date, "Scheduled appointment price", r.amount]);
         
@@ -196,6 +209,7 @@ export default function AnalyticsDashboard() {
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Business Analytics</h1>
                     <p className="text-muted-foreground">Performance metrics and insights for your service business.</p>
+                    <p className="mt-2 text-sm text-muted-foreground" data-testid="analytics-finance-unconnected">Invoiced amount: {NOT_CONNECTED}. Cash collected: {NOT_CONNECTED}.</p>
                 </div>
                 <div className="flex gap-3">
                     <Select value={dateRange} onValueChange={setDateRange}>
@@ -220,16 +234,16 @@ export default function AnalyticsDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <MetricCard 
                     title="Scheduled appointment price" 
-                    value={`$${metrics.revenue.total.toLocaleString()}`} 
-                    subtext="Completed appointments by scheduled date. Not earned operating revenue."
+                    value={metrics.revenue.state === 'ok' ? `$${metrics.revenue.total.toLocaleString()}` : NOT_CONNECTED}
+                    subtext="Scheduled appointment price — not earned operating revenue."
                     trend={null}
                     trendValue={NOT_CONNECTED}
                     icon={DollarSign}
-                    color="green"
+                    color="slate"
                 />
                 <MetricCard 
                     title="Work Orders Completed" 
-                    value={metrics.jobs.count} 
+                    value={metrics.jobs.state === 'ok' ? metrics.jobs.count : NOT_CONNECTED}
                     subtext={`Average duration: ${NOT_CONNECTED}`}
                     trend={null}
                     trendValue={NOT_CONNECTED}
@@ -238,8 +252,8 @@ export default function AnalyticsDashboard() {
                 />
                 <MetricCard 
                     title="New Leads" 
-                    value={metrics.leads.total} 
-                    subtext={`Conv. Rate: ${metrics.leads.conversionRate}%`}
+                    value={metrics.leads.state === 'ok' ? metrics.leads.total : NOT_CONNECTED}
+                    subtext={NOT_CONNECTED}
                     trend={null}
                     trendValue={NOT_CONNECTED}
                     icon={Users}
@@ -260,9 +274,10 @@ export default function AnalyticsDashboard() {
                 <Card className="lg:col-span-2">
                     <CardHeader>
                         <CardTitle>Scheduled appointment price</CardTitle>
-                        <CardDescription>Completed appointment prices by scheduled date. Not earned operating revenue. Period comparison is {NOT_CONNECTED}.</CardDescription>
+                        <CardDescription>Scheduled appointment price — not earned operating revenue. Period comparison is {NOT_CONNECTED}.</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[300px]">
+                        {metrics.revenue.state === 'ok' ? (
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={charts.revenueTrend}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -275,6 +290,9 @@ export default function AnalyticsDashboard() {
                                 <Line type="monotone" dataKey="amount" stroke="#2563eb" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
                             </LineChart>
                         </ResponsiveContainer>
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-sm text-muted-foreground" data-testid="analytics-price-unavailable">{NOT_CONNECTED}</div>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -296,7 +314,9 @@ export default function AnalyticsDashboard() {
                         <CardDescription>Leading sources of new business.</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[300px]">
-                         {charts.partnerPerformance.length > 0 ? (
+                         {metrics.referrals.state !== 'ok' ? (
+                             <div className="h-full flex items-center justify-center text-sm text-muted-foreground">{NOT_CONNECTED}</div>
+                         ) : charts.partnerPerformance.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart layout="vertical" data={charts.partnerPerformance} margin={{ left: 20 }}>
                                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
@@ -318,6 +338,9 @@ export default function AnalyticsDashboard() {
                         <CardDescription>Breakdown of appointment outcomes.</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[300px]">
+                         {metrics.jobs.state !== 'ok' ? (
+                             <div className="h-full flex items-center justify-center text-sm text-muted-foreground">{NOT_CONNECTED}</div>
+                         ) : (
                          <ResponsiveContainer width="100%" height="100%">
                              <BarChart data={charts.jobsByStatus}>
                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -327,6 +350,7 @@ export default function AnalyticsDashboard() {
                                  <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40} />
                              </BarChart>
                          </ResponsiveContainer>
+                         )}
                     </CardContent>
                 </Card>
             </div>

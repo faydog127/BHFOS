@@ -90,9 +90,9 @@ export async function createBlankPlan(client, env) {
   return { ok: true, plan: data };
 }
 
-export async function saveDraft(client, { id, expectedVersion, inputs, notes }, env) {
+export async function saveDraft(client, { id, expectedVersion, inputs, notes, schemaVersion = 1 }, env) {
   if (!financeWritesEnabled(env)) return { ok: false, code: FINANCE_WRITES_DISABLED };
-  const validated = validatePlanInputs(inputs);
+  const validated = validatePlanInputs(inputs, schemaVersion);
   if (!validated.ok) return { ok: false, code: validated.code };
   const noteResult = validateNotes(notes);
   if (!noteResult.ok) return { ok: false, code: noteResult.code };
@@ -133,6 +133,22 @@ export async function openDraftFromApproved(client, { id }, env) {
   const { data, error } = await client.rpc('finance_open_draft', { p_plan_id: id });
   if (error) return { ok: false, code: error.code || 'finance_draft_failed' };
   if (!data) return { ok: false, code: 'finance_draft_failed' };
+  return { ok: true, plan: data };
+}
+
+export async function upgradeDraftSchema(client, { id, expectedVersion }, env) {
+  if (!financeWritesEnabled(env)) return { ok: false, code: FINANCE_WRITES_DISABLED };
+  const { data, error } = await client.rpc('finance_upgrade_draft_schema', {
+    p_plan_id: id,
+    p_expected_version: expectedVersion,
+  });
+  if (error) {
+    if (error.code === '40001' || error.message === 'finance_version_conflict') {
+      return { ok: false, code: 'version_conflict' };
+    }
+    return { ok: false, code: error.code || 'finance_schema_upgrade_failed' };
+  }
+  if (!data) return { ok: false, code: 'version_conflict' };
   return { ok: true, plan: data };
 }
 
@@ -206,6 +222,10 @@ export async function readPlan(client, id) {
     .maybeSingle();
   if (error) return { ok: false, code: codeFrom(error, 'finance_read_failed') };
   if (!data) return { ok: false, code: 'finance_not_found' };
-  if (data.schema_version !== FINANCE_PLAN_SCHEMA_VERSION) return { ok: false, code: 'finance_schema_unsupported' };
+  if (data.schema_version !== 1 && data.schema_version !== 2) return { ok: false, code: 'finance_schema_unsupported' };
+  if (data.schema_version === 2) {
+    const basis = validatePlanInputs(data.inputs, 2);
+    if (!basis.ok) return { ok: false, code: 'finance_schema_unsupported' };
+  }
   return { ok: true, plan: data };
 }

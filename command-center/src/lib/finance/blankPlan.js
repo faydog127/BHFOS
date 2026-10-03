@@ -2,6 +2,7 @@
  * Neutral plan inputs. Every amount, hour, count, and fraction is null.
  * Structural keys match the calculator. This is not the synthetic fixture.
  */
+import { validateMonthlyBasis } from './actuals.js';
 import { POOL_GROUPS, STAGE_KEYS } from './calculate.js';
 
 export const FINANCE_PLAN_SCHEMA_VERSION = 1;
@@ -210,13 +211,30 @@ function assertShape(template, value, path) {
   }
 }
 
-export function validatePlanInputs(inputs) {
+export function validatePlanInputs(inputs, schemaVersion = 1) {
+  if (schemaVersion !== 1 && schemaVersion !== 2) return { ok: false, code: 'finance_schema_unsupported' };
+  if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) return { ok: false, code: 'invalid_inputs' };
+  const hasBasis = Object.prototype.hasOwnProperty.call(inputs, 'monthly_basis');
+  if (schemaVersion === 1) {
+    if (hasBasis) return { ok: false, code: 'invalid_inputs' };
+    try {
+      assertShape(blankPlanInputs(), inputs, 'inputs');
+      return { ok: true, inputs };
+    } catch {
+      return { ok: false, code: 'invalid_inputs' };
+    }
+  }
+  if (!hasBasis) return { ok: false, code: 'invalid_monthly_basis' };
+  const basisResult = validateMonthlyBasis(inputs.monthly_basis);
+  if (!basisResult.ok) return basisResult;
+  const rest = { ...inputs };
+  delete rest.monthly_basis;
   try {
-    assertShape(blankPlanInputs(), inputs, 'inputs');
-    return { ok: true, inputs };
+    assertShape(blankPlanInputs(), rest, 'inputs');
   } catch {
     return { ok: false, code: 'invalid_inputs' };
   }
+  return { ok: true, inputs: { ...rest, monthly_basis: basisResult.basis } };
 }
 
 export function validateNotes(notes) {
