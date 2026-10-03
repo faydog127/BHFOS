@@ -2,25 +2,8 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { FINANCE_MODES, GUIDED_BRIEFS } from '@/lib/finance/modes';
+import { presentLabel } from '@/lib/finance/presentLabel';
 import { showCents, showMoney } from '@/lib/finance/viewModel';
-
-const TOKEN_LABELS = {
-  NotReady: 'Not ready',
-  below_near: 'Below near capacity',
-  near_capacity: 'Near capacity',
-  at_or_over_capacity: 'At or over capacity',
-};
-
-function presentLabel(value) {
-  if (typeof value !== 'string' || value === '') return value;
-  let next = value;
-  for (const [token, label] of Object.entries(TOKEN_LABELS)) next = next.replaceAll(token, label);
-  if (/^[a-z][a-z0-9_]*$/.test(next)) {
-    const parts = next.split('_');
-    return parts.map((part, index) => (index === 0 && part ? part.charAt(0).toUpperCase() + part.slice(1) : part)).join(' ');
-  }
-  return next;
-}
 
 const STEPS = [
   ['what', 'What this is'],

@@ -7,12 +7,14 @@ const PRINT_CSS = `
   [data-print-hide] { display: none !important; }
   html, body { background: #fff !important; }
   .report-sheet { max-width: none !important; background: #fff !important; color: #0f172a !important; }
-  .report-block, .report-month { break-inside: avoid; page-break-inside: avoid; }
-  table { width: 100%; border-collapse: collapse; }
+  .overflow-x-auto { overflow: visible !important; }
+  .report-block { break-inside: avoid; page-break-inside: avoid; }
+  table { width: 100% !important; border-collapse: collapse; table-layout: fixed; }
   thead { display: table-header-group; }
   tr, th, td { break-inside: avoid; page-break-inside: avoid; }
-  th, td { border-bottom: 1px solid #cbd5e1; padding: 4px 8px; text-align: left; vertical-align: top; }
+  th, td { border-bottom: 1px solid #cbd5e1; padding: 4px 6px !important; text-align: left; vertical-align: top; font-size: 10px !important; white-space: normal !important; overflow-wrap: anywhere; }
 }
+@page { size: letter; margin: 12mm; }
 `;
 
 function FactTable({ title, rows, testId }) {

@@ -14,6 +14,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const read = (p) => readFileSync(path.join(root, p), 'utf8');
 const shell = read('src/pages/finance/FinanceShell.jsx');
 const ui = read('src/pages/finance/FinanceModes.jsx');
+const labels = read('src/lib/finance/presentLabel.js');
 
 function bannerBlock() {
   const start = shell.indexOf('data-testid="finance-unsaved-in-readonly-mode"');
@@ -90,12 +91,13 @@ describe('C2 recheck extra: F5/F7 presentation guards', () => {
   });
 
   it('presentLabel is applied to readiness, utilization, labels and exception text, and maps the raw tokens', () => {
-    for (const token of ['NotReady', 'below_near', 'near_capacity', 'at_or_over_capacity']) assert.match(ui, new RegExp(token));
+    for (const token of ['NotReady', 'below_near', 'near_capacity', 'at_or_over_capacity']) assert.match(labels, new RegExp(token));
+    assert.match(ui, /import \{ presentLabel \} from '@\/lib\/finance\/presentLabel'/);
     assert.match(ui, /presentLabel\(support\.readiness\)/);
     assert.match(ui, /presentLabel\(support\.utilizationBand\)/);
     assert.match(ui, /presentLabel\(item\.text\)/);
     assert.match(ui, /presentLabel\(row\.readiness\)/);
-    assert.match(ui, /function presentLabel\(value\) \{\s*if \(typeof value !== 'string'/);
+    assert.match(labels, /function presentLabel\(value\) \{\s*if \(typeof value !== 'string'/);
   });
 });
 

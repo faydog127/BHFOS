@@ -111,6 +111,7 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     await expect(surface.locator('input, textarea, select, button')).toHaveCount(0);
     await expect(page.getByRole('navigation', { name: 'Planning sections' })).toHaveCount(0);
     await page.screenshot({ path: `${out}/${id}-desktop.png`, fullPage: true });
+    await page.setViewportSize({ width: 740, height: 1056 });
     await page.emulateMedia({ media: 'print' });
     await expect(page.locator('[data-print-hide]')).toBeHidden();
     await expect(surface.locator('a:visible')).toHaveCount(0);
@@ -127,10 +128,37 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
       };
     });
     expect(printLayout.navDisplay).toBe('none');
-    writeFileSync(`${out}/${id}-print-layout.json`, JSON.stringify(printLayout, null, 2));
+    const clip = await page.evaluate(() => {
+      const sheet = document.querySelector('.report-sheet');
+      const sheetRight = sheet.getBoundingClientRect().right;
+      return [...sheet.querySelectorAll('.overflow-x-auto')].map((wrap) => {
+        const table = wrap.querySelector('table');
+        const tableRect = table ? table.getBoundingClientRect() : null;
+        return {
+          overflow: getComputedStyle(wrap).overflowX,
+          tableWidth: tableRect ? Math.ceil(tableRect.width) : 0,
+          sheetWidth: Math.ceil(sheet.getBoundingClientRect().width),
+          clipped: tableRect ? tableRect.right > sheetRight + 1 : false,
+        };
+      });
+    });
+    expect(clip.every((row) => row.overflow === 'visible')).toBe(true);
+    expect(clip.every((row) => row.clipped === false)).toBe(true);
+    writeFileSync(`${out}/${id}-print-layout.json`, JSON.stringify({ ...printLayout, clip }, null, 2));
+    if (id === 'pricing-economics') {
+      await expect(page.getByRole('columnheader', { name: 'Signed variance' })).toBeVisible();
+      await expect(page.getByRole('columnheader', { name: 'Stage 2 capacity' })).toBeVisible();
+    }
+    if (id === 'cost-structure') {
+      await expect(page.getByRole('columnheader', { name: /Future\/Licensing Dependent HVAC/ })).toBeVisible();
+    }
+    const printed = await page.getByTestId('finance-reports').innerText();
+    expect(printed).not.toContain('NotReady');
+    expect(printed).not.toContain('below_near');
     await page.screenshot({ path: `${out}/${id}-print.png`, fullPage: true });
     await page.pdf({ path: `${out}/${id}.pdf`, printBackground: true });
     await page.emulateMedia({ media: 'screen' });
+    await page.setViewportSize({ width: 1280, height: 900 });
   }
 
   await page.setViewportSize({ width: 390, height: 844 });

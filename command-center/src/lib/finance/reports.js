@@ -6,6 +6,7 @@
  */
 import { CHECKIN_FIELDS, REVENUE_DEFINITION, plannedFactsForMonth } from './actuals.js';
 import { BASIS_COPY, displayCheckinValue } from './modes.js';
+import { presentLabel } from './presentLabel.js';
 import { EXPLANATIONS, MISSING_MARK, showCents, showMoney } from './viewModel.js';
 
 export const HVAC_REPORT_HEADING = 'Future/Licensing Dependent HVAC';
@@ -57,6 +58,11 @@ function presetById(id) {
 }
 
 function text(value) {
+  if (value === null || value === undefined || value === '') return MISSING_MARK;
+  return presentLabel(String(value));
+}
+
+function identifier(value) {
   if (value === null || value === undefined || value === '') return MISSING_MARK;
   return String(value);
 }
@@ -138,7 +144,11 @@ function storedBasis(record, inputs) {
 function costTable(result) {
   const stages = COST_STAGE_KEYS.map((key) => {
     const stage = result?.stages?.[key] || null;
-    return { key, label: stage?.label || key };
+    const label = stage?.label || key;
+    return {
+      key,
+      label: key === 'stage_3_plus_hvac' ? `${label} (${HVAC_REPORT_HEADING})` : label,
+    };
   });
   return {
     type: 'table',
@@ -206,7 +216,7 @@ function ownerOperating(support) {
       type: 'list',
       title: 'Material exceptions',
       testId: 'report-exceptions',
-      items: (support.exceptions || []).map((item) => item.text),
+      items: (support.exceptions || []).map((item) => text(item.text)),
     },
     noteBlock(support.appointmentBoundary),
     factBlock('Not connected', (support.unconnected || []).map((item) => [item.label, item.display, `report-unconnected-${item.key}`])),
@@ -235,7 +245,7 @@ function growthReadiness(support, view) {
       columns: ['Stage', 'Required revenue', 'Cash cost', 'Economic cost', 'Liquidity', 'Readiness', 'Hurdle'],
       rows: stages.map((stage) => ({
         label: stage.label,
-        cells: [stage.requiredRevenue, stage.cash, stage.economic, stage.liquidity, stage.readiness, stage.hurdle],
+        cells: [stage.requiredRevenue, stage.cash, stage.economic, stage.liquidity, stage.readiness, stage.hurdle].map((cell) => text(cell)),
       })),
     },
     factBlock('Selected stage capacity', [
@@ -253,7 +263,7 @@ function growthReadiness(support, view) {
       type: 'list',
       title: 'Incomplete states',
       testId: 'report-exceptions',
-      items: (support.exceptions || []).map((item) => item.text),
+      items: (support.exceptions || []).map((item) => text(item.text)),
     },
     noteBlock(support.advisory || MISSING_MARK),
   ];
@@ -373,7 +383,7 @@ function assumptions(support, view, inputs, record) {
       testId: 'report-caveats',
       items: [
         support.advisory,
-        ...(support.exceptions || []).map((item) => item.text),
+        ...(support.exceptions || []).map((item) => text(item.text)),
         ...(support.history || []).map((month) => `${month.label} source ${text(month.source)}. Note ${text(month.sourceNote)}.`),
       ].filter(Boolean),
     },
@@ -390,7 +400,7 @@ function planVsActual(support) {
     type: 'month',
     title: month.label,
     testId: `report-history-${month.label}`,
-    comparisonPlan: text(month.comparisonPlanId),
+    comparisonPlan: identifier(month.comparisonPlanId),
     schemaVersion: month.schemaVersion == null ? MISSING_MARK : String(month.schemaVersion),
     basisKind: month.basisKind,
     basis: month.basisCopy,
