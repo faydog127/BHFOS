@@ -17,11 +17,21 @@ const TenantGuard = ({ children }) => {
   const location = useLocation();
   const locationRef = useRef(location);
   locationRef.current = location;
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+  const verifiedFor = useRef(null);
   const [isChecking, setIsChecking] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
 
   useEffect(() => {
     let mounted = true;
+    const userId = session?.user?.id || null;
+    const identity = userId && urlTenant ? `${userId}:${urlTenant}` : null;
+    // BrowserRouter's navigate function changes with the path. A new session
+    // object also arrives on token refresh. Either one used to set isChecking
+    // and unmount Finance, which discarded unsaved edits. Recheck the same
+    // user and tenant without taking the shell down.
+    const keepMounted = Boolean(identity && verifiedFor.current === identity);
 
     const safeSet = (setter) => {
       if (mounted) setter();
@@ -38,24 +48,29 @@ const TenantGuard = ({ children }) => {
     const verifyTenantAccess = async () => {
       if (authLoading) return;
 
-      safeSet(() => {
-        setIsChecking(true);
-        setAccessDenied(false);
-      });
+      if (!keepMounted) {
+        safeSet(() => {
+          setIsChecking(true);
+          setAccessDenied(false);
+        });
+      }
 
+      let granted = false;
       try {
         // Strict enforcement: tenant must exist in URL path.
         if (!urlTenant) {
-          navigate('/select-tenant', { replace: true });
+          verifiedFor.current = null;
+          navigateRef.current('/select-tenant', { replace: true });
           return;
         }
 
         // 1. Not Logged In
         if (!session) {
+          verifiedFor.current = null;
           const current = locationRef.current;
           const next = encodeURIComponent(current.pathname + current.search);
           const loginPath = `/${urlTenant || 'tvg'}/login?next=${next}`;
-          navigate(loginPath, { replace: true });
+          navigateRef.current(loginPath, { replace: true });
           return;
         }
 
@@ -69,6 +84,7 @@ const TenantGuard = ({ children }) => {
         }
 
         if (isSuper) {
+          granted = true;
           return;
         }
 
@@ -83,6 +99,7 @@ const TenantGuard = ({ children }) => {
         }
 
         if (!jwtTenant) {
+          verifiedFor.current = null;
           safeSet(() => setAccessDenied(true));
           return;
         }
@@ -102,6 +119,7 @@ const TenantGuard = ({ children }) => {
               const newJwtTenant = newDecoded.app_metadata?.tenant_id;
 
               if (newJwtTenant === urlTenant) {
+                granted = true;
                 return;
               }
             }
@@ -109,19 +127,22 @@ const TenantGuard = ({ children }) => {
             console.warn('TenantGuard: refresh session failed/timed out.', refreshErr);
           }
 
+          verifiedFor.current = null;
           toast({
             title: 'Access Mismatch',
             description: `You are logged in to '${jwtTenant}' but trying to access '${urlTenant}'.`,
             variant: 'destructive'
           });
 
-          navigate(`/${jwtTenant}/crm/dashboard`, { replace: true });
+          navigateRef.current(`/${jwtTenant}/crm/dashboard`, { replace: true });
           return;
         }
+        granted = true;
       } catch (err) {
         console.error('TenantGuard: unexpected verification error', err);
       } finally {
-        safeSet(() => setIsChecking(false));
+        if (granted && identity) verifiedFor.current = identity;
+        if (!keepMounted) safeSet(() => setIsChecking(false));
       }
     };
 
@@ -130,9 +151,7 @@ const TenantGuard = ({ children }) => {
     return () => {
       mounted = false;
     };
-    // Location is read through locationRef. Repeating this effect on every
-    // same-tenant navigation set isChecking and unmounted the Finance shell.
-  }, [session, authLoading, urlTenant, navigate]);
+  }, [session, authLoading, urlTenant]);
 
   if (authLoading || isChecking) {
     return (

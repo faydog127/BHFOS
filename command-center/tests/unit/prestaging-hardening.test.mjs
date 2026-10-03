@@ -21,8 +21,12 @@ const read = (p) => readFileSync(path.join(root, p), 'utf8');
 describe('pre-staging hardening: navigation, brand, schema', () => {
   it('TenantGuard re-checks session and tenant, not every same-tenant location change', () => {
     const source = read('src/components/TenantGuard.jsx');
-    assert.match(source, /\}, \[session, authLoading, urlTenant, navigate\]\);/);
-    assert.equal(/\}, \[session, authLoading, urlTenant, navigate, location\]\);/.test(source), false);
+    assert.match(source, /\}, \[session, authLoading, urlTenant\]\);/);
+    assert.equal(/\}, \[session, authLoading, urlTenant, navigate\]\);/.test(source), false);
+    assert.equal(/location\]\);/.test(source), false);
+    assert.match(source, /navigateRef/);
+    assert.match(source, /verifiedFor/);
+    assert.match(source, /keepMounted/);
     assert.match(source, /check_is_superuser/);
     assert.match(source, /jwtTenant !== urlTenant/);
   });
