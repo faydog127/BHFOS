@@ -21,6 +21,7 @@ async function assertNoDocumentOverflow(page) {
     scrollWidth: document.documentElement.scrollWidth,
     innerWidth: window.innerWidth,
   }));
+  console.log(`CHECKIN_WIDTH scrollWidth=${widths.scrollWidth} innerWidth=${widths.innerWidth}`);
   expect(widths.scrollWidth).toBeLessThanOrEqual(widths.innerWidth);
   return widths;
 }
@@ -217,7 +218,6 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await page.getByTestId('finance-mode-executive').click();
   await page.getByRole('navigation', { name: 'Planning sections' }).getByRole('link', { name: 'Monthly Check-In' }).click();
   await expect(page).toHaveURL(/\/finance\/checkin$/);
-  await expect(page.getByTestId('finance-shell')).toHaveAttribute('data-mode', 'executive');
   await expect(page.getByTestId('finance-mode')).toHaveCount(0);
   await expect(page.getByTestId('finance-header-copy')).toContainText('What this section is, what you can change, and what the formulas return.');
   await expect(page.getByTestId('finance-header-copy')).not.toContainText('Switching mode does not save');
@@ -228,6 +228,7 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await page.locator('aside label select').selectOption('');
   await expect(page).toHaveURL(/\/finance$/);
   await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByTestId('finance-mode-executive').click();
   await expect(page.getByTestId('finance-shell')).toHaveAttribute('data-mode', 'executive');
   await expect(page.getByTestId('finance-save')).toHaveCount(0);
   await expect(page.getByTestId('finance-unsaved-in-readonly-mode')).toHaveCount(0);

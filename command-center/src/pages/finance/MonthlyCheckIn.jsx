@@ -208,14 +208,14 @@ export default function MonthlyCheckIn({
   const plannedDerived = planned ? derivedActualMetrics(planned) : null;
 
   return (
-    <div className="space-y-4" data-testid="finance-checkin">
+    <div className="min-w-0 space-y-4" data-testid="finance-checkin">
       <section className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
         <h2 className="font-semibold text-slate-900">Monthly check-in</h2>
         <p className="mt-2 leading-6" data-testid="checkin-revenue-definition">{REVENUE_DEFINITION}</p>
         <p className="mt-2 leading-6">Enter one actual for the month. Leave a field blank when you do not know it. Blank stays unknown. Zero means the amount really is zero. Cents are kept. This screen does not invent a monthly plan series.</p>
       </section>
-      <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="rounded-lg border border-slate-200 bg-white p-3" data-testid="checkin-history">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <aside className="min-w-0 rounded-lg border border-slate-200 bg-white p-3" data-testid="checkin-history">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">History</h3>
             <button type="button" className="rounded border border-slate-300 px-2 py-1 text-xs" data-testid="checkin-new" onClick={openNew}>New month</button>
@@ -240,7 +240,7 @@ export default function MonthlyCheckIn({
           )}
         </aside>
         <form
-          className="space-y-4 rounded-lg border border-slate-200 bg-white p-4"
+          className="min-w-0 space-y-4 rounded-lg border border-slate-200 bg-white p-4"
           data-testid="checkin-entry"
           onSubmit={(event) => {
             event.preventDefault();
@@ -336,7 +336,7 @@ export default function MonthlyCheckIn({
             {selected ? 'Save correction' : 'Save month'}
           </button>
           {selected ? <p className="text-xs text-slate-500" data-testid="checkin-version">Edit version {selected.version}. There is no delete.</p> : null}
-          <div className="overflow-x-auto">
+          <div className="min-w-0 overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="text-left text-xs uppercase text-slate-500">
                 <tr>

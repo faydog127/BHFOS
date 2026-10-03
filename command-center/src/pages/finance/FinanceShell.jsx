@@ -510,7 +510,7 @@ export default function FinanceShell({ grantedAccess }) {
           Stored plan ({record.status}). Save writes this draft. Refresh discards unsaved edits. The synthetic illustration is not this plan.
         </div>
       ) : null}
-      <div className="lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
+      <div className="min-w-0 lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="border-b border-slate-200 bg-slate-900 text-slate-100 lg:min-h-screen lg:border-b-0 lg:border-r">
           <div className="px-4 py-4">
             <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Planning</div>
@@ -545,7 +545,7 @@ export default function FinanceShell({ grantedAccess }) {
             ))}
           </nav>
         </aside>
-        <main className="px-4 py-6 lg:px-8">
+        <main className="min-w-0 px-4 py-6 lg:px-8">
           <header className="mb-6 flex flex-col gap-3">
             {section !== 'checkin' ? <ModeSwitch mode={mode} onMode={selectFinanceMode} /> : null}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
