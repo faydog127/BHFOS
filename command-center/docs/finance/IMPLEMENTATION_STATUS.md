@@ -19,6 +19,13 @@ Steps 1–6 of the TVG financial planning model, under the 2026-10-01 Command Ce
 
 Draft PR only. No merge, no push to the default branch, no production or staging deploy, no `supabase link`, no `db push`, no remote migration. Production `wwyxohjnyqnegzbxtuxs` and staging `glkrykpksbsqmmilmjhs` were not contacted. No service-role key in the frontend.
 
+No real TVG data may be entered in any Vercel Preview or staging environment. The finance migration is not applied to any remote project by PR #164. Preview must use a non-production Supabase project, or none. Applying the migration anywhere requires explicit Command Center authorization.
+
+## Unresolved
+
+- More than one draft plan can exist. A partial unique index for one draft per tenant is not in this branch. That needs a Command Center ruling.
+- Who runs a clean `supabase db reset` and the finance SQL tests before any staging apply is unresolved. `npx supabase db reset` failed in the environment that wrote this branch (database container setup exited 1). This stage does not apply the migration remotely.
+
 ## Next action
 
-Challenge review of Stage A on draft PR https://github.com/faydog127/BHFOS/pull/164. Stages B, C, and D stay held.
+Challenge re-review of the Stage A security fixes on draft PR https://github.com/faydog127/BHFOS/pull/164. Stages B, C, and D stay held.

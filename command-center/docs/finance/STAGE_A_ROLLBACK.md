@@ -4,6 +4,14 @@ This rollback drops the Stage A finance tables and functions. It does not touch 
 
 Do not run this against a linked, staging, or production database. Production project `wwyxohjnyqnegzbxtuxs` and staging project `glkrykpksbsqmmilmjhs` are out of scope. There is no finance seed to restore.
 
+No real TVG data may be entered in any Vercel Preview or staging environment. The finance migration is not applied to any remote project by PR #164. Preview must use a non-production Supabase project, or none. Applying the migration anywhere requires explicit Command Center authorization.
+
+`finance.plan_transition` is a transaction-local setting used only inside `finance_approve_plan`. It is not an API column. Direct SQL in that same session can set it. The app approves through `finance_approve_plan`.
+
+Trigger functions are executable by `authenticated` because PostgreSQL requires that privilege to fire the trigger. `PUBLIC` and `anon` do not have it.
+
+JWT tenant comparison is `lower(btrim(tenant_id)) = 'tvg'`, the same lower-and-trim rule as the client guard. The stored `tenant_id` column remains exactly `tvg`. SQL `btrim` removes spaces. The client trim also removes other leading and trailing whitespace, so a non-space pad is denied by the database.
+
 Apply on a local stack only, after `npx supabase start` and `npx supabase db reset` from `command-center/`:
 
 ```sql

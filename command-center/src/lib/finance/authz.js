@@ -24,6 +24,8 @@ export function readAppMetadataClaims(accessToken) {
       return { role: null, tenantId: null };
     }
     const role = typeof appMetadata.role === 'string' ? appMetadata.role.trim().toLowerCase() : null;
+    // Same rule as SQL lower(btrim(tenant_id)) = 'tvg'. Stored tenant_id stays exactly tvg.
+    // SQL btrim removes spaces; this trim also removes other leading and trailing whitespace.
     const tenantId = typeof appMetadata.tenant_id === 'string' ? appMetadata.tenant_id.trim().toLowerCase() : null;
     return { role, tenantId };
   } catch {

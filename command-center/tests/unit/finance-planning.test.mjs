@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -249,6 +249,8 @@ describe('finance authorization', () => {
     assert.equal(evaluateFinanceAccess({ accessToken: token('admin', 'tvg', 'viewer'), routeTenantId: 'tvg' }).allowed, true);
     assert.equal(evaluateFinanceAccess({ accessToken: token('super_admin', 'tvg', 'owner'), routeTenantId: 'tvg' }).allowed, true);
     assert.equal(evaluateFinanceAccess({ accessToken: token('admin', 'other', 'admin'), routeTenantId: 'tvg' }).allowed, false);
+    assert.equal(evaluateFinanceAccess({ accessToken: token('admin', 'TVG', 'viewer'), routeTenantId: 'TVG' }).allowed, true);
+    assert.equal(evaluateFinanceAccess({ accessToken: token('admin', ' tvg ', 'viewer'), routeTenantId: ' tvg ' }).allowed, true);
     assert.equal(evaluateFinanceAccess({ accessToken: token('admin', 'tvg', 'admin'), routeTenantId: 'other' }).allowed, false);
     assert.equal(evaluateFinanceAccess({ accessToken: null, routeTenantId: 'tvg' }).allowed, false);
     const decoded = jwtDecode(token('owner', 'tvg', 'admin'));
@@ -276,6 +278,16 @@ describe('finance authorization', () => {
       assert.equal(access.allowed, false);
       assert.notEqual(access.sessionTenantId, 'tvg');
     }
+  });
+
+  it('denies a token with no app_metadata', () => {
+    const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+    const accessToken = `${encode({ alg: 'none', typ: 'JWT' })}.${encode({
+      user_metadata: { role: 'admin', tenant_id: 'tvg' },
+    })}.sig`;
+    const access = evaluateFinanceAccess({ accessToken, routeTenantId: 'tvg' });
+    assert.equal(access.allowed, false);
+    assert.equal(access.role, null);
   });
 
   it('rejects an array-valued role', () => {
@@ -433,18 +445,23 @@ describe('verify script and source guards', () => {
   });
 
   it('matches the SQL role list and blocks the preview harness', () => {
-    const migration = readFileSync(path.join(root, 'supabase/migrations/20261003053000_finance_stage_a_persistence.sql'), 'utf8');
-    const match = migration.match(/in \('admin', 'super_admin'\)/);
-    assert.ok(match);
-    assert.deepEqual(FINANCE_ALLOWED_ROLES, ['admin', 'super_admin']);
-    assert.equal(match[0], "in ('admin', 'super_admin')");
-    const stripped = migration.replace(/\$\$[\s\S]*?\$\$/g, '');
-    assert.equal(/\binsert\s+into\b/i.test(stripped), false);
-    assert.equal(/\bcopy\s+/i.test(stripped), false);
+    const migrationDir = path.join(root, 'supabase/migrations');
+    const migrationNames = readdirSync(migrationDir).filter((name) => name.includes('finance') && name.endsWith('.sql')).sort();
+    let roleList = null;
     const allowed = new Set(['0', '1', '2', '10', '14', '2000']);
-    const numbers = stripped.match(/\d+/g) || [];
-    for (const value of numbers) assert.equal(allowed.has(value), true, value);
-    assert.equal(migration.includes('user_metadata'), false);
+    for (const name of migrationNames) {
+      const migration = readFileSync(path.join(migrationDir, name), 'utf8');
+      const match = migration.match(/lower\(btrim\(auth\.jwt\(\) -> 'app_metadata' ->> 'role'\)\) in \(([^)]+)\)/);
+      if (match) {
+        roleList = [...match[1].matchAll(/'([^']+)'/g)].map((item) => item[1]);
+      }
+      const stripped = migration.replace(/\$\$[\s\S]*?\$\$/g, '').replace(/--.*$/gm, '');
+      assert.equal(/\binsert\s+into\b/i.test(stripped), false, name);
+      assert.equal(/\bcopy\s+/i.test(stripped), false, name);
+      for (const value of stripped.match(/\d+/g) || []) assert.equal(allowed.has(value), true, `${name}:${value}`);
+      assert.equal(migration.includes('user_metadata'), false, name);
+    }
+    assert.deepEqual(roleList, [...FINANCE_ALLOWED_ROLES]);
     for (const relative of [
       'src/lib/finance/authz.js',
       'src/lib/finance/persistence.js',
