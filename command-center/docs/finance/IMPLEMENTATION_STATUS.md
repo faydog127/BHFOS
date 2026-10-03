@@ -9,7 +9,7 @@ Steps 1–6 of the TVG financial planning model, under the 2026-10-01 Command Ce
 - Stage A harness removal: `66f441d663fac1e9f2018df40d51072dc12988db`
 - Stage A persistence: `243f2081bcee8bed254176a87c48f0f6fc7dc839`
 - Plan-independent actuals: `bd202f8ef7de07e59ff4bae9ccd5d33b27cf5307`
-- Stage B starts from accepted Stage A `7d643f0a25cb9418dc99f6f2b07401e3e1afc7b5`. Monthly Check-In entry and history are in the shell. Stages C and D are not started.
+- Stage B starts from accepted Stage A `7d643f0a25cb9418dc99f6f2b07401e3e1afc7b5`. Monthly Check-In: `5df5090a4a6a89381fb7a3711e53d8dbe7293286`. Stages C and D are not started.
 - Draft PR: https://github.com/faydog127/BHFOS/pull/164 (do not merge)
 - Evidence tier: **locally verified**. Not deployed, not staging-verified, not merged, not production-verified.
 - Clean local reset: `npx supabase db reset --local` on an unlinked stack exited 0 and applied through `20261003145000_finance_actuals_known_channel_ceiling.sql`. Finance SQL tests 01, 02, 03, 04, and 05 then passed and rolled back. That stack was not linked to a remote project.
