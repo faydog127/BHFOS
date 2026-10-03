@@ -2,6 +2,7 @@
  * Finance persistence. Callers pass the anon/authenticated client.
  * Errors return codes only. A version conflict does not mutate the caller's inputs.
  */
+import { channelRevenueIssue } from './actuals.js';
 import { FINANCE_ROUTE_TENANT } from './authz.js';
 import { FINANCE_PLAN_SCHEMA_VERSION, blankPlanInputs, validateNotes, validatePlanInputs } from './blankPlan.js';
 import { FINANCE_WRITES_DISABLED, financeWritesEnabled } from './writeGate.js';
@@ -26,9 +27,33 @@ const ACTUAL_FACT_KEYS = [
   'source_note',
 ];
 
+const REVENUE_KEYS = [
+  'total_revenue',
+  'direct_residential_revenue',
+  'commercial_direct_revenue',
+  'portal_revenue',
+];
+
 function codeFrom(error, fallback) {
   if (!error) return fallback;
   return error.code || fallback;
+}
+
+function failure(error, fallback) {
+  return { ok: false, code: codeFrom(error, fallback), detail: error?.message || '' };
+}
+
+function factPatch(facts) {
+  const patch = {};
+  const sourceFacts = facts && typeof facts === 'object' ? facts : {};
+  for (const key of ACTUAL_FACT_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(sourceFacts, key)) patch[key] = sourceFacts[key];
+  }
+  if (REVENUE_KEYS.every((key) => Object.prototype.hasOwnProperty.call(patch, key))) {
+    const issue = channelRevenueIssue(patch);
+    if (issue) return { ok: false, code: issue };
+  }
+  return { ok: true, patch };
 }
 
 export function selectVisiblePlan(plans) {
@@ -122,19 +147,53 @@ export async function listMonthlyActuals(client) {
 
 export async function correctMonthlyActual(client, { id, expectedVersion, facts }, env) {
   if (!financeWritesEnabled(env)) return { ok: false, code: FINANCE_WRITES_DISABLED };
-  const patch = {};
-  const sourceFacts = facts && typeof facts === 'object' ? facts : {};
-  for (const key of ACTUAL_FACT_KEYS) {
-    if (Object.prototype.hasOwnProperty.call(sourceFacts, key)) patch[key] = sourceFacts[key];
-  }
+  const prepared = factPatch(facts);
+  if (!prepared.ok) return prepared;
   const { data, error } = await client
     .from('finance_monthly_actuals')
-    .update(patch)
+    .update(prepared.patch)
     .eq('id', id)
     .eq('version', expectedVersion)
     .select(ACTUAL_COLUMNS)
     .maybeSingle();
-  if (error) return { ok: false, code: codeFrom(error, 'finance_save_failed') };
+  if (error) return failure(error, 'finance_save_failed');
+  if (!data) return { ok: false, code: 'version_conflict' };
+  return { ok: true, actual: data };
+}
+
+export async function createMonthlyActual(client, { month, facts, comparisonPlanId }, env) {
+  if (!financeWritesEnabled(env)) return { ok: false, code: FINANCE_WRITES_DISABLED };
+  const prepared = factPatch(facts);
+  if (!prepared.ok) return prepared;
+  const row = {
+    tenant_id: FINANCE_ROUTE_TENANT,
+    month,
+    schema_version: 1,
+    source: 'manual_entry',
+    ...prepared.patch,
+  };
+  if (comparisonPlanId) row.comparison_plan_id = comparisonPlanId;
+  const { data, error } = await client
+    .from('finance_monthly_actuals')
+    .insert(row)
+    .select(ACTUAL_COLUMNS)
+    .maybeSingle();
+  if (error) return failure(error, 'finance_create_failed');
+  if (!data) return { ok: false, code: 'finance_create_failed' };
+  return { ok: true, actual: data };
+}
+
+export async function associateComparisonPlan(client, { id, expectedVersion, comparisonPlanId }, env) {
+  if (!financeWritesEnabled(env)) return { ok: false, code: FINANCE_WRITES_DISABLED };
+  if (!comparisonPlanId) return { ok: false, code: 'comparison_plan_required' };
+  const { data, error } = await client
+    .from('finance_monthly_actuals')
+    .update({ comparison_plan_id: comparisonPlanId })
+    .eq('id', id)
+    .eq('version', expectedVersion)
+    .select(ACTUAL_COLUMNS)
+    .maybeSingle();
+  if (error) return failure(error, 'finance_save_failed');
   if (!data) return { ok: false, code: 'version_conflict' };
   return { ok: true, actual: data };
 }

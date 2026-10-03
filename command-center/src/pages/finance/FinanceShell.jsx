@@ -6,7 +6,11 @@ import { calculatePlan, monthlyPayroll, OWNER_FIELD_RESERVE_LABEL, STAGE_3_CORE_
 import { supabase } from '@/lib/customSupabaseClient';
 import {
   approvePlan,
+  associateComparisonPlan,
+  correctMonthlyActual,
   createBlankPlan,
+  createMonthlyActual,
+  listMonthlyActuals,
   listPlans,
   openDraftFromApproved,
   saveDraft,
@@ -15,6 +19,7 @@ import {
 import { FINANCE_NOTES_MAX } from '@/lib/finance/blankPlan';
 import { financeWritesEnabled } from '@/lib/finance/writeGate';
 import { EXPLANATIONS, FINANCE_SECTIONS, buildFinanceView, showCents, showMoney } from '@/lib/finance/viewModel';
+import MonthlyCheckIn from '@/pages/finance/MonthlyCheckIn';
 
 function sectionIdFromPath(pathname) {
   const parts = pathname.split('/').filter(Boolean);
@@ -76,6 +81,8 @@ export default function FinanceShell({ grantedAccess }) {
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(allowed);
   const [loadCode, setLoadCode] = useState(null);
+  const [actuals, setActuals] = useState([]);
+  const [actualsCode, setActualsCode] = useState(null);
   const [saveCode, setSaveCode] = useState(null);
   const [conflict, setConflict] = useState(false);
   const [selectedStage, setSelectedStage] = useState('stage_2');
@@ -92,38 +99,41 @@ export default function FinanceShell({ grantedAccess }) {
   }
 
   async function refreshPlans() {
-    const listed = await listPlans(supabase);
+    const [listed, actualList] = await Promise.all([listPlans(supabase), listMonthlyActuals(supabase)]);
+    setLoading(false);
     if (!listed.ok) {
       setLoadCode(listed.code);
-      setLoading(false);
-      return;
+    } else {
+      const choice = selectVisiblePlan(listed.plans);
+      setLoadCode(null);
+      if (!choice.visible) {
+        setRecord(null);
+        setInputs(null);
+        setApprovedBasis(null);
+      } else {
+        applyPlan(choice.visible, choice.draft ? choice.approved : null);
+      }
     }
-    const choice = selectVisiblePlan(listed.plans);
-    setLoadCode(null);
-    setLoading(false);
-    if (!choice.visible) {
-      setRecord(null);
-      setInputs(null);
-      setApprovedBasis(null);
-      return;
+    if (!actualList.ok) setActualsCode(actualList.code);
+    else {
+      setActualsCode(null);
+      setActuals(actualList.actuals);
     }
-    applyPlan(choice.visible, choice.draft ? choice.approved : null);
   }
 
   useEffect(() => {
     if (!allowed) return undefined;
     let live = true;
-    listPlans(supabase).then((listed) => {
+    Promise.all([listPlans(supabase), listMonthlyActuals(supabase)]).then(([listed, actualList]) => {
       if (!live) return;
-      if (!listed.ok) {
-        setLoadCode(listed.code);
-        setLoading(false);
-        return;
-      }
-      const choice = selectVisiblePlan(listed.plans);
       setLoading(false);
-      if (!choice.visible) return;
-      applyPlan(choice.visible, choice.draft ? choice.approved : null);
+      if (!listed.ok) setLoadCode(listed.code);
+      else {
+        const choice = selectVisiblePlan(listed.plans);
+        if (choice.visible) applyPlan(choice.visible, choice.draft ? choice.approved : null);
+      }
+      if (!actualList.ok) setActualsCode(actualList.code);
+      else setActuals(actualList.actuals);
     });
     return () => {
       live = false;
@@ -244,6 +254,33 @@ export default function FinanceShell({ grantedAccess }) {
     applyPlan(approved.plan, null);
   }
 
+  async function refreshActuals() {
+    const actualList = await listMonthlyActuals(supabase);
+    if (!actualList.ok) setActualsCode(actualList.code);
+    else {
+      setActualsCode(null);
+      setActuals(actualList.actuals);
+    }
+  }
+
+  async function onCreateActual(payload) {
+    const created = await createMonthlyActual(supabase, payload);
+    if (created.ok) await refreshActuals();
+    return created;
+  }
+
+  async function onCorrectActual(payload) {
+    const saved = await correctMonthlyActual(supabase, payload);
+    if (saved.ok) await refreshActuals();
+    return saved;
+  }
+
+  async function onAssociateActual(payload) {
+    const saved = await associateComparisonPlan(supabase, payload);
+    if (saved.ok) await refreshActuals();
+    return saved;
+  }
+
   async function onNewDraft() {
     if (!writesEnabled || !record || record.status !== 'approved') return;
     const opened = await openDraftFromApproved(supabase, { id: record.id });
@@ -264,26 +301,31 @@ export default function FinanceShell({ grantedAccess }) {
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading plan…</div>;
   }
-  if (!record) {
+  if (!record && section !== 'checkin') {
     return (
       <div className="min-h-screen bg-slate-100 p-8" data-testid="finance-empty">
         <h1 className="text-2xl font-semibold">No plan yet</h1>
-        <p className="mt-2 max-w-xl text-sm text-slate-600">Create a blank plan. Nothing is filled in for you.</p>
+        <p className="mt-2 max-w-xl text-sm text-slate-600">Create a blank plan. Nothing is filled in for you. A monthly actual does not need a plan.</p>
         {writesEnabled ? null : (
           <p className="mt-3 text-sm font-medium text-slate-800" data-testid="finance-writes-disabled">Finance writes are disabled. This screen is read-only.</p>
         )}
         {saveCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-save-error">{saveCode}</p> : null}
         {loadCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-load-error">{loadCode}</p> : null}
-        <button type="button" className="mt-4 rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-create-plan" onClick={onCreate} disabled={!writesEnabled}>Create plan</button>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-create-plan" onClick={onCreate} disabled={!writesEnabled}>Create plan</button>
+          <NavLink className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium" data-testid="finance-open-checkin" to={`/${routeTenantId}/finance/checkin`}>Monthly Check-In</NavLink>
+        </div>
       </div>
     );
   }
-  if (!view || !inputs) {
+  if (section !== 'checkin' && (!view || !inputs)) {
     return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading plan…</div>;
   }
 
   const base = `/${routeTenantId}/finance`;
-  const draftLocked = record.status !== 'draft';
+  const planReady = Boolean(record && view && inputs);
+  const draftLocked = !record || record.status !== 'draft';
+  const comparisonPlan = record?.status === 'approved' ? record : approvedBasis;
   const stageKeys = ['stage_0', 'stage_1', 'stage_2', 'stage_3'];
 
   return (
@@ -293,9 +335,11 @@ export default function FinanceShell({ grantedAccess }) {
           Finance writes are disabled. This screen is read-only.
         </div>
       )}
-      <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-950" data-testid="plan-banner">
-        Stored plan ({record.status}). Save writes this draft. Refresh discards unsaved edits. The synthetic illustration is not this plan.
-      </div>
+      {planReady ? (
+        <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-950" data-testid="plan-banner">
+          Stored plan ({record.status}). Save writes this draft. Refresh discards unsaved edits. The synthetic illustration is not this plan.
+        </div>
+      ) : null}
       <div className="lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="border-b border-slate-200 bg-slate-900 text-slate-100 lg:min-h-screen lg:border-b-0 lg:border-r">
           <div className="px-4 py-4">
@@ -337,19 +381,35 @@ export default function FinanceShell({ grantedAccess }) {
               <h1 className="text-2xl font-semibold">{FINANCE_SECTIONS.find((item) => (item.path || 'overview') === section)?.label}</h1>
               <p className="mt-1 text-sm text-slate-600">What this section is, what you can change, and what the formulas return.</p>
             </div>
-            <label className="text-sm text-slate-600">
-              Display stage
-              <select
-                className="mt-1 block rounded border border-slate-300 bg-white px-2 py-1.5"
-                value={selectedStage}
-                onChange={(event) => setSelectedStage(event.target.value)}
-              >
-                {stageKeys.map((key) => (
-                  <option key={key} value={key}>{inputs.stages[key].label}</option>
-                ))}
-              </select>
-            </label>
+            {planReady && section !== 'checkin' ? (
+              <label className="text-sm text-slate-600">
+                Display stage
+                <select
+                  className="mt-1 block rounded border border-slate-300 bg-white px-2 py-1.5"
+                  value={selectedStage}
+                  onChange={(event) => setSelectedStage(event.target.value)}
+                >
+                  {stageKeys.map((key) => (
+                    <option key={key} value={key}>{inputs.stages[key].label}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </header>
+          {section === 'checkin' ? (
+            <MonthlyCheckIn
+              actuals={actuals}
+              approvedPlan={comparisonPlan}
+              writesEnabled={writesEnabled}
+              onCreate={onCreateActual}
+              onCorrect={onCorrectActual}
+              onAssociate={onAssociateActual}
+              onReload={refreshActuals}
+            />
+          ) : null}
+          {actualsCode && section === 'checkin' ? <p className="mb-4 text-sm text-red-700" data-testid="checkin-load-error">{actualsCode}</p> : null}
+          {planReady && section !== 'checkin' ? (
+          <>
           <div className="mb-4 flex flex-wrap items-center gap-2">
             {record.status === 'draft' ? (
               <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-save" onClick={onSave} disabled={!writesEnabled}>Save draft</button>
@@ -399,8 +459,9 @@ export default function FinanceShell({ grantedAccess }) {
           {section === 'production' ? <Production inputs={inputs} view={view} onService={patchService} onInput={editInputs} /> : null}
           {section === 'pricing' ? <Pricing view={view} inputs={inputs} onService={patchService} /> : null}
           {section === 'stages' ? <Stages view={view} inputs={inputs} /> : null}
-          {section === 'checkin' ? <Checkin view={view} /> : null}
           </fieldset>
+          </>
+          ) : null}
           <div className="mt-8 flex justify-between text-sm">
             <SectionLink sections={FINANCE_SECTIONS} current={section} base={base} direction={-1} label="Back" />
             <SectionLink sections={FINANCE_SECTIONS} current={section} base={base} direction={1} label="Next" />
@@ -426,7 +487,7 @@ function Overview({ view, inputs }) {
   const selected = view.stages.find((stage) => stage.key === view.selectedStageKey);
   return (
     <div className="space-y-6" data-testid="finance-overview">
-      <p className="text-sm text-slate-600">A snapshot of the synthetic illustration. Current cash cost is not current revenue. No revenue actual has been entered.</p>
+      <p className="text-sm text-slate-600">A snapshot of the stored plan. Current cash cost is not current revenue. Monthly actuals are entered on Monthly Check-In.</p>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Stat label="Illustrated cash baseline" value={view.stages[0].cash} note="Derived from the stage 0 cost pools. Not verified revenue." />
         <Stat label="Selected stage required revenue" value={selected.requiredRevenue} note={inputs.stages[view.selectedStageKey].label} />
@@ -745,39 +806,6 @@ function Stages({ view, inputs }) {
         <p className="mt-2" data-testid="hvac-revenue-missing">{view.missing.hvacRevenue}</p>
         <p className="mt-2">{STAGE_3_CORE_CAVEAT}</p>
         <p className="mt-2">Core units: {view.missing.stage3CoreUnits}. Core utilization: {view.missing.stage3CoreUtilization}. Core productive hours/day: {view.missing.stage3CoreProductiveHoursPerDay}. HVAC non-labor share: {view.missing.hvacNonLaborShare}.</p>
-      </div>
-    </div>
-  );
-}
-
-function Checkin({ view }) {
-  return (
-    <div className="space-y-4" data-testid="finance-checkin">
-      <Explain title="Monthly check-in">This screen does not load or enter monthly actuals. Actual and variance stay blank. A monthly plan series is not defined, so none is invented.</Explain>
-      <p className="text-sm" data-testid="actuals-missing">Actuals source: {view.missing.actualsSource}. Monthly plan series: {view.missing.monthlyPlanSeries}.</p>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-            <tr>
-              <th className="px-3 py-2">Metric</th>
-              <th className="px-3 py-2">Plan</th>
-              <th className="px-3 py-2">Actual</th>
-              <th className="px-3 py-2">Variance</th>
-              <th className="px-3 py-2">Favorable direction</th>
-            </tr>
-          </thead>
-          <tbody>
-            {view.checkin.map((row) => (
-              <tr key={row.key} className="border-t border-slate-100" data-testid={`checkin-${row.key}`}>
-                <td className="px-3 py-2">{row.label}</td>
-                <td className="px-3 py-2">{row.plan}</td>
-                <td className="px-3 py-2">{row.actual}</td>
-                <td className="px-3 py-2">{row.variance}</td>
-                <td className="px-3 py-2">{row.direction === null ? 'Not declared' : row.direction === 'higher' ? 'Higher is favorable' : 'Lower is favorable'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </div>
   );

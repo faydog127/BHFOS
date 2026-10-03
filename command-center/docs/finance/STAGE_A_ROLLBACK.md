@@ -18,6 +18,8 @@ Monthly actuals are one row per `tenant_id` and `month`. `comparison_plan_id` is
 
 Total Revenue is earned operating revenue for work completed in the reporting month. It is not invoice issue-date volume, cash collected, quoted value, or scheduled value. Channel revenue uses the same basis. AR and cash stay separate. `source` allows only manual entry.
 
+`20261003145000_finance_actuals_known_channel_ceiling.sql` replaces `finance_actuals_channel_reconcile`. Known non-null channel amounts cannot exceed Total Revenue. When all three channels are present they must equal Total Revenue, and Total Revenue is required. A null channel is not stored as zero. The check expression uses zero only to add the known amounts. Dropping `finance_monthly_actuals` drops that constraint with the table.
+
 `jobs` / `job_operational_state_v1` are the operational starting point for completed work. Appointments are scheduling records. Business Analytics is not Finance revenue authority.
 
 Apply on a local stack only, after `npx supabase start` and `npx supabase db reset` from `command-center/`:

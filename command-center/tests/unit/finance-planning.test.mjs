@@ -16,7 +16,8 @@ import { nearCapacityBand, stageReadiness, READINESS_INCOMPLETE, READINESS_NOT_R
 import { variance, variancePct } from '../../src/lib/finance/variance.js';
 import { evaluateFinanceAccess, roleHasFinanceCapability, FINANCE_ALLOWED_ROLES, FINANCE_CAPABILITIES } from '../../src/lib/finance/authz.js';
 import { blankPlanInputs, validateNotes, validatePlanInputs } from '../../src/lib/finance/blankPlan.js';
-import { approvePlan, correctMonthlyActual, createBlankPlan, openDraftFromApproved, saveDraft, selectVisiblePlan } from '../../src/lib/finance/persistence.js';
+import { approvePlan, associateComparisonPlan, correctMonthlyActual, createBlankPlan, createMonthlyActual, openDraftFromApproved, saveDraft, selectVisiblePlan } from '../../src/lib/finance/persistence.js';
+import { channelRevenueIssue, declaredMonthlyBasis, derivedActualMetrics, formatStoredDecimal, parseActualDecimal } from '../../src/lib/finance/actuals.js';
 import { FINANCE_WRITES_DISABLED, financeWritesEnabled } from '../../src/lib/finance/writeGate.js';
 import { getSyntheticPlanningFixture } from '../../src/lib/finance/syntheticFixture.js';
 import { buildFinanceView } from '../../src/lib/finance/viewModel.js';
@@ -476,10 +477,18 @@ describe('verify script and source guards', () => {
     const created = await createBlankPlan(client, preview);
     const approved = await approvePlan(client, { id: '11111111-1111-4111-8111-111111111111', expectedVersion: 1 }, preview);
     const opened = await openDraftFromApproved(client, { id: '11111111-1111-4111-8111-111111111111' }, preview);
+    const month = await createMonthlyActual(client, { month: '2026-01-01', facts: {} }, preview);
+    const linked = await associateComparisonPlan(client, {
+      id: '11111111-1111-4111-8111-111111111111',
+      expectedVersion: 1,
+      comparisonPlanId: '22222222-2222-4222-8222-222222222222',
+    }, preview);
     assert.equal(saved.code, FINANCE_WRITES_DISABLED);
     assert.equal(created.code, FINANCE_WRITES_DISABLED);
     assert.equal(approved.code, FINANCE_WRITES_DISABLED);
     assert.equal(opened.code, FINANCE_WRITES_DISABLED);
+    assert.equal(month.code, FINANCE_WRITES_DISABLED);
+    assert.equal(linked.code, FINANCE_WRITES_DISABLED);
     assert.equal(called, false);
     assert.equal(financeWritesEnabled(), true);
   });
@@ -507,6 +516,106 @@ describe('verify script and source guards', () => {
     assert.equal(calls[0].cash_reserve, 0);
   });
 
+  it('keeps a blank channel null, rejects a known channel above total, and omits an unrequested plan', async () => {
+    assert.equal(parseActualDecimal('', 2).value, null);
+    assert.equal(parseActualDecimal('0.00', 2).value, 0);
+    assert.equal(parseActualDecimal('1.01', 2).value, 1.01);
+    assert.equal(formatStoredDecimal('0', 2), '0.00');
+    assert.equal(formatStoredDecimal(null, 2), '');
+    assert.equal(channelRevenueIssue({
+      total_revenue: 4,
+      direct_residential_revenue: 5,
+      commercial_direct_revenue: null,
+      portal_revenue: null,
+    }), 'known_channels_exceed_total');
+    assert.equal(channelRevenueIssue({
+      total_revenue: 4,
+      direct_residential_revenue: 1,
+      commercial_direct_revenue: null,
+      portal_revenue: null,
+    }), null);
+    assert.equal(channelRevenueIssue({
+      total_revenue: 3.1,
+      direct_residential_revenue: 1,
+      commercial_direct_revenue: 1.05,
+      portal_revenue: 1.05,
+    }), null);
+    assert.equal(channelRevenueIssue({
+      total_revenue: null,
+      direct_residential_revenue: 1,
+      commercial_direct_revenue: 1,
+      portal_revenue: 1,
+    }), 'channels_require_total');
+    assert.equal(declaredMonthlyBasis({
+      schema_version: 1,
+      inputs: { stages: { stage_2: { scenario: { projected_revenue: 100 } } } },
+    }), null);
+    const derived = derivedActualMetrics({
+      total_revenue: 3.1,
+      total_jobs: 2,
+      productive_unit_hours: 1.5,
+      portal_revenue: 1.05,
+      direct_residential_revenue: 1,
+      commercial_direct_revenue: null,
+      field_payroll: null,
+      indirect_cash_costs: 0,
+      ar_ending: null,
+      cash_reserve: 0,
+    });
+    assert.equal(derived.direct_share, null);
+    assert.equal(derived.field_payroll_pct_of_revenue, null);
+    assert.equal(derived.cash_reserve_over_revenue, 0);
+    assert.equal(derived.indirect_cost_pct_of_revenue, 0);
+    const inserts = [];
+    const row = {
+      insert(payload) { inserts.push(payload); return row; },
+      select() { return row; },
+      maybeSingle: async () => ({ data: { id: 'a', version: 1 }, error: null }),
+    };
+    const facts = {
+      total_revenue: null,
+      direct_residential_revenue: null,
+      commercial_direct_revenue: null,
+      portal_revenue: null,
+      cash_reserve: 0,
+    };
+    const created = await createMonthlyActual({ from: () => row }, {
+      month: '2026-01-01',
+      facts,
+      comparisonPlanId: null,
+    });
+    assert.equal(created.ok, true);
+    assert.equal(Object.prototype.hasOwnProperty.call(inserts[0], 'comparison_plan_id'), false);
+    assert.equal(inserts[0].source, 'manual_entry');
+    assert.equal(inserts[0].total_revenue, null);
+    assert.equal(inserts[0].cash_reserve, 0);
+    const blocked = await createMonthlyActual({ from: () => row }, {
+      month: '2026-02-01',
+      facts: {
+        total_revenue: 4,
+        direct_residential_revenue: 5,
+        commercial_direct_revenue: null,
+        portal_revenue: null,
+      },
+    });
+    assert.equal(blocked.code, 'known_channels_exceed_total');
+    assert.equal(inserts.length, 1);
+    const updates = [];
+    const updateRow = {
+      update(payload) { updates.push(payload); return updateRow; },
+      eq() { return updateRow; },
+      select() { return updateRow; },
+      maybeSingle: async () => ({ data: { id: 'a', version: 2, comparison_plan_id: 'plan-1' }, error: null }),
+    };
+    const linked = await associateComparisonPlan({ from: () => updateRow }, {
+      id: 'a',
+      expectedVersion: 1,
+      comparisonPlanId: 'plan-1',
+    });
+    assert.equal(linked.ok, true);
+    assert.deepEqual(updates[0], { comparison_plan_id: 'plan-1' });
+  });
+
   it('matches the SQL role list and blocks the preview harness', () => {
     const migrationDir = path.join(root, 'supabase/migrations');
     const migrationNames = readdirSync(migrationDir).filter((name) => name.includes('finance') && name.endsWith('.sql')).sort();
@@ -531,6 +640,8 @@ describe('verify script and source guards', () => {
       'src/lib/finance/writeGate.js',
       'src/lib/finance/blankPlan.js',
       'src/pages/finance/FinanceShell.jsx',
+      'src/pages/finance/MonthlyCheckIn.jsx',
+      'src/lib/finance/actuals.js',
       'src/components/finance/FinanceGuard.jsx',
     ]) {
       assert.equal(readFileSync(path.join(root, relative), 'utf8').includes('user_metadata'), false, relative);
@@ -541,7 +652,13 @@ describe('verify script and source guards', () => {
     assert.equal(shell.includes('getSyntheticPlanningFixture'), false);
     assert.match(shell, /grantedAccess\?\.allowed === true/);
     assert.match(shell, /No plan yet/);
-    assert.match(shell, /does not load or enter monthly actuals/);
+    assert.match(shell, /MonthlyCheckIn/);
+    const checkin = readFileSync(path.join(root, 'src/pages/finance/MonthlyCheckIn.jsx'), 'utf8');
+    const actuals = readFileSync(path.join(root, 'src/lib/finance/actuals.js'), 'utf8');
+    assert.match(checkin, /does not invent a monthly plan series/);
+    assert.match(actuals, /not the invoices issued this month/);
+    assert.match(checkin, /checkin-no-plan/);
+    assert.equal(checkin.includes('Housecall'), false);
     assert.match(shell, /finance-writes-disabled/);
     assert.match(shell, /Finance writes are disabled/);
     assert.match(shell, /disabled=\{!writesEnabled\}/);
