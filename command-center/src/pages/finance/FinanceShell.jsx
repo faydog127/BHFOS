@@ -23,6 +23,8 @@ import { CHECKIN_FIELDS, basisAmountDraft } from '@/lib/finance/actuals';
 import { FINANCE_NOTES_MAX } from '@/lib/finance/blankPlan';
 import { financeWritesEnabled } from '@/lib/finance/writeGate';
 import { EXPLANATIONS, FINANCE_SECTIONS, buildFinanceView, showCents, showMoney } from '@/lib/finance/viewModel';
+import { buildDecisionSupport, normalizeFinanceMode } from '@/lib/finance/modes';
+import { AdvancedView, ExecutiveView, GuidedBrief, ModeSwitch } from '@/pages/finance/FinanceModes';
 import MonthlyCheckIn from '@/pages/finance/MonthlyCheckIn';
 
 function MonthlyBasisEditor({ inputs, onPatch }) {
@@ -123,11 +125,11 @@ function NumberField({ label, value, onChange }) {
   );
 }
 
-function Stat({ label, value, note }) {
+function Stat({ label, value, note, testId }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
       <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
+      <div className="mt-2 text-2xl font-semibold text-slate-900" data-testid={testId}>{value}</div>
       {note ? <p className="mt-2 text-xs text-slate-500">{note}</p> : null}
     </div>
   );
@@ -161,6 +163,7 @@ export default function FinanceShell({ grantedAccess }) {
   const [saveCode, setSaveCode] = useState(null);
   const [conflict, setConflict] = useState(false);
   const [selectedStage, setSelectedStage] = useState('stage_2');
+  const [mode, setMode] = useState('guided');
   const section = sectionIdFromPath(location.pathname);
 
   function applyPlan(plan, basis) {
@@ -253,6 +256,14 @@ export default function FinanceShell({ grantedAccess }) {
     () => (inputs && result ? buildFinanceView({ meta: { label: 'Stored plan', data_class: 'stored' }, inputs }, result, selectedStage) : null),
     [inputs, result, selectedStage],
   );
+  const support = useMemo(
+    () => buildDecisionSupport({ view, result, inputs, actuals, plans }),
+    [view, result, inputs, actuals, plans],
+  );
+
+  function selectFinanceMode(next) {
+    setMode(normalizeFinanceMode(next));
+  }
 
   function patchStage(stageKey, field, value) {
     editInputs((current) => {
@@ -444,17 +455,35 @@ export default function FinanceShell({ grantedAccess }) {
   }
   if (!record && section !== 'checkin') {
     return (
-      <div className="min-h-screen bg-slate-100 p-8" data-testid="finance-empty">
-        <h1 className="text-2xl font-semibold">{loadCode === 'finance_schema_unsupported' ? 'Stored plan needs repair' : 'No plan yet'}</h1>
-        <p className="mt-2 max-w-xl text-sm text-slate-600">Create a blank plan. Nothing is filled in for you. A monthly actual does not need a plan.</p>
-        {writesEnabled ? null : (
-          <p className="mt-3 text-sm font-medium text-slate-800" data-testid="finance-writes-disabled">Finance writes are disabled. This screen is read-only.</p>
-        )}
-        {saveCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-save-error">{saveCode}</p> : null}
-        {loadCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-load-error">{loadErrorCopy(loadCode)}</p> : null}
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-create-plan" onClick={onCreate} disabled={!writesEnabled}>Create plan</button>
-          <NavLink className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium" data-testid="finance-open-checkin" to={`/${routeTenantId}/finance/checkin`}>Monthly Check-In</NavLink>
+      <div className="min-h-screen bg-slate-100 p-4 sm:p-8" data-testid="finance-empty" data-mode={mode}>
+        <div className="mx-auto max-w-3xl">
+          <ModeSwitch mode={mode} onMode={selectFinanceMode} />
+          <h1 className="mt-4 text-2xl font-semibold">{loadCode === 'finance_schema_unsupported' ? 'Stored plan needs repair' : 'No plan yet'}</h1>
+          <p className="mt-2 max-w-xl text-sm text-slate-600">Create a blank plan. Nothing is filled in for you. A monthly actual does not need a plan.</p>
+          {writesEnabled ? null : (
+            <p className="mt-3 text-sm font-medium text-slate-800" data-testid="finance-writes-disabled">Finance writes are disabled. This screen is read-only.</p>
+          )}
+          {saveCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-save-error">{saveCode}</p> : null}
+          {loadCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-load-error">{loadErrorCopy(loadCode)}</p> : null}
+          {mode === 'guided' ? (
+            <div className="mt-4">
+              <p className="text-sm text-slate-700">Required monthly revenue <span data-testid="canonical-required-revenue">{support.requiredMonthlyRevenue}</span></p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button type="button" className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-create-plan" onClick={onCreate} disabled={!writesEnabled}>Create plan</button>
+                <NavLink className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium" data-testid="finance-open-checkin" to={`/${routeTenantId}/finance/checkin`}>Monthly Check-In</NavLink>
+              </div>
+            </div>
+          ) : null}
+          {mode === 'executive' ? (
+            <div className="mt-4">
+              <ExecutiveView support={support} onEdit={() => selectFinanceMode('guided')} checkinHref={`/${routeTenantId}/finance/checkin`} />
+            </div>
+          ) : null}
+          {mode === 'advanced' ? (
+            <div className="mt-4">
+              <AdvancedView support={support} onEdit={() => selectFinanceMode('guided')} checkinHref={`/${routeTenantId}/finance/checkin`} />
+            </div>
+          ) : null}
         </div>
       </div>
     );
@@ -470,7 +499,7 @@ export default function FinanceShell({ grantedAccess }) {
   const stageKeys = ['stage_0', 'stage_1', 'stage_2', 'stage_3'];
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900" data-testid="finance-shell">
+    <div className="min-h-screen bg-slate-100 text-slate-900" data-testid="finance-shell" data-mode={mode}>
       {writesEnabled ? null : (
         <div className="border-b border-slate-300 bg-slate-200 px-4 py-2 text-sm font-medium text-slate-900" data-testid="finance-writes-disabled">
           Finance writes are disabled. This screen is read-only.
@@ -517,10 +546,12 @@ export default function FinanceShell({ grantedAccess }) {
           </nav>
         </aside>
         <main className="px-4 py-6 lg:px-8">
-          <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <header className="mb-6 flex flex-col gap-3">
+            <ModeSwitch mode={mode} onMode={selectFinanceMode} />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h1 className="text-2xl font-semibold">{FINANCE_SECTIONS.find((item) => (item.path || 'overview') === section)?.label}</h1>
-              <p className="mt-1 text-sm text-slate-600">What this section is, what you can change, and what the formulas return.</p>
+              <h1 className="text-2xl font-semibold">{section === 'checkin' ? 'Monthly Check-In' : mode === 'executive' ? 'Executive' : mode === 'advanced' ? 'Advanced Analytics' : FINANCE_SECTIONS.find((item) => (item.path || 'overview') === section)?.label}</h1>
+              <p className="mt-1 text-sm text-slate-600">{mode === 'guided' ? 'What this section is, what you can change, and what the formulas return.' : 'Read from the stored plan and Monthly Check-In. Switching mode does not save.'}</p>
             </div>
             {planReady && section !== 'checkin' ? (
               <label className="text-sm text-slate-600">
@@ -536,6 +567,7 @@ export default function FinanceShell({ grantedAccess }) {
                 </select>
               </label>
             ) : null}
+            </div>
           </header>
           {section === 'checkin' ? (
             <MonthlyCheckIn
@@ -551,8 +583,15 @@ export default function FinanceShell({ grantedAccess }) {
           ) : null}
           {loadCode ? <p className="mb-4 text-sm text-red-700" data-testid="finance-load-error">{loadErrorCopy(loadCode)}</p> : null}
           {actualsCode && section === 'checkin' ? <p className="mb-4 text-sm text-red-700" data-testid="checkin-load-error">{actualsCode}</p> : null}
-          {planReady && section !== 'checkin' ? (
+          {planReady && section !== 'checkin' && mode === 'executive' ? (
+            <ExecutiveView support={support} onEdit={() => selectFinanceMode('guided')} checkinHref={`/${routeTenantId}/finance/checkin`} />
+          ) : null}
+          {planReady && section !== 'checkin' && mode === 'advanced' ? (
+            <AdvancedView support={support} onEdit={() => selectFinanceMode('guided')} checkinHref={`/${routeTenantId}/finance/checkin`} />
+          ) : null}
+          {planReady && section !== 'checkin' && mode === 'guided' ? (
           <>
+          <GuidedBrief section={section} />
           <div className="mb-4 flex flex-wrap items-center gap-2">
             {record.status === 'draft' && record.schema_version === 1 ? (
               <button type="button" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:text-slate-400" data-testid="finance-upgrade-schema" onClick={onUpgradeSchema} disabled={!writesEnabled || dirty}>Use monthly plan basis</button>
@@ -639,7 +678,7 @@ function Overview({ view, inputs }) {
       <p className="text-sm text-slate-600">A snapshot of the stored plan. Current cash cost is not current revenue. Monthly actuals are entered on Monthly Check-In.</p>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Stat label="Illustrated cash baseline" value={view.stages[0].cash} note="Derived from the stage 0 cost pools. Not verified revenue." />
-        <Stat label="Selected stage required revenue" value={selected.requiredRevenue} note={inputs.stages[view.selectedStageKey].label} />
+        <Stat testId="canonical-required-revenue" label="Selected stage required revenue" value={selected.requiredRevenue} note={inputs.stages[view.selectedStageKey].label} />
         <Stat label="Selected liquidity target" value={selected.liquidity} note="Max of operating cash float and safety reserve." />
         <Stat label="Stage 3 headline" value={view.stage3Headline.requiredRevenue} note={view.hvacEnabled ? 'Stage 3 + HVAC' : view.hvacDisabledCopy} />
       </div>

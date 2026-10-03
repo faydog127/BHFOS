@@ -12,7 +12,55 @@ test.beforeAll(() => {
   mkdirSync(out, { recursive: true });
 });
 
+async function shot(page, name) {
+  await page.screenshot({ path: `${out}/${name}.png`, fullPage: true });
+}
+
+async function assertModeSwitchWritesNothing(page) {
+  const writes = [];
+  const onRequest = (request) => {
+    const method = request.method();
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return;
+    const url = request.url();
+    if (url.includes('/auth/v1/token')) return;
+    writes.push(`${method} ${url}`);
+  };
+  page.on('request', onRequest);
+  await page.getByTestId('finance-mode-executive').click();
+  await page.getByTestId('finance-mode-advanced').click();
+  await page.getByTestId('finance-mode-guided').click();
+  await page.waitForTimeout(400);
+  page.off('request', onRequest);
+  expect(writes).toEqual([]);
+}
+
+async function cycleModes(page, prefix) {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.getByTestId('finance-mode')).toHaveAttribute('data-mode', 'guided');
+  await shot(page, `${prefix}-guided-desktop`);
+  await page.getByTestId('finance-mode-executive').click();
+  await expect(page.getByTestId('finance-mode')).toHaveAttribute('data-mode', 'executive');
+  await expect(page.getByTestId('canonical-required-revenue')).toBeVisible();
+  const required = await page.getByTestId('canonical-required-revenue').innerText();
+  await shot(page, `${prefix}-executive-desktop`);
+  await page.getByTestId('finance-mode-advanced').click();
+  await expect(page.getByTestId('finance-mode')).toHaveAttribute('data-mode', 'advanced');
+  await expect(page.getByTestId('canonical-required-revenue')).toHaveText(required);
+  await shot(page, `${prefix}-advanced-desktop`);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await shot(page, `${prefix}-advanced-mobile`);
+  await page.getByTestId('finance-mode-executive').click();
+  await expect(page.getByTestId('canonical-required-revenue')).toHaveText(required);
+  await shot(page, `${prefix}-executive-mobile`);
+  await page.getByTestId('finance-mode-guided').click();
+  await expect(page.getByTestId('canonical-required-revenue')).toHaveText(required);
+  await shot(page, `${prefix}-guided-mobile`);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.getByRole('tab')).toHaveCount(3);
+}
+
 test('monthly check-in entry, history, and comparison basis', async ({ page }) => {
+  test.setTimeout(240000);
   test.skip(!process.env.FINANCE_CHECKIN_EMAIL || !process.env.FINANCE_CHECKIN_PASSWORD, 'local check-in credentials were not provided');
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/tvg/login?next=%2Ftvg%2Ffinance%2Fcheckin');
@@ -53,8 +101,22 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await page.screenshot({ path: `${out}/desktop-history.png`, fullPage: true });
 
   await page.goto('/tvg/finance');
+  await expect(page.getByTestId('finance-empty')).toBeVisible();
+  await expect(page.getByTestId('finance-mode-guided')).toBeVisible();
+  await expect(page.getByTestId('finance-mode-executive')).toBeVisible();
+  await expect(page.getByTestId('finance-mode-advanced')).toBeVisible();
+  await assertModeSwitchWritesNothing(page);
+  await cycleModes(page, 'empty');
+  await expect(page.getByTestId('finance-create-plan')).toBeVisible();
   await page.getByTestId('finance-create-plan').click();
   await expect(page.getByTestId('finance-monthly-basis')).toBeVisible();
+  await expect(page.getByTestId('finance-guided-brief')).toBeVisible();
+  await expect(page.getByTestId('guided-what')).toBeVisible();
+  await expect(page.getByTestId('guided-result')).toBeVisible();
+  await assertModeSwitchWritesNothing(page);
+  await cycleModes(page, 'incomplete');
+  await expect(page.getByTestId('finance-monthly-basis')).toBeVisible();
+  await expect(page.getByTestId('finance-basis-total-revenue')).toHaveValue('');
   await page.getByTestId('finance-approve').click();
   await expect(page.getByTestId('plan-banner')).toContainText('approved');
   await page.goto('/tvg/finance/checkin');
@@ -110,6 +172,37 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await page.screenshot({ path: `${out}/mobile-partial-basis.png`, fullPage: true });
 
   await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/tvg/finance');
+  await expect(page.getByTestId('finance-shell')).toHaveAttribute('data-mode', 'guided');
+  await assertModeSwitchWritesNothing(page);
+  await page.getByTestId('finance-mode-executive').click();
+  await expect(page.getByTestId('finance-save')).toHaveCount(0);
+  await expect(page.getByTestId('finance-approve')).toHaveCount(0);
+  await expect(page.getByTestId('decision-latest-month')).toHaveText('2026-02');
+  await expect(page.getByTestId('decision-basis-state')).toContainText('blank plan figure is not zero');
+  await expect(page.getByTestId('decision-plan-total-revenue')).toHaveText('$10.50');
+  await expect(page.getByTestId('decision-actual-total-revenue')).toHaveText('$4.00');
+  await expect(page.getByTestId('decision-variance-total-revenue')).toHaveText('-$6.50');
+  await expect(page.getByTestId('decision-plan-cash-reserve')).toHaveText('$0.00');
+  await expect(page.getByTestId('decision-actual-cash-reserve')).toHaveText('$0.00');
+  await expect(page.getByTestId('decision-plan-total-jobs')).toHaveText('--');
+  await expect(page.getByTestId('decision-actual-field-payroll')).toHaveText('--');
+  await expect(page.getByTestId('finance-unconnected')).toContainText('unavailable / not connected');
+  await expect(page.getByTestId('finance-unconnected')).toContainText('not earned operating revenue');
+  await page.getByTestId('finance-mode-advanced').click();
+  await expect(page.getByTestId('history-2026-02-plan-total-revenue')).toHaveText('$10.50');
+  await expect(page.getByTestId('history-2026-02-actual-total-revenue')).toHaveText('$4.00');
+  await expect(page.getByTestId('history-2026-02-variance-total-revenue')).toHaveText('-$6.50');
+  await expect(page.getByTestId('history-2026-02-plan-cash-reserve')).toHaveText('$0.00');
+  await expect(page.getByTestId('history-2026-02-plan-total-jobs')).toHaveText('--');
+  await expect(page.getByTestId('history-2026-01-plan-total-revenue')).toHaveText('--');
+  await expect(page.getByTestId('history-2026-01-variance-total-revenue')).toHaveText('--');
+  await expect(page.getByTestId('history-2026-01-actual-cash-reserve')).toHaveText('$0.00');
+  await expect(page.getByTestId('decision-plan-total-revenue')).toHaveCount(0);
+  await page.getByTestId('finance-mode-guided').click();
+  await expect(page.getByTestId('finance-monthly-basis')).toHaveCount(0);
+  await cycleModes(page, 'populated');
+  await page.goto('/tvg/finance/checkin');
   await page.getByTestId('checkin-history-2026-01').click();
   await expect(page.getByTestId('checkin-plan-total-revenue')).toHaveText('--');
   await expect(page.getByTestId('checkin-variance-total-revenue')).toHaveText('--');
