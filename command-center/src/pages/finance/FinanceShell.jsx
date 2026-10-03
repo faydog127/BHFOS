@@ -646,6 +646,9 @@ export default function FinanceShell({ grantedAccess }) {
             ) : null}
             </div>
           </header>
+          {section === 'checkin' && dirty ? (
+            <p className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" data-testid="finance-unsaved-held">This draft has unsaved edits. Nothing is saved automatically.</p>
+          ) : null}
           {section === 'checkin' ? (
             <MonthlyCheckIn
               actuals={actuals}

@@ -33,6 +33,10 @@ describe('pre-staging hardening: navigation, brand, schema', () => {
     assert.match(shell, /data-testid="finance-leave-cancel"/);
     assert.match(shell, /data-testid="finance-leave-discard"/);
     assert.match(shell, /Nothing is saved automatically/);
+    assert.match(shell, /data-testid="finance-unsaved-held"/);
+    const reportsScreen = read('src/pages/finance/FinanceReports.jsx');
+    assert.match(reportsScreen, /const liveNotice = screenNote\(dirty, conflict\)/);
+    assert.match(reportsScreen, /data-testid="finance-report-notice">\{liveNotice\}/);
     assert.equal(shell.includes('function share'), false);
     assert.equal(shell.includes('Share of required revenue'), false);
     assert.match(shell, /presentLabel\(view\.utilizationBand\)/);

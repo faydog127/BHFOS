@@ -177,7 +177,7 @@ function contextFor(support, record) {
   };
 }
 
-function screenNote(dirty, conflict) {
+export function screenNote(dirty, conflict) {
   if (conflict && dirty) return 'Changed elsewhere. Your unsaved edits are kept in Guided. These figures include them.';
   if (conflict) return 'Changed elsewhere. Return to Guided to reload the latest plan.';
   if (dirty) return 'These figures include unsaved edits. Return to Guided to save or discard them.';

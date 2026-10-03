@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import EntityBrandIdentity from '@/components/finance/EntityBrandIdentity';
-import { FINANCE_REPORT_PRESETS, buildFinanceReport } from '@/lib/finance/reports';
+import { FINANCE_REPORT_PRESETS, buildFinanceReport, screenNote } from '@/lib/finance/reports';
 
 const PRINT_CSS = `
 @media print {
@@ -161,6 +161,7 @@ export default function FinanceReportScreen({
   conflict,
 }) {
   const [generatedAt] = useState(() => new Date().toISOString());
+  const liveNotice = screenNote(dirty, conflict);
   const report = reportId === 'index' ? null : buildFinanceReport({
     id: reportId,
     support,
@@ -215,6 +216,7 @@ export default function FinanceReportScreen({
               <h1 className="mt-2 text-2xl font-semibold" data-testid="finance-report-title">Reports</h1>
               <p className="mt-2 text-sm text-slate-700">Generated <time data-testid="finance-report-generated-at" dateTime={generatedAt}>{generatedAt}</time> UTC</p>
               <p className="mt-2 text-sm leading-6 text-slate-700">Eight reports. They read the plan on this screen and Monthly Check-In. They do not save.</p>
+              {liveNotice ? <p className="mt-3 text-sm text-slate-800" data-testid="finance-report-notice">{liveNotice}</p> : null}
             </header>
             <ol className="mt-4 list-decimal pl-5 text-sm leading-7">
               {FINANCE_REPORT_PRESETS.map((item) => <li key={item.id}>{item.title}</li>)}
