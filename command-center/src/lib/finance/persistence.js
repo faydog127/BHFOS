@@ -4,7 +4,7 @@
  */
 import { channelRevenueIssue } from './actuals.js';
 import { FINANCE_ROUTE_TENANT } from './authz.js';
-import { FINANCE_PLAN_SCHEMA_VERSION, blankPlanInputs, validateNotes, validatePlanInputs } from './blankPlan.js';
+import { blankPlanInputs, validateNotes, validatePlanInputs } from './blankPlan.js';
 import { FINANCE_WRITES_DISABLED, financeWritesEnabled } from './writeGate.js';
 
 const PLAN_COLUMNS = 'id, version, status, schema_version, inputs, notes, approved_at, approved_by, updated_at';
@@ -63,6 +63,19 @@ export function selectVisiblePlan(plans) {
   return { approved, draft, visible: draft || approved || null };
 }
 
+export const STORED_PLAN_INVALID_COPY = 'A stored plan failed validation. An administrator must repair the draft.';
+
+export function storedPlanDecision(plan) {
+  if (!plan) return { ok: true };
+  try {
+    const validated = validatePlanInputs(plan.inputs, plan.schema_version);
+    if (!validated.ok) return { ok: false, code: 'finance_schema_unsupported' };
+    return { ok: true };
+  } catch {
+    return { ok: false, code: 'finance_schema_unsupported' };
+  }
+}
+
 export async function listPlans(client) {
   const { data, error } = await client
     .from('finance_plans')
@@ -74,13 +87,14 @@ export async function listPlans(client) {
 
 export async function createBlankPlan(client, env) {
   if (!financeWritesEnabled(env)) return { ok: false, code: FINANCE_WRITES_DISABLED };
-  const inputs = blankPlanInputs();
+  const validated = validatePlanInputs({ ...blankPlanInputs(), monthly_basis: {} }, 2);
+  if (!validated.ok) return { ok: false, code: validated.code };
   const { data, error } = await client
     .from('finance_plans')
     .insert({
       tenant_id: FINANCE_ROUTE_TENANT,
-      schema_version: FINANCE_PLAN_SCHEMA_VERSION,
-      inputs,
+      schema_version: 2,
+      inputs: validated.inputs,
       notes: null,
     })
     .select(PLAN_COLUMNS)

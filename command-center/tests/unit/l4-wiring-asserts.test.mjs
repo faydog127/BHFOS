@@ -24,6 +24,14 @@ describe('MonthlyCheckIn L4 wiring', () => {
     assert.match(src, /disabled=\{!writesEnabled \|\| saving \|\| conflict\}>\s*Associate|disabled=\{!writesEnabled \|\| saving \|\| conflict\}>Associate/);
     assert.match(src, /data-testid="checkin-save" disabled=\{!writesEnabled \|\| saving \|\| conflict\}/);
   });
+  it('New month does not clear an unresolved conflict', () => {
+    const openNew = src.match(/function openNew\(\) \{[\s\S]*?\n  \}\n/)?.[0] ?? '';
+    assert.match(openNew, /function openNew\(\) \{\s*if \(conflict\)/);
+    const guard = openNew.indexOf('if (conflict) return;');
+    assert.ok(guard > -1);
+    assert.equal(openNew.slice(0, guard).includes('setConflict(false)'), false);
+    assert.equal(openNew.slice(0, guard).includes('setForm'), false);
+  });
   it('history selection does not clear a conflict or load the cached row', () => {
     const openRow = src.match(/function openRow\(row\) \{[\s\S]*?\n  \}\n/)?.[0] ?? '';
     assert.match(openRow, /if \(conflict\) return;/);

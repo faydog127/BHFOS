@@ -15,9 +15,11 @@ import {
   openDraftFromApproved,
   saveDraft,
   selectVisiblePlan,
+  STORED_PLAN_INVALID_COPY,
+  storedPlanDecision,
   upgradeDraftSchema,
 } from '@/lib/finance/persistence';
-import { CHECKIN_FIELDS } from '@/lib/finance/actuals';
+import { CHECKIN_FIELDS, basisAmountDraft } from '@/lib/finance/actuals';
 import { FINANCE_NOTES_MAX } from '@/lib/finance/blankPlan';
 import { financeWritesEnabled } from '@/lib/finance/writeGate';
 import { EXPLANATIONS, FINANCE_SECTIONS, buildFinanceView, showCents, showMoney } from '@/lib/finance/viewModel';
@@ -25,30 +27,71 @@ import MonthlyCheckIn from '@/pages/finance/MonthlyCheckIn';
 
 function MonthlyBasisEditor({ inputs, onPatch }) {
   const [month, setMonth] = useState('2026-02');
+  const [draft, setDraft] = useState({});
   const row = inputs?.monthly_basis?.[`${month}-01`] || {};
+
+  function changeMonth(value) {
+    setMonth(value);
+    setDraft({});
+  }
+
+  function changeAmount(key, raw) {
+    const decision = basisAmountDraft(raw);
+    if (decision.commit === 'reject') return;
+    setDraft((current) => ({ ...current, [key]: decision.text }));
+    if (decision.commit === 'hold') return;
+    onPatch(month, key, decision.commit === 'clear' ? '' : decision.text);
+  }
+
+  function blurAmount(key) {
+    const text = draft[key];
+    if (text === undefined) return;
+    if (/^\d+\.$/.test(text)) onPatch(month, key, text.slice(0, -1));
+    setDraft((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  }
+
   return (
     <section className="mb-4 rounded border border-slate-200 bg-white p-4" data-testid="finance-monthly-basis">
       <h2 className="text-sm font-semibold">Monthly plan basis</h2>
       <p className="mt-1 text-xs text-slate-500">Blank means not planned. Zero means a planned zero. A stage figure is not copied in.</p>
       <label className="mt-3 block text-xs text-slate-600">
         Month
-        <input className="mt-1 rounded border border-slate-300 px-2 py-1.5 text-sm" type="month" data-testid="finance-basis-month" value={month} onChange={(event) => setMonth(event.target.value)} />
+        <input className="mt-1 rounded border border-slate-300 px-2 py-1.5 text-sm" type="month" data-testid="finance-basis-month" value={month} onChange={(event) => changeMonth(event.target.value)} />
       </label>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        {CHECKIN_FIELDS.map((field) => (
-          <label key={field.key} className="block text-xs text-slate-600">
-            {field.technical}
-            <input
-              className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
-              data-testid={`finance-basis-${field.key.replaceAll('_', '-')}`}
-              value={row[field.key] === null || row[field.key] === undefined ? '' : String(row[field.key])}
-              onChange={(event) => onPatch(month, field.key, event.target.value)}
-            />
-          </label>
-        ))}
+        {CHECKIN_FIELDS.map((field) => {
+          const stored = row[field.key] === null || row[field.key] === undefined ? '' : String(row[field.key]);
+          const shown = field.kind === 'count' ? stored : (draft[field.key] !== undefined ? draft[field.key] : stored);
+          return (
+            <label key={field.key} className="block text-xs text-slate-600">
+              {field.technical}
+              <input
+                className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+                data-testid={`finance-basis-${field.key.replaceAll('_', '-')}`}
+                value={shown}
+                onChange={(event) => {
+                  if (field.kind === 'count') onPatch(month, field.key, event.target.value);
+                  else changeAmount(field.key, event.target.value);
+                }}
+                onBlur={() => {
+                  if (field.kind !== 'count') blurAmount(field.key);
+                }}
+              />
+            </label>
+          );
+        })}
       </div>
     </section>
   );
+}
+
+function loadErrorCopy(code) {
+  if (code === 'finance_schema_unsupported') return STORED_PLAN_INVALID_COPY;
+  return code;
 }
 
 function sectionIdFromPath(pathname) {
@@ -120,6 +163,19 @@ export default function FinanceShell({ grantedAccess }) {
   const section = sectionIdFromPath(location.pathname);
 
   function applyPlan(plan, basis) {
+    const decision = storedPlanDecision(plan);
+    if (!decision.ok) {
+      setLoadCode(decision.code);
+      setRecord(null);
+      setInputs(null);
+      setApprovedBasis(null);
+      setNotes('');
+      setDirty(false);
+      setConflict(false);
+      setSaveCode(null);
+      return;
+    }
+    setLoadCode(null);
     setRecord(plan);
     setApprovedBasis(basis || null);
     setInputs(plan.inputs);
@@ -146,8 +202,8 @@ export default function FinanceShell({ grantedAccess }) {
     } else {
       const choice = selectVisiblePlan(listed.plans);
       setPlans(listed.plans || []);
-      setLoadCode(null);
       if (!choice.visible) {
+        setLoadCode(null);
         setRecord(null);
         setInputs(null);
         setApprovedBasis(null);
@@ -386,13 +442,13 @@ export default function FinanceShell({ grantedAccess }) {
   if (!record && section !== 'checkin') {
     return (
       <div className="min-h-screen bg-slate-100 p-8" data-testid="finance-empty">
-        <h1 className="text-2xl font-semibold">No plan yet</h1>
+        <h1 className="text-2xl font-semibold">{loadCode === 'finance_schema_unsupported' ? 'Stored plan needs repair' : 'No plan yet'}</h1>
         <p className="mt-2 max-w-xl text-sm text-slate-600">Create a blank plan. Nothing is filled in for you. A monthly actual does not need a plan.</p>
         {writesEnabled ? null : (
           <p className="mt-3 text-sm font-medium text-slate-800" data-testid="finance-writes-disabled">Finance writes are disabled. This screen is read-only.</p>
         )}
         {saveCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-save-error">{saveCode}</p> : null}
-        {loadCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-load-error">{loadCode}</p> : null}
+        {loadCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-load-error">{loadErrorCopy(loadCode)}</p> : null}
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-create-plan" onClick={onCreate} disabled={!writesEnabled}>Create plan</button>
           <NavLink className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium" data-testid="finance-open-checkin" to={`/${routeTenantId}/finance/checkin`}>Monthly Check-In</NavLink>
@@ -490,7 +546,7 @@ export default function FinanceShell({ grantedAccess }) {
               onReload={refreshActuals}
             />
           ) : null}
-          {loadCode ? <p className="mb-4 text-sm text-red-700" data-testid="finance-load-error">{loadCode}</p> : null}
+          {loadCode ? <p className="mb-4 text-sm text-red-700" data-testid="finance-load-error">{loadErrorCopy(loadCode)}</p> : null}
           {actualsCode && section === 'checkin' ? <p className="mb-4 text-sm text-red-700" data-testid="checkin-load-error">{actualsCode}</p> : null}
           {planReady && section !== 'checkin' ? (
           <>

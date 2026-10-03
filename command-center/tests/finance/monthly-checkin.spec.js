@@ -54,6 +54,7 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
 
   await page.goto('/tvg/finance');
   await page.getByTestId('finance-create-plan').click();
+  await expect(page.getByTestId('finance-monthly-basis')).toBeVisible();
   await page.getByTestId('finance-approve').click();
   await expect(page.getByTestId('plan-banner')).toContainText('approved');
   await page.goto('/tvg/finance/checkin');
@@ -62,7 +63,8 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await expect(page.getByTestId('checkin-basis')).toContainText('locked');
   await expect(page.getByTestId('checkin-plan-total-revenue')).toHaveText('--');
   await expect(page.getByTestId('checkin-variance-total-revenue')).toHaveText('--');
-  await expect(page.getByTestId('checkin-no-monthly-basis')).toBeVisible();
+  await expect(page.getByTestId('checkin-partial-basis')).toBeVisible();
+  await expect(page.getByTestId('checkin-no-monthly-basis')).toHaveCount(0);
   await page.screenshot({ path: `${out}/desktop-plan-associated.png`, fullPage: true });
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -72,10 +74,11 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await page.goto('/tvg/finance');
   await page.getByTestId('finance-new-draft').click();
   await expect(page.getByTestId('finance-monthly-basis')).toBeVisible();
-  await page.getByTestId('finance-basis-total-revenue').fill('10.00');
+  const basisRevenue = page.getByTestId('finance-basis-total-revenue');
+  await basisRevenue.click();
+  await basisRevenue.pressSequentially('10.50');
+  await expect(basisRevenue).toHaveValue('10.50');
   await page.getByTestId('finance-basis-cash-reserve').fill('0.00');
-  await expect(page.getByTestId('finance-basis-total-revenue')).toHaveValue('10');
-  await expect(page.getByTestId('finance-basis-cash-reserve')).toHaveValue('0');
   const saveDone = page.waitForResponse((res) => res.url().includes('/finance_plans') && res.request().method() === 'PATCH' && res.ok());
   await page.getByTestId('finance-save').click();
   await saveDone;
@@ -96,10 +99,10 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await expect(page.getByTestId('checkin-history-2026-02')).toBeVisible();
   await expect(page.getByTestId('checkin-partial-basis')).toBeVisible();
   await expect(page.getByTestId('checkin-no-monthly-basis')).toHaveCount(0);
-  await expect(page.getByTestId('checkin-plan-total-revenue')).toHaveText('$10.00');
+  await expect(page.getByTestId('checkin-plan-total-revenue')).toHaveText('$10.50');
   await expect(page.getByTestId('checkin-plan-cash-reserve')).toHaveText('$0.00');
   await expect(page.getByTestId('checkin-plan-total-jobs')).toHaveText('--');
-  await expect(page.getByTestId('checkin-variance-total-revenue')).toHaveText('-$6.00');
+  await expect(page.getByTestId('checkin-variance-total-revenue')).toHaveText('-$6.50');
   await expect(page.getByTestId('checkin-variance-cash-reserve')).toHaveText('$0.00');
   await expect(page.getByTestId('checkin-variance-total-jobs')).toHaveText('--');
   await page.screenshot({ path: `${out}/desktop-partial-basis.png`, fullPage: true });
@@ -110,7 +113,7 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await page.getByTestId('checkin-history-2026-01').click();
   await expect(page.getByTestId('checkin-plan-total-revenue')).toHaveText('--');
   await expect(page.getByTestId('checkin-variance-total-revenue')).toHaveText('--');
-  await expect(page.getByTestId('checkin-no-monthly-basis')).toBeVisible();
-  await expect(page.getByTestId('checkin-partial-basis')).toHaveCount(0);
-  await page.screenshot({ path: `${out}/desktop-historical-v1-basis.png`, fullPage: true });
+  await expect(page.getByTestId('checkin-partial-basis')).toBeVisible();
+  await expect(page.getByTestId('checkin-no-monthly-basis')).toHaveCount(0);
+  await page.screenshot({ path: `${out}/desktop-historical-locked-basis.png`, fullPage: true });
 });

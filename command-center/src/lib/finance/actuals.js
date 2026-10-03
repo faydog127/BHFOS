@@ -163,7 +163,27 @@ function hasAtMostTwoDecimals(value) {
 function wholeDigitCount(value) {
   const whole = Math.trunc(Math.abs(value));
   if (whole === 0) return 1;
+  // numeric(14,2) rejects 13+ whole digits. At 1e21, String() becomes "1e+21".
+  if (whole >= 1e21) return 99;
   return String(whole).length;
+}
+
+/**
+ * Keep typed money/hour text until it is a complete amount.
+ * A trailing decimal point is held so the next digit is not concatenated onto the whole number.
+ */
+export function basisAmountDraft(raw) {
+  const text = String(raw ?? '');
+  if (text.trim() === '') return { text: '', commit: 'clear', value: null };
+  if (/^\d+(\.\d{1,2})?$/.test(text)) return { text, commit: 'set', value: Number(text) };
+  if (/^\d+\.$/.test(text)) return { text, commit: 'hold' };
+  return { commit: 'reject' };
+}
+
+export function typeBasisAmount(previousText, nextText) {
+  const decision = basisAmountDraft(nextText);
+  if (decision.commit === 'reject') return { text: previousText, commit: 'reject' };
+  return { text: decision.text, commit: decision.commit, value: decision.value };
 }
 
 export function validateMonthlyBasis(basis) {

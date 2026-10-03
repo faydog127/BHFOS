@@ -113,6 +113,7 @@ export default function MonthlyCheckIn({
   const basisLocked = Boolean(selected?.comparison_plan_id);
 
   function openNew() {
+    if (conflict) return;
     setSelectedId(null);
     setMonthInput('');
     setForm(blankForm());

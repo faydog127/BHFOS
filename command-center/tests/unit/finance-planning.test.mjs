@@ -16,8 +16,8 @@ import { nearCapacityBand, stageReadiness, READINESS_INCOMPLETE, READINESS_NOT_R
 import { variance, variancePct } from '../../src/lib/finance/variance.js';
 import { evaluateFinanceAccess, roleHasFinanceCapability, FINANCE_ALLOWED_ROLES, FINANCE_CAPABILITIES } from '../../src/lib/finance/authz.js';
 import { blankPlanInputs, validateNotes, validatePlanInputs } from '../../src/lib/finance/blankPlan.js';
-import { approvePlan, associateComparisonPlan, correctMonthlyActual, createBlankPlan, createMonthlyActual, openDraftFromApproved, readPlan, saveDraft, selectVisiblePlan, upgradeDraftSchema } from '../../src/lib/finance/persistence.js';
-import { actualFactsFromForm, channelRevenueIssue, comparisonPlanForCheckin, declaredMonthlyBasis, derivedActualMetrics, plannedFactsForMonth, validateMonthlyBasis } from '../../src/lib/finance/actuals.js';
+import { approvePlan, associateComparisonPlan, correctMonthlyActual, createBlankPlan, createMonthlyActual, openDraftFromApproved, readPlan, saveDraft, selectVisiblePlan, STORED_PLAN_INVALID_COPY, storedPlanDecision, upgradeDraftSchema } from '../../src/lib/finance/persistence.js';
+import { actualFactsFromForm, channelRevenueIssue, comparisonPlanForCheckin, declaredMonthlyBasis, derivedActualMetrics, plannedFactsForMonth, typeBasisAmount, validateMonthlyBasis } from '../../src/lib/finance/actuals.js';
 import { formatStoredDecimal, parseActualDecimal, parseActualInteger } from '../../src/lib/finance/actuals.js';
 import { FINANCE_WRITES_DISABLED, financeWritesEnabled } from '../../src/lib/finance/writeGate.js';
 import { CHECKIN_CONFLICT_COPY, nextCheckinCorrection, reloadCheckinFromServer } from '../../src/lib/finance/checkinConflict.js';
@@ -974,8 +974,12 @@ describe('monthly plan basis', () => {
     };
     const created = await createBlankPlan({ from: () => insertRow }, { MODE: 'test' });
     assert.equal(created.ok, true);
-    assert.equal(inserts[0].schema_version, 1);
-    assert.equal(Object.prototype.hasOwnProperty.call(inserts[0].inputs, 'monthly_basis'), false);
+    assert.equal(inserts[0].schema_version, 2);
+    assert.deepEqual(inserts[0].inputs.monthly_basis, {});
+    const structural = blankPlanInputs();
+    for (const key of Object.keys(structural)) {
+      assert.deepEqual(inserts[0].inputs[key], structural[key]);
+    }
   });
 
   it('reads version 2 and upgrades a draft only through the server RPC', async () => {
@@ -1016,5 +1020,68 @@ describe('monthly plan basis', () => {
       rpc() { return { data: null, error: { code: '40001', message: 'finance_version_conflict' } }; },
     }, { id, expectedVersion: 1 }, { MODE: 'test' });
     assert.equal(conflict.code, 'version_conflict');
+  });
+
+  it('a stored plan whose inputs are only an empty monthly basis does not throw and the shell shows a repair state', () => {
+    const plan = {
+      id,
+      schema_version: 2,
+      status: 'approved',
+      inputs: { monthly_basis: {} },
+    };
+    const decision = storedPlanDecision(plan);
+    assert.equal(decision.ok, false);
+    assert.equal(decision.code, 'finance_schema_unsupported');
+    assert.equal(Object.prototype.hasOwnProperty.call(decision, 'inputs'), false);
+    assert.equal(JSON.stringify(decision).includes('monthly_basis'), false);
+    assert.throws(() => {
+      void plan.inputs.stages.stage_0.label;
+    });
+    const shell = readFileSync(path.join(root, 'src/pages/finance/FinanceShell.jsx'), 'utf8');
+    const applyStart = shell.indexOf('function applyPlan');
+    const applyEnd = shell.indexOf('async function refreshPlans');
+    const apply = shell.slice(applyStart, applyEnd);
+    const gate = apply.indexOf('storedPlanDecision(plan)');
+    const write = apply.indexOf('setInputs(plan.inputs)');
+    assert.ok(gate > -1 && write > gate);
+    assert.match(apply, /if \(!decision\.ok\) \{[\s\S]*setInputs\(null\)[\s\S]*return;/);
+    assert.equal(/console\./.test(apply), false);
+    assert.match(shell, /loadErrorCopy\(loadCode\)/);
+    assert.match(shell, /STORED_PLAN_INVALID_COPY/);
+    assert.match(shell, /data-testid="finance-load-error"/);
+    assert.match(shell, /Stored plan needs repair/);
+    assert.equal(shell.includes(STORED_PLAN_INVALID_COPY), false);
+    const valid = storedPlanDecision({ schema_version: 1, inputs: blankPlanInputs() });
+    assert.equal(valid.ok, true);
+  });
+
+  it('typing a decimal monthly basis keeps the point until the amount is complete', () => {
+    function typeSequence(chars) {
+      let text = '';
+      let value = null;
+      const seen = [];
+      for (const ch of chars) {
+        const next = typeBasisAmount(text, text + ch);
+        text = next.text;
+        seen.push(text);
+        if (next.commit === 'set') value = next.value;
+        if (next.commit === 'clear') value = null;
+      }
+      return { text, value, seen };
+    }
+    const five = typeSequence('10.5');
+    assert.deepEqual(five.seen, ['1', '10', '10.', '10.5']);
+    assert.equal(five.text, '10.5');
+    assert.equal(five.value, 10.5);
+    assert.equal(five.seen.includes('105'), false);
+    const fiveCents = typeSequence('10.05');
+    assert.deepEqual(fiveCents.seen, ['1', '10', '10.', '10.0', '10.05']);
+    assert.equal(fiveCents.text, '10.05');
+    assert.equal(fiveCents.value, 10.05);
+    assert.equal(fiveCents.seen.includes('1005'), false);
+    const shell = readFileSync(path.join(root, 'src/pages/finance/FinanceShell.jsx'), 'utf8');
+    assert.match(shell, /basisAmountDraft/);
+    assert.match(shell, /draft\[field\.key\]/);
+    assert.match(shell, /blurAmount/);
   });
 });
