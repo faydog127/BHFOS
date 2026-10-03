@@ -88,6 +88,11 @@ function messageFor(result) {
   if (String(result.detail || '').includes('finance_actuals_basis_locked')) {
     return 'The comparison basis is already set and cannot be changed.';
   }
+  const field = CHECKIN_FIELDS.find((item) => item.key === result.field);
+  const fieldName = field ? field.guided : 'This field';
+  if (result.code === 'amount_too_large' && field?.kind === 'hours') return `${fieldName} can have at most 8 digits before the cents.`;
+  if (result.code === 'amount_too_large') return `${fieldName} can have at most 12 digits before the cents.`;
+  if (result.code === 'count_too_large') return `${fieldName} must be a whole number up to 2147483647, or blank.`;
   if (result.code === 'invalid_amount') return 'Enter a blank, or a zero or positive amount. Money and hours keep cents. Counts are whole jobs. A blank is unknown, not zero.';
   if (result.code === 'invalid_month') return 'Choose the reporting month.';
   if (result.code === 'invalid_notes') return 'Notes must be 2000 characters or fewer.';

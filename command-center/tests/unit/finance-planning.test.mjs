@@ -17,7 +17,7 @@ import { variance, variancePct } from '../../src/lib/finance/variance.js';
 import { evaluateFinanceAccess, roleHasFinanceCapability, FINANCE_ALLOWED_ROLES, FINANCE_CAPABILITIES } from '../../src/lib/finance/authz.js';
 import { blankPlanInputs, validateNotes, validatePlanInputs } from '../../src/lib/finance/blankPlan.js';
 import { approvePlan, associateComparisonPlan, correctMonthlyActual, createBlankPlan, createMonthlyActual, openDraftFromApproved, saveDraft, selectVisiblePlan } from '../../src/lib/finance/persistence.js';
-import { channelRevenueIssue, declaredMonthlyBasis, derivedActualMetrics, formatStoredDecimal, parseActualDecimal } from '../../src/lib/finance/actuals.js';
+import { actualFactsFromForm, channelRevenueIssue, declaredMonthlyBasis, derivedActualMetrics, formatStoredDecimal, parseActualDecimal, parseActualInteger } from '../../src/lib/finance/actuals.js';
 import { FINANCE_WRITES_DISABLED, financeWritesEnabled } from '../../src/lib/finance/writeGate.js';
 import { getSyntheticPlanningFixture } from '../../src/lib/finance/syntheticFixture.js';
 import { buildFinanceView } from '../../src/lib/finance/viewModel.js';
@@ -439,7 +439,7 @@ describe('verify script and source guards', () => {
       expectedVersion: 1,
       inputs,
       notes: null,
-    });
+    }, { MODE: 'test' });
     assert.equal(result.ok, false);
     assert.equal(result.code, 'version_conflict');
     assert.deepEqual(inputs, before);
@@ -490,7 +490,8 @@ describe('verify script and source guards', () => {
     assert.equal(month.code, FINANCE_WRITES_DISABLED);
     assert.equal(linked.code, FINANCE_WRITES_DISABLED);
     assert.equal(called, false);
-    assert.equal(financeWritesEnabled(), true);
+    assert.equal(financeWritesEnabled(), false);
+    assert.equal(financeWritesEnabled({ MODE: 'test' }), true);
   });
 
   it('keeps a stale actual correction from writing or mutating the caller', async () => {
@@ -507,7 +508,7 @@ describe('verify script and source guards', () => {
       id: '11111111-1111-4111-8111-111111111111',
       expectedVersion: 1,
       facts,
-    });
+    }, { MODE: 'test' });
     assert.equal(result.code, 'version_conflict');
     assert.deepEqual(facts, before);
     assert.equal(Object.prototype.hasOwnProperty.call(calls[0], 'comparison_plan_id'), false);
@@ -520,6 +521,15 @@ describe('verify script and source guards', () => {
     assert.equal(parseActualDecimal('', 2).value, null);
     assert.equal(parseActualDecimal('0.00', 2).value, 0);
     assert.equal(parseActualDecimal('1.01', 2).value, 1.01);
+    assert.equal(parseActualDecimal('999999999999.99', 2, 12).ok, true);
+    assert.equal(parseActualDecimal('1000000000000.00', 2, 12).code, 'amount_too_large');
+    assert.equal(parseActualDecimal('99999999.99', 2, 8).ok, true);
+    assert.equal(parseActualDecimal('100000000.00', 2, 8).code, 'amount_too_large');
+    assert.equal(parseActualInteger('2147483647').value, 2147483647);
+    assert.equal(parseActualInteger('2147483648').code, 'count_too_large');
+    assert.equal(actualFactsFromForm({ total_revenue: '1000000000000' }).field, 'total_revenue');
+    assert.equal(actualFactsFromForm({ productive_unit_hours: '100000000' }).code, 'amount_too_large');
+    assert.equal(actualFactsFromForm({ total_jobs: '2147483648' }).code, 'count_too_large');
     assert.equal(formatStoredDecimal('0', 2), '0.00');
     assert.equal(formatStoredDecimal(null, 2), '');
     assert.equal(channelRevenueIssue({
@@ -563,6 +573,16 @@ describe('verify script and source guards', () => {
       cash_reserve: 0,
     });
     assert.equal(derived.direct_share, null);
+    assert.equal(derived.portal_share, null);
+    assert.equal(derivedActualMetrics({ total_revenue: 10, portal_revenue: 4 }).portal_share, null);
+    const completeShares = derivedActualMetrics({
+      total_revenue: 10,
+      direct_residential_revenue: 3,
+      commercial_direct_revenue: 3,
+      portal_revenue: 4,
+    });
+    assert.equal(completeShares.portal_share, 0.4);
+    assert.equal(completeShares.direct_share, 0.6);
     assert.equal(derived.field_payroll_pct_of_revenue, null);
     assert.equal(derived.cash_reserve_over_revenue, 0);
     assert.equal(derived.indirect_cost_pct_of_revenue, 0);
@@ -583,7 +603,7 @@ describe('verify script and source guards', () => {
       month: '2026-01-01',
       facts,
       comparisonPlanId: null,
-    });
+    }, { MODE: 'test' });
     assert.equal(created.ok, true);
     assert.equal(Object.prototype.hasOwnProperty.call(inserts[0], 'comparison_plan_id'), false);
     assert.equal(inserts[0].source, 'manual_entry');
@@ -597,7 +617,7 @@ describe('verify script and source guards', () => {
         commercial_direct_revenue: null,
         portal_revenue: null,
       },
-    });
+    }, { MODE: 'test' });
     assert.equal(blocked.code, 'known_channels_exceed_total');
     assert.equal(inserts.length, 1);
     const updates = [];
@@ -611,7 +631,7 @@ describe('verify script and source guards', () => {
       id: 'a',
       expectedVersion: 1,
       comparisonPlanId: 'plan-1',
-    });
+    }, { MODE: 'test' });
     assert.equal(linked.ok, true);
     assert.deepEqual(updates[0], { comparison_plan_id: 'plan-1' });
   });

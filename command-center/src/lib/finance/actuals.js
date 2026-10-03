@@ -154,11 +154,12 @@ export function derivedActualMetrics(facts) {
   const directSum = direct !== null && direct !== undefined && commercial !== null && commercial !== undefined
     ? direct + commercial
     : null;
+  const channelsComplete = [direct, commercial, portal].every(v => v !== null && v !== undefined);
   return {
     average_ticket: div(revenue, jobs),
     revenue_per_productive_hour: div(revenue, hours),
-    portal_share: div(portal, revenue),
-    direct_share: div(directSum, revenue),
+    portal_share: channelsComplete ? div(portal, revenue) : null,
+    direct_share: channelsComplete ? div(directSum, revenue) : null,
     jobs_per_productive_hour: div(jobs, hours),
     field_payroll_pct_of_revenue: div(facts?.field_payroll ?? null, revenue),
     indirect_cost_pct_of_revenue: div(facts?.indirect_cash_costs ?? null, revenue),
@@ -167,13 +168,15 @@ export function derivedActualMetrics(facts) {
   };
 }
 
-export function parseActualDecimal(raw, scale) {
+export function parseActualDecimal(raw, scale, wholeDigits) {
   if (raw === null || raw === undefined) return { ok: true, value: null };
   const text = String(raw).trim();
   if (text === '') return { ok: true, value: null };
   if (!/^\d+(\.\d+)?$/.test(text)) return { ok: false, code: 'invalid_amount' };
   const fraction = text.split('.')[1] || '';
   if (fraction.length > scale) return { ok: false, code: 'invalid_amount' };
+  const whole = text.split('.')[0].replace(/^0+/, '');
+  if (wholeDigits !== undefined && whole.length > wholeDigits) return { ok: false, code: 'amount_too_large' };
   const value = Number(text);
   if (!Number.isFinite(value)) return { ok: false, code: 'invalid_amount' };
   return { ok: true, value };
@@ -186,6 +189,7 @@ export function parseActualInteger(raw) {
   if (!/^\d+$/.test(text)) return { ok: false, code: 'invalid_amount' };
   const value = Number(text);
   if (!Number.isSafeInteger(value)) return { ok: false, code: 'invalid_amount' };
+  if (value > 2147483647) return { ok: false, code: 'count_too_large' };
   return { ok: true, value };
 }
 
@@ -212,8 +216,8 @@ export function actualFactsFromForm(form) {
   for (const field of CHECKIN_FIELDS) {
     const parsed = field.kind === 'count'
       ? parseActualInteger(form[field.key])
-      : parseActualDecimal(form[field.key], 2);
-    if (!parsed.ok) return parsed;
+      : parseActualDecimal(form[field.key], 2, field.kind === 'hours' ? 8 : 12);
+    if (!parsed.ok) return { ...parsed, field: field.key };
     facts[field.key] = parsed.value;
   }
   for (const key of ACTUAL_TEXT_KEYS) {

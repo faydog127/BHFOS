@@ -6,8 +6,8 @@ export const FINANCE_SYNTHETIC_ONLY = 'approved-synthetic';
 export const FINANCE_WRITES_DISABLED = 'finance_writes_disabled';
 
 function currentFinanceBuildEnv() {
-  const env = (typeof import.meta !== 'undefined' && import.meta && import.meta.env) || null;
-  if (!env || Object.keys(env).length === 0) return { local: true };
+  const env = typeof import.meta !== 'undefined' && import.meta ? import.meta.env : undefined;
+  if (!env) return {};
   return env;
 }
 

@@ -99,7 +99,15 @@ export default function FinanceShell({ grantedAccess }) {
   }
 
   async function refreshPlans() {
-    const [listed, actualList] = await Promise.all([listPlans(supabase), listMonthlyActuals(supabase)]);
+    let listed;
+    let actualList;
+    try {
+      [listed, actualList] = await Promise.all([listPlans(supabase), listMonthlyActuals(supabase)]);
+    } catch {
+      setLoading(false);
+      setLoadCode('finance_read_failed');
+      return;
+    }
     setLoading(false);
     if (!listed.ok) {
       setLoadCode(listed.code);
@@ -134,6 +142,10 @@ export default function FinanceShell({ grantedAccess }) {
       }
       if (!actualList.ok) setActualsCode(actualList.code);
       else setActuals(actualList.actuals);
+    }).catch(() => {
+      if (!live) return;
+      setLoading(false);
+      setLoadCode('finance_read_failed');
     });
     return () => {
       live = false;
@@ -407,6 +419,7 @@ export default function FinanceShell({ grantedAccess }) {
               onReload={refreshActuals}
             />
           ) : null}
+          {loadCode ? <p className="mb-4 text-sm text-red-700" data-testid="finance-load-error">{loadCode}</p> : null}
           {actualsCode && section === 'checkin' ? <p className="mb-4 text-sm text-red-700" data-testid="checkin-load-error">{actualsCode}</p> : null}
           {planReady && section !== 'checkin' ? (
           <>
