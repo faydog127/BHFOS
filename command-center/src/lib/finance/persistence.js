@@ -4,6 +4,7 @@
  */
 import { FINANCE_ROUTE_TENANT } from './authz.js';
 import { FINANCE_PLAN_SCHEMA_VERSION, blankPlanInputs, validateNotes, validatePlanInputs } from './blankPlan.js';
+import { FINANCE_WRITES_DISABLED, financeWritesEnabled } from './writeGate.js';
 
 const PLAN_COLUMNS = 'id, version, status, schema_version, inputs, notes, approved_at, approved_by, updated_at';
 
@@ -28,7 +29,8 @@ export async function listPlans(client) {
   return { ok: true, plans: data || [] };
 }
 
-export async function createBlankPlan(client) {
+export async function createBlankPlan(client, env) {
+  if (!financeWritesEnabled(env)) return { ok: false, code: FINANCE_WRITES_DISABLED };
   const inputs = blankPlanInputs();
   const { data, error } = await client
     .from('finance_plans')
@@ -45,7 +47,8 @@ export async function createBlankPlan(client) {
   return { ok: true, plan: data };
 }
 
-export async function saveDraft(client, { id, expectedVersion, inputs, notes }) {
+export async function saveDraft(client, { id, expectedVersion, inputs, notes }, env) {
+  if (!financeWritesEnabled(env)) return { ok: false, code: FINANCE_WRITES_DISABLED };
   const validated = validatePlanInputs(inputs);
   if (!validated.ok) return { ok: false, code: validated.code };
   const noteResult = validateNotes(notes);
@@ -66,7 +69,8 @@ export async function saveDraft(client, { id, expectedVersion, inputs, notes }) 
   return { ok: true, plan: data };
 }
 
-export async function approvePlan(client, { id, expectedVersion }) {
+export async function approvePlan(client, { id, expectedVersion }, env) {
+  if (!financeWritesEnabled(env)) return { ok: false, code: FINANCE_WRITES_DISABLED };
   const { data, error } = await client.rpc('finance_approve_plan', {
     p_plan_id: id,
     p_expected_version: expectedVersion,
@@ -81,7 +85,8 @@ export async function approvePlan(client, { id, expectedVersion }) {
   return { ok: true, plan: data };
 }
 
-export async function openDraftFromApproved(client, { id }) {
+export async function openDraftFromApproved(client, { id }, env) {
+  if (!financeWritesEnabled(env)) return { ok: false, code: FINANCE_WRITES_DISABLED };
   const { data, error } = await client.rpc('finance_open_draft', { p_plan_id: id });
   if (error) return { ok: false, code: error.code || 'finance_draft_failed' };
   if (!data) return { ok: false, code: 'finance_draft_failed' };

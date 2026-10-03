@@ -13,6 +13,7 @@ import {
   selectVisiblePlan,
 } from '@/lib/finance/persistence';
 import { FINANCE_NOTES_MAX } from '@/lib/finance/blankPlan';
+import { financeWritesEnabled } from '@/lib/finance/writeGate';
 import { EXPLANATIONS, FINANCE_SECTIONS, buildFinanceView, showCents, showMoney } from '@/lib/finance/viewModel';
 
 function sectionIdFromPath(pathname) {
@@ -67,6 +68,7 @@ export default function FinanceShell({ grantedAccess }) {
   const navigate = useNavigate();
   const { tenantId: routeTenantId } = useParams();
   const allowed = grantedAccess?.allowed === true;
+  const writesEnabled = financeWritesEnabled();
   const [inputs, setInputs] = useState(null);
   const [record, setRecord] = useState(null);
   const [approvedBasis, setApprovedBasis] = useState(null);
@@ -199,6 +201,10 @@ export default function FinanceShell({ grantedAccess }) {
 
   async function onCreate() {
     setSaveCode(null);
+    if (!writesEnabled) {
+      setSaveCode('finance_writes_disabled');
+      return;
+    }
     const created = await createBlankPlan(supabase);
     if (!created.ok) {
       setSaveCode(created.code);
@@ -208,7 +214,7 @@ export default function FinanceShell({ grantedAccess }) {
   }
 
   async function onSave() {
-    if (!record || record.status !== 'draft') return;
+    if (!writesEnabled || !record || record.status !== 'draft') return;
     const saved = await saveDraft(supabase, {
       id: record.id,
       expectedVersion: record.version,
@@ -224,6 +230,7 @@ export default function FinanceShell({ grantedAccess }) {
   }
 
   async function onApprove() {
+    if (!writesEnabled) return;
     if (!record || record.status !== 'draft' || dirty) {
       setSaveCode('finance_save_before_approve');
       return;
@@ -238,7 +245,7 @@ export default function FinanceShell({ grantedAccess }) {
   }
 
   async function onNewDraft() {
-    if (!record || record.status !== 'approved') return;
+    if (!writesEnabled || !record || record.status !== 'approved') return;
     const opened = await openDraftFromApproved(supabase, { id: record.id });
     if (!opened.ok) {
       setSaveCode(opened.code);
@@ -262,9 +269,12 @@ export default function FinanceShell({ grantedAccess }) {
       <div className="min-h-screen bg-slate-100 p-8" data-testid="finance-empty">
         <h1 className="text-2xl font-semibold">No plan yet</h1>
         <p className="mt-2 max-w-xl text-sm text-slate-600">Create a blank plan. Nothing is filled in for you.</p>
+        {writesEnabled ? null : (
+          <p className="mt-3 text-sm font-medium text-slate-800" data-testid="finance-writes-disabled">Finance writes are disabled. This screen is read-only.</p>
+        )}
         {saveCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-save-error">{saveCode}</p> : null}
         {loadCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-load-error">{loadCode}</p> : null}
-        <button type="button" className="mt-4 rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white" data-testid="finance-create-plan" onClick={onCreate}>Create plan</button>
+        <button type="button" className="mt-4 rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-create-plan" onClick={onCreate} disabled={!writesEnabled}>Create plan</button>
       </div>
     );
   }
@@ -278,6 +288,11 @@ export default function FinanceShell({ grantedAccess }) {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900" data-testid="finance-shell">
+      {writesEnabled ? null : (
+        <div className="border-b border-slate-300 bg-slate-200 px-4 py-2 text-sm font-medium text-slate-900" data-testid="finance-writes-disabled">
+          Finance writes are disabled. This screen is read-only.
+        </div>
+      )}
       <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-950" data-testid="plan-banner">
         Stored plan ({record.status}). Save writes this draft. Refresh discards unsaved edits. The synthetic illustration is not this plan.
       </div>
@@ -337,13 +352,13 @@ export default function FinanceShell({ grantedAccess }) {
           </header>
           <div className="mb-4 flex flex-wrap items-center gap-2">
             {record.status === 'draft' ? (
-              <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white" data-testid="finance-save" onClick={onSave}>Save draft</button>
+              <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-save" onClick={onSave} disabled={!writesEnabled}>Save draft</button>
             ) : null}
             {record.status === 'draft' ? (
-              <button type="button" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm" data-testid="finance-approve" onClick={onApprove}>Approve plan</button>
+              <button type="button" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:text-slate-400" data-testid="finance-approve" onClick={onApprove} disabled={!writesEnabled}>Approve plan</button>
             ) : null}
             {record.status === 'approved' ? (
-              <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white" data-testid="finance-new-draft" onClick={onNewDraft}>New draft</button>
+              <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-new-draft" onClick={onNewDraft} disabled={!writesEnabled}>New draft</button>
             ) : null}
             {approvedBasis ? <p className="text-xs text-slate-500">An approved plan basis exists. This draft does not drive variance until it is approved.</p> : null}
           </div>
@@ -352,7 +367,7 @@ export default function FinanceShell({ grantedAccess }) {
             <textarea
               className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm"
               maxLength={FINANCE_NOTES_MAX}
-              disabled={draftLocked}
+              disabled={draftLocked || !writesEnabled}
               value={notes}
               onChange={(event) => {
                 setDirty(true);
@@ -373,7 +388,7 @@ export default function FinanceShell({ grantedAccess }) {
               Some inputs are incomplete or invalid. Affected results show --. Retention hurdles must satisfy 0 ≤ value &lt; 1.
             </div>
           ) : null}
-          <fieldset disabled={draftLocked} className="min-w-0 border-0 p-0">
+          <fieldset disabled={draftLocked || !writesEnabled} className="min-w-0 border-0 p-0">
           {section === 'overview' ? <Overview view={view} inputs={inputs} /> : null}
           {section === 'people' ? (
             <People inputs={inputs} result={result} onRole={patchRole} onHeadcount={patchHeadcount} onStage={patchStage} onOwner={patchOwner} />

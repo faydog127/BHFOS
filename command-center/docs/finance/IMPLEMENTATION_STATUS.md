@@ -10,9 +10,13 @@ Steps 1–6 of the TVG financial planning model, under the 2026-10-01 Command Ce
 - Stage A persistence: `243f2081bcee8bed254176a87c48f0f6fc7dc839`
 - Draft PR: https://github.com/faydog127/BHFOS/pull/164 (do not merge)
 - Evidence tier: **locally verified**. Not deployed, not staging-verified, not merged, not production-verified.
+- Clean local reset: `npx supabase db reset --local` on an unlinked stack exited 0, then finance SQL tests 01, 02, and 03 passed and rolled back. That stack was not linked to a remote project.
 - Route: `/:tenantId/finance/*` → `TenantGuard` → `FinanceGuard` → `FinanceShell`. The shell is not inside `BHFCrmLayout`.
 - Data: synthetic illustration remains in the unit fixture only (`SYNTHETIC — NOT TVG DATA`). Stored plans are blank inputs. No workbook seeds in git. No finance seed migration.
-- Stage A adds `finance_plans` and `finance_monthly_actuals` in `supabase/migrations/20261003053000_finance_stage_a_persistence.sql`. Monthly Check-In UI, three modes, and Reports are not started.
+- Stage A adds `finance_plans` and `finance_monthly_actuals` in `supabase/migrations/20261003053000_finance_stage_a_persistence.sql`, with security fixes in `20261003063000_finance_stage_a_security_fixes.sql` and one draft per tenant in `20261003113216_finance_one_draft_per_tenant.sql`. Monthly Check-In UI, three modes, and Reports are not started.
+- One draft per tenant is database-enforced. `finance_open_draft` returns the existing draft. Superseded actuals stay on their original plan and are read-only. Factual corrections are allowed only while that plan is still `approved`, with server-side version, `updated_by_user_id`, and `updated_at`.
+- `owner` stays denied. There is no owner-to-admin mapping.
+- Finance writes are off unless the build is local (`vite` dev, test, or a non-bundled local run) or `VITE_FINANCE_SYNTHETIC_ONLY=approved-synthetic`. Preview and production builds do not set that flag. The gate does not name a remote host. The screen shows “Finance writes are disabled. This screen is read-only.”
 - Private check: `npm run finance:verify -- <gitignored-json>`. Prints test identity, PASS/FAIL, and tolerances only.
 
 ## Authorization boundary
@@ -23,9 +27,10 @@ No real TVG data may be entered in any Vercel Preview or staging environment. Th
 
 ## Unresolved
 
-- More than one draft plan can exist. A partial unique index for one draft per tenant is not in this branch. That needs a Command Center ruling.
-- Who runs a clean `supabase db reset` and the finance SQL tests before any staging apply is unresolved. `npx supabase db reset` failed in the environment that wrote this branch (database container setup exited 1). This stage does not apply the migration remotely.
+- A later historical-restatement workflow for superseded actuals is Stage B or later. This stage does not invent one.
+- Who applies a migration to staging or production is not this stage. This stage does not apply the migration remotely.
+- The Preview Supabase host still cannot be identified from the repo. Writes stay disabled there unless a build sets `VITE_FINANCE_SYNTHETIC_ONLY=approved-synthetic`.
 
 ## Next action
 
-Challenge re-review of the Stage A security fixes on draft PR https://github.com/faydog127/BHFOS/pull/164. Stages B, C, and D stay held.
+Challenge re-review of the Stage A completion on draft PR https://github.com/faydog127/BHFOS/pull/164. Stages B, C, and D stay held.

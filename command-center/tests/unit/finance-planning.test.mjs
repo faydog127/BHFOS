@@ -16,7 +16,8 @@ import { nearCapacityBand, stageReadiness, READINESS_INCOMPLETE, READINESS_NOT_R
 import { variance, variancePct } from '../../src/lib/finance/variance.js';
 import { evaluateFinanceAccess, roleHasFinanceCapability, FINANCE_ALLOWED_ROLES, FINANCE_CAPABILITIES } from '../../src/lib/finance/authz.js';
 import { blankPlanInputs, validateNotes, validatePlanInputs } from '../../src/lib/finance/blankPlan.js';
-import { saveDraft, selectVisiblePlan } from '../../src/lib/finance/persistence.js';
+import { approvePlan, createBlankPlan, openDraftFromApproved, saveDraft, selectVisiblePlan } from '../../src/lib/finance/persistence.js';
+import { FINANCE_WRITES_DISABLED, financeWritesEnabled } from '../../src/lib/finance/writeGate.js';
 import { getSyntheticPlanningFixture } from '../../src/lib/finance/syntheticFixture.js';
 import { buildFinanceView } from '../../src/lib/finance/viewModel.js';
 import { HVAC_REVENUE_MISSING_COPY } from '../../src/lib/finance/calculate.js';
@@ -444,6 +445,45 @@ describe('verify script and source guards', () => {
     assert.deepEqual(selectVisiblePlan([]), { approved: null, draft: null, visible: null });
   });
 
+  it('disables finance writes unless the build is local or approved synthetic', async () => {
+    const preview = { DEV: false, MODE: 'production' };
+    assert.equal(financeWritesEnabled(preview), false);
+    assert.equal(financeWritesEnabled({ DEV: true, MODE: 'production' }), true);
+    assert.equal(financeWritesEnabled({ DEV: false, MODE: 'development' }), true);
+    assert.equal(financeWritesEnabled({ DEV: false, MODE: 'test' }), true);
+    assert.equal(financeWritesEnabled({ local: true, DEV: false, MODE: 'production' }), true);
+    assert.equal(financeWritesEnabled({
+      DEV: false,
+      MODE: 'production',
+      VITE_FINANCE_SYNTHETIC_ONLY: 'approved-synthetic',
+    }), true);
+    assert.equal(financeWritesEnabled({
+      DEV: false,
+      MODE: 'production',
+      VITE_FINANCE_SYNTHETIC_ONLY: 'true',
+    }), false);
+    let called = false;
+    const client = {
+      from() { called = true; return {}; },
+      rpc() { called = true; return {}; },
+    };
+    const saved = await saveDraft(client, {
+      id: '11111111-1111-4111-8111-111111111111',
+      expectedVersion: 1,
+      inputs: blankPlanInputs(),
+      notes: null,
+    }, preview);
+    const created = await createBlankPlan(client, preview);
+    const approved = await approvePlan(client, { id: '11111111-1111-4111-8111-111111111111', expectedVersion: 1 }, preview);
+    const opened = await openDraftFromApproved(client, { id: '11111111-1111-4111-8111-111111111111' }, preview);
+    assert.equal(saved.code, FINANCE_WRITES_DISABLED);
+    assert.equal(created.code, FINANCE_WRITES_DISABLED);
+    assert.equal(approved.code, FINANCE_WRITES_DISABLED);
+    assert.equal(opened.code, FINANCE_WRITES_DISABLED);
+    assert.equal(called, false);
+    assert.equal(financeWritesEnabled(), true);
+  });
+
   it('matches the SQL role list and blocks the preview harness', () => {
     const migrationDir = path.join(root, 'supabase/migrations');
     const migrationNames = readdirSync(migrationDir).filter((name) => name.includes('finance') && name.endsWith('.sql')).sort();
@@ -465,6 +505,7 @@ describe('verify script and source guards', () => {
     for (const relative of [
       'src/lib/finance/authz.js',
       'src/lib/finance/persistence.js',
+      'src/lib/finance/writeGate.js',
       'src/lib/finance/blankPlan.js',
       'src/pages/finance/FinanceShell.jsx',
       'src/components/finance/FinanceGuard.jsx',
@@ -477,6 +518,9 @@ describe('verify script and source guards', () => {
     assert.equal(shell.includes('getSyntheticPlanningFixture'), false);
     assert.match(shell, /grantedAccess\?\.allowed === true/);
     assert.match(shell, /No plan yet/);
+    assert.match(shell, /finance-writes-disabled/);
+    assert.match(shell, /Finance writes are disabled/);
+    assert.match(shell, /disabled=\{!writesEnabled\}/);
     assert.match(guard, /<FinanceShell grantedAccess=\{access\} \/>/);
     assert.equal(existsSync(path.join(root, 'finance-preview.html')), false);
     assert.equal(existsSync(path.join(root, 'src/financePreviewMain.jsx')), false);
