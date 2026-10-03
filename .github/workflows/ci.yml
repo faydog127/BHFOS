@@ -175,3 +175,12 @@ jobs:
 
       - name: Build
         run: npm run build:local
+
+      - name: Reject finance preview harness
+        run: |
+          test ! -e finance-preview.html
+          test ! -e src/financePreviewMain.jsx
+          if find dist \( -iname '*finance-preview*' -o -iname '*financePreview*' \) | grep -q .; then
+            echo 'finance preview artifact in dist'
+            exit 1
+          fi
