@@ -1,21 +1,22 @@
 # Financial planning — implementation status
 
-Steps 1–6 of the TVG financial planning model, under the 2026-10-01 Command Center Option B ruling.
+Steps 1–6 of the TVG financial planning model, under the 2026-10-01 Command Center Option B ruling, plus Stage A persistence under the 2026-10-03 Command Center ruling.
 
 - Branch: `cursor/tvg-finance-steps-1-6-a117`
 - Baseline: `17f9228951d74824d9b6fb0eb704832befed2afc` (ancestor of this branch)
-- Code commit: `d8ce7d97a29c66b109722022bab107486aca3528`
+- Steps 1–6 code commit: `d8ce7d97a29c66b109722022bab107486aca3528`
+- Guard/test commit: `7c272fe4b8d07beead373d7a0ba48297429b1a68`
 - Draft PR: https://github.com/faydog127/BHFOS/pull/164 (do not merge)
-- Evidence tier: **locally verified** on synthetic fixtures. Not deployed, not staging-verified, not merged, not production-verified.
+- Evidence tier: **locally verified**. Not deployed, not staging-verified, not merged, not production-verified.
 - Route: `/:tenantId/finance/*` → `TenantGuard` → `FinanceGuard` → `FinanceShell`. The shell is not inside `BHFCrmLayout`.
-- Data: synthetic illustration only (`SYNTHETIC — NOT TVG DATA`). No workbook seeds in git.
-- Persistence, migrations, RLS, and Steps 7–8: absent.
+- Data: synthetic illustration remains in the unit fixture only (`SYNTHETIC — NOT TVG DATA`). Stored plans are blank inputs. No workbook seeds in git. No finance seed migration.
+- Stage A adds `finance_plans` and `finance_monthly_actuals` in `supabase/migrations/20261003053000_finance_stage_a_persistence.sql`. Monthly Check-In UI, three modes, and Reports are not started.
 - Private check: `npm run finance:verify -- <gitignored-json>`. Prints test identity, PASS/FAIL, and tolerances only.
 
 ## Authorization boundary
 
-Draft PR only. No merge, no push to the default branch, no production deploy, no remote Supabase, no service-role credentials, no migration files.
+Draft PR only. No merge, no push to the default branch, no production or staging deploy, no `supabase link`, no `db push`, no remote migration. Production `wwyxohjnyqnegzbxtuxs` and staging `glkrykpksbsqmmilmjhs` were not contacted. No service-role key in the frontend.
 
 ## Next action
 
-Challenge diff-only review of draft PR https://github.com/faydog127/BHFOS/pull/164. Steps 7–8 stay held until a separate Command Center decision.
+Challenge review of Stage A on draft PR https://github.com/faydog127/BHFOS/pull/164. Stages B, C, and D stay held.

@@ -1,8 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { useParams } from 'react-router-dom';
 import { calculatePlan, monthlyPayroll, OWNER_FIELD_RESERVE_LABEL, STAGE_3_CORE_CAVEAT } from '@/lib/finance/calculate';
-import { FINANCE_ROUTE_TENANT } from '@/lib/finance/authz';
+import { supabase } from '@/lib/customSupabaseClient';
+import {
+  approvePlan,
+  createBlankPlan,
+  listPlans,
+  openDraftFromApproved,
+  saveDraft,
+  selectVisiblePlan,
+} from '@/lib/finance/persistence';
+import { FINANCE_NOTES_MAX } from '@/lib/finance/blankPlan';
 import { EXPLANATIONS, FINANCE_SECTIONS, buildFinanceView, showCents, showMoney } from '@/lib/finance/viewModel';
 
 function sectionIdFromPath(pathname) {
@@ -52,43 +62,85 @@ function Explain({ title, children }) {
   );
 }
 
-export default function FinanceShell({ routeTenantId, sessionTenantId }) {
+export default function FinanceShell({ grantedAccess }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const [planDocument, setPlanDocument] = useState(null);
+  const { tenantId: routeTenantId } = useParams();
+  const allowed = grantedAccess?.allowed === true;
   const [inputs, setInputs] = useState(null);
-  const [denied, setDenied] = useState(false);
+  const [record, setRecord] = useState(null);
+  const [approvedBasis, setApprovedBasis] = useState(null);
+  const [notes, setNotes] = useState('');
+  const [dirty, setDirty] = useState(false);
+  const [loading, setLoading] = useState(allowed);
+  const [loadCode, setLoadCode] = useState(null);
+  const [saveCode, setSaveCode] = useState(null);
+  const [conflict, setConflict] = useState(false);
   const [selectedStage, setSelectedStage] = useState('stage_2');
   const section = sectionIdFromPath(location.pathname);
 
+  function applyPlan(plan, basis) {
+    setRecord(plan);
+    setApprovedBasis(basis || null);
+    setInputs(plan.inputs);
+    setNotes(plan.notes || '');
+    setDirty(false);
+    setConflict(false);
+    setSaveCode(null);
+  }
+
+  async function refreshPlans() {
+    const listed = await listPlans(supabase);
+    if (!listed.ok) {
+      setLoadCode(listed.code);
+      setLoading(false);
+      return;
+    }
+    const choice = selectVisiblePlan(listed.plans);
+    setLoadCode(null);
+    setLoading(false);
+    if (!choice.visible) {
+      setRecord(null);
+      setInputs(null);
+      setApprovedBasis(null);
+      return;
+    }
+    applyPlan(choice.visible, choice.draft ? choice.approved : null);
+  }
+
   useEffect(() => {
+    if (!allowed) return undefined;
     let live = true;
-    import('@/lib/finance/syntheticFixture.js')
-      .then((mod) => {
-        if (!live) return;
-        const loaded = mod.getSyntheticPlanningFixture({
-          routeTenant: routeTenantId,
-          sessionTenant: sessionTenantId,
-        });
-        setPlanDocument(loaded);
-        setInputs(loaded.inputs);
-      })
-      .catch(() => {
-        if (live) setDenied(true);
-      });
+    listPlans(supabase).then((listed) => {
+      if (!live) return;
+      if (!listed.ok) {
+        setLoadCode(listed.code);
+        setLoading(false);
+        return;
+      }
+      const choice = selectVisiblePlan(listed.plans);
+      setLoading(false);
+      if (!choice.visible) return;
+      applyPlan(choice.visible, choice.draft ? choice.approved : null);
+    });
     return () => {
       live = false;
     };
-  }, [routeTenantId, sessionTenantId]);
+  }, [allowed]);
+
+  function editInputs(updater) {
+    setDirty(true);
+    setInputs(updater);
+  }
 
   const result = useMemo(() => (inputs ? calculatePlan(inputs) : null), [inputs]);
   const view = useMemo(
-    () => (planDocument && result ? buildFinanceView(planDocument, result, selectedStage) : null),
-    [planDocument, result, selectedStage],
+    () => (inputs && result ? buildFinanceView({ meta: { label: 'Stored plan', data_class: 'stored' }, inputs }, result, selectedStage) : null),
+    [inputs, result, selectedStage],
   );
 
   function patchStage(stageKey, field, value) {
-    setInputs((current) => {
+    editInputs((current) => {
       const next = structuredClone(current);
       next.stages[stageKey][field] = value;
       return next;
@@ -96,7 +148,7 @@ export default function FinanceShell({ routeTenantId, sessionTenantId }) {
   }
 
   function patchOwner(field, value) {
-    setInputs((current) => {
+    editInputs((current) => {
       const next = structuredClone(current);
       next.owner_field_replacement[field] = value;
       return next;
@@ -104,7 +156,7 @@ export default function FinanceShell({ routeTenantId, sessionTenantId }) {
   }
 
   function patchRole(roleKey, field, value) {
-    setInputs((current) => {
+    editInputs((current) => {
       const next = structuredClone(current);
       const role = next.staffing.find((item) => item.key === roleKey);
       if (role) role[field] = value;
@@ -113,7 +165,7 @@ export default function FinanceShell({ routeTenantId, sessionTenantId }) {
   }
 
   function patchHeadcount(roleKey, stageKey, value) {
-    setInputs((current) => {
+    editInputs((current) => {
       const next = structuredClone(current);
       const role = next.staffing.find((item) => item.key === roleKey);
       if (role) role.headcount[stageKey] = value;
@@ -122,7 +174,7 @@ export default function FinanceShell({ routeTenantId, sessionTenantId }) {
   }
 
   function patchPool(group, line, stageKey, value) {
-    setInputs((current) => {
+    editInputs((current) => {
       const next = structuredClone(current);
       next.cost_pools[group][line][stageKey] = value;
       return next;
@@ -130,7 +182,7 @@ export default function FinanceShell({ routeTenantId, sessionTenantId }) {
   }
 
   function patchChannel(index, field, value) {
-    setInputs((current) => {
+    editInputs((current) => {
       const next = structuredClone(current);
       next.channels[index][field] = value;
       return next;
@@ -138,31 +190,96 @@ export default function FinanceShell({ routeTenantId, sessionTenantId }) {
   }
 
   function patchService(serviceKey, field, value) {
-    setInputs((current) => {
+    editInputs((current) => {
       const next = structuredClone(current);
       next.services[serviceKey][field] = value;
       return next;
     });
   }
 
-  if (denied) {
+  async function onCreate() {
+    setSaveCode(null);
+    const created = await createBlankPlan(supabase);
+    if (!created.ok) {
+      setSaveCode(created.code);
+      return;
+    }
+    applyPlan(created.plan, null);
+  }
+
+  async function onSave() {
+    if (!record || record.status !== 'draft') return;
+    const saved = await saveDraft(supabase, {
+      id: record.id,
+      expectedVersion: record.version,
+      inputs,
+      notes,
+    });
+    if (!saved.ok) {
+      if (saved.code === 'version_conflict') setConflict(true);
+      setSaveCode(saved.code);
+      return;
+    }
+    applyPlan(saved.plan, approvedBasis);
+  }
+
+  async function onApprove() {
+    if (!record || record.status !== 'draft' || dirty) {
+      setSaveCode('finance_save_before_approve');
+      return;
+    }
+    const approved = await approvePlan(supabase, { id: record.id, expectedVersion: record.version });
+    if (!approved.ok) {
+      if (approved.code === 'version_conflict') setConflict(true);
+      setSaveCode(approved.code);
+      return;
+    }
+    applyPlan(approved.plan, null);
+  }
+
+  async function onNewDraft() {
+    if (!record || record.status !== 'approved') return;
+    const opened = await openDraftFromApproved(supabase, { id: record.id });
+    if (!opened.ok) {
+      setSaveCode(opened.code);
+      return;
+    }
+    applyPlan(opened.plan, record);
+  }
+
+  if (!allowed) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6" data-testid="finance-fixture-denied">
-        <p className="text-slate-700">Planning illustration is unavailable.</p>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6" data-testid="finance-shell-unguarded">
+        <p className="text-slate-700">Planning is unavailable.</p>
+      </div>
+    );
+  }
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading plan…</div>;
+  }
+  if (!record) {
+    return (
+      <div className="min-h-screen bg-slate-100 p-8" data-testid="finance-empty">
+        <h1 className="text-2xl font-semibold">No plan yet</h1>
+        <p className="mt-2 max-w-xl text-sm text-slate-600">Create a blank plan. Nothing is filled in for you.</p>
+        {saveCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-save-error">{saveCode}</p> : null}
+        {loadCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-load-error">{loadCode}</p> : null}
+        <button type="button" className="mt-4 rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white" data-testid="finance-create-plan" onClick={onCreate}>Create plan</button>
       </div>
     );
   }
   if (!view || !inputs) {
-    return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading illustration…</div>;
+    return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading plan…</div>;
   }
 
-  const base = `/${FINANCE_ROUTE_TENANT}/finance`;
+  const base = `/${routeTenantId}/finance`;
+  const draftLocked = record.status !== 'draft';
   const stageKeys = ['stage_0', 'stage_1', 'stage_2', 'stage_3'];
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900" data-testid="finance-shell">
-      <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-950" data-testid="synthetic-banner">
-        {view.label}. In-memory only. Refresh discards edits. Nothing is saved.
+      <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-950" data-testid="plan-banner">
+        Stored plan ({record.status}). Save writes this draft. Refresh discards unsaved edits. The synthetic illustration is not this plan.
       </div>
       <div className="lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="border-b border-slate-200 bg-slate-900 text-slate-100 lg:min-h-screen lg:border-b-0 lg:border-r">
@@ -218,11 +335,45 @@ export default function FinanceShell({ routeTenantId, sessionTenantId }) {
               </select>
             </label>
           </header>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            {record.status === 'draft' ? (
+              <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white" data-testid="finance-save" onClick={onSave}>Save draft</button>
+            ) : null}
+            {record.status === 'draft' ? (
+              <button type="button" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm" data-testid="finance-approve" onClick={onApprove}>Approve plan</button>
+            ) : null}
+            {record.status === 'approved' ? (
+              <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white" data-testid="finance-new-draft" onClick={onNewDraft}>New draft</button>
+            ) : null}
+            {approvedBasis ? <p className="text-xs text-slate-500">An approved plan basis exists. This draft does not drive variance until it is approved.</p> : null}
+          </div>
+          <label className="mb-4 block text-sm text-slate-600">
+            Notes
+            <textarea
+              className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm"
+              maxLength={FINANCE_NOTES_MAX}
+              disabled={draftLocked}
+              value={notes}
+              onChange={(event) => {
+                setDirty(true);
+                setNotes(event.target.value);
+              }}
+            />
+            <span className="mt-1 block text-xs text-slate-500">Plain text only. Do not enter employee or customer names or other personal data.</span>
+          </label>
+          {conflict ? (
+            <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" data-testid="finance-version-conflict">
+              Changed elsewhere. Your unsaved edits are still on this screen.
+              <button type="button" className="ml-3 underline" data-testid="finance-reload" onClick={refreshPlans}>Reload</button>
+            </div>
+          ) : null}
+          {saveCode ? <p className="mb-4 text-sm text-red-700" data-testid="finance-save-error">{saveCode}</p> : null}
           {view.errors.length > 0 ? (
             <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800" data-testid="finance-validation">
               Some inputs are incomplete or invalid. Affected results show --. Retention hurdles must satisfy 0 ≤ value &lt; 1.
             </div>
           ) : null}
+          <fieldset disabled={draftLocked} className="min-w-0 border-0 p-0">
           {section === 'overview' ? <Overview view={view} inputs={inputs} /> : null}
           {section === 'people' ? (
             <People inputs={inputs} result={result} onRole={patchRole} onHeadcount={patchHeadcount} onStage={patchStage} onOwner={patchOwner} />
@@ -230,10 +381,11 @@ export default function FinanceShell({ routeTenantId, sessionTenantId }) {
           {section === 'trucks' ? <Pools title="Trucks & Equipment" groups={['direct_production', 'indirect_field']} inputs={inputs} onPatch={patchPool} copy={[EXPLANATIONS.directProduction, EXPLANATIONS.fieldOverhead]} /> : null}
           {section === 'office' ? <Office inputs={inputs} result={result} onPatch={patchPool} /> : null}
           {section === 'growth' ? <Growth inputs={inputs} view={view} result={result} onStage={patchStage} onChannel={patchChannel} /> : null}
-          {section === 'production' ? <Production inputs={inputs} view={view} onService={patchService} onInput={setInputs} /> : null}
+          {section === 'production' ? <Production inputs={inputs} view={view} onService={patchService} onInput={editInputs} /> : null}
           {section === 'pricing' ? <Pricing view={view} inputs={inputs} onService={patchService} /> : null}
           {section === 'stages' ? <Stages view={view} inputs={inputs} /> : null}
           {section === 'checkin' ? <Checkin view={view} /> : null}
+          </fieldset>
           <div className="mt-8 flex justify-between text-sm">
             <SectionLink sections={FINANCE_SECTIONS} current={section} base={base} direction={-1} label="Back" />
             <SectionLink sections={FINANCE_SECTIONS} current={section} base={base} direction={1} label="Next" />

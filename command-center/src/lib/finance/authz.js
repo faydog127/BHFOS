@@ -1,7 +1,7 @@
 /**
  * Finance authorization for Steps 1–6.
  * Role and tenant come only from the JWT app_metadata claims.
- * owner is denied. user_metadata and localStorage are not authorities.
+ * owner is denied. Editable profile claims and localStorage are not authorities.
  * The route tenant must equal tvg, and a route param cannot grant access by itself.
  */
 import { jwtDecode } from 'jwt-decode';

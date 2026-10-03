@@ -43,7 +43,7 @@ export default function FinanceGuard() {
 
   return (
     <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading planning workspace…</div>}>
-      <FinanceShell routeTenantId="tvg" sessionTenantId="tvg" />
+      <FinanceShell grantedAccess={access} />
     </Suspense>
   );
 }

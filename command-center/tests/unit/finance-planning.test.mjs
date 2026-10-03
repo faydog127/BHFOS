@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -14,7 +14,9 @@ import { calculatePlan, monthlyPayroll, retentionHurdle } from '../../src/lib/fi
 import { div, num, roundUpToIncrement } from '../../src/lib/finance/nullMath.js';
 import { nearCapacityBand, stageReadiness, READINESS_INCOMPLETE, READINESS_NOT_READY, READINESS_READY } from '../../src/lib/finance/readiness.js';
 import { variance, variancePct } from '../../src/lib/finance/variance.js';
-import { evaluateFinanceAccess, roleHasFinanceCapability, FINANCE_CAPABILITIES } from '../../src/lib/finance/authz.js';
+import { evaluateFinanceAccess, roleHasFinanceCapability, FINANCE_ALLOWED_ROLES, FINANCE_CAPABILITIES } from '../../src/lib/finance/authz.js';
+import { blankPlanInputs, validateNotes, validatePlanInputs } from '../../src/lib/finance/blankPlan.js';
+import { saveDraft, selectVisiblePlan } from '../../src/lib/finance/persistence.js';
 import { getSyntheticPlanningFixture } from '../../src/lib/finance/syntheticFixture.js';
 import { buildFinanceView } from '../../src/lib/finance/viewModel.js';
 import { HVAC_REVENUE_MISSING_COPY } from '../../src/lib/finance/calculate.js';
@@ -381,5 +383,85 @@ describe('verify script and source guards', () => {
     assert.equal(monthlyPayroll({
       headcount: 1, hourlyWage: 10, weeklyHours: 10, burdenPct: 0.5, weeksPerYear: 52, monthsPerYear: 12,
     }), payroll(1, 10, 10, 0.5));
+  });
+
+  it('keeps a blank plan free of numeric assumptions', () => {
+    const numbers = [];
+    const walk = (value) => {
+      if (typeof value === 'number') numbers.push(value);
+      else if (Array.isArray(value)) value.forEach(walk);
+      else if (value && typeof value === 'object') Object.values(value).forEach(walk);
+    };
+    const inputs = blankPlanInputs();
+    walk(inputs);
+    assert.deepEqual(numbers, []);
+    assert.equal(JSON.stringify(inputs).includes('SYNTHETIC'), false);
+    assert.equal(validatePlanInputs(inputs).ok, true);
+    const unknown = blankPlanInputs();
+    unknown.extra = null;
+    assert.equal(validatePlanInputs(unknown).code, 'invalid_inputs');
+    const negative = blankPlanInputs();
+    negative.structural.weeks_per_year = -1;
+    assert.equal(validatePlanInputs(negative).code, 'invalid_inputs');
+    const nonFinite = blankPlanInputs();
+    nonFinite.hvac_revenue = Number.NaN;
+    assert.equal(validatePlanInputs(nonFinite).code, 'invalid_inputs');
+    assert.equal(validateNotes('x'.repeat(2001)).code, 'invalid_notes');
+    assert.equal(validateNotes(null).notes, null);
+  });
+
+  it('reports a version conflict without mutating the caller inputs', async () => {
+    const inputs = blankPlanInputs();
+    inputs.structural.weeks_per_year = 1;
+    const before = structuredClone(inputs);
+    const row = {
+      update() { return row; },
+      eq() { return row; },
+      select() { return row; },
+      maybeSingle: async () => ({ data: null, error: null }),
+    };
+    const result = await saveDraft({ from: () => row }, {
+      id: '11111111-1111-4111-8111-111111111111',
+      expectedVersion: 1,
+      inputs,
+      notes: null,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'version_conflict');
+    assert.deepEqual(inputs, before);
+    assert.deepEqual(selectVisiblePlan([]), { approved: null, draft: null, visible: null });
+  });
+
+  it('matches the SQL role list and blocks the preview harness', () => {
+    const migration = readFileSync(path.join(root, 'supabase/migrations/20261003053000_finance_stage_a_persistence.sql'), 'utf8');
+    const match = migration.match(/in \('admin', 'super_admin'\)/);
+    assert.ok(match);
+    assert.deepEqual(FINANCE_ALLOWED_ROLES, ['admin', 'super_admin']);
+    assert.equal(match[0], "in ('admin', 'super_admin')");
+    const stripped = migration.replace(/\$\$[\s\S]*?\$\$/g, '');
+    assert.equal(/\binsert\s+into\b/i.test(stripped), false);
+    assert.equal(/\bcopy\s+/i.test(stripped), false);
+    const allowed = new Set(['0', '1', '2', '10', '14', '2000']);
+    const numbers = stripped.match(/\d+/g) || [];
+    for (const value of numbers) assert.equal(allowed.has(value), true, value);
+    assert.equal(migration.includes('user_metadata'), false);
+    for (const relative of [
+      'src/lib/finance/authz.js',
+      'src/lib/finance/persistence.js',
+      'src/lib/finance/blankPlan.js',
+      'src/pages/finance/FinanceShell.jsx',
+      'src/components/finance/FinanceGuard.jsx',
+    ]) {
+      assert.equal(readFileSync(path.join(root, relative), 'utf8').includes('user_metadata'), false, relative);
+    }
+    const shell = readFileSync(path.join(root, 'src/pages/finance/FinanceShell.jsx'), 'utf8');
+    const guard = readFileSync(path.join(root, 'src/components/finance/FinanceGuard.jsx'), 'utf8');
+    assert.equal(shell.includes('syntheticFixture'), false);
+    assert.equal(shell.includes('getSyntheticPlanningFixture'), false);
+    assert.match(shell, /grantedAccess\?\.allowed === true/);
+    assert.match(shell, /No plan yet/);
+    assert.match(guard, /<FinanceShell grantedAccess=\{access\} \/>/);
+    assert.equal(existsSync(path.join(root, 'finance-preview.html')), false);
+    assert.equal(existsSync(path.join(root, 'src/financePreviewMain.jsx')), false);
   });
 });
