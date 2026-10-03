@@ -160,7 +160,10 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     if (id === 'pricing-economics') {
       await expect(page.getByRole('columnheader', { name: 'Signed variance' })).toBeVisible();
       await expect(page.getByRole('columnheader', { name: 'Stage 2 capacity' })).toBeVisible();
-      shippedPrintCss = await page.locator('style').first().evaluate((el) => el.textContent || '');
+      shippedPrintCss = await page.evaluate(() => {
+        const tag = [...document.querySelectorAll('style')].find((el) => (el.textContent || '').includes('.report-value'));
+        return tag ? tag.textContent : '';
+      });
     }
     if (id === 'cost-structure') {
       await expect(page.getByRole('columnheader', { name: /Future\/Licensing Dependent HVAC/ })).toBeVisible();
