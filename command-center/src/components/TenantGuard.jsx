@@ -31,6 +31,10 @@ const TenantGuard = ({ children }) => {
     // object also arrives on token refresh. Either one used to set isChecking
     // and unmount Finance, which discarded unsaved edits. Recheck the same
     // user and tenant without taking the shell down.
+    // Same-tenant navigation does not re-run this effect, so a superuser or
+    // role change is not re-checked until the session or the URL tenant
+    // changes. Server RLS and the finance RPCs still enforce the role on
+    // every request. That client staleness is documented in the staging runbook.
     const keepMounted = Boolean(identity && verifiedFor.current === identity);
 
     const safeSet = (setter) => {

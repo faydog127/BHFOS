@@ -35,11 +35,19 @@ function seedHistoricalV1() {
   execFileSync('psql', [db, '-v', 'ON_ERROR_STOP=1', '-f', seed], { stdio: 'pipe' });
 }
 
-function mediaBox(file) {
+function mediaBoxes(file) {
   const raw = readFileSync(file).toString('latin1');
-  const match = raw.match(/\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/);
-  if (!match) return null;
-  return [Number(match[1]), Number(match[2])];
+  return [...raw.matchAll(/\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/g)].map((match) => [Number(match[1]), Number(match[2])]);
+}
+
+function assertPaper(file, expectedBox, landscape) {
+  const boxes = mediaBoxes(file);
+  expect(boxes.length, file).toBeGreaterThan(0);
+  for (const box of boxes) {
+    expect(Math.abs(box[0] - expectedBox[0]), file).toBeLessThan(3);
+    expect(Math.abs(box[1] - expectedBox[1]), file).toBeLessThan(3);
+    if (landscape) expect(box[0], file).toBeGreaterThan(box[1]);
+  }
 }
 
 async function assertNoDocumentOverflow(page) {
@@ -53,7 +61,9 @@ async function assertNoDocumentOverflow(page) {
 
 test('eight finance reports read the screen and do not write', async ({ page }) => {
   test.setTimeout(300000);
-  test.skip(!process.env.FINANCE_CHECKIN_EMAIL || !process.env.FINANCE_CHECKIN_PASSWORD, 'local check-in credentials were not provided');
+  if (!process.env.FINANCE_CHECKIN_EMAIL || !process.env.FINANCE_CHECKIN_PASSWORD) {
+    throw new Error('FINANCE_CHECKIN_EMAIL and FINANCE_CHECKIN_PASSWORD are required. The release gate supplies synthetic local credentials. This spec does not skip.');
+  }
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/tvg/login?next=%2Ftvg%2Ffinance');
   await page.locator('#email').fill(process.env.FINANCE_CHECKIN_EMAIL);
@@ -89,13 +99,44 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
   await expect(page).toHaveURL(/\/finance\/?$/);
   await expect(page.locator('textarea')).toHaveValue('unsaved hardening note');
   await page.getByTestId('finance-leave-probe').click();
-  await page.getByTestId('finance-leave-cancel').click();
+  await expect(page.getByTestId('finance-leave-dialog')).toBeVisible();
+  await expect(page.getByTestId('finance-leave-stay')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByTestId('finance-leave-discard')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByTestId('finance-leave-stay')).toBeFocused();
+  await page.keyboard.press('Escape');
   await expect(page.getByTestId('finance-leave-dialog')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/finance\/?$/);
+  await expect(page.locator('textarea')).toHaveValue('unsaved hardening note');
+  await page.evaluate(() => {
+    history.pushState({}, '', '/tvg/crm/dashboard');
+  });
+  await expect(page.getByTestId('finance-leave-dialog')).toBeVisible();
+  await expect(page).toHaveURL(/\/finance\/?$/);
+  await expect(page.locator('textarea')).toHaveValue('unsaved hardening note');
+  await page.keyboard.press('Escape');
+  await page.getByRole('link', { name: 'Pricing' }).click();
+  await expect(page).toHaveURL(/\/finance\/pricing$/);
+  await expect(page.getByTestId('finance-leave-dialog')).toHaveCount(0);
+  await page.goBack();
+  await expect(page.getByTestId('finance-leave-dialog')).toHaveCount(0);
+  await expect(page.locator('textarea')).toHaveValue('unsaved hardening note');
+  await page.goBack();
+  await expect(page.getByTestId('finance-leave-dialog')).toBeVisible();
+  await expect(page).toHaveURL(/\/finance/);
+  await expect(page.locator('textarea')).toHaveValue('unsaved hardening note');
+  await page.keyboard.press('Escape');
   expect(dirtyWrites.some((line) => /finance_plans|finance_monthly_actuals|finance_approve|finance_open_draft|finance_upgrade/.test(line))).toBe(false);
   page.off('request', onDirtyRequest);
   page.once('dialog', (dialog) => dialog.accept());
   await page.reload();
   await expect(page.getByTestId('canonical-required-revenue')).toBeVisible();
+  await page.getByRole('link', { name: 'Pricing' }).click();
+  await expect(page.getByTestId('finance-pricing')).toBeVisible();
+  await page.getByTestId('price-row-residential_dryer_vent').locator('input').fill('-1234567.89');
+  await page.getByTestId('price-row-duct_12_drop_floor').locator('input').fill('-12345678.89');
+  await page.getByRole('link', { name: 'Overview' }).click();
   const required = await page.getByTestId('canonical-required-revenue').innerText();
   await page.getByTestId('finance-mode-executive').click();
   await expect(page.getByTestId('decision-plan-total-revenue')).toHaveText('$10.50');
@@ -126,8 +167,11 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
   await expect(page.getByTestId('finance-report-title')).toHaveText('Owner Operating Report');
   await expect(page.getByTestId('finance-report-generated-at')).not.toHaveText('--');
   await expect(page.locator('p', { has: page.getByTestId('finance-report-generated-at') })).toContainText('UTC');
-  await expect(page.getByTestId('entity-brand-identity')).toHaveText('BHFOS');
-  await expect(page.getByTestId('entity-brand-identity')).toHaveAttribute('data-brand-complete', 'false');
+  await expect(page.getByTestId('entity-brand-name')).toHaveText('The Vent Guys');
+  await expect(page.getByTestId('entity-brand-identity')).toHaveAttribute('data-brand-complete', 'true');
+  await expect(page.getByTestId('entity-brand-identity')).toHaveAttribute('data-entity-id', 'tvg');
+  await expect(page.getByTestId('entity-brand-logo')).toHaveAttribute('src', '/assets/finance/tvg-logo-primary.png');
+  await expect(page.getByTestId('entity-brand-pending')).toHaveCount(0);
 
   await page.getByTestId('finance-report-link-monthly-summary').click();
   await expect(page.getByTestId('report-plan-total-revenue')).toHaveText(planRevenue);
@@ -241,9 +285,13 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     expect(printed).not.toContain('below_near');
     await page.screenshot({ path: `${out}/${id}-print.png`, fullPage: true });
     await page.pdf({ path: `${out}/${id}.pdf`, format: 'Letter', printBackground: true });
+    assertPaper(`${out}/${id}.pdf`, [612, 792], false);
     await page.pdf({ path: `${out}/${id}-a4.pdf`, format: 'A4', printBackground: true });
+    assertPaper(`${out}/${id}-a4.pdf`, [595, 842], false);
     await page.pdf({ path: `${out}/${id}-landscape.pdf`, format: 'Letter', landscape: true, printBackground: true });
+    assertPaper(`${out}/${id}-landscape.pdf`, [792, 612], true);
     await page.pdf({ path: `${out}/${id}-a4-landscape.pdf`, format: 'A4', landscape: true, printBackground: true });
+    assertPaper(`${out}/${id}-a4-landscape.pdf`, [842, 595], true);
     await page.emulateMedia({ media: 'screen' });
     await page.setViewportSize({ width: 1280, height: 900 });
   }
@@ -257,47 +305,60 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
   }
 
   expect(shippedPrintCss).toContain('.report-value');
-  const big = '-$1,234,567.89';
-  const headers = ['Service', 'Planned price', 'Direct labor', 'Materials', 'Dispatch', 'Direct job cost', 'Indirect', 'Fully supported', 'Stage 2 capacity', 'Signed variance'];
-  const cells = ['duct_plus_ahu_package', '$2,345,678.90', '$123,456.78', '$12,345.67', '$1,234.56', '$234,567.89', '$12.50', '0.00%', '40.00', big];
-  await page.setContent(`<!doctype html><html><head><style>${shippedPrintCss}</style></head><body><article class="report-sheet"><h1>Pricing & Service Economics</h1><section class="report-block"><div class="overflow-x-auto"><table><thead><tr>${headers.map((header) => `<th>${header}</th>`).join('')}</tr></thead><tbody><tr>${cells.map((cell, index) => (index === 0 ? `<th>${cell}</th>` : `<td class="report-value">${cell}</td>`)).join('')}</tr></tbody></table></div></section></article></body>`);
+  const signed7 = '-$1,234,567.89';
+  const signed8 = '-$12,345,678.89';
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ media: 'screen' });
+  await page.getByTestId('finance-report-link-pricing-economics').click();
+  await expect(page.getByTestId('finance-report-pricing-economics')).toBeVisible();
+  await expect(page.locator('.report-value', { hasText: signed7 })).toHaveCount(1);
+  await expect(page.locator('.report-value', { hasText: signed8 })).toHaveCount(1);
+  await expect(page.getByTestId('entity-brand-footer')).toBeVisible();
+  await expect(page.getByTestId('entity-brand-contact')).toContainText('info@vent-guys.com');
   for (const setup of [
-    ['pricing-7digit-letter', { width: 725, height: 960 }, { format: 'Letter' }, [612, 792]],
-    ['pricing-7digit-a4', { width: 703, height: 1000 }, { format: 'A4' }, [595, 842]],
-    ['pricing-7digit-landscape', { width: 965, height: 700 }, { format: 'Letter', landscape: true }, [792, 612]],
-    ['pricing-7digit-a4-landscape', { width: 1000, height: 680 }, { format: 'A4', landscape: true }, [842, 595]],
+    ['pricing-7digit-letter', { width: 725, height: 960 }, { format: 'Letter' }, [612, 792], false],
+    ['pricing-7digit-a4', { width: 703, height: 1000 }, { format: 'A4' }, [595, 842], false],
+    ['pricing-7digit-landscape', { width: 965, height: 700 }, { format: 'Letter', landscape: true }, [792, 612], true],
+    ['pricing-7digit-a4-landscape', { width: 1000, height: 680 }, { format: 'A4', landscape: true }, [842, 595], true],
   ]) {
-    const [name, viewport, pdf, expectedBox] = setup;
+    const [name, viewport, pdf, expectedBox, landscape] = setup;
     await page.setViewportSize(viewport);
     await page.emulateMedia({ media: 'print' });
-    const fit = await page.evaluate((signed) => {
+    const fit = await page.evaluate(({ seven, eight }) => {
       const sheet = document.querySelector('.report-sheet');
-      const table = document.querySelector('table');
-      const signedCell = [...document.querySelectorAll('.report-value')].find((el) => el.textContent === signed);
-      const range = document.createRange();
-      range.selectNodeContents(signedCell);
+      const table = document.querySelector('[data-testid="report-services"] table');
+      const cellFor = (signed) => [...document.querySelectorAll('.report-value')].find((el) => (el.textContent || '').trim() === signed);
+      const measure = (signed) => {
+        const signedCell = cellFor(signed);
+        const range = document.createRange();
+        range.selectNodeContents(signedCell);
+        return {
+          lines: range.getClientRects().length,
+          overflow: signedCell.scrollWidth > signedCell.clientWidth + 1,
+          font: getComputedStyle(signedCell).fontSize,
+        };
+      };
       const sheetBox = sheet.getBoundingClientRect();
       const tableBox = table.getBoundingClientRect();
       return {
-        lines: range.getClientRects().length,
-        overflow: signedCell.scrollWidth > signedCell.clientWidth + 1,
+        seven: measure(seven),
+        eight: measure(eight),
         clipped: tableBox.right > sheetBox.right + 1,
-        font: getComputedStyle(signedCell).fontSize,
-        headers: document.querySelectorAll('thead th').length,
+        headers: table.querySelectorAll('thead th').length,
       };
-    }, big);
+    }, { seven: signed7, eight: signed8 });
     expect(fit.headers).toBe(10);
-    expect(fit.lines).toBe(1);
-    expect(fit.overflow).toBe(false);
+    expect(fit.seven.lines).toBe(1);
+    expect(fit.eight.lines).toBe(1);
+    expect(fit.seven.overflow).toBe(false);
+    expect(fit.eight.overflow).toBe(false);
     expect(fit.clipped).toBe(false);
-    expect(fit.font).toBe('8px');
+    expect(fit.seven.font).toBe('8px');
+    expect(fit.eight.font).toBe('8px');
     writeFileSync(`${out}/${name}-layout.json`, JSON.stringify(fit, null, 2));
     await page.screenshot({ path: `${out}/${name}.png`, fullPage: true });
     await page.pdf({ path: `${out}/${name}.pdf`, printBackground: true, ...pdf });
-    const box = mediaBox(`${out}/${name}.pdf`);
-    expect(box, name).not.toBeNull();
-    expect(Math.abs(box[0] - expectedBox[0]), name).toBeLessThan(3);
-    expect(Math.abs(box[1] - expectedBox[1]), name).toBeLessThan(3);
+    assertPaper(`${out}/${name}.pdf`, expectedBox, landscape);
   }
 
   expect(writes.every((line) => line.includes('/rpc/check_is_superuser'))).toBe(true);

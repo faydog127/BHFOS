@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import { validateMonthlyBasis, plannedFactsForMonth, comparisonPlanForCheckin } from '../../src/lib/finance/actuals.js';
 import { validatePlanInputs, blankPlanInputs } from '../../src/lib/finance/blankPlan.js';
+import { formatCurrencyCents } from '../../src/lib/finance/format.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const checkin = readFileSync(path.join(root, 'src/pages/finance/MonthlyCheckIn.jsx'), 'utf8');
@@ -34,7 +35,18 @@ describe('validateMonthlyBasis mirrors the database check', () => {
     bad({ '0000-01-01': { total_revenue: 1 } });
     bad({ [M]: { total_revenue: -0 } });
     good({ [M]: { total_revenue: 1234567.89 } });
+    good({ [M]: { total_revenue: 12345678.89 } });
+    good({ [M]: { total_revenue: 123456789012.89 } });
+    good({ [M]: { productive_unit_hours: 12345678.89 } });
+    bad({ [M]: { total_revenue: 1234567890123.89 } });
+    bad({ [M]: { total_revenue: 1.001 } });
+    bad({ [M]: { total_revenue: -1234567.89 } });
+    bad({ [M]: { productive_unit_hours: 123456789.89 } });
     bad({ [M]: { total_revenue: 1234567.891 } });
+    assert.equal(formatCurrencyCents(1234567.89), '$1,234,567.89');
+    assert.equal(formatCurrencyCents(12345678.89), '$12,345,678.89');
+    assert.equal(formatCurrencyCents(-1234567.89), '-$1,234,567.89');
+    assert.equal(formatCurrencyCents(-12345678.89), '-$12,345,678.89');
     bad({ [M]: { bogus: 1 } });
   });
   it('rejects amounts of 21 or more whole digits like the database (FAILS on 60773aa: finding F2)', () => {

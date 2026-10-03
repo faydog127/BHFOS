@@ -18,6 +18,8 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const email = 'finance-gate@example.test';
 const password = randomBytes(18).toString('base64url');
+const ownerEmail = 'finance-owner-gate@example.test';
+const ownerPassword = randomBytes(18).toString('base64url');
 
 function redact(text) {
   return String(text || '').replace(/(KEY|PASSWORD|TOKEN|SECRET|DATABASE_URL|DB_URL)=[^\s]+/gi, '$1=[redacted]');
@@ -50,34 +52,34 @@ function statusEnv() {
   });
 }
 
-async function ensureAdmin(apiUrl, serviceRole) {
+async function ensureLocalUser(apiUrl, serviceRole, userEmail, userPassword, appMetadata) {
   const headers = {
     apikey: serviceRole,
     Authorization: `Bearer ${serviceRole}`,
     'Content-Type': 'application/json',
   };
   const body = {
-    email,
-    password,
+    email: userEmail,
+    password: userPassword,
     email_confirm: true,
-    app_metadata: { role: 'admin', tenant_id: 'tvg' },
+    app_metadata: appMetadata,
   };
   const created = await fetch(`${apiUrl}/auth/v1/admin/users`, { method: 'POST', headers, body: JSON.stringify(body) });
   if (created.ok) return;
   if (created.status !== 422 && created.status !== 409) {
-    throw new Error(`synthetic admin create failed with HTTP ${created.status}`);
+    throw new Error(`synthetic user create failed with HTTP ${created.status}`);
   }
-  const listed = await fetch(`${apiUrl}/auth/v1/admin/users?email=${encodeURIComponent(email)}`, { headers });
-  if (!listed.ok) throw new Error(`synthetic admin lookup failed with HTTP ${listed.status}`);
+  const listed = await fetch(`${apiUrl}/auth/v1/admin/users?email=${encodeURIComponent(userEmail)}`, { headers });
+  if (!listed.ok) throw new Error(`synthetic user lookup failed with HTTP ${listed.status}`);
   const payload = await listed.json();
-  const user = (payload.users || []).find((item) => item.email === email);
-  if (!user?.id) throw new Error('synthetic admin already exists but could not be listed');
+  const user = (payload.users || []).find((item) => item.email === userEmail);
+  if (!user?.id) throw new Error('synthetic user already exists but could not be listed');
   const updated = await fetch(`${apiUrl}/auth/v1/admin/users/${user.id}`, {
     method: 'PUT',
     headers,
-    body: JSON.stringify({ password, email_confirm: true, app_metadata: { role: 'admin', tenant_id: 'tvg' } }),
+    body: JSON.stringify({ password: userPassword, email_confirm: true, app_metadata: appMetadata }),
   });
-  if (!updated.ok) throw new Error(`synthetic admin password reset failed with HTTP ${updated.status}`);
+  if (!updated.ok) throw new Error(`synthetic user password reset failed with HTTP ${updated.status}`);
 }
 
 const status = await statusEnv();
@@ -95,18 +97,24 @@ if (!/127\.0\.0\.1|localhost/.test(apiUrl) || !/127\.0\.0\.1|localhost/.test(dbU
   process.exit(1);
 }
 
-await ensureAdmin(apiUrl, serviceRole);
+await ensureLocalUser(apiUrl, serviceRole, email, password, { role: 'admin', tenant_id: 'tvg' });
+await ensureLocalUser(apiUrl, serviceRole, ownerEmail, ownerPassword, { role: 'owner', tenant_id: 'tvg' });
 
 const evidence = process.env.FINANCE_EVIDENCE_ROOT || '/opt/cursor/artifacts/finance-hardening';
 mkdirSync(evidence, { recursive: true });
 
+const playwrightEnv = { ...process.env };
+delete playwrightEnv.SERVICE_ROLE_KEY;
+delete playwrightEnv.SUPABASE_SERVICE_ROLE_KEY;
 const child = spawn('npx', ['playwright', 'test', '--config=playwright.finance-checkin.config.js'], {
   cwd: root,
   stdio: 'inherit',
   env: {
-    ...process.env,
+    ...playwrightEnv,
     FINANCE_CHECKIN_EMAIL: email,
     FINANCE_CHECKIN_PASSWORD: password,
+    FINANCE_OWNER_EMAIL: ownerEmail,
+    FINANCE_OWNER_PASSWORD: ownerPassword,
     FINANCE_LOCAL_DB_URL: dbUrl,
     VITE_SUPABASE_URL: apiUrl,
     VITE_SUPABASE_ANON_KEY: anon,
@@ -116,5 +124,9 @@ const child = spawn('npx', ['playwright', 'test', '--config=playwright.finance-c
 });
 
 child.on('close', (code) => {
-  process.exit(code ?? 1);
+  const check = spawn('node', ['tools/finance-e2e-report-check.mjs'], { cwd: root, stdio: 'inherit' });
+  check.on('close', (checkCode) => {
+    if (checkCode !== 0) process.exit(checkCode ?? 1);
+    process.exit(code ?? 1);
+  });
 });

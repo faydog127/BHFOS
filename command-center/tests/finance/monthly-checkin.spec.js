@@ -74,7 +74,9 @@ async function cycleModes(page, prefix) {
 
 test('monthly check-in entry, history, and comparison basis', async ({ page }) => {
   test.setTimeout(300000);
-  test.skip(!process.env.FINANCE_CHECKIN_EMAIL || !process.env.FINANCE_CHECKIN_PASSWORD, 'local check-in credentials were not provided');
+  if (!process.env.FINANCE_CHECKIN_EMAIL || !process.env.FINANCE_CHECKIN_PASSWORD) {
+    throw new Error('FINANCE_CHECKIN_EMAIL and FINANCE_CHECKIN_PASSWORD are required. The release gate supplies synthetic local credentials. This spec does not skip.');
+  }
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/tvg/login?next=%2Ftvg%2Ffinance%2Fcheckin');
   await page.locator('#email').fill(process.env.FINANCE_CHECKIN_EMAIL);

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useParams } from 'react-router-dom';
@@ -178,6 +178,7 @@ export default function FinanceShell({ grantedAccess }) {
   const [leavePrompt, setLeavePrompt] = useState(null);
   const section = sectionIdFromPath(location.pathname);
   const reportId = reportIdFromPath(location.pathname);
+  const allowLeaveRef = useRef(false);
 
   function applyPlan(plan, basis) {
     const decision = storedPlanDecision(plan);
@@ -277,6 +278,68 @@ export default function FinanceShell({ grantedAccess }) {
   useEffect(() => {
     if (!dirty) return undefined;
     const prefix = `/${routeTenantId}/finance`;
+    const isFinancePath = (pathname) => pathname === prefix || pathname.startsWith(`${prefix}/`);
+    const describe = (url) => {
+      const parsed = new URL(url, window.location.origin);
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    };
+    let lastFinanceUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const originalPush = history.pushState.bind(history);
+    const originalReplace = history.replaceState.bind(history);
+
+    function outsideDestination(url) {
+      if (url == null) return false;
+      try {
+        const parsed = new URL(String(url), window.location.origin);
+        if (parsed.origin !== window.location.origin) return false;
+        return !isFinancePath(parsed.pathname);
+      } catch {
+        return false;
+      }
+    }
+
+    function note(url) {
+      if (url == null) return;
+      try {
+        const parsed = new URL(String(url), window.location.origin);
+        if (parsed.origin === window.location.origin && isFinancePath(parsed.pathname)) {
+          lastFinanceUrl = describe(parsed.href);
+        }
+      } catch {
+        /* keep the last Finance URL */
+      }
+    }
+
+    history.pushState = function guardedPush(state, title, url) {
+      if (!allowLeaveRef.current && outsideDestination(url)) {
+        setLeavePrompt(describe(url));
+        return;
+      }
+      const result = originalPush(state, title, url);
+      note(url);
+      return result;
+    };
+    history.replaceState = function guardedReplace(state, title, url) {
+      if (!allowLeaveRef.current && outsideDestination(url)) {
+        setLeavePrompt(describe(url));
+        return;
+      }
+      const result = originalReplace(state, title, url);
+      note(url);
+      return result;
+    };
+
+    const onPopState = (event) => {
+      if (allowLeaveRef.current) return;
+      if (isFinancePath(window.location.pathname)) {
+        lastFinanceUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        return;
+      }
+      event.stopImmediatePropagation();
+      const left = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      originalPush(window.history.state, '', lastFinanceUrl);
+      setLeavePrompt(left);
+    };
     const onClick = (event) => {
       if (event.defaultPrevented || event.button !== 0) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -300,9 +363,14 @@ export default function FinanceShell({ grantedAccess }) {
     };
     document.addEventListener('click', onClick, true);
     window.addEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener('popstate', onPopState, true);
     return () => {
+      allowLeaveRef.current = false;
+      history.pushState = originalPush;
+      history.replaceState = originalReplace;
       document.removeEventListener('click', onClick, true);
       window.removeEventListener('beforeunload', onBeforeUnload);
+      window.removeEventListener('popstate', onPopState, true);
     };
   }, [dirty, routeTenantId]);
 
@@ -312,6 +380,7 @@ export default function FinanceShell({ grantedAccess }) {
 
   function discardAndLeave() {
     const next = leavePrompt;
+    allowLeaveRef.current = true;
     setLeavePrompt(null);
     setDirty(false);
     if (next) navigate(next);
@@ -514,6 +583,7 @@ export default function FinanceShell({ grantedAccess }) {
       <>
         <FinanceReportScreen
           reportId={reportId}
+          entityId={routeTenantId}
           base={`/${routeTenantId}/finance`}
           support={support}
           view={view}
@@ -531,6 +601,7 @@ export default function FinanceShell({ grantedAccess }) {
     return (
       <div className="min-h-screen bg-slate-100 p-4 sm:p-8" data-testid="finance-empty" data-mode={mode}>
         <div className="mx-auto max-w-3xl">
+          <EntityBrandIdentity entityId={routeTenantId} className="max-w-xs" />
           <ModeSwitch mode={mode} onMode={selectFinanceMode} />
           <h1 className="mt-4 text-2xl font-semibold">{loadCode === 'finance_schema_unsupported' ? 'Stored plan needs repair' : 'No plan yet'}</h1>
           <p className="mt-2 max-w-xl text-sm text-slate-600">Create a blank plan. Nothing is filled in for you. A monthly actual does not need a plan.</p>
@@ -589,7 +660,7 @@ export default function FinanceShell({ grantedAccess }) {
         <aside className="border-b border-slate-200 bg-slate-900 text-slate-100 lg:min-h-screen lg:border-b-0 lg:border-r">
           <div className="px-4 py-4">
             <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Planning</div>
-            <EntityBrandIdentity entityId={routeTenantId} className="mt-2 text-sm text-slate-100" />
+            <EntityBrandIdentity entityId={routeTenantId} className="mt-2" />
             <div className="mt-1 text-lg font-semibold">Financial model</div>
           </div>
           <label className="block px-4 pb-3 lg:hidden">
@@ -756,16 +827,43 @@ export default function FinanceShell({ grantedAccess }) {
 }
 
 function LeaveFinanceDialog({ prompt, onStay, onDiscard }) {
+  const stayRef = useRef(null);
+  const discardRef = useRef(null);
+  const onStayRef = useRef(onStay);
+  onStayRef.current = onStay;
+  useEffect(() => {
+    if (!prompt) return undefined;
+    stayRef.current?.focus();
+    const onKey = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onStayRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const first = stayRef.current;
+      const last = discardRef.current;
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [prompt]);
   if (!prompt) return null;
   return (
-    <div role="dialog" aria-modal="true" data-testid="finance-leave-dialog" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+    <div role="alertdialog" aria-modal="true" aria-labelledby="finance-leave-title" data-testid="finance-leave-dialog" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
       <div className="max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
-        <h2 className="text-lg font-semibold text-slate-950">Leave without saving?</h2>
+        <h2 id="finance-leave-title" className="text-lg font-semibold text-slate-950">Leave without saving?</h2>
         <p className="mt-2 text-sm text-slate-700">This draft has unsaved edits. Leaving Finance discards them. Staying keeps them on this screen. Nothing is saved automatically.</p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" className="inline-flex min-h-11 items-center rounded bg-slate-900 px-3 text-sm font-medium text-white" data-testid="finance-leave-stay" onClick={onStay}>Stay</button>
-          <button type="button" className="inline-flex min-h-11 items-center rounded border border-slate-300 bg-white px-3 text-sm" data-testid="finance-leave-cancel" onClick={onStay}>Cancel</button>
-          <button type="button" className="inline-flex min-h-11 items-center rounded border border-red-300 bg-white px-3 text-sm text-red-800" data-testid="finance-leave-discard" onClick={onDiscard}>Discard</button>
+          <button type="button" ref={stayRef} className="inline-flex min-h-11 items-center rounded bg-slate-900 px-3 text-sm font-medium text-white" data-testid="finance-leave-stay" onClick={onStay}>Stay</button>
+          <button type="button" ref={discardRef} className="inline-flex min-h-11 items-center rounded border border-red-300 bg-white px-3 text-sm text-red-800" data-testid="finance-leave-discard" onClick={onDiscard}>Discard</button>
         </div>
       </div>
     </div>

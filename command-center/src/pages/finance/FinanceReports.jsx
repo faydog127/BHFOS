@@ -151,6 +151,7 @@ function Block({ block }) {
 
 export default function FinanceReportScreen({
   reportId,
+  entityId,
   base,
   support,
   view,
@@ -199,7 +200,7 @@ export default function FinanceReportScreen({
         {report ? (
           <>
             <header className="report-block border-b border-slate-300 pb-4">
-              <EntityBrandIdentity entityId="tvg" />
+              <EntityBrandIdentity entityId={entityId} />
               <h1 className="mt-2 text-2xl font-semibold" data-testid="finance-report-title">{report.title}</h1>
               <p className="mt-2 text-sm text-slate-700">Reporting period <span data-testid="finance-report-period">{report.context.period}</span></p>
               <p className="mt-1 text-sm text-slate-700" data-testid="finance-report-basis">{report.context.basis}</p>
@@ -208,11 +209,14 @@ export default function FinanceReportScreen({
               {report.notice ? <p className="mt-3 text-sm text-slate-800" data-testid="finance-report-notice">{report.notice}</p> : null}
             </header>
             {report.blocks.map((block, index) => <Block key={`${block.type}-${block.title || index}`} block={block} />)}
+            <footer className="report-block mt-8 border-t border-slate-300 pt-4" data-testid="finance-report-footer">
+              <EntityBrandIdentity entityId={entityId} variant="footer" testId="entity-brand-footer" />
+            </footer>
           </>
         ) : (
           <>
             <header className="report-block border-b border-slate-300 pb-4">
-              <EntityBrandIdentity entityId="tvg" />
+              <EntityBrandIdentity entityId={entityId} />
               <h1 className="mt-2 text-2xl font-semibold" data-testid="finance-report-title">Reports</h1>
               <p className="mt-2 text-sm text-slate-700">Generated <time data-testid="finance-report-generated-at" dateTime={generatedAt}>{generatedAt}</time> UTC</p>
               <p className="mt-2 text-sm leading-6 text-slate-700">Eight reports. They read the plan on this screen and Monthly Check-In. They do not save.</p>
@@ -222,6 +226,9 @@ export default function FinanceReportScreen({
               {FINANCE_REPORT_PRESETS.map((item) => <li key={item.id}>{item.title}</li>)}
             </ol>
             {reportId !== 'index' ? <p className="mt-4 text-sm text-slate-700">That report is not one of the eight.</p> : null}
+            <footer className="report-block mt-8 border-t border-slate-300 pt-4" data-testid="finance-report-footer">
+              <EntityBrandIdentity entityId={entityId} variant="footer" testId="entity-brand-footer" />
+            </footer>
           </>
         )}
       </article>

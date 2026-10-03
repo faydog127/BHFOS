@@ -139,6 +139,63 @@ begin
   if public.finance_plan_document_ok(2, pg_temp.finance_v2_document('{}'::jsonb)) is not true then
     raise exception 'FAIL: full v2 rejected';
   end if;
+  if public.finance_plan_document_ok(2, pg_temp.finance_v2_document(jsonb_build_object('2026-07-01', jsonb_build_object('total_revenue', 1234567.89)))) is not true then
+    raise exception 'FAIL: 7-digit cents rejected';
+  end if;
+  if public.finance_plan_document_ok(2, pg_temp.finance_v2_document(jsonb_build_object('2026-07-01', jsonb_build_object('total_revenue', 12345678.89)))) is not true then
+    raise exception 'FAIL: 8-digit cents rejected';
+  end if;
+  if public.finance_plan_document_ok(2, pg_temp.finance_v2_document(jsonb_build_object('2026-07-01', jsonb_build_object('total_revenue', 123456789012.89)))) is not true then
+    raise exception 'FAIL: 12-digit cents rejected';
+  end if;
+  if public.finance_plan_document_ok(2, pg_temp.finance_v2_document(jsonb_build_object('2026-07-01', jsonb_build_object('productive_unit_hours', 12345678.89)))) is not true then
+    raise exception 'FAIL: 8-digit hours rejected';
+  end if;
+  if public.finance_plan_document_ok(2, pg_temp.finance_v2_document(jsonb_build_object('2026-07-01', jsonb_build_object('total_revenue', 1234567890123.89)))) then
+    raise exception 'FAIL: 13 whole digits accepted';
+  end if;
+  if public.finance_plan_document_ok(2, pg_temp.finance_v2_document(jsonb_build_object('2026-07-01', jsonb_build_object('total_revenue', 1.001)))) then
+    raise exception 'FAIL: three decimal places accepted';
+  end if;
+  if public.finance_plan_document_ok(2, pg_temp.finance_v2_document(jsonb_build_object('2026-07-01', jsonb_build_object('total_revenue', -1234567.89)))) then
+    raise exception 'FAIL: negative money accepted';
+  end if;
+  if public.finance_plan_document_ok(2, pg_temp.finance_v2_document(jsonb_build_object('2026-07-01', jsonb_build_object('productive_unit_hours', 123456789.89)))) then
+    raise exception 'FAIL: 9-digit hours accepted';
+  end if;
+
+  -- A minimal version 1 row stays valid storage. Upgrade and open-draft copy it
+  -- into a version 2 document and then fail closed. This probe rolls back.
+  begin
+    insert into public.finance_plans (tenant_id, schema_version, inputs, notes)
+    values ('tvg', 1, '{"kept":true}'::jsonb, 'minimal-v1-probe')
+    returning id, version into v_hist, v_version;
+    begin
+      perform public.finance_upgrade_draft_schema(v_hist, v_version);
+      raise exception 'FAIL: minimal v1 upgrade accepted';
+    exception
+      when check_violation then
+        null;
+    end;
+    select version into v_version from public.finance_plans where id = v_hist;
+    perform public.finance_approve_plan(v_hist, v_version);
+    begin
+      perform public.finance_open_draft(v_hist);
+      raise exception 'FAIL: minimal v1 open draft accepted';
+    exception
+      when check_violation then
+        null;
+    end;
+    raise exception 'rollback minimal v1 probe';
+  exception
+    when raise_exception then
+      if sqlerrm is distinct from 'rollback minimal v1 probe' then
+        raise;
+      end if;
+  end;
+  if (select count(*) from public.finance_plans) <> 0 then
+    raise exception 'FAIL: minimal v1 probe left rows';
+  end if;
 
   insert into public.finance_plans (tenant_id, schema_version, inputs, notes)
   values ('tvg', 1, pg_temp.finance_v1_document(), 'preserve-me')

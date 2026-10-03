@@ -31,10 +31,16 @@ describe('pre-staging hardening: navigation, brand, schema', () => {
     assert.match(source, /jwtTenant !== urlTenant/);
   });
 
-  it('leaving Finance asks to stay, cancel, or discard and does not save', () => {
+  it('leaving Finance asks to stay or discard and does not save', () => {
     const shell = read('src/pages/finance/FinanceShell.jsx');
     assert.match(shell, /data-testid="finance-leave-stay"/);
-    assert.match(shell, /data-testid="finance-leave-cancel"/);
+    assert.equal(shell.includes('finance-leave-cancel'), false);
+    assert.match(shell, /role="alertdialog"/);
+    assert.match(shell, /aria-labelledby="finance-leave-title"/);
+    assert.match(shell, /event\.key === 'Escape'/);
+    assert.match(shell, /popstate/);
+    assert.match(shell, /history\.pushState/);
+    assert.match(shell, /history\.replaceState/);
     assert.match(shell, /data-testid="finance-leave-discard"/);
     assert.match(shell, /Nothing is saved automatically/);
     assert.match(shell, /data-testid="finance-unsaved-held"/);
@@ -69,12 +75,18 @@ describe('pre-staging hardening: navigation, brand, schema', () => {
     assert.equal(screen.includes('brandAssets'), false);
     assert.equal((screen.match(/EntityBrandIdentity/g) || []).length >= 2, true);
     const brand = resolveEntityBrand('tvg');
-    assert.equal(brand.identityLabel, 'BHFOS');
-    assert.equal(brand.logoUrl, null);
-    assert.equal(brand.colors, null);
-    assert.equal(brand.complete, false);
+    assert.equal(brand.identityLabel, 'The Vent Guys');
+    assert.equal(brand.legalName, 'The Vent Guys');
+    assert.equal(brand.logoUrl, '/assets/finance/tvg-logo-primary.png');
+    assert.equal(brand.logoUrl.startsWith('http'), false);
+    assert.equal(brand.colors.navy, '#173861');
+    assert.equal(brand.colors.red, '#b52025');
+    assert.equal(brand.complete, true);
+    assert.equal(brand.contact.email, 'info@vent-guys.com');
     assert.ok(ENTITY_BRAND_MISSING_INPUTS.length >= 4);
     const blackHorse = resolveEntityBrand('bhfos');
+    assert.equal(blackHorse.identityLabel, 'BHFOS');
+    assert.equal(blackHorse.complete, false);
     assert.equal(blackHorse.logoUrl, null);
     assert.equal(blackHorse.colors, null);
   });

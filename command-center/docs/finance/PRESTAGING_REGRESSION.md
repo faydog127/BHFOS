@@ -23,13 +23,14 @@ SQL tests `supabase/tests/finance/01` through `06` remain the regression for:
 
 ## Visual and smoke
 
-The release CI job `finance_e2e` resets a local Supabase started on the runner, creates a synthetic admin in memory, and runs `tests/finance/monthly-checkin.spec.js` and `tests/finance/reports.spec.js`. No GitHub secret is required. The service role from that local stack is not passed into the browser spec and is not stored in the repo.
+The release CI job `finance_e2e` resets a local Supabase started on the runner, creates a synthetic admin and a synthetic owner in memory, and runs `tests/finance/monthly-checkin.spec.js`, `tests/finance/owner-denied.spec.js`, and `tests/finance/reports.spec.js`. No GitHub secret is required. The service role from that local stack is not passed into the browser spec and is not stored in the repo. A missing JSON report, a skipped test, or zero passed tests fails the job.
 
 The report spec checks:
 
 - report figures match the screen for the shared revenue, cash, and jobs values
 - unsaved Guided edits survive Reports and Check-In navigation and are not saved by that navigation
-- leaving Finance asks Stay, Cancel, or Discard
+- leaving Finance asks Stay or Discard; Escape stays; browser Back and programmatic history changes outside Finance stay on the screen until Discard
+- the TVG route shows The Vent Guys and the localized logo, not a remote URL
 - a seeded superseded version 1 plan shows schema `1` and `--` plan revenue on Plan vs. Actual
 - print hides navigation and inputs
 - Letter and A4, portrait and landscape, keep a 7-digit signed value on one line
