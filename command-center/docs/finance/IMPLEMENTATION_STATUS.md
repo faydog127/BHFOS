@@ -10,11 +10,15 @@ Steps 1–6 of the TVG financial planning model, under the 2026-10-01 Command Ce
 - Stage A persistence: `243f2081bcee8bed254176a87c48f0f6fc7dc839`
 - Draft PR: https://github.com/faydog127/BHFOS/pull/164 (do not merge)
 - Evidence tier: **locally verified**. Not deployed, not staging-verified, not merged, not production-verified.
-- Clean local reset: `npx supabase db reset --local` on an unlinked stack exited 0, then finance SQL tests 01, 02, and 03 passed and rolled back. That stack was not linked to a remote project.
+- Clean local reset: `npx supabase db reset --local` on an unlinked stack exited 0 and applied through `20261003132212_finance_actuals_plan_independent.sql`. Finance SQL tests 01, 02, 03, and 04 then passed and rolled back. That stack was not linked to a remote project.
 - Route: `/:tenantId/finance/*` → `TenantGuard` → `FinanceGuard` → `FinanceShell`. The shell is not inside `BHFCrmLayout`.
 - Data: synthetic illustration remains in the unit fixture only (`SYNTHETIC — NOT TVG DATA`). Stored plans are blank inputs. No workbook seeds in git. No finance seed migration.
-- Stage A adds `finance_plans` and `finance_monthly_actuals` in `supabase/migrations/20261003053000_finance_stage_a_persistence.sql`, with security fixes in `20261003063000_finance_stage_a_security_fixes.sql` and one draft per tenant in `20261003113216_finance_one_draft_per_tenant.sql`. Monthly Check-In UI, three modes, and Reports are not started.
-- One draft per tenant is database-enforced. `finance_open_draft` returns the existing draft. Superseded actuals stay on their original plan and are read-only. Factual corrections are allowed only while that plan is still `approved`, with server-side version, `updated_by_user_id`, and `updated_at`.
+- Stage A adds `finance_plans` and `finance_monthly_actuals` in `supabase/migrations/20261003053000_finance_stage_a_persistence.sql`, with security fixes in `20261003063000_finance_stage_a_security_fixes.sql`, one draft per tenant in `20261003113216_finance_one_draft_per_tenant.sql`, and plan-independent actuals in `20261003132212_finance_actuals_plan_independent.sql`. Monthly Check-In UI, three modes, and Reports are not started.
+- One draft per tenant is database-enforced. `finance_open_draft` returns the existing draft. One approved plan per tenant remains.
+- Monthly actuals are one row per tenant and month. `comparison_plan_id` is a nullable comparison basis, not ownership. An actual may exist with no plan. Once that basis is set, superseding the plan does not detach or rewrite it, and the basis, tenant, and month cannot be rebound. Factual corrections stay allowed after supersession, with server-side version, `updated_by_user_id`, and `updated_at`. There is no DELETE. The screen does not load or enter actuals.
+- Total Revenue is earned operating revenue for work completed in the reporting month. It is not invoice issue-date volume, cash collected, quoted value, or scheduled value. The three channel fields use that same basis. If all three are present they must equal Total Revenue. A missing channel stays null. AR and cash stay separate.
+- Actual provenance is `source = manual_entry` plus an optional source note. No external import is authorized.
+- For completed work, `jobs` / `job_operational_state_v1` are the operational starting point. Appointments are scheduling records. Business Analytics summing appointment `pricing_snapshot.price` is not Finance revenue authority. This round does not change `Reporting.jsx`.
 - `owner` stays denied. There is no owner-to-admin mapping.
 - Finance writes are off unless the build is local (`vite` dev, test, or a non-bundled local run) or `VITE_FINANCE_SYNTHETIC_ONLY=approved-synthetic`. Preview and production builds do not set that flag. The gate does not name a remote host. The screen shows “Finance writes are disabled. This screen is read-only.”
 - Private check: `npm run finance:verify -- <gitignored-json>`. Prints test identity, PASS/FAIL, and tolerances only.
@@ -27,10 +31,10 @@ No real TVG data may be entered in any Vercel Preview or staging environment. Th
 
 ## Unresolved
 
-- A later historical-restatement workflow for superseded actuals is Stage B or later. This stage does not invent one.
+- A broader accounting-restatement workflow is not built. Factual corrections use the normal versioned update.
 - Who applies a migration to staging or production is not this stage. This stage does not apply the migration remotely.
 - The Preview Supabase host still cannot be identified from the repo. Writes stay disabled there unless a build sets `VITE_FINANCE_SYNTHETIC_ONLY=approved-synthetic`.
 
 ## Next action
 
-Challenge re-review of the Stage A completion on draft PR https://github.com/faydog127/BHFOS/pull/164. Stages B, C, and D stay held.
+Challenge re-review of the plan-independent actuals correction on draft PR https://github.com/faydog127/BHFOS/pull/164. Stages B, C, and D stay held.

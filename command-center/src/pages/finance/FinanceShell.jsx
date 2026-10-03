@@ -753,7 +753,7 @@ function Stages({ view, inputs }) {
 function Checkin({ view }) {
   return (
     <div className="space-y-4" data-testid="finance-checkin">
-      <Explain title="Monthly check-in">No authoritative actuals source is mapped. Actual and variance stay blank. A monthly plan series is not defined, so none is invented. There is no entry form and nothing is stored.</Explain>
+      <Explain title="Monthly check-in">This screen does not load or enter monthly actuals. Actual and variance stay blank. A monthly plan series is not defined, so none is invented.</Explain>
       <p className="text-sm" data-testid="actuals-missing">Actuals source: {view.missing.actualsSource}. Monthly plan series: {view.missing.monthlyPlanSeries}.</p>
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
         <table className="min-w-full text-sm">

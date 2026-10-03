@@ -7,6 +7,24 @@ import { FINANCE_PLAN_SCHEMA_VERSION, blankPlanInputs, validateNotes, validatePl
 import { FINANCE_WRITES_DISABLED, financeWritesEnabled } from './writeGate.js';
 
 const PLAN_COLUMNS = 'id, version, status, schema_version, inputs, notes, approved_at, approved_by, updated_at';
+const ACTUAL_COLUMNS = 'id, version, comparison_plan_id, month, source, source_note, total_revenue, direct_residential_revenue, commercial_direct_revenue, portal_revenue, field_payroll, indirect_cash_costs, ar_ending, cash_reserve, total_jobs, dryer_vent_jobs, duct_jobs, ahu_jobs, productive_unit_hours, notes, updated_at';
+const ACTUAL_FACT_KEYS = [
+  'total_revenue',
+  'direct_residential_revenue',
+  'commercial_direct_revenue',
+  'portal_revenue',
+  'field_payroll',
+  'indirect_cash_costs',
+  'ar_ending',
+  'cash_reserve',
+  'total_jobs',
+  'dryer_vent_jobs',
+  'duct_jobs',
+  'ahu_jobs',
+  'productive_unit_hours',
+  'notes',
+  'source_note',
+];
 
 function codeFrom(error, fallback) {
   if (!error) return fallback;
@@ -91,6 +109,34 @@ export async function openDraftFromApproved(client, { id }, env) {
   if (error) return { ok: false, code: error.code || 'finance_draft_failed' };
   if (!data) return { ok: false, code: 'finance_draft_failed' };
   return { ok: true, plan: data };
+}
+
+export async function listMonthlyActuals(client) {
+  const { data, error } = await client
+    .from('finance_monthly_actuals')
+    .select(ACTUAL_COLUMNS)
+    .order('month', { ascending: false });
+  if (error) return { ok: false, code: codeFrom(error, 'finance_read_failed') };
+  return { ok: true, actuals: data || [] };
+}
+
+export async function correctMonthlyActual(client, { id, expectedVersion, facts }, env) {
+  if (!financeWritesEnabled(env)) return { ok: false, code: FINANCE_WRITES_DISABLED };
+  const patch = {};
+  const sourceFacts = facts && typeof facts === 'object' ? facts : {};
+  for (const key of ACTUAL_FACT_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(sourceFacts, key)) patch[key] = sourceFacts[key];
+  }
+  const { data, error } = await client
+    .from('finance_monthly_actuals')
+    .update(patch)
+    .eq('id', id)
+    .eq('version', expectedVersion)
+    .select(ACTUAL_COLUMNS)
+    .maybeSingle();
+  if (error) return { ok: false, code: codeFrom(error, 'finance_save_failed') };
+  if (!data) return { ok: false, code: 'version_conflict' };
+  return { ok: true, actual: data };
 }
 
 export async function readPlan(client, id) {

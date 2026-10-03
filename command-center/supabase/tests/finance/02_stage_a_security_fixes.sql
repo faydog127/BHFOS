@@ -152,6 +152,7 @@ declare
   v_plan uuid;
   v_next uuid;
   v_actual uuid;
+  v_basis uuid;
   v_money numeric;
   v_notes text;
 begin
@@ -160,12 +161,12 @@ begin
   values ('tvg', 1, '{}'::jsonb)
   returning id into v_plan;
   select id into v_plan from public.finance_approve_plan(v_plan, 1);
-  insert into public.finance_monthly_actuals (tenant_id, plan_id, month, schema_version, total_revenue, productive_unit_hours)
+  insert into public.finance_monthly_actuals (tenant_id, comparison_plan_id, month, schema_version, total_revenue, productive_unit_hours)
   values ('tvg', v_plan, date '2026-01-01', 1, null, null)
   returning id into v_actual;
 
   begin
-    insert into public.finance_monthly_actuals (tenant_id, plan_id, month, schema_version, total_revenue)
+    insert into public.finance_monthly_actuals (tenant_id, comparison_plan_id, month, schema_version, total_revenue)
     values ('tvg', v_plan, date '2026-02-01', 1, 'NaN');
     raise exception 'FAIL: money NaN';
   exception
@@ -173,7 +174,7 @@ begin
       null;
   end;
   begin
-    insert into public.finance_monthly_actuals (tenant_id, plan_id, month, schema_version, total_revenue)
+    insert into public.finance_monthly_actuals (tenant_id, comparison_plan_id, month, schema_version, total_revenue)
     values ('tvg', v_plan, date '2026-02-01', 1, 'Infinity');
     raise exception 'FAIL: money infinity';
   exception
@@ -181,7 +182,7 @@ begin
       null;
   end;
   begin
-    insert into public.finance_monthly_actuals (tenant_id, plan_id, month, schema_version, productive_unit_hours)
+    insert into public.finance_monthly_actuals (tenant_id, comparison_plan_id, month, schema_version, productive_unit_hours)
     values ('tvg', v_plan, date '2026-03-01', 1, 'NaN');
     raise exception 'FAIL: hours NaN';
   exception
@@ -189,7 +190,7 @@ begin
       null;
   end;
   begin
-    insert into public.finance_monthly_actuals (tenant_id, plan_id, month, schema_version, productive_unit_hours)
+    insert into public.finance_monthly_actuals (tenant_id, comparison_plan_id, month, schema_version, productive_unit_hours)
     values ('tvg', v_plan, date '2026-03-01', 1, 'Infinity');
     raise exception 'FAIL: hours infinity';
   exception
@@ -197,7 +198,7 @@ begin
       null;
   end;
   begin
-    insert into public.finance_monthly_actuals (tenant_id, plan_id, month, schema_version, total_jobs)
+    insert into public.finance_monthly_actuals (tenant_id, comparison_plan_id, month, schema_version, total_jobs)
     values ('tvg', v_plan, date '2026-04-01', 1, 'NaN');
     raise exception 'FAIL: count NaN';
   exception
@@ -205,7 +206,7 @@ begin
       null;
   end;
   begin
-    insert into public.finance_monthly_actuals (tenant_id, plan_id, month, schema_version, total_jobs)
+    insert into public.finance_monthly_actuals (tenant_id, comparison_plan_id, month, schema_version, total_jobs)
     values ('tvg', v_plan, date '2026-04-01', 1, 'Infinity');
     raise exception 'FAIL: count infinity';
   exception
@@ -213,7 +214,7 @@ begin
       null;
   end;
   begin
-    insert into public.finance_monthly_actuals (tenant_id, plan_id, month, schema_version)
+    insert into public.finance_monthly_actuals (tenant_id, comparison_plan_id, month, schema_version)
     values ('tvg', v_plan, 'infinity', 1);
     raise exception 'FAIL: month infinity';
   exception
@@ -236,36 +237,32 @@ begin
 
   begin
     update public.finance_monthly_actuals
-    set plan_id = v_next, total_revenue = 1
+    set comparison_plan_id = v_next, total_revenue = 1
     where id = v_actual;
-    raise exception 'FAIL: superseded actual edited';
+    raise exception 'FAIL: comparison basis rebound';
   exception
     when check_violation then
       null;
   end;
-  select total_revenue, notes into v_money, v_notes
+  select total_revenue, notes, comparison_plan_id into v_money, v_notes, v_basis
   from public.finance_monthly_actuals
   where id = v_actual;
-  if v_money is not null or v_notes <> 'synthetic-note-current' then
-    raise exception 'FAIL: superseded history changed';
+  if v_money is not null or v_notes <> 'synthetic-note-current' or v_basis is distinct from v_plan then
+    raise exception 'FAIL: rebind changed the actual';
   end if;
 
-  begin
-    update public.finance_monthly_actuals
-    set notes = 'synthetic-note-rewritten'
-    where id = v_actual;
-    raise exception 'FAIL: superseded notes edited';
-  exception
-    when check_violation then
-      null;
-  end;
-  select notes into v_notes from public.finance_monthly_actuals where id = v_actual;
-  if v_notes <> 'synthetic-note-current' then
-    raise exception 'FAIL: superseded notes persisted';
+  update public.finance_monthly_actuals
+  set notes = 'synthetic-note-rewritten'
+  where id = v_actual;
+  select notes, comparison_plan_id into v_notes, v_basis
+  from public.finance_monthly_actuals
+  where id = v_actual;
+  if v_notes <> 'synthetic-note-rewritten' or v_basis is distinct from v_plan then
+    raise exception 'FAIL: fact correction after supersession';
   end if;
 
   perform pg_temp.finance_clear();
-  raise notice 'PASS: NaN infinity and superseded history';
+  raise notice 'PASS: NaN infinity and basis lock';
 end $$;
 
 rollback;

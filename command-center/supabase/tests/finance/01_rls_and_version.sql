@@ -305,7 +305,7 @@ begin
   end;
 
   begin
-    insert into public.finance_monthly_actuals (tenant_id, plan_id, month, schema_version)
+    insert into public.finance_monthly_actuals (tenant_id, comparison_plan_id, month, schema_version)
     values ('tvg', v_plan, date '2026-01-01', 1);
     raise exception 'FAIL: actual on draft';
   exception
@@ -352,7 +352,7 @@ begin
   end;
 
   begin
-    insert into public.finance_monthly_actuals (tenant_id, plan_id, month, schema_version, total_revenue)
+    insert into public.finance_monthly_actuals (tenant_id, comparison_plan_id, month, schema_version, total_revenue)
     values ('tvg', 'dddddddd-dddd-4ddd-8ddd-ddddddddddd1', date '2026-01-01', 1, null);
     raise exception 'FAIL: missing plan actual';
   exception
@@ -360,7 +360,7 @@ begin
       null;
   end;
 
-  insert into public.finance_monthly_actuals (tenant_id, plan_id, month, schema_version, total_revenue)
+  insert into public.finance_monthly_actuals (tenant_id, comparison_plan_id, month, schema_version, total_revenue)
   values ('tvg', v_plan, date '2026-01-01', 1, null)
   returning id, total_revenue into v_actual, v_money;
   if v_money is not null then
@@ -368,7 +368,7 @@ begin
   end if;
 
   begin
-    insert into public.finance_monthly_actuals (tenant_id, plan_id, month, schema_version, total_revenue)
+    insert into public.finance_monthly_actuals (tenant_id, comparison_plan_id, month, schema_version, total_revenue)
     values ('tvg', v_plan, date '2026-02-01', 1, -1);
     raise exception 'FAIL: negative actual';
   exception
@@ -398,7 +398,7 @@ begin
       raise exception 'FAIL: approved row changed by open draft';
     end if;
     begin
-      insert into public.finance_monthly_actuals (tenant_id, plan_id, month, schema_version)
+      insert into public.finance_monthly_actuals (tenant_id, comparison_plan_id, month, schema_version)
       values ('tvg', v_draft, date '2026-03-01', 1);
       raise exception 'FAIL: actual on new draft';
     exception

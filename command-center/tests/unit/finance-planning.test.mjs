@@ -16,7 +16,7 @@ import { nearCapacityBand, stageReadiness, READINESS_INCOMPLETE, READINESS_NOT_R
 import { variance, variancePct } from '../../src/lib/finance/variance.js';
 import { evaluateFinanceAccess, roleHasFinanceCapability, FINANCE_ALLOWED_ROLES, FINANCE_CAPABILITIES } from '../../src/lib/finance/authz.js';
 import { blankPlanInputs, validateNotes, validatePlanInputs } from '../../src/lib/finance/blankPlan.js';
-import { approvePlan, createBlankPlan, openDraftFromApproved, saveDraft, selectVisiblePlan } from '../../src/lib/finance/persistence.js';
+import { approvePlan, correctMonthlyActual, createBlankPlan, openDraftFromApproved, saveDraft, selectVisiblePlan } from '../../src/lib/finance/persistence.js';
 import { FINANCE_WRITES_DISABLED, financeWritesEnabled } from '../../src/lib/finance/writeGate.js';
 import { getSyntheticPlanningFixture } from '../../src/lib/finance/syntheticFixture.js';
 import { buildFinanceView } from '../../src/lib/finance/viewModel.js';
@@ -484,6 +484,29 @@ describe('verify script and source guards', () => {
     assert.equal(financeWritesEnabled(), true);
   });
 
+  it('keeps a stale actual correction from writing or mutating the caller', async () => {
+    const facts = { total_revenue: null, cash_reserve: 0, comparison_plan_id: 'should-not-send', month: '2026-01-01' };
+    const before = structuredClone(facts);
+    const calls = [];
+    const row = {
+      update(patch) { calls.push(patch); return row; },
+      eq() { return row; },
+      select() { return row; },
+      maybeSingle: async () => ({ data: null, error: null }),
+    };
+    const result = await correctMonthlyActual({ from: () => row }, {
+      id: '11111111-1111-4111-8111-111111111111',
+      expectedVersion: 1,
+      facts,
+    });
+    assert.equal(result.code, 'version_conflict');
+    assert.deepEqual(facts, before);
+    assert.equal(Object.prototype.hasOwnProperty.call(calls[0], 'comparison_plan_id'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(calls[0], 'month'), false);
+    assert.equal(calls[0].total_revenue, null);
+    assert.equal(calls[0].cash_reserve, 0);
+  });
+
   it('matches the SQL role list and blocks the preview harness', () => {
     const migrationDir = path.join(root, 'supabase/migrations');
     const migrationNames = readdirSync(migrationDir).filter((name) => name.includes('finance') && name.endsWith('.sql')).sort();
@@ -518,6 +541,7 @@ describe('verify script and source guards', () => {
     assert.equal(shell.includes('getSyntheticPlanningFixture'), false);
     assert.match(shell, /grantedAccess\?\.allowed === true/);
     assert.match(shell, /No plan yet/);
+    assert.match(shell, /does not load or enter monthly actuals/);
     assert.match(shell, /finance-writes-disabled/);
     assert.match(shell, /Finance writes are disabled/);
     assert.match(shell, /disabled=\{!writesEnabled\}/);

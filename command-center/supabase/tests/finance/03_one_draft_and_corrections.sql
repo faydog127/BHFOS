@@ -73,7 +73,7 @@ begin
 
   select id into v_plan from public.finance_approve_plan(v_plan, 1);
 
-  insert into public.finance_monthly_actuals (tenant_id, plan_id, month, schema_version, total_revenue)
+  insert into public.finance_monthly_actuals (tenant_id, comparison_plan_id, month, schema_version, total_revenue)
   values ('tvg', v_plan, date '2026-01-01', 1, null)
   returning id into v_actual;
 
@@ -83,7 +83,7 @@ begin
       updated_by_user_id = '00000000-0000-4000-8000-000000000099',
       updated_at = timestamptz '2000-01-01'
   where id = v_actual
-  returning version, updated_by_user_id, plan_id, total_revenue, updated_at
+  returning version, updated_by_user_id, comparison_plan_id, total_revenue, updated_at
   into v_version, v_updated_by, v_plan_id, v_revenue, v_updated_at;
   if v_version <> 2
     or v_updated_by is distinct from v_admin
@@ -116,29 +116,31 @@ begin
   select version into v_version from public.finance_plans where id = v_draft and status = 'draft';
   select id into v_next from public.finance_approve_plan(v_draft, v_version);
 
-  select plan_id, version, total_revenue
+  select comparison_plan_id, version, total_revenue
   into v_plan_id, v_version, v_revenue
   from public.finance_monthly_actuals
   where id = v_actual;
   if v_plan_id is distinct from v_plan or v_version <> 2 or v_revenue is distinct from 1 then
-    raise exception 'FAIL: approval rebound historical actual';
+    raise exception 'FAIL: supersession changed the comparison basis';
   end if;
 
   begin
     update public.finance_monthly_actuals
-    set plan_id = v_next, total_revenue = 2
+    set comparison_plan_id = v_next
     where id = v_actual;
-    raise exception 'FAIL: superseded actual corrected';
+    raise exception 'FAIL: comparison basis rebound';
   exception
     when check_violation then
       null;
   end;
-  select plan_id, version, total_revenue
-  into v_plan_id, v_version, v_revenue
-  from public.finance_monthly_actuals
-  where id = v_actual;
-  if v_plan_id is distinct from v_plan or v_version <> 2 or v_revenue is distinct from 1 then
-    raise exception 'FAIL: superseded actual changed';
+
+  update public.finance_monthly_actuals
+  set total_revenue = 2
+  where id = v_actual
+  returning version, comparison_plan_id, total_revenue
+  into v_version, v_plan_id, v_revenue;
+  if v_version <> 3 or v_plan_id is distinct from v_plan or v_revenue is distinct from 2 then
+    raise exception 'FAIL: correction after supersession';
   end if;
 
   perform pg_temp.finance_clear();
