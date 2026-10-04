@@ -1,0 +1,10 @@
+{
+  "name": "@bhfos/tvg-platform-bots",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/platform-bots.test.mjs test/safety-source-scan.test.mjs"
+  }
+}
