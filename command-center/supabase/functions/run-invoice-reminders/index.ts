@@ -1,5 +1,5 @@
 import { corsHeaders } from '../_shared/cors.ts';
-import { getTenantIdFromClaims, getVerifiedClaims } from '../_shared/auth.ts';
+import { getTenantIdFromClaims, getVerifiedClaims, isServiceRoleBearer } from '../_shared/auth.ts';
 import { supabaseAdmin } from '../_shared/supabaseAdmin.ts';
 import { isWithinBusinessHours, normalizeAutomationDueAt } from '../_shared/businessHours.ts';
 import { logMoneyLoopEvent } from '../_shared/moneyLoopUtils.ts';
@@ -112,9 +112,10 @@ Deno.serve(async (req) => {
 
   try {
     const body = await parseJson(req);
-    const { claims } = await getVerifiedClaims(req);
-    const tenantId = asString(body.tenant_id) || getTenantIdFromClaims(claims) || 'tvg';
-    const actorId = typeof claims.sub === 'string' ? claims.sub : null;
+    const serviceCaller = isServiceRoleBearer(req);
+    const claims = serviceCaller ? null : (await getVerifiedClaims(req)).claims;
+    const tenantId = asString(body.tenant_id) || (claims ? getTenantIdFromClaims(claims) : '') || 'tvg';
+    const actorId = claims && typeof claims.sub === 'string' ? claims.sub : null;
     const dryRun = body.dry_run === true;
     const limit = Math.max(1, Math.min(50, Number(body.limit) || 25));
     const requestedRunAt = asString(body.run_at);
