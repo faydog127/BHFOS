@@ -349,8 +349,10 @@ begin
     perform public.finance_approve_plan(v_plan, 3);
     raise exception 'FAIL: second approve';
   exception
-    when serialization_failure then
-      null;
+    when sqlstate 'PT409' then
+      if sqlerrm <> 'finance_version_conflict' then
+        raise exception 'FAIL: second approve message %', sqlerrm;
+      end if;
   end;
 
   begin
@@ -415,6 +417,37 @@ begin
     raise exception 'FAIL: super_admin helper';
   end if;
   perform pg_temp.finance_clear();
+
+  begin
+    raise exception 'db serialization' using errcode = '40001';
+    raise exception 'FAIL: real serialization swallowed';
+  exception
+    when sqlstate 'PT409' then
+      raise exception 'FAIL: real serialization rewritten';
+    when serialization_failure then
+      if sqlerrm <> 'db serialization' then
+        raise exception 'FAIL: real serialization message %', sqlerrm;
+      end if;
+  end;
+
+  if position('40001' in pg_get_functiondef('public.finance_approve_plan(uuid, integer)'::regprocedure)) <> 0 then
+    raise exception 'FAIL: approve still raises 40001';
+  end if;
+  if position('PT409' in pg_get_functiondef('public.finance_approve_plan(uuid, integer)'::regprocedure)) = 0 then
+    raise exception 'FAIL: approve missing PT409';
+  end if;
+  if position('40001' in pg_get_functiondef('public.finance_upgrade_draft_schema(uuid, integer)'::regprocedure)) <> 0 then
+    raise exception 'FAIL: upgrade still raises 40001';
+  end if;
+  if position('PT409' in pg_get_functiondef('public.finance_upgrade_draft_schema(uuid, integer)'::regprocedure)) = 0
+    or position('raise;' in pg_get_functiondef('public.finance_upgrade_draft_schema(uuid, integer)'::regprocedure)) = 0 then
+    raise exception 'FAIL: upgrade lost PT409 or the re-raise';
+  end if;
+  if position('40001' in pg_get_functiondef('public.finance_open_draft(uuid)'::regprocedure)) <> 0
+    or position('PT409' in pg_get_functiondef('public.finance_open_draft(uuid)'::regprocedure)) <> 0 then
+    raise exception 'FAIL: open_draft rewritten';
+  end if;
+
   raise notice 'PASS: admin write, conflict, approval, actuals';
 end $$;
 

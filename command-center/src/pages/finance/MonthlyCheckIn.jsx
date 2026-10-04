@@ -153,19 +153,22 @@ export default function MonthlyCheckIn({
       return;
     }
     setSaving(true);
-    const result = gate.mode === 'correct' ? await onCorrect(gate.payload) : await onCreate(gate.payload);
-    setSaving(false);
-    if (!result?.ok) {
-      setConflict(result?.code === 'version_conflict');
-      setMessage(messageFor(result));
-      return;
+    try {
+      const result = gate.mode === 'correct' ? await onCorrect(gate.payload) : await onCreate(gate.payload);
+      if (!result?.ok) {
+        setConflict(result?.code === 'version_conflict');
+        setMessage(messageFor(result));
+        return;
+      }
+      setConflict(false);
+      setMessage(null);
+      setSelectedId(result.actual.id);
+      setMonthInput(String(result.actual.month || '').slice(0, 7));
+      setForm(formFromActual(result.actual));
+      setAssociateOnCreate(false);
+    } finally {
+      setSaving(false);
     }
-    setConflict(false);
-    setMessage(null);
-    setSelectedId(result.actual.id);
-    setMonthInput(String(result.actual.month || '').slice(0, 7));
-    setForm(formFromActual(result.actual));
-    setAssociateOnCreate(false);
   }
 
   async function onReloadClick() {
@@ -184,20 +187,23 @@ export default function MonthlyCheckIn({
   async function onAssociateClick() {
     if (!writesEnabled || !selected || !approved || basisLocked || saving || conflict) return;
     setSaving(true);
-    const result = await onAssociate({
-      id: selected.id,
-      expectedVersion: selected.version,
-      comparisonPlanId: approved.id,
-    });
-    setSaving(false);
-    if (!result?.ok) {
-      setConflict(result?.code === 'version_conflict');
-      setMessage(messageFor(result));
-      return;
+    try {
+      const result = await onAssociate({
+        id: selected.id,
+        expectedVersion: selected.version,
+        comparisonPlanId: approved.id,
+      });
+      if (!result?.ok) {
+        setConflict(result?.code === 'version_conflict');
+        setMessage(messageFor(result));
+        return;
+      }
+      setConflict(false);
+      setMessage(null);
+      setForm(formFromActual(result.actual));
+    } finally {
+      setSaving(false);
     }
-    setConflict(false);
-    setMessage(null);
-    setForm(formFromActual(result.actual));
   }
 
   const parsedPreview = actualFactsFromForm(form);

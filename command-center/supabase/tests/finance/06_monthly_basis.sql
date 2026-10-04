@@ -272,7 +272,7 @@ begin
     perform public.finance_upgrade_draft_schema(v_rich, v_version - 1);
     raise exception 'FAIL: stale upgrade';
   exception
-    when serialization_failure then
+    when sqlstate 'PT409' then
       if sqlerrm <> 'finance_version_conflict' then
         raise exception 'FAIL: stale upgrade message %', sqlerrm;
       end if;
@@ -289,7 +289,7 @@ begin
     perform public.finance_upgrade_draft_schema(v_rich, v_version);
     raise exception 'FAIL: second upgrade';
   exception
-    when serialization_failure then
+    when sqlstate 'PT409' then
       null;
   end;
 
@@ -533,14 +533,14 @@ begin
     perform public.finance_upgrade_draft_schema(v_hist, 1);
     raise exception 'FAIL: superseded v1 upgrade';
   exception
-    when serialization_failure then
+    when sqlstate 'PT409' then
       null;
   end;
   begin
     perform public.finance_upgrade_draft_schema(v_rich, 1);
     raise exception 'FAIL: approved upgrade';
   exception
-    when serialization_failure then
+    when sqlstate 'PT409' then
       null;
   end;
 

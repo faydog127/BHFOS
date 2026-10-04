@@ -190,6 +190,7 @@ export function spawn(cmd, args, opts = {}) {
   let code = 99; let out = '';
   if (key.startsWith('npx supabase status')) { code = 0; out = process.env.FAKE_STATUS; }
   else if (key.startsWith('npx playwright test')) code = Number(process.env.FAKE_PW);
+  else if (key.startsWith('node tools/finance-version-conflict-http.mjs')) code = Number(process.env.FAKE_HTTP || 0);
   else if (key.startsWith('node tools/finance-e2e-report-check.mjs')) code = Number(process.env.FAKE_CHK);
   setImmediate(() => { if (out) c.stdout.emit('data', Buffer.from(out)); c.emit('close', code); });
   return c;
@@ -200,13 +201,13 @@ globalThis.fetch = async (url) => { appendFileSync(process.env.FAKE_LOG, JSON.st
 
   const status = (api, db, svc = 'svc-key') => [`API_URL="${api}"`, 'ANON_KEY="anon"', svc ? `SERVICE_ROLE_KEY="${svc}"` : '', `DB_URL="${db}"`].filter(Boolean).join('\n');
   let n = 0;
-  function run({ pw = 0, chk = 0, api = 'http://127.0.0.1:54321', db = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres', svc } = {}) {
+  function run({ pw = 0, chk = 0, http = 0, api = 'http://127.0.0.1:54321', db = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres', svc } = {}) {
     n += 1;
     const log = path.join(tmp, `log-${n}.jsonl`);
     writeFileSync(log, '');
     const r = spawnSync(process.execPath, ['--import', path.join(tmp, 'tools/fetch-stub.mjs'), path.join(tmp, 'tools/finance-release-gate.mjs')], {
       cwd: tmp, encoding: 'utf8', timeout: 20000,
-      env: { PATH: process.env.PATH, FAKE_LOG: log, FAKE_PW: String(pw), FAKE_CHK: String(chk), FAKE_STATUS: status(api, db, svc), FINANCE_EVIDENCE_ROOT: path.join(tmp, 'evidence'), SERVICE_ROLE_KEY: 'leak-me', SUPABASE_SERVICE_ROLE_KEY: 'leak-me' },
+      env: { PATH: process.env.PATH, FAKE_LOG: log, FAKE_PW: String(pw), FAKE_CHK: String(chk), FAKE_HTTP: String(http), FAKE_STATUS: status(api, db, svc), FINANCE_EVIDENCE_ROOT: path.join(tmp, 'evidence'), SERVICE_ROLE_KEY: 'leak-me', SUPABASE_SERVICE_ROLE_KEY: 'leak-me' },
     });
     const events = readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
     return { code: r.status, err: r.stderr, events, keys: events.filter((e) => e.kind === 'spawn').map((e) => e.key) };
@@ -215,8 +216,16 @@ globalThis.fetch = async (url) => { appendFileSync(process.env.FAKE_LOG, JSON.st
   it('baseline: playwright 0 and report check 0 -> exit 0; both spawned in order; service role not forwarded', () => {
     const r = run({ pw: 0, chk: 0 });
     assert.equal(r.code, 0, r.err);
-    assert.deepEqual(r.keys.map((k) => k.split(' ').slice(0, 3).join(' ')), ['npx supabase status', 'npx playwright test', 'node tools/finance-e2e-report-check.mjs']);
+    assert.deepEqual(r.keys.map((k) => k.split(' ').slice(0, 3).join(' ')), ['npx supabase status', 'node tools/finance-version-conflict-http.mjs', 'npx playwright test', 'node tools/finance-e2e-report-check.mjs']);
     assert.equal(r.events.find((e) => e.key?.startsWith('npx playwright')).svc, false);
+    assert.equal(r.events.find((e) => e.key?.startsWith('node tools/finance-version-conflict-http.mjs')).svc, false);
+  });
+  it('a failing version-conflict probe fails the gate, and Playwright and the report check still run', () => {
+    const r = run({ pw: 0, chk: 0, http: 1 });
+    assert.equal(r.code, 1, r.err);
+    assert.ok(r.keys.some((k) => k.startsWith('npx playwright test')));
+    assert.ok(r.keys.some((k) => k.startsWith('node tools/finance-e2e-report-check.mjs')));
+    assert.equal(r.events.find((e) => e.key?.startsWith('node tools/finance-version-conflict-http.mjs')).svc, false);
   });
   it('G07: a failing playwright run fails the gate (exit code propagated), and the report check still runs', () => {
     for (const pw of [1, 2, 137]) {
