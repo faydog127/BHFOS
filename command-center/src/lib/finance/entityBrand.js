@@ -36,7 +36,7 @@ const PROFILES = Object.freeze({
     productName: 'BHFOS',
     entityId: 'tvg',
     displayName: 'The Vent Guys',
-    legalName: 'The Vent Guys',
+    legalName: null,
     tagline: 'We Clear What Others Miss',
     logoUrl: TVG_LOGO_PATH,
     logoAlt: 'The Vent Guys',

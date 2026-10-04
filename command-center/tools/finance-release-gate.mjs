@@ -92,7 +92,16 @@ if (!apiUrl || !anon || !serviceRole || !dbUrl) {
   console.error(`Local supabase status is missing: ${missing.join(', ')}. This gate does not create GitHub secrets and does not contact a remote project.`);
   process.exit(1);
 }
-if (!/127\.0\.0\.1|localhost/.test(apiUrl) || !/127\.0\.0\.1|localhost/.test(dbUrl)) {
+function isLoopbackUrl(value) {
+  let hostname = '';
+  try {
+    hostname = new URL(value).hostname;
+  } catch {
+    return false;
+  }
+  return hostname === '127.0.0.1' || hostname === 'localhost';
+}
+if (!isLoopbackUrl(apiUrl) || !isLoopbackUrl(dbUrl)) {
   console.error('Refusing to run the Finance gate against a non-local Supabase URL.');
   process.exit(1);
 }

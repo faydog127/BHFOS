@@ -76,7 +76,8 @@ describe('pre-staging hardening: navigation, brand, schema', () => {
     assert.equal((screen.match(/EntityBrandIdentity/g) || []).length >= 2, true);
     const brand = resolveEntityBrand('tvg');
     assert.equal(brand.identityLabel, 'The Vent Guys');
-    assert.equal(brand.legalName, 'The Vent Guys');
+    assert.equal(brand.displayName, 'The Vent Guys');
+    assert.equal(brand.legalName, null);
     assert.equal(brand.logoUrl, '/assets/finance/tvg-logo-primary.png');
     assert.equal(brand.logoUrl.startsWith('http'), false);
     assert.equal(brand.colors.navy, '#173861');

@@ -100,16 +100,19 @@ describe('stage D closeout: numeric value cells and print scoping', () => {
     assert.equal(CSS.replace(/@media[^{]*\{[\s\S]*?\n\}\n/g, '').replace(/@page[^{]*\{[^}]*\}/g, '').trim(), '', 'no bare rules outside at-rules');
   });
 
-  it('.report-value never breaks inside a token and does not use nowrap', () => {
+  it('.report-value stays one line and labels stay wrappable', () => {
     const rule = rulesIn(printBase.body).find((r) => r.sel === '.report-value');
     assert.ok(rule, '.report-value rule in @media print');
     assert.match(rule.decl, /overflow-wrap:\s*normal\s*!important/);
     assert.match(rule.decl, /word-break:\s*normal\s*!important/);
     assert.match(rule.decl, /hyphens:\s*manual\s*!important/);
-    assert.equal(/anywhere|break-all|break-word|hyphens:\s*auto|nowrap/.test(rule.decl), false);
-    assert.equal(/nowrap/.test(CSS), false, 'labels must remain wrappable');
+    assert.match(rule.decl, /white-space:\s*nowrap\s*!important/);
+    assert.equal(/anywhere|break-all|break-word|hyphens:\s*auto/.test(rule.decl), false);
     const cell = rulesIn(printBase.body).find((r) => r.sel === 'th, td');
     assert.match(cell.decl, /white-space:\s*normal\s*!important/);
+    assert.equal(/nowrap/.test(cell.decl), false, 'labels must remain wrappable');
+    const head = rulesIn(printBase.body).find((r) => r.sel === 'th');
+    assert.equal(/nowrap/.test(head.decl), false);
     assert.match(cell.decl, /overflow-wrap:\s*anywhere/);
     assert.match(CSS, /table\s*\{[^}]*table-layout:\s*fixed/);
   });
@@ -125,7 +128,7 @@ describe('stage D closeout: numeric value cells and print scoping', () => {
     assert.match(sized[0].decl, /font-size:\s*8px\s*!important/);
     assert.match(sized[0].decl, /padding:\s*2px 1px\s*!important/);
     const first = rs.find((r) => /:first-child/.test(r.sel));
-    assert.match(first.decl, /width:\s*11%/);
+    assert.match(first.decl, /width:\s*8%/);
     assert.equal(/nowrap/.test(first.decl), false);
     const head = rs.find((r) => /th:not\(:first-child\)/.test(r.sel));
     assert.match(head.decl, /overflow-wrap:\s*normal\s*!important/);

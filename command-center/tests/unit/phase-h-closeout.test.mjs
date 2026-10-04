@@ -24,7 +24,9 @@ function printFailures(css) {
   if ((css.match(/@media print/g) || []).length !== 2) failures.push('two print blocks');
   if (/@page[^{]*\{[^}]*size\s*:/.test(css)) failures.push('page size');
   if (/orientation\s*:\s*portrait/.test(css)) failures.push('portrait media');
-  if (/nowrap/.test(css)) failures.push('nowrap');
+  if (!/\.report-value\s*\{[^}]*white-space:\s*nowrap\s*!important/.test(css)) failures.push('value nowrap');
+  if (/th,\s*td\s*\{[^}]*nowrap/.test(css) || /\n {2}th \{[^}]*nowrap/.test(css)) failures.push('label nowrap');
+  if (!/width:\s*8%/.test(css)) failures.push('value width');
   if (!/\.report-value\s*\{[^}]*overflow-wrap:\s*normal\s*!important/.test(css)) failures.push('report-value');
   if (!/thead\s*\{[^}]*display:\s*table-header-group/.test(css)) failures.push('thead');
   if (!/font-size:\s*8px\s*!important/.test(css)) failures.push('8px');
@@ -66,6 +68,10 @@ function brandFailures(source) {
   if (!source.includes("red: '#b52025'")) failures.push('red');
   if (/https?:\/\//.test(source)) failures.push('remote');
   if (source.includes('brandAssets') || source.includes('brandConfig')) failures.push('other module');
+  const tvgAt = source.indexOf("entityId: 'tvg'");
+  const tvgBlock = tvgAt < 0 ? '' : source.slice(tvgAt, tvgAt + 500);
+  if (!tvgBlock.includes('legalName: null')) failures.push('legal name');
+  if (tvgBlock.includes("legalName: '")) failures.push('legal name');
   const bhfosAt = source.indexOf("entityId: 'bhfos'");
   const bhfosBlock = bhfosAt < 0 ? '' : source.slice(bhfosAt, bhfosAt + 400);
   if (!bhfosBlock.includes('complete: false')) failures.push('incomplete slot');
@@ -77,6 +83,10 @@ function ciFailures({ yml, gate, check, specs }) {
   const job = yml.split('finance_e2e:')[1].split('\n  build:')[0];
   const failures = [];
   if (!/permissions:\n\s+contents: read/.test(job)) failures.push('permissions');
+  if (!yml.includes('permissions:\n  contents: read\n')) failures.push('workflow permissions');
+  if (/uses:\s*\S+@v\d/.test(yml)) failures.push('floating action');
+  if (yml.includes('# v4.2.2')) failures.push('checkout comment');
+  if (!yml.includes('actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0')) failures.push('checkout comment');
   if (!job.includes('actions/checkout@11d5960a326750d5838078e36cf38b85af677262')) failures.push('checkout');
   if (!job.includes('actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020')) failures.push('node');
   if (!job.includes('supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb')) failures.push('cli');
@@ -86,7 +96,10 @@ function ciFailures({ yml, gate, check, specs }) {
   if (!gate.includes('delete playwrightEnv.SERVICE_ROLE_KEY')) failures.push('strip role');
   if (/SERVICE_ROLE_KEY:\s*serviceRole/.test(gate)) failures.push('leak');
   if (!gate.includes('FINANCE_OWNER_EMAIL: ownerEmail')) failures.push('owner');
-  if (!check.includes('skipped > 0') || !check.includes('passed < 1')) failures.push('fail closed');
+  if (!check.includes('skipped > 0') || !check.includes('passed < 3')) failures.push('fail closed');
+  if (!gate.includes('new URL(value).hostname')) failures.push('local host');
+  if (!gate.includes("hostname === '127.0.0.1'") || !gate.includes("hostname === 'localhost'")) failures.push('local host');
+  if (/127\\\.0\\\.0\\\.1\|localhost/.test(gate)) failures.push('unanchored host');
   if (specs.some((spec) => /test\.skip\(/.test(spec))) failures.push('skip');
   return failures;
 }
@@ -109,7 +122,9 @@ describe('phase H print style mutants', () => {
     const mutants = [
       printCss.replace('@page { margin: 12mm; }', '@page { size: letter; margin: 12mm; }'),
       printCss.replace('@media print {\n  table:has(th:nth-child(10))', '@media print and (orientation: portrait) {\n  table:has(th:nth-child(10))'),
-      printCss.replace('.report-value { overflow-wrap: normal !important;', '.report-value { white-space: nowrap; overflow-wrap: normal !important;'),
+      printCss.replace('white-space: nowrap !important;', 'white-space: normal !important;'),
+      printCss.replace('width: 8%', 'width: 11%'),
+      printCss.replace('th { overflow-wrap: normal !important;', 'th { white-space: nowrap !important; overflow-wrap: normal !important;'),
       printCss.replace('font-size: 8px !important;', 'font-size: 10px !important;'),
       printCss.replace('thead { display: table-header-group; }', 'thead { display: table-row-group; }'),
       printCss.replace('table-layout: fixed;', 'table-layout: auto;'),
@@ -164,6 +179,7 @@ describe('phase H entity profile mutants', () => {
   it('each brand mutant fails closed', () => {
     const mutants = [
       brandSource.replace("displayName: 'The Vent Guys'", "displayName: 'BHFOS'"),
+      brandSource.replace('legalName: null', "legalName: 'The Vent Guys'"),
       brandSource.replace("'/assets/finance/tvg-logo-primary.png'", "'https://vent-guys.com/brand/logo-primary.png'"),
       brandSource.replace("navy: '#173861'", "navy: '#0a56a6'"),
       brandSource.replace("red: '#b52025'", "red: '#2563eb'"),
@@ -211,6 +227,8 @@ describe('phase H release gate mutants', () => {
       { ...ciInput, gate: gate.replace('delete playwrightEnv.SERVICE_ROLE_KEY;', '') },
       { ...ciInput, gate: gate.replace('FINANCE_OWNER_EMAIL: ownerEmail', 'SERVICE_ROLE_KEY: serviceRole') },
       { ...ciInput, check: check.replace('skipped > 0', 'skipped < 0') },
+      { ...ciInput, check: check.replace('passed < 3', 'passed < 1') },
+      { ...ciInput, gate: gate.replace("hostname === '127.0.0.1'", "value.includes('127.0.0.1')") },
       { ...ciInput, specs: [...specs, 'test.skip(true)'] },
     ];
     for (const mutant of mutants) assert.ok(ciFailures(mutant).length > 0);

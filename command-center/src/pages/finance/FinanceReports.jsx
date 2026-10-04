@@ -22,11 +22,11 @@ const PRINT_CSS = `
   tr, th, td { break-inside: avoid; page-break-inside: avoid; }
   th, td { border-bottom: 1px solid #cbd5e1; padding: 4px 6px !important; text-align: left; vertical-align: top; font-size: 10px !important; white-space: normal !important; overflow-wrap: anywhere; }
   th { overflow-wrap: normal !important; word-break: normal !important; hyphens: manual !important; }
-  .report-value { overflow-wrap: normal !important; word-break: normal !important; hyphens: manual !important; }
+  .report-value { overflow-wrap: normal !important; word-break: normal !important; hyphens: manual !important; white-space: nowrap !important; }
 }
 @media print {
   table:has(th:nth-child(10)) th, table:has(th:nth-child(10)) td { font-family: "Finance Report Sans", "Liberation Sans", "Nimbus Sans", "Noto Sans", sans-serif !important; font-weight: 400 !important; font-size: 8px !important; padding: 2px 1px !important; }
-  table:has(th:nth-child(10)) th:first-child, table:has(th:nth-child(10)) td:first-child { width: 11%; }
+  table:has(th:nth-child(10)) th:first-child, table:has(th:nth-child(10)) td:first-child { width: 8%; }
   table:has(th:nth-child(10)) th:not(:first-child) { overflow-wrap: normal !important; word-break: normal !important; hyphens: manual !important; }
 }
 @page { margin: 12mm; }

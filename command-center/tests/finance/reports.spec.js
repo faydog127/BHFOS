@@ -346,6 +346,8 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
         return {
           lines: range.getClientRects().length,
           overflow: signedCell.scrollWidth > signedCell.clientWidth + 1,
+          scroll: signedCell.scrollWidth,
+          client: signedCell.clientWidth,
           font: getComputedStyle(signedCell).fontSize,
         };
       };
@@ -360,6 +362,7 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
       };
     }, { seven: signed7, eight: signed8 });
     expect(fit.reportFont).toBe(true);
+    console.log(`PRINT_FIT ${name} ${JSON.stringify(fit)}`);
     expect(fit.headers).toBe(10);
     expect(fit.seven.lines).toBe(1);
     expect(fit.eight.lines).toBe(1);
