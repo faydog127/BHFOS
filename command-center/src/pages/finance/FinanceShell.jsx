@@ -377,7 +377,8 @@ export default function FinanceShell({ grantedAccess }) {
     };
     document.addEventListener('click', onClick, true);
     window.addEventListener('beforeunload', onBeforeUnload);
-    window.addEventListener('popstate', onPopState, true);
+    // popstate is delivered by the bootstrap listener in main.jsx.
+    window.__financeLeaveHold = onPopState;
     window.navigation?.addEventListener('navigate', onNavigate);
     document.documentElement.dataset.financeLeaveGuard = 'on';
     return () => {
@@ -387,7 +388,7 @@ export default function FinanceShell({ grantedAccess }) {
       window.history.replaceState = originalReplace;
       document.removeEventListener('click', onClick, true);
       window.removeEventListener('beforeunload', onBeforeUnload);
-      window.removeEventListener('popstate', onPopState, true);
+      delete window.__financeLeaveHold;
       window.navigation?.removeEventListener('navigate', onNavigate);
     };
   }, [dirty, routeTenantId]);

@@ -41,14 +41,16 @@ function printFailures(css) {
   return failures;
 }
 
-function navFailures(shell) {
+function navFailures(shell, main = '') {
   const failures = [];
   if (!shell.includes('role="alertdialog"')) failures.push('role');
   if (!shell.includes('aria-labelledby="finance-leave-title"')) failures.push('label');
   if (!shell.includes("event.key === 'Escape'")) failures.push('esc');
   if (!shell.includes("event.key !== 'Tab'")) failures.push('trap');
   if (!shell.includes('stayRef.current?.focus()')) failures.push('focus');
-  if (!shell.includes("addEventListener('popstate'")) failures.push('pop');
+  if (!main.includes("window.addEventListener('popstate', (e) => window.__financeLeaveHold?.(e), true)")) failures.push('pop');
+  if (!shell.includes('window.__financeLeaveHold = onPopState')) failures.push('pop hold');
+  if (!shell.includes('delete window.__financeLeaveHold')) failures.push('pop cleanup');
   if (!shell.includes("addEventListener('navigate'")) failures.push('navigate');
   if (!shell.includes('history.pushState = function guardedPush')) failures.push('push');
   if (!shell.includes('history.replaceState = function guardedReplace')) failures.push('replace');
@@ -96,7 +98,7 @@ function ciFailures({ yml, gate, check, specs }) {
   if (!gate.includes('delete playwrightEnv.SERVICE_ROLE_KEY')) failures.push('strip role');
   if (/SERVICE_ROLE_KEY:\s*serviceRole/.test(gate)) failures.push('leak');
   if (!gate.includes('FINANCE_OWNER_EMAIL: ownerEmail')) failures.push('owner');
-  if (!check.includes('skipped > 0') || !check.includes('passed < 3')) failures.push('fail closed');
+  if (!check.includes('skipped > 0') || !check.includes('passed < 4')) failures.push('fail closed');
   if (!gate.includes('new URL(value).hostname')) failures.push('local host');
   if (!gate.includes("hostname === '127.0.0.1'") || !gate.includes("hostname === 'localhost'")) failures.push('local host');
   if (/127\\\.0\\\.0\\\.1\|localhost/.test(gate)) failures.push('unanchored host');
@@ -106,6 +108,7 @@ function ciFailures({ yml, gate, check, specs }) {
 
 const printCss = read('src/pages/finance/FinanceReports.jsx').match(/const PRINT_CSS = `([\s\S]*?)`;/)[1];
 const shell = read('src/pages/finance/FinanceShell.jsx');
+const mainJsx = read('src/main.jsx');
 const brandSource = read('src/lib/finance/entityBrand.js');
 const identity = read('src/components/finance/EntityBrandIdentity.jsx');
 const yml = readFileSync(path.join(repoRoot, '.github/workflows/ci.yml'), 'utf8');
@@ -142,24 +145,27 @@ describe('phase H print style mutants', () => {
 
 describe('phase H navigation hold mutants', () => {
   it('the shipped leave guard passes', () => {
-    assert.deepEqual(navFailures(shell), []);
+    assert.deepEqual(navFailures(shell, mainJsx), []);
   });
   it('each navigation mutant fails closed', () => {
-    const mutants = [
-      shell.replace('role="alertdialog"', 'role="dialog"'),
-      shell.replace('aria-labelledby="finance-leave-title"', ''),
-      shell.replace("event.key === 'Escape'", "event.key === 'F1'"),
-      shell.replace("event.key !== 'Tab'", "event.key !== 'Enter'"),
-      shell.replace('stayRef.current?.focus()', ''),
-      shell.replace("addEventListener('popstate'", "addEventListener('click'"),
-      shell.replace("addEventListener('navigate'", "addEventListener('click'"),
-      shell.replace('history.pushState = function guardedPush', 'history.forward = function guardedPush'),
-      shell.replace('history.replaceState = function guardedReplace', 'history.forward = function guardedReplace'),
-      shell.replaceAll('allowLeaveRef', 'unusedLeave'),
-      shell.replace('stopImmediatePropagation', 'stopPropagation'),
-      shell.replace('data-testid="finance-leave-discard"', 'data-testid="finance-leave-cancel"'),
+    const cases = [
+      [shell.replace('role="alertdialog"', 'role="dialog"'), mainJsx],
+      [shell.replace('aria-labelledby="finance-leave-title"', ''), mainJsx],
+      [shell.replace("event.key === 'Escape'", "event.key === 'F1'"), mainJsx],
+      [shell.replace("event.key !== 'Tab'", "event.key !== 'Enter'"), mainJsx],
+      [shell.replace('stayRef.current?.focus()', ''), mainJsx],
+      [shell.replace('window.__financeLeaveHold = onPopState', 'window.__unusedHold = onPopState'), mainJsx],
+      [shell, mainJsx.replace("window.addEventListener('popstate'", "window.addEventListener('click'")],
+      [shell.replace("addEventListener('navigate'", "addEventListener('click'"), mainJsx],
+      [shell.replace('history.pushState = function guardedPush', 'history.forward = function guardedPush'), mainJsx],
+      [shell.replace('history.replaceState = function guardedReplace', 'history.forward = function guardedReplace'), mainJsx],
+      [shell.replaceAll('allowLeaveRef', 'unusedLeave'), mainJsx],
+      [shell.replace('stopImmediatePropagation', 'stopPropagation'), mainJsx],
+      [shell.replace('data-testid="finance-leave-discard"', 'data-testid="finance-leave-cancel"'), mainJsx],
     ];
-    for (const mutant of mutants) assert.ok(navFailures(mutant).length > 0);
+    for (const [nextShell, nextMain] of cases) {
+      assert.ok(navFailures(nextShell, nextMain).length > 0, nextShell.slice(0, 60));
+    }
   });
 });
 
@@ -227,7 +233,7 @@ describe('phase H release gate mutants', () => {
       { ...ciInput, gate: gate.replace('delete playwrightEnv.SERVICE_ROLE_KEY;', '') },
       { ...ciInput, gate: gate.replace('FINANCE_OWNER_EMAIL: ownerEmail', 'SERVICE_ROLE_KEY: serviceRole') },
       { ...ciInput, check: check.replace('skipped > 0', 'skipped < 0') },
-      { ...ciInput, check: check.replace('passed < 3', 'passed < 1') },
+      { ...ciInput, check: check.replace('passed < 4', 'passed < 1') },
       { ...ciInput, gate: gate.replace("hostname === '127.0.0.1'", "value.includes('127.0.0.1')") },
       { ...ciInput, specs: [...specs, 'test.skip(true)'] },
     ];
