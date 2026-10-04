@@ -1,6 +1,6 @@
 /**
  * Fail closed when the Finance Playwright JSON report is missing,
- * records a skip, or records fewer than the four Finance specs.
+ * records a skip, or records fewer than the five Finance specs.
  * test.skip cannot turn the release job green.
  */
 import { readFileSync } from 'node:fs';
@@ -20,7 +20,7 @@ try {
 
 const skipped = Number(report?.stats?.skipped || 0);
 const passed = Number(report?.stats?.expected || 0);
-if (skipped > 0 || passed < 4) {
+if (skipped > 0 || passed < 5) {
   console.error(`Finance Playwright gate failed closed: passed=${passed} skipped=${skipped}.`);
   process.exit(1);
 }

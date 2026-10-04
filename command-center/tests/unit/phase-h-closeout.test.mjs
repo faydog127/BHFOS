@@ -106,7 +106,7 @@ function ciFailures({ yml, gate, check, specs }) {
   if (!gate.includes('delete playwrightEnv.SERVICE_ROLE_KEY')) failures.push('strip role');
   if (/SERVICE_ROLE_KEY:\s*serviceRole/.test(gate)) failures.push('leak');
   if (!gate.includes('FINANCE_OWNER_EMAIL: ownerEmail')) failures.push('owner');
-  if (!check.includes('skipped > 0') || !check.includes('passed < 4')) failures.push('fail closed');
+  if (!check.includes('skipped > 0') || !check.includes('passed < 5')) failures.push('fail closed');
   if (!gate.includes('new URL(value).hostname')) failures.push('local host');
   if (!gate.includes("hostname === '127.0.0.1'") || !gate.includes("hostname === 'localhost'")) failures.push('local host');
   if (/127\\\.0\\\.0\\\.1\|localhost/.test(gate)) failures.push('unanchored host');
@@ -243,7 +243,7 @@ describe('phase H release gate mutants', () => {
       { ...ciInput, gate: gate.replace('delete playwrightEnv.SERVICE_ROLE_KEY;', '') },
       { ...ciInput, gate: gate.replace('FINANCE_OWNER_EMAIL: ownerEmail', 'SERVICE_ROLE_KEY: serviceRole') },
       { ...ciInput, check: check.replace('skipped > 0', 'skipped < 0') },
-      { ...ciInput, check: check.replace('passed < 4', 'passed < 1') },
+      { ...ciInput, check: check.replace('passed < 5', 'passed < 1') },
       { ...ciInput, gate: gate.replace("hostname === '127.0.0.1'", "value.includes('127.0.0.1')") },
       { ...ciInput, specs: [...specs, 'test.skip(true)'] },
     ];

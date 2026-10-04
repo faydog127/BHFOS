@@ -135,10 +135,36 @@ async function assertPriceLabelsClear(file) {
   }
 }
 
-async function assertStage3Note(file) {
-  const items = await pdfItems(file);
-  const joined = pdfText(items).replace(/\s+/g, ' ');
-  expect(joined, file).toContain('not a readiness input');
+function squashPdf(value) {
+  return value.replace(/[\s\u00ad\u200b]+/g, '');
+}
+
+async function assertStage3Note(file, note) {
+  const text = squashPdf(pdfText(await pdfItems(file)));
+  expect(text, file).toContain(squashPdf('not a readiness input'));
+  expect(note.length, file).toBeGreaterThan(80);
+  expect(text, file).toContain(squashPdf(note.split(/\s+/).slice(-5).join(' ')));
+  expect(text, file).toContain(squashPdf(note));
+}
+
+async function assertNoSameLineOverlap(file) {
+  const words = (await pdfItems(file)).filter((item) => item.str.trim().length > 0 && item.w > 0);
+  expect(words.length, file).toBeGreaterThan(50);
+  const hits = [];
+  for (let i = 0; i < words.length; i += 1) {
+    for (let j = i + 1; j < words.length; j += 1) {
+      const a = words[i];
+      const b = words[j];
+      if (a.page !== b.page) continue;
+      const yOverlap = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+      const sameLine = yOverlap > 0.5 * Math.min(a.h, b.h);
+      const xOverlap = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+      if (sameLine && xOverlap > 1) hits.push(`'${a.str}' x '${b.str}' ${xOverlap.toFixed(1)}pt`);
+      if (hits.length > 4) break;
+    }
+    if (hits.length > 4) break;
+  }
+  expect(hits, file).toEqual([]);
 }
 
 async function assertInsidePageMargin(file) {
@@ -151,7 +177,7 @@ async function assertInsidePageMargin(file) {
 async function assertWrappedValuesFit(page, label) {
   const overflow = await page.evaluate(() => [...document.querySelectorAll('.report-value')].filter((el) => {
     if (el.closest('table')?.querySelector('th:nth-child(10)')) return false;
-    return el.scrollWidth > el.clientWidth + 1;
+    return el.scrollWidth > el.clientWidth + 0.5;
   }).map((el) => (el.textContent || '').trim().slice(0, 80)));
   expect(overflow, label).toEqual([]);
 }
@@ -417,13 +443,17 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     await page.pdf({ path: `${out}/${id}-a4-landscape.pdf`, format: 'A4', landscape: true, printBackground: true });
     assertPaper(`${out}/${id}-a4-landscape.pdf`, [842, 595], true);
     if (id === 'growth-readiness') {
+      const stage3Note = (await page.getByTestId('report-hvac-caveat').innerText()).trim();
+      expect(stage3Note.length).toBeGreaterThan(80);
       for (const suffix of ['', '-a4', '-landscape', '-a4-landscape']) {
-        await assertStage3Note(`${out}/${id}${suffix}.pdf`);
+        await assertStage3Note(`${out}/${id}${suffix}.pdf`, stage3Note);
       }
     }
     if (id === 'pricing-economics') {
       for (const suffix of ['', '-a4', '-landscape', '-a4-landscape']) {
-        await assertPriceLabelsClear(`${out}/${id}${suffix}.pdf`);
+        const file = `${out}/${id}${suffix}.pdf`;
+        await assertPriceLabelsClear(file);
+        await assertNoSameLineOverlap(file);
       }
     }
     if (id === 'cost-structure') {
@@ -499,10 +529,12 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     expect(fit.clipped).toBe(false);
     expect(fit.seven.font).toBe('8px');
     expect(fit.eight.font).toBe('8px');
+    await assertWrappedValuesFit(page, `${name} wrapped`);
     writeFileSync(`${out}/${name}-layout.json`, JSON.stringify(fit, null, 2));
     await page.screenshot({ path: `${out}/${name}.png`, fullPage: true });
     await page.pdf({ path: `${out}/${name}.pdf`, printBackground: true, ...pdf });
     assertPaper(`${out}/${name}.pdf`, expectedBox, landscape);
+    await assertNoSameLineOverlap(`${out}/${name}.pdf`);
   }
 
   let delayed = false;
