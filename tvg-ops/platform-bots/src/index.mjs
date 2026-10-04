@@ -11,5 +11,6 @@ export const lulaBot = new PlatformBot(lulaContract);
 export const bhfosAppBot = new PlatformBot(bhfosAppContract);
 export const zrsBot = new PlatformBot(zrsContract);
 
-export { PlatformBot } from './platform-bot.mjs';
-export { AUTHORITY, UNKNOWN } from './core.mjs';
+export { PlatformBot, reconcileHandoffs } from './platform-bot.mjs';
+export { parseManualRelay, prepareBatch } from './intake.mjs';
+export { AUTHORITY, SCHEMA_VERSION, BOT_CODE_VERSION } from './core.mjs';
