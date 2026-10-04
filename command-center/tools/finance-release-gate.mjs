@@ -115,27 +115,32 @@ mkdirSync(evidence, { recursive: true });
 const playwrightEnv = { ...process.env };
 delete playwrightEnv.SERVICE_ROLE_KEY;
 delete playwrightEnv.SUPABASE_SERVICE_ROLE_KEY;
-const child = spawn('npx', ['playwright', 'test', '--config=playwright.finance-checkin.config.js'], {
-  cwd: root,
-  stdio: 'inherit',
-  env: {
-    ...playwrightEnv,
-    FINANCE_CHECKIN_EMAIL: email,
-    FINANCE_CHECKIN_PASSWORD: password,
-    FINANCE_OWNER_EMAIL: ownerEmail,
-    FINANCE_OWNER_PASSWORD: ownerPassword,
-    FINANCE_LOCAL_DB_URL: dbUrl,
-    VITE_SUPABASE_URL: apiUrl,
-    VITE_SUPABASE_ANON_KEY: anon,
-    FINANCE_CHECKIN_SHOTS: path.join(evidence, 'checkin'),
-    FINANCE_REPORT_SHOTS: path.join(evidence, 'reports'),
-  },
-});
 
-child.on('close', (code) => {
-  const check = spawn('node', ['tools/finance-e2e-report-check.mjs'], { cwd: root, stdio: 'inherit' });
-  check.on('close', (checkCode) => {
-    if (checkCode !== 0) process.exit(checkCode ?? 1);
-    process.exit(code ?? 1);
+function run(args, env) {
+  return new Promise((resolve) => {
+    const child = spawn(args[0], args.slice(1), { cwd: root, stdio: 'inherit', env });
+    child.on('close', (code) => resolve(code ?? 1));
   });
+}
+
+const sharedEnv = {
+  ...playwrightEnv,
+  FINANCE_CHECKIN_EMAIL: email,
+  FINANCE_CHECKIN_PASSWORD: password,
+  FINANCE_OWNER_EMAIL: ownerEmail,
+  FINANCE_OWNER_PASSWORD: ownerPassword,
+  FINANCE_LOCAL_DB_URL: dbUrl,
+  VITE_SUPABASE_URL: apiUrl,
+  VITE_SUPABASE_ANON_KEY: anon,
+};
+
+const httpCode = await run(['node', 'tools/finance-version-conflict-http.mjs'], sharedEnv);
+const playwrightCode = await run(['npx', 'playwright', 'test', '--config=playwright.finance-checkin.config.js'], {
+  ...sharedEnv,
+  FINANCE_CHECKIN_SHOTS: path.join(evidence, 'checkin'),
+  FINANCE_REPORT_SHOTS: path.join(evidence, 'reports'),
 });
+const checkCode = await run(['node', 'tools/finance-e2e-report-check.mjs'], playwrightEnv);
+if (checkCode !== 0) process.exit(checkCode);
+if (httpCode !== 0) process.exit(httpCode);
+process.exit(playwrightCode);

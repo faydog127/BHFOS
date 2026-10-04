@@ -482,6 +482,7 @@ export default function FinanceShell({ grantedAccess }) {
   }
 
   async function onSave() {
+    if (conflict) return;
     if (!writesEnabled || !record || record.status !== 'draft') return;
     const saved = await saveDraft(supabase, {
       id: record.id,
@@ -524,6 +525,7 @@ export default function FinanceShell({ grantedAccess }) {
   }
 
   async function onUpgradeSchema() {
+    if (conflict) return;
     if (!writesEnabled || !record || record.status !== 'draft' || record.schema_version !== FINANCE_PLAN_SCHEMA_WITHOUT_MONTHLY_BASIS) return;
     const upgraded = await upgradeDraftSchema(supabase, { id: record.id, expectedVersion: record.version });
     if (!upgraded.ok) {
@@ -535,6 +537,7 @@ export default function FinanceShell({ grantedAccess }) {
   }
 
   async function onApprove() {
+    if (conflict) return;
     if (!writesEnabled) return;
     if (!record || record.status !== 'draft' || dirty) {
       setSaveCode('finance_save_before_approve');
@@ -578,9 +581,11 @@ export default function FinanceShell({ grantedAccess }) {
   }
 
   async function onNewDraft() {
+    if (conflict) return;
     if (!writesEnabled || !record || record.status !== 'approved') return;
     const opened = await openDraftFromApproved(supabase, { id: record.id });
     if (!opened.ok) {
+      if (opened.code === 'version_conflict') setConflict(true);
       setSaveCode(opened.code);
       return;
     }
@@ -774,16 +779,16 @@ export default function FinanceShell({ grantedAccess }) {
           <GuidedBrief section={section} />
           <div className="mb-4 flex flex-wrap items-center gap-2">
             {record.status === 'draft' && record.schema_version === FINANCE_PLAN_SCHEMA_WITHOUT_MONTHLY_BASIS ? (
-              <button type="button" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:text-slate-400" data-testid="finance-upgrade-schema" onClick={onUpgradeSchema} disabled={!writesEnabled || dirty}>Use monthly plan basis</button>
+              <button type="button" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:text-slate-400" data-testid="finance-upgrade-schema" onClick={onUpgradeSchema} disabled={!writesEnabled || dirty || conflict}>Use monthly plan basis</button>
             ) : null}
             {record.status === 'draft' ? (
-              <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-save" onClick={onSave} disabled={!writesEnabled}>Save draft</button>
+              <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-save" onClick={onSave} disabled={!writesEnabled || conflict}>Save draft</button>
             ) : null}
             {record.status === 'draft' ? (
-              <button type="button" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:text-slate-400" data-testid="finance-approve" onClick={onApprove} disabled={!writesEnabled}>Approve plan</button>
+              <button type="button" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:text-slate-400" data-testid="finance-approve" onClick={onApprove} disabled={!writesEnabled || conflict}>Approve plan</button>
             ) : null}
             {record.status === 'approved' ? (
-              <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-new-draft" onClick={onNewDraft} disabled={!writesEnabled}>New draft</button>
+              <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-new-draft" onClick={onNewDraft} disabled={!writesEnabled || conflict}>New draft</button>
             ) : null}
             {approvedBasis ? <p className="text-xs text-slate-500">An approved plan basis exists. This draft does not drive variance until it is approved.</p> : null}
           </div>

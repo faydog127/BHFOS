@@ -16,7 +16,7 @@ import { nearCapacityBand, stageReadiness, READINESS_INCOMPLETE, READINESS_NOT_R
 import { variance, variancePct } from '../../src/lib/finance/variance.js';
 import { evaluateFinanceAccess, roleHasFinanceCapability, FINANCE_ALLOWED_ROLES, FINANCE_CAPABILITIES } from '../../src/lib/finance/authz.js';
 import { blankPlanInputs, validateNotes, validatePlanInputs } from '../../src/lib/finance/blankPlan.js';
-import { approvePlan, associateComparisonPlan, correctMonthlyActual, createBlankPlan, createMonthlyActual, openDraftFromApproved, readPlan, saveDraft, selectVisiblePlan, STORED_PLAN_INVALID_COPY, storedPlanDecision, upgradeDraftSchema } from '../../src/lib/finance/persistence.js';
+import { approvePlan, associateComparisonPlan, correctMonthlyActual, createBlankPlan, createMonthlyActual, isFinanceVersionConflict, openDraftFromApproved, readPlan, saveDraft, selectVisiblePlan, STORED_PLAN_INVALID_COPY, storedPlanDecision, upgradeDraftSchema } from '../../src/lib/finance/persistence.js';
 import { actualFactsFromForm, channelRevenueIssue, comparisonPlanForCheckin, declaredMonthlyBasis, derivedActualMetrics, plannedFactsForMonth, typeBasisAmount, validateMonthlyBasis } from '../../src/lib/finance/actuals.js';
 import { formatStoredDecimal, parseActualDecimal, parseActualInteger } from '../../src/lib/finance/actuals.js';
 import { FINANCE_WRITES_DISABLED, financeWritesEnabled } from '../../src/lib/finance/writeGate.js';
@@ -1020,6 +1020,47 @@ describe('monthly plan basis', () => {
       rpc() { return { data: null, error: { code: '40001', message: 'finance_version_conflict' } }; },
     }, { id, expectedVersion: 1 }, { MODE: 'test' });
     assert.equal(conflict.code, 'version_conflict');
+  });
+
+  it('maps PT409 and the stable identifier onto the version-conflict banner without treating every 409 as one', async () => {
+    function client(error) {
+      return { rpc() { return { data: null, error }; } };
+    }
+    const identified = {
+      code: 'PT409',
+      message: 'finance_version_conflict',
+      details: 'finance_version_conflict',
+      hint: 'finance_version_conflict',
+    };
+    const plan = { id, expectedVersion: 1 };
+    const env = { MODE: 'test' };
+    assert.equal((await approvePlan(client(identified), plan, env)).code, 'version_conflict');
+    assert.equal((await upgradeDraftSchema(client(identified), plan, env)).code, 'version_conflict');
+    assert.equal((await openDraftFromApproved(client(identified), { id }, env)).code, 'version_conflict');
+    assert.equal((await approvePlan(client({ code: '40001' }), plan, env)).code, 'version_conflict');
+    assert.equal((await upgradeDraftSchema(client({ hint: 'finance_version_conflict' }), plan, env)).code, 'version_conflict');
+    assert.equal((await approvePlan(client({ details: 'finance_version_conflict' }), plan, env)).code, 'version_conflict');
+    assert.equal((await approvePlan(client({ status: 409, message: 'conflict' }), plan, env)).code, 'finance_approve_failed');
+    assert.equal((await upgradeDraftSchema(client({ status: 409, message: 'conflict' }), plan, env)).code, 'finance_schema_upgrade_failed');
+    assert.equal((await upgradeDraftSchema(client({ code: '23514', message: 'finance_plan_locked' }), plan, env)).code, '23514');
+    assert.equal((await openDraftFromApproved(client({ code: '02000', message: 'finance_no_approved_plan' }), { id }, env)).code, '02000');
+    assert.equal(isFinanceVersionConflict({ status: 409 }), false);
+    assert.equal(isFinanceVersionConflict(null), false);
+    const shell = readFileSync(path.join(root, 'src/pages/finance/FinanceShell.jsx'), 'utf8');
+    assert.match(shell, /async function onSave\(\) \{\n    if \(conflict\) return;/);
+    assert.match(shell, /async function onUpgradeSchema\(\) \{\n    if \(conflict\) return;/);
+    assert.match(shell, /async function onApprove\(\) \{\n    if \(conflict\) return;/);
+    assert.match(shell, /async function onNewDraft\(\) \{\n    if \(conflict\) return;/);
+    assert.match(shell, /data-testid="finance-save" onClick=\{onSave\} disabled=\{!writesEnabled \|\| conflict\}/);
+    assert.match(shell, /data-testid="finance-approve" onClick=\{onApprove\} disabled=\{!writesEnabled \|\| conflict\}/);
+    assert.match(shell, /data-testid="finance-new-draft" onClick=\{onNewDraft\} disabled=\{!writesEnabled \|\| conflict\}/);
+    assert.match(shell, /data-testid="finance-upgrade-schema" onClick=\{onUpgradeSchema\} disabled=\{!writesEnabled \|\| dirty \|\| conflict\}/);
+    assert.match(shell, /disabled=\{!writesEnabled\}/);
+    const checkin = readFileSync(path.join(root, 'src/pages/finance/MonthlyCheckIn.jsx'), 'utf8');
+    assert.match(checkin, /finally \{\n      setSaving\(false\);\n    \}/);
+    const gate = readFileSync(path.join(root, 'tools/finance-release-gate.mjs'), 'utf8');
+    assert.match(gate, /finance-version-conflict-http\.mjs/);
+    assert.equal(/SERVICE_ROLE_KEY:\s*serviceRole/.test(gate), false);
   });
 
   it('a stored plan whose inputs are only an empty monthly basis does not throw and the shell shows a repair state', () => {

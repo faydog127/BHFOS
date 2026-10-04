@@ -40,6 +40,17 @@ function codeFrom(error, fallback) {
   return error.code || fallback;
 }
 
+const FINANCE_VERSION_CONFLICT_ID = 'finance_version_conflict';
+
+export function isFinanceVersionConflict(error) {
+  if (!error || typeof error !== 'object') return false;
+  const identified = ['message', 'details', 'detail', 'hint'].some((key) => (
+    typeof error[key] === 'string' && error[key].includes(FINANCE_VERSION_CONFLICT_ID)
+  ));
+  if (identified) return true;
+  return error.code === '40001' || error.code === 'PT409';
+}
+
 function failure(error, fallback) {
   return { ok: false, code: codeFrom(error, fallback), detail: error?.message || '' };
 }
@@ -134,9 +145,7 @@ export async function approvePlan(client, { id, expectedVersion }, env) {
     p_expected_version: expectedVersion,
   });
   if (error) {
-    if (error.code === '40001' || error.message === 'finance_version_conflict') {
-      return { ok: false, code: 'version_conflict' };
-    }
+    if (isFinanceVersionConflict(error)) return { ok: false, code: 'version_conflict' };
     return { ok: false, code: error.code || 'finance_approve_failed' };
   }
   if (!data) return { ok: false, code: 'version_conflict' };
@@ -146,7 +155,10 @@ export async function approvePlan(client, { id, expectedVersion }, env) {
 export async function openDraftFromApproved(client, { id }, env) {
   if (!financeWritesEnabled(env)) return { ok: false, code: FINANCE_WRITES_DISABLED };
   const { data, error } = await client.rpc('finance_open_draft', { p_plan_id: id });
-  if (error) return { ok: false, code: error.code || 'finance_draft_failed' };
+  if (error) {
+    if (isFinanceVersionConflict(error)) return { ok: false, code: 'version_conflict' };
+    return { ok: false, code: error.code || 'finance_draft_failed' };
+  }
   if (!data) return { ok: false, code: 'finance_draft_failed' };
   return { ok: true, plan: data };
 }
@@ -158,9 +170,7 @@ export async function upgradeDraftSchema(client, { id, expectedVersion }, env) {
     p_expected_version: expectedVersion,
   });
   if (error) {
-    if (error.code === '40001' || error.message === 'finance_version_conflict') {
-      return { ok: false, code: 'version_conflict' };
-    }
+    if (isFinanceVersionConflict(error)) return { ok: false, code: 'version_conflict' };
     return { ok: false, code: error.code || 'finance_schema_upgrade_failed' };
   }
   if (!data) return { ok: false, code: 'version_conflict' };
