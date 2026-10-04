@@ -43,6 +43,7 @@ function navFailures(shell) {
   if (!shell.includes("event.key !== 'Tab'")) failures.push('trap');
   if (!shell.includes('stayRef.current?.focus()')) failures.push('focus');
   if (!shell.includes("addEventListener('popstate'")) failures.push('pop');
+  if (!shell.includes("addEventListener('navigate'")) failures.push('navigate');
   if (!shell.includes('history.pushState = function guardedPush')) failures.push('push');
   if (!shell.includes('history.replaceState = function guardedReplace')) failures.push('replace');
   if (!shell.includes('allowLeaveRef')) failures.push('allow');
@@ -130,6 +131,7 @@ describe('phase H navigation hold mutants', () => {
       shell.replace("event.key !== 'Tab'", "event.key !== 'Enter'"),
       shell.replace('stayRef.current?.focus()', ''),
       shell.replace("addEventListener('popstate'", "addEventListener('click'"),
+      shell.replace("addEventListener('navigate'", "addEventListener('click'"),
       shell.replace('history.pushState = function guardedPush', 'history.forward = function guardedPush'),
       shell.replace('history.replaceState = function guardedReplace', 'history.forward = function guardedReplace'),
       shell.replaceAll('allowLeaveRef', 'unusedLeave'),

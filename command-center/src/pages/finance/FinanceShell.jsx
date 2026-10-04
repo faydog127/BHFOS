@@ -284,8 +284,8 @@ export default function FinanceShell({ grantedAccess }) {
       return `${parsed.pathname}${parsed.search}${parsed.hash}`;
     };
     let lastFinanceUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    const originalPush = history.pushState.bind(history);
-    const originalReplace = history.replaceState.bind(history);
+    const originalPush = window.history.pushState.bind(window.history);
+    const originalReplace = window.history.replaceState.bind(window.history);
 
     function outsideDestination(url) {
       if (url == null) return false;
@@ -310,7 +310,7 @@ export default function FinanceShell({ grantedAccess }) {
       }
     }
 
-    history.pushState = function guardedPush(state, title, url) {
+    window.history.pushState = function guardedPush(state, title, url) {
       if (!allowLeaveRef.current && outsideDestination(url)) {
         setLeavePrompt(describe(url));
         return;
@@ -319,7 +319,7 @@ export default function FinanceShell({ grantedAccess }) {
       note(url);
       return result;
     };
-    history.replaceState = function guardedReplace(state, title, url) {
+    window.history.replaceState = function guardedReplace(state, title, url) {
       if (!allowLeaveRef.current && outsideDestination(url)) {
         setLeavePrompt(describe(url));
         return;
@@ -329,6 +329,20 @@ export default function FinanceShell({ grantedAccess }) {
       return result;
     };
 
+    const onNavigate = (event) => {
+      if (allowLeaveRef.current || !event.cancelable) return;
+      const destination = event.destination;
+      if (!destination?.url) return;
+      let url;
+      try {
+        url = new URL(destination.url);
+      } catch {
+        return;
+      }
+      if (url.origin !== window.location.origin || isFinancePath(url.pathname)) return;
+      event.preventDefault();
+      setLeavePrompt(`${url.pathname}${url.search}${url.hash}`);
+    };
     const onPopState = (event) => {
       if (allowLeaveRef.current) return;
       if (isFinancePath(window.location.pathname)) {
@@ -364,15 +378,17 @@ export default function FinanceShell({ grantedAccess }) {
     document.addEventListener('click', onClick, true);
     window.addEventListener('beforeunload', onBeforeUnload);
     window.addEventListener('popstate', onPopState, true);
+    window.navigation?.addEventListener('navigate', onNavigate);
     document.documentElement.dataset.financeLeaveGuard = 'on';
     return () => {
       allowLeaveRef.current = false;
       delete document.documentElement.dataset.financeLeaveGuard;
-      history.pushState = originalPush;
-      history.replaceState = originalReplace;
+      window.history.pushState = originalPush;
+      window.history.replaceState = originalReplace;
       document.removeEventListener('click', onClick, true);
       window.removeEventListener('beforeunload', onBeforeUnload);
       window.removeEventListener('popstate', onPopState, true);
+      window.navigation?.removeEventListener('navigate', onNavigate);
     };
   }, [dirty, routeTenantId]);
 
