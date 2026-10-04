@@ -80,6 +80,7 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
   });
   await page.locator('textarea').fill('unsaved hardening note');
   await expect(page.locator('textarea')).toHaveValue('unsaved hardening note');
+  await expect(page.locator('html')).toHaveAttribute('data-finance-leave-guard', 'on');
   await page.goBack();
   await expect(page.getByTestId('finance-leave-dialog')).toBeVisible();
   await expect(page).toHaveURL(/\/finance\/?$/);

@@ -364,8 +364,10 @@ export default function FinanceShell({ grantedAccess }) {
     document.addEventListener('click', onClick, true);
     window.addEventListener('beforeunload', onBeforeUnload);
     window.addEventListener('popstate', onPopState, true);
+    document.documentElement.dataset.financeLeaveGuard = 'on';
     return () => {
       allowLeaveRef.current = false;
+      delete document.documentElement.dataset.financeLeaveGuard;
       history.pushState = originalPush;
       history.replaceState = originalReplace;
       document.removeEventListener('click', onClick, true);

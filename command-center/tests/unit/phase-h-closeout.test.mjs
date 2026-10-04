@@ -47,6 +47,7 @@ function navFailures(shell) {
   if (!shell.includes('history.replaceState = function guardedReplace')) failures.push('replace');
   if (!shell.includes('allowLeaveRef')) failures.push('allow');
   if (!shell.includes('stopImmediatePropagation')) failures.push('stop');
+  if (!shell.includes("dataset.financeLeaveGuard = 'on'")) failures.push('guard flag');
   if (shell.includes('finance-leave-cancel')) failures.push('cancel');
   return failures;
 }
