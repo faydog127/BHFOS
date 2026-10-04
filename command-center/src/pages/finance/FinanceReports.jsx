@@ -5,9 +5,16 @@ import { FINANCE_REPORT_PRESETS, buildFinanceReport, screenNote } from '@/lib/fi
 
 const PRINT_CSS = `
 @media print {
+  @font-face {
+    font-family: "Finance Report Sans";
+    font-style: normal;
+    font-weight: 400;
+    font-display: block;
+    src: url("/assets/finance/report-sans.woff2") format("woff2");
+  }
   [data-print-hide] { display: none !important; }
   html, body { background: #fff !important; }
-  .report-sheet { max-width: none !important; background: #fff !important; color: #0f172a !important; }
+  .report-sheet { max-width: none !important; background: #fff !important; color: #0f172a !important; padding-left: 0 !important; padding-right: 0 !important; }
   .overflow-x-auto { overflow: visible !important; }
   .report-block { break-inside: avoid; page-break-inside: avoid; }
   table { width: 100% !important; border-collapse: collapse; table-layout: fixed; }
@@ -18,7 +25,7 @@ const PRINT_CSS = `
   .report-value { overflow-wrap: normal !important; word-break: normal !important; hyphens: manual !important; }
 }
 @media print {
-  table:has(th:nth-child(10)) th, table:has(th:nth-child(10)) td { font-size: 8px !important; padding: 2px 1px !important; }
+  table:has(th:nth-child(10)) th, table:has(th:nth-child(10)) td { font-family: "Finance Report Sans", "Liberation Sans", "Nimbus Sans", "Noto Sans", sans-serif !important; font-weight: 400 !important; font-size: 8px !important; padding: 2px 1px !important; }
   table:has(th:nth-child(10)) th:first-child, table:has(th:nth-child(10)) td:first-child { width: 11%; }
   table:has(th:nth-child(10)) th:not(:first-child) { overflow-wrap: normal !important; word-break: normal !important; hyphens: manual !important; }
 }

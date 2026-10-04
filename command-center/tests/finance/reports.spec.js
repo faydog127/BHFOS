@@ -227,6 +227,7 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     await page.screenshot({ path: `${out}/${id}-desktop.png`, fullPage: true });
     await page.setViewportSize({ width: 740, height: 1056 });
     await page.emulateMedia({ media: 'print' });
+    await page.evaluate(() => document.fonts.ready);
     await expect(page.locator('[data-print-hide]')).toBeHidden();
     await expect(surface.locator('a:visible')).toHaveCount(0);
     await expect(surface.locator('input, textarea, select, button')).toHaveCount(0);
@@ -333,6 +334,7 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     const [name, viewport, pdf, expectedBox, landscape] = setup;
     await page.setViewportSize(viewport);
     await page.emulateMedia({ media: 'print' });
+    await page.evaluate(() => document.fonts.ready);
     const fit = await page.evaluate(({ seven, eight }) => {
       const sheet = document.querySelector('.report-sheet');
       const table = document.querySelector('[data-testid="report-services"] table');
@@ -354,8 +356,10 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
         eight: measure(eight),
         clipped: tableBox.right > sheetBox.right + 1,
         headers: table.querySelectorAll('thead th').length,
+        reportFont: document.fonts.check('400 8px "Finance Report Sans"'),
       };
     }, { seven: signed7, eight: signed8 });
+    expect(fit.reportFont).toBe(true);
     expect(fit.headers).toBe(10);
     expect(fit.seven.lines).toBe(1);
     expect(fit.eight.lines).toBe(1);

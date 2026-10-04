@@ -29,6 +29,10 @@ function printFailures(css) {
   if (!/thead\s*\{[^}]*display:\s*table-header-group/.test(css)) failures.push('thead');
   if (!/font-size:\s*8px\s*!important/.test(css)) failures.push('8px');
   if (!/font-size:\s*10px\s*!important/.test(css)) failures.push('10px');
+  if (!css.includes('font-family: "Finance Report Sans", "Liberation Sans"')) failures.push('report font');
+  if (!css.includes('url("/assets/finance/report-sans.woff2")')) failures.push('report font file');
+  if (/https?:\/\//.test(css)) failures.push('remote font');
+  if (!existsSync(path.join(root, 'public/assets/finance/report-sans.woff2'))) failures.push('woff2 missing');
   if (!/table-layout:\s*fixed/.test(css)) failures.push('fixed');
   if (!/overflow-wrap:\s*anywhere/.test(css)) failures.push('anywhere');
   if (/@media\s+(?!print\b)/.test(css)) failures.push('non-print media');
@@ -112,6 +116,8 @@ describe('phase H print style mutants', () => {
       printCss.replace('overflow-wrap: anywhere;', 'overflow-wrap: normal;'),
       printCss.replace(/\.report-value \{[^}]+\}\n/, ''),
       `${printCss}\n@media screen { body { color: red; } }`,
+      printCss.replace('url("/assets/finance/report-sans.woff2")', 'url("https://example.invalid/report-sans.woff2")'),
+      printCss.replace('font-family: "Finance Report Sans", "Liberation Sans", "Nimbus Sans", "Noto Sans", sans-serif', 'font-family: sans-serif'),
     ];
     for (const mutant of mutants) {
       assert.ok(printFailures(mutant).length > 0, mutant.slice(0, 80));
