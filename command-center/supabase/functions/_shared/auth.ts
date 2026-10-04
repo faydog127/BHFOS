@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, jwtVerify } from 'https://esm.sh/jose@5.2.4';
+import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'https://esm.sh/jose@5.2.4';
 
 export type JwtClaims = {
   sub?: string;
@@ -12,21 +12,72 @@ export type JwtClaims = {
   [k: string]: unknown;
 };
 
+const USER_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const unauthorized = (): never => {
+  throw new Error('unauthorized');
+};
+
+/**
+ * Issuer pin: EXPECTED_ISS is `SUPABASE_URL` with trailing slashes removed,
+ * plus `/auth/v1`. The token `iss` must equal that string exactly.
+ * Trailing-slash, letter-case, and explicit-port variants do not match.
+ * The JWKS URL is built only from that env value. Token claims never select a URL.
+ * HS256 is accepted only when SUPABASE_JWT_SECRET is set, with the same issuer
+ * and audience. There is no shared-secret fallback and no localhost exception.
+ */
+const parseHttpUrl = (value: string): URL => {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return unauthorized();
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return unauthorized();
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) return unauthorized();
+  return parsed;
+};
+
+const supabaseBaseUrl = (): string => {
+  const raw = (Deno.env.get('SUPABASE_URL') ?? '').trim().replace(/\/+$/, '');
+  if (!raw) return unauthorized();
+  parseHttpUrl(raw);
+  return raw;
+};
+
+const expectedIssuer = (): string => `${supabaseBaseUrl()}/auth/v1`;
+
+let ownJwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+let ownJwksUrl = '';
+
+const ownJwksSet = (): ReturnType<typeof createRemoteJWKSet> => {
+  const url = `${supabaseBaseUrl()}/auth/v1/.well-known/jwks.json`;
+  if (ownJwks && ownJwksUrl === url) return ownJwks;
+
+  const parsed = parseHttpUrl(url);
+  ownJwks = createRemoteJWKSet(parsed, {
+    cooldownDuration: 30_000,
+    timeoutDuration: 5_000,
+  });
+  ownJwksUrl = url;
+  return ownJwks;
+};
+
+const base64UrlDecodeToString = (input: string): string => {
+  const base64 = input.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '==='.slice((base64.length + 3) % 4);
+  if (typeof atob !== 'function') unauthorized();
+  return atob(padded);
+};
+
 export const getBearerToken = (req: Request): string | null => {
   const header = req.headers.get('authorization') || req.headers.get('Authorization') || '';
   if (!header) return null;
   return header.startsWith('Bearer ') ? header.slice(7) : header;
 };
 
-const base64UrlDecodeToString = (input: string): string => {
-  const base64 = input.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = base64 + '==='.slice((base64.length + 3) % 4);
-  if (typeof atob === 'function') {
-    return atob(padded);
-  }
-  throw new Error('No base64 decoder available in runtime.');
-};
-
+/** Unverified payload decode. Not an authentication decision. */
 export const decodeJwtClaims = (token: string): JwtClaims => {
   const parts = token.split('.');
   if (parts.length !== 3) throw new Error('Invalid JWT format.');
@@ -34,145 +85,103 @@ export const decodeJwtClaims = (token: string): JwtClaims => {
   return JSON.parse(payloadJson);
 };
 
-export const getTrustedClaims = (req: Request): { token: string; claims: JwtClaims } => {
-  const token = getBearerToken(req);
-  if (!token) throw new Error('Missing Authorization Bearer token.');
-  const claims = decodeJwtClaims(token);
-  return { token, claims };
-};
-
-const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
-const LOCAL_SUPABASE_JWT_SECRET = 'super-secret-jwt-token-with-at-least-32-characters-long';
-
-const resolveJwtSecret = (): string | null => {
-  const secret = Deno.env.get('JWT_SECRET') || Deno.env.get('SUPABASE_JWT_SECRET') || '';
-  return secret.trim() || null;
-};
-
-const isLocalIssuer = (issuer: string) => /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?(?:\/|$)/i.test(issuer);
-
-type JwtHeader = {
-  alg?: string;
-  kid?: string;
-  typ?: string;
-  [k: string]: unknown;
-};
-
-const decodeJwtHeader = (token: string): JwtHeader => {
+const peekAlgorithm = (token: string): string => {
   const parts = token.split('.');
-  if (parts.length !== 3) throw new Error('Invalid JWT format.');
-  const headerJson = base64UrlDecodeToString(parts[0]);
-  return JSON.parse(headerJson);
-};
+  if (parts.length !== 3 || !parts[0] || !parts[1]) unauthorized();
 
-const resolveIssuer = (claims: JwtClaims): string | null => {
-  if (typeof claims.iss === 'string' && claims.iss.trim()) return claims.iss;
-
-  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-  if (!supabaseUrl) return null;
-
-  return `${supabaseUrl.replace(/\/$/, '')}/auth/v1`;
-};
-
-const resolveJwksUrl = (issuer: string) => {
-  // Some Supabase keys (anon/service_role) use a non-URL issuer like "supabase" / "supabase-demo".
-  // These tokens are HS256-signed with the JWT secret and should be verified via shared secret,
-  // not via a remote JWKS URL.
-  if (!issuer.includes('://')) {
-    throw new Error(`Cannot resolve JWKS URL for non-URL issuer: ${issuer}`);
+  let header: unknown;
+  try {
+    header = JSON.parse(base64UrlDecodeToString(parts[0]));
+  } catch {
+    unauthorized();
   }
+  if (!header || typeof header !== 'object') unauthorized();
 
-  // Tokens minted by local Supabase often use an `iss` like:
-  //   http://127.0.0.1:25431/auth/v1
-  // That URL is NOT reachable from inside the Edge Runtime container, so we
-  // fetch JWKS via the container-reachable SUPABASE_URL instead (Kong).
-  if (isLocalIssuer(issuer)) {
-    const supabaseUrl = (Deno.env.get('SUPABASE_URL') ?? '').trim();
-    if (supabaseUrl) {
-      return new URL(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/.well-known/jwks.json`);
-    }
-  }
-
-  return new URL(`${issuer.replace(/\/$/, '')}/.well-known/jwks.json`);
+  const algValue = (header as { alg?: unknown }).alg;
+  const alg = typeof algValue === 'string' ? algValue.trim() : '';
+  if (!alg || alg.toLowerCase() === 'none') unauthorized();
+  return alg;
 };
 
-const getRemoteJwks = (issuer: string) => {
-  const jwksUrl = resolveJwksUrl(issuer);
-  const cacheKey = jwksUrl.toString();
-  const cached = jwksCache.get(cacheKey);
-  if (cached) return cached;
-
-  const jwks = createRemoteJWKSet(jwksUrl);
-  jwksCache.set(cacheKey, jwks);
-  return jwks;
-};
-
-const verifyWithSharedSecret = async (
-  token: string,
-  issuer: string,
-  secret: string,
-  audience?: string | string[],
-): Promise<JwtClaims> => {
-  const options: Record<string, unknown> = { issuer };
-  // Only enforce audience when provided by the caller.
-  if (audience) options.audience = audience;
-
-  const { payload } = await jwtVerify(token, new TextEncoder().encode(secret), options as any);
-
+const assertUserClaims = (payload: JWTPayload, expectedIss: string): JwtClaims => {
+  if (payload.iss !== expectedIss) unauthorized();
+  if (typeof payload.sub !== 'string' || !USER_UUID.test(payload.sub)) unauthorized();
+  if (payload.role !== 'authenticated') unauthorized();
+  if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp)) unauthorized();
+  if (payload.is_anonymous === true) unauthorized();
   return payload as JwtClaims;
 };
 
+const legacyJwtSecret = (): string => (Deno.env.get('SUPABASE_JWT_SECRET') ?? '').trim();
+
 export const verifyJwtClaims = async (token: string): Promise<JwtClaims> => {
-  const untrusted = decodeJwtClaims(token);
-  const header = decodeJwtHeader(token);
-  const issuer = resolveIssuer(untrusted);
-  if (!issuer) throw new Error('Missing iss claim.');
+  if (typeof token !== 'string' || !token.trim()) unauthorized();
+  const expectedIss = expectedIssuer();
+  const alg = peekAlgorithm(token.trim());
 
-  const algorithm = typeof header.alg === 'string' ? header.alg.trim() : '';
-  const isHmacAlgorithm = algorithm.startsWith('HS');
-  const sharedSecret = resolveJwtSecret() || (isLocalIssuer(issuer) ? LOCAL_SUPABASE_JWT_SECRET : null);
-  const audience = typeof untrusted.aud === 'string' || Array.isArray(untrusted.aud) ? (untrusted.aud as any) : undefined;
-  const isUrlIssuer = issuer.includes('://');
-
-  // Supabase anon/service keys can have an issuer like "supabase" or "supabase-demo" (not a URL).
-  // These are HS256 tokens, so verify using the shared secret and skip JWKS.
-  // Allow missing `aud` ONLY for these non-URL issuers (local-style keys).
-  if (isHmacAlgorithm && sharedSecret && !isUrlIssuer) {
-    return verifyWithSharedSecret(token, issuer, sharedSecret, audience);
-  }
-
-  // Local Supabase can mint either:
-  // - HS256 tokens (shared secret), or
-  // - ES256 tokens (JWKS).
-  // Never attempt shared-secret verification for non-HS algorithms.
-  if (isHmacAlgorithm && sharedSecret && isLocalIssuer(issuer)) {
-    // URL issuer: enforce audience (default to "authenticated" if missing).
-    return verifyWithSharedSecret(token, issuer, sharedSecret, audience ?? 'authenticated');
-  }
-
-  const jwks = getRemoteJwks(issuer);
   try {
-    const { payload } = await jwtVerify(token, jwks, {
-      issuer,
-      // URL issuer: enforce audience (default to "authenticated" if missing).
-      audience: audience ?? 'authenticated',
-    });
-
-    return payload as JwtClaims;
-  } catch (error) {
-    if (isHmacAlgorithm && sharedSecret && isLocalIssuer(issuer)) {
-      return verifyWithSharedSecret(token, issuer, sharedSecret, audience ?? 'authenticated');
+    if (alg === 'HS256') {
+      const secret = legacyJwtSecret();
+      if (!secret) unauthorized();
+      const { payload } = await jwtVerify(token.trim(), new TextEncoder().encode(secret), {
+        issuer: expectedIss,
+        audience: 'authenticated',
+        algorithms: ['HS256'],
+        clockTolerance: 5,
+      });
+      return assertUserClaims(payload, expectedIss);
     }
-    throw error;
+
+    if (alg !== 'ES256' && alg !== 'RS256') unauthorized();
+
+    const { payload } = await jwtVerify(token.trim(), ownJwksSet(), {
+      issuer: expectedIss,
+      audience: 'authenticated',
+      algorithms: ['ES256', 'RS256'],
+      clockTolerance: 5,
+    });
+    return assertUserClaims(payload, expectedIss);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'unauthorized') throw error;
+    return unauthorized();
   }
+};
+
+const timingSafeEqualString = (left: string, right: string): boolean => {
+  const encoder = new TextEncoder();
+  const a = encoder.encode(left);
+  const b = encoder.encode(right);
+  const length = Math.max(a.length, b.length, 1);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < length; i++) {
+    diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
+  }
+  return diff === 0;
+};
+
+const bearerEqualsEnv = (token: string, envName: string): boolean => {
+  const expected = (Deno.env.get(envName) ?? '').trim();
+  if (!token || !expected) return false;
+  return timingSafeEqualString(token, expected);
+};
+
+/** True only when the bearer equals SUPABASE_SERVICE_ROLE_KEY. Never a user claim. */
+export const isServiceRoleBearer = (req: Request): boolean => {
+  const token = getBearerToken(req)?.trim() ?? '';
+  return bearerEqualsEnv(token, 'SUPABASE_SERVICE_ROLE_KEY');
 };
 
 export const getVerifiedClaims = async (req: Request): Promise<{ token: string; claims: JwtClaims }> => {
-  const token = getBearerToken(req);
-  if (!token) throw new Error('Missing Authorization Bearer token.');
+  const token = getBearerToken(req)?.trim() ?? '';
+  if (!token) unauthorized();
+  if (bearerEqualsEnv(token, 'SUPABASE_SERVICE_ROLE_KEY')) unauthorized();
+  if (bearerEqualsEnv(token, 'SUPABASE_ANON_KEY')) unauthorized();
   const claims = await verifyJwtClaims(token);
   return { token, claims };
 };
+
+/** Verifies the bearer. The previous unverified decoder under this name was removed. */
+export const getTrustedClaims = getVerifiedClaims;
 
 export const getTenantIdFromClaims = (claims: JwtClaims): string | null => {
   const app = claims.app_metadata as Record<string, unknown> | undefined;

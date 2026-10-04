@@ -1,6 +1,6 @@
 import { corsHeaders } from '../_lib/cors.ts';
 import { supabaseAdmin } from '../_lib/supabaseAdmin.ts';
-import { getTenantIdFromClaims, getVerifiedClaims } from '../_shared/auth.ts';
+import { getTenantIdFromClaims, getVerifiedClaims, isServiceRoleBearer } from '../_shared/auth.ts';
 import { renderHtmlToPdfBytes, pdfAttachmentFromBytes } from '../_shared/htmlToPdf.ts';
 import { base64EncodeBytes } from '../_shared/pdfUtils.ts';
 import {
@@ -710,7 +710,8 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
   try {
-    const { claims } = await getVerifiedClaims(req);
+    const serviceCaller = isServiceRoleBearer(req);
+    const claims = serviceCaller ? null : (await getVerifiedClaims(req)).claims;
     const body = (await req.json().catch(() => ({}))) as JsonObject;
     const requestedTenantId = asNullableString(body.tenant_id);
     const inspectionId = asNullableString(body.inspection_id);
@@ -720,10 +721,9 @@ Deno.serve(async (req) => {
     if (!requestedTenantId) return json({ error: 'Missing tenant_id' }, 400);
     if (!inspectionId) return json({ error: 'Missing inspection_id' }, 400);
 
-    const role = normalize((claims as any)?.role);
-    const jwtTenantId = getTenantIdFromClaims(claims);
+    const jwtTenantId = claims ? getTenantIdFromClaims(claims) : null;
 
-    if (role !== 'service_role') {
+    if (!serviceCaller) {
       if (!jwtTenantId) return json({ error: 'Unauthorized: missing tenant claim' }, 403);
       if (requestedTenantId !== jwtTenantId) return json({ error: 'Tenant mismatch' }, 403);
     }
