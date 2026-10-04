@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -15,11 +15,27 @@ const TenantGuard = ({ children }) => {
   const { session, loading: authLoading, signOut } = useSupabaseAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const locationRef = useRef(location);
+  locationRef.current = location;
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+  const verifiedFor = useRef(null);
   const [isChecking, setIsChecking] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
 
   useEffect(() => {
     let mounted = true;
+    const userId = session?.user?.id || null;
+    const identity = userId && urlTenant ? `${userId}:${urlTenant}` : null;
+    // BrowserRouter's navigate function changes with the path. A new session
+    // object also arrives on token refresh. Either one used to set isChecking
+    // and unmount Finance, which discarded unsaved edits. Recheck the same
+    // user and tenant without taking the shell down.
+    // Same-tenant navigation does not re-run this effect, so a superuser or
+    // role change is not re-checked until the session or the URL tenant
+    // changes. Server RLS and the finance RPCs still enforce the role on
+    // every request. That client staleness is documented in the staging runbook.
+    const keepMounted = Boolean(identity && verifiedFor.current === identity);
 
     const safeSet = (setter) => {
       if (mounted) setter();
@@ -36,23 +52,29 @@ const TenantGuard = ({ children }) => {
     const verifyTenantAccess = async () => {
       if (authLoading) return;
 
-      safeSet(() => {
-        setIsChecking(true);
-        setAccessDenied(false);
-      });
+      if (!keepMounted) {
+        safeSet(() => {
+          setIsChecking(true);
+          setAccessDenied(false);
+        });
+      }
 
+      let granted = false;
       try {
         // Strict enforcement: tenant must exist in URL path.
         if (!urlTenant) {
-          navigate('/select-tenant', { replace: true });
+          verifiedFor.current = null;
+          navigateRef.current('/select-tenant', { replace: true });
           return;
         }
 
         // 1. Not Logged In
         if (!session) {
-          const next = encodeURIComponent(location.pathname + location.search);
+          verifiedFor.current = null;
+          const current = locationRef.current;
+          const next = encodeURIComponent(current.pathname + current.search);
           const loginPath = `/${urlTenant || 'tvg'}/login?next=${next}`;
-          navigate(loginPath, { replace: true });
+          navigateRef.current(loginPath, { replace: true });
           return;
         }
 
@@ -66,6 +88,7 @@ const TenantGuard = ({ children }) => {
         }
 
         if (isSuper) {
+          granted = true;
           return;
         }
 
@@ -80,6 +103,7 @@ const TenantGuard = ({ children }) => {
         }
 
         if (!jwtTenant) {
+          verifiedFor.current = null;
           safeSet(() => setAccessDenied(true));
           return;
         }
@@ -99,6 +123,7 @@ const TenantGuard = ({ children }) => {
               const newJwtTenant = newDecoded.app_metadata?.tenant_id;
 
               if (newJwtTenant === urlTenant) {
+                granted = true;
                 return;
               }
             }
@@ -106,19 +131,22 @@ const TenantGuard = ({ children }) => {
             console.warn('TenantGuard: refresh session failed/timed out.', refreshErr);
           }
 
+          verifiedFor.current = null;
           toast({
             title: 'Access Mismatch',
             description: `You are logged in to '${jwtTenant}' but trying to access '${urlTenant}'.`,
             variant: 'destructive'
           });
 
-          navigate(`/${jwtTenant}/crm/dashboard`, { replace: true });
+          navigateRef.current(`/${jwtTenant}/crm/dashboard`, { replace: true });
           return;
         }
+        granted = true;
       } catch (err) {
         console.error('TenantGuard: unexpected verification error', err);
       } finally {
-        safeSet(() => setIsChecking(false));
+        if (granted && identity) verifiedFor.current = identity;
+        if (!keepMounted) safeSet(() => setIsChecking(false));
       }
     };
 
@@ -127,7 +155,7 @@ const TenantGuard = ({ children }) => {
     return () => {
       mounted = false;
     };
-  }, [session, authLoading, urlTenant, navigate, location]);
+  }, [session, authLoading, urlTenant]);
 
   if (authLoading || isChecking) {
     return (

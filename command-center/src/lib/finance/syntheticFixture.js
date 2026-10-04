@@ -1,0 +1,662 @@
+/**
+ * SYNTHETIC — NOT TVG DATA
+ * Formula-shaped illustration. Not workbook seeds. Not owner pay.
+ * FinanceGuard must allow the session before this module is imported.
+ */
+export const SYNTHETIC_LABEL = 'SYNTHETIC — NOT TVG DATA';
+
+export const SYNTHETIC_PLANNING_FIXTURE = {
+  "meta": {
+    "data_class": "synthetic",
+    "label": "SYNTHETIC — NOT TVG DATA",
+    "illustration_for_route_tenant": "tvg",
+    "note": "Same formula relationships as the planning packet. Values are obviously fake and are not TVG workbook seeds.",
+    "stage_3_core_caveat": "Derived: v4 Stage 3 minus HVAC technician payroll only. HVAC-related non-labor/indirect costs and the third unit's capacity are not separated in the workbook. Informational; not a readiness input.",
+    "owner_field_reserve_label": "Owner field reserve / surge — priced as replacement cost; not permanent production labor."
+  },
+  "inputs": {
+    "structural": {
+      "weeks_per_year": 52,
+      "months_per_year": 12,
+      "days_per_month_ar": 30,
+      "rounding_increment_usd": 10
+    },
+    "hvac_delivery_authorized": false,
+    "hvac_revenue": null,
+    "stage_3_core_capacity": {
+      "revenue_producing_units": null,
+      "utilization": null,
+      "productive_hours_per_realized_day": null,
+      "hvac_share_of_direct_nonlabor_and_indirect_costs": null
+    },
+    "authoritative_actuals_source": null,
+    "stages": {
+      "stage_0": {
+        "label": "Stage 0 — Current Solo",
+        "operating_model": "Illustrated solo producer. This stage tracks a synthetic cash baseline. It is not a long-term pricing basis.",
+        "revenue_producing_units": 1,
+        "working_days_per_month": 10,
+        "utilization": 0.5,
+        "productive_hours_per_realized_day": 4,
+        "safety_months": 1,
+        "owner_management_comp": 0,
+        "owner_shadow_hours": 2,
+        "true_operating_profit_pct": 0,
+        "growth_reserve_pct": 0,
+        "bad_debt_warranty_pct": 0,
+        "unidentified_cost_contingency_pct": 0,
+        "scenario": {
+          "practical_billable_capacity": null,
+          "projected_billable_utilization": null,
+          "projected_contribution": null,
+          "cash_reserve": null,
+          "projected_revenue": null,
+          "modeled_labor_and_fixed_load": null
+        }
+      },
+      "stage_1": {
+        "label": "Stage 1 — Owner-Producer Team",
+        "operating_model": "Illustrated owner still produces, with one hired lead. Owner field time is priced at a replacement rate.",
+        "revenue_producing_units": 1,
+        "working_days_per_month": 10,
+        "utilization": 0.8,
+        "productive_hours_per_realized_day": 5,
+        "safety_months": 2,
+        "owner_management_comp": 100,
+        "owner_shadow_hours": 2,
+        "true_operating_profit_pct": 0.1,
+        "growth_reserve_pct": 0.1,
+        "bad_debt_warranty_pct": 0.05,
+        "unidentified_cost_contingency_pct": 0.05,
+        "scenario": {
+          "practical_billable_capacity": null,
+          "projected_billable_utilization": null,
+          "projected_contribution": null,
+          "cash_reserve": null,
+          "projected_revenue": null,
+          "modeled_labor_and_fixed_load": null
+        }
+      },
+      "stage_2": {
+        "label": "Stage 2 — Owner GM + Field Reserve",
+        "operating_model": "Owner primary role is general management. Routine production should not depend on the owner, but the owner remains available as field reserve / surge capacity.",
+        "production_units_definition": "A production unit means a schedulable revenue-producing truck/crew, not two dedicated employees. This illustration has two production units supported by three field technicians: two primary technicians anchor the units and the third is shared helper/floater capacity. The founder is not a fourth or permanent production technician.",
+        "revenue_producing_units": 2,
+        "working_days_per_month": 10,
+        "utilization": 0.5,
+        "productive_hours_per_realized_day": 4,
+        "safety_months": 3,
+        "owner_management_comp": 200,
+        "owner_shadow_hours": 1,
+        "true_operating_profit_pct": 0.1,
+        "growth_reserve_pct": 0.1,
+        "bad_debt_warranty_pct": 0.05,
+        "unidentified_cost_contingency_pct": 0.05,
+        "scenario": {
+          "practical_billable_capacity": null,
+          "projected_billable_utilization": null,
+          "projected_contribution": null,
+          "cash_reserve": null,
+          "projected_revenue": null,
+          "modeled_labor_and_fixed_load": null
+        }
+      },
+      "stage_3": {
+        "label": "Stage 3 — Full Production Units",
+        "operating_model": "Illustrated route lane plus a duct crew. HVAC is conditional and is not a committed expense unless the planning toggle is on.",
+        "revenue_producing_units": 2,
+        "working_days_per_month": 10,
+        "utilization": 1,
+        "productive_hours_per_realized_day": 5,
+        "safety_months": 4,
+        "owner_management_comp": 300,
+        "owner_shadow_hours": 0,
+        "true_operating_profit_pct": 0.1,
+        "growth_reserve_pct": 0.1,
+        "bad_debt_warranty_pct": 0.05,
+        "unidentified_cost_contingency_pct": 0.05,
+        "scenario": {
+          "practical_billable_capacity": null,
+          "projected_billable_utilization": null,
+          "projected_contribution": null,
+          "cash_reserve": null,
+          "projected_revenue": null,
+          "modeled_labor_and_fixed_load": null
+        }
+      }
+    },
+    "staffing": [
+      {
+        "key": "lead",
+        "label": "Lead technician",
+        "classification": "direct_field",
+        "wage": 10,
+        "burden": 0.5,
+        "weekly_hours": 10,
+        "headcount": {
+          "stage_0": 0,
+          "stage_1": 1,
+          "stage_2": 1,
+          "stage_3": 1
+        }
+      },
+      {
+        "key": "duct_tech",
+        "label": "Duct technician",
+        "classification": "direct_field",
+        "wage": 7,
+        "burden": 0.5,
+        "weekly_hours": 10,
+        "headcount": {
+          "stage_0": 0,
+          "stage_1": 0,
+          "stage_2": 1,
+          "stage_3": 1
+        }
+      },
+      {
+        "key": "helper",
+        "label": "Helper / floater",
+        "classification": "direct_field",
+        "wage": 8,
+        "burden": 0.5,
+        "weekly_hours": 10,
+        "headcount": {
+          "stage_0": 0,
+          "stage_1": 0,
+          "stage_2": 1,
+          "stage_3": 1
+        }
+      },
+      {
+        "key": "route_tech",
+        "label": "Route technician",
+        "classification": "direct_field",
+        "wage": 6,
+        "burden": 0.5,
+        "weekly_hours": 10,
+        "headcount": {
+          "stage_0": 0,
+          "stage_1": 0,
+          "stage_2": 0,
+          "stage_3": 1
+        }
+      },
+      {
+        "key": "hvac_tech",
+        "label": "HVAC technician",
+        "classification": "direct_field",
+        "hvac_specific": true,
+        "wage": 4,
+        "burden": 0.5,
+        "weekly_hours": 10,
+        "headcount": {
+          "stage_0": 0,
+          "stage_1": 0,
+          "stage_2": 0,
+          "stage_3": 1
+        }
+      },
+      {
+        "key": "admin",
+        "label": "Admin support",
+        "classification": "indirect_support",
+        "wage": 2,
+        "burden": 0.25,
+        "weekly_hours": 10,
+        "headcount": {
+          "stage_0": 0,
+          "stage_1": 1,
+          "stage_2": 1,
+          "stage_3": 1
+        }
+      }
+    ],
+    "owner_field_replacement": {
+      "wage": 10,
+      "burden": 0.5
+    },
+    "cost_pools": {
+      "direct_production": {
+        "fuel": {
+          "stage_0": 10,
+          "stage_1": 20,
+          "stage_2": 30,
+          "stage_3": 40
+        },
+        "consumables": {
+          "stage_0": 0,
+          "stage_1": 5,
+          "stage_2": 10,
+          "stage_3": 15
+        },
+        "job_rentals": {
+          "stage_0": 0,
+          "stage_1": 0,
+          "stage_2": 5,
+          "stage_3": 10
+        }
+      },
+      "indirect_field": {
+        "vehicle_payments": {
+          "stage_0": 10,
+          "stage_1": 20,
+          "stage_2": 20,
+          "stage_3": 30
+        },
+        "maintenance": {
+          "stage_0": 0,
+          "stage_1": 5,
+          "stage_2": 10,
+          "stage_3": 15
+        },
+        "equipment_financing": {
+          "stage_0": 0,
+          "stage_1": 5,
+          "stage_2": 10,
+          "stage_3": 15
+        },
+        "tooling_ppe": {
+          "stage_0": 0,
+          "stage_1": 5,
+          "stage_2": 5,
+          "stage_3": 10
+        },
+        "replacement_sinking_fund": {
+          "stage_0": 0,
+          "stage_1": 10,
+          "stage_2": 15,
+          "stage_3": 20
+        }
+      },
+      "ga": {
+        "office_shop": {
+          "stage_0": 0,
+          "stage_1": 10,
+          "stage_2": 20,
+          "stage_3": 30
+        },
+        "utilities": {
+          "stage_0": 0,
+          "stage_1": 5,
+          "stage_2": 5,
+          "stage_3": 10
+        },
+        "software": {
+          "stage_0": 0,
+          "stage_1": 5,
+          "stage_2": 10,
+          "stage_3": 15
+        },
+        "accounting_legal": {
+          "stage_0": 0,
+          "stage_1": 5,
+          "stage_2": 5,
+          "stage_3": 10
+        },
+        "office_misc": {
+          "stage_0": 10,
+          "stage_1": 5,
+          "stage_2": 5,
+          "stage_3": 5
+        }
+      },
+      "sales": {
+        "marketing": {
+          "stage_0": 0,
+          "stage_1": 10,
+          "stage_2": 20,
+          "stage_3": 30
+        },
+        "memberships": {
+          "stage_0": 0,
+          "stage_1": 5,
+          "stage_2": 5,
+          "stage_3": 10
+        },
+        "collateral": {
+          "stage_0": 0,
+          "stage_1": 5,
+          "stage_2": 5,
+          "stage_3": 5
+        }
+      },
+      "insurance": {
+        "gl_package": {
+          "stage_0": 10,
+          "stage_1": 15,
+          "stage_2": 20,
+          "stage_3": 25
+        },
+        "commercial_auto": {
+          "stage_0": 0,
+          "stage_1": 10,
+          "stage_2": 15,
+          "stage_3": 20
+        },
+        "umbrella": {
+          "stage_0": 0,
+          "stage_1": 5,
+          "stage_2": 5,
+          "stage_3": 10
+        },
+        "workers_comp_fixed": {
+          "stage_0": 0,
+          "stage_1": 0,
+          "stage_2": 0,
+          "stage_3": 0
+        },
+        "licensing": {
+          "stage_0": 0,
+          "stage_1": 5,
+          "stage_2": 5,
+          "stage_3": 10
+        }
+      }
+    },
+    "channels": [
+      {
+        "key": "direct",
+        "label": "Direct illustration",
+        "share": 0.4,
+        "dso_days": 10,
+        "acquisition_pct": 0.1,
+        "vent_price": 100
+      },
+      {
+        "key": "commercial",
+        "label": "Commercial illustration",
+        "share": 0.4,
+        "dso_days": 20,
+        "acquisition_pct": 0.08,
+        "vent_price": 90
+      },
+      {
+        "key": "portal",
+        "label": "Portal illustration",
+        "share": 0.2,
+        "dso_days": 30,
+        "acquisition_pct": 0.04,
+        "vent_price": 70
+      }
+    ],
+    "route": {
+      "average_ticket": 100,
+      "dense_stops": 4,
+      "stop_counts": [
+        4,
+        3,
+        2
+      ]
+    },
+    "production_copy": {
+      "route_crew": 1,
+      "duct_technical_minimum_crew": 2,
+      "duct_preferred_crew": 3,
+      "floor_per_drop": 20,
+      "book_per_drop": 24,
+      "typical_drops": 10
+    },
+    "services": {
+      "residential_dryer_vent": {
+        "label": "Residential dryer vent",
+        "labor_model": "route_tech",
+        "planned_price": 100,
+        "material_cost": 4,
+        "dispatch_dollars": 6,
+        "travel_hours": null,
+        "site_clock_hours": 2,
+        "production_unit_hours": 2
+      },
+      "duct_12_drop_floor": {
+        "label": "Duct floor illustration",
+        "labor_model": "duct_crew",
+        "planned_price": 200,
+        "material_cost": 8,
+        "dispatch_dollars": 9,
+        "travel_hours": null,
+        "site_clock_hours": 2,
+        "production_unit_hours": 2,
+        "drops": 10,
+        "price_per_drop": 20
+      },
+      "duct_12_drop_book": {
+        "label": "Duct book illustration",
+        "labor_model": "duct_crew",
+        "planned_price": 240,
+        "material_cost": 8,
+        "dispatch_dollars": 9,
+        "travel_hours": null,
+        "site_clock_hours": 2,
+        "production_unit_hours": 2,
+        "drops": 10,
+        "price_per_drop": 24
+      },
+      "duct_12_drop_stress": {
+        "label": "Duct stress illustration",
+        "labor_model": "duct_crew",
+        "planned_price": 240,
+        "material_cost": 8,
+        "dispatch_dollars": 9,
+        "travel_hours": null,
+        "site_clock_hours": 3,
+        "production_unit_hours": 3,
+        "drops": 10,
+        "price_per_drop": 24
+      },
+      "ahu_future": {
+        "label": "AHU cleaning — future / licensing dependent",
+        "labor_model": "hvac_tech",
+        "planned_price": 80,
+        "material_cost": 3,
+        "dispatch_dollars": 7,
+        "travel_hours": null,
+        "site_clock_hours": 2,
+        "production_unit_hours": 2
+      },
+      "duct_plus_ahu_package": {
+        "label": "Duct + AHU package",
+        "labor_model": "package",
+        "planned_price": 320,
+        "material_cost": 11,
+        "dispatch_dollars": 12,
+        "travel_hours": null,
+        "duct_clock_hours": 2,
+        "ahu_clock_hours": 2,
+        "dispatch_note": "Dispatch dollars are an entered assumption. They are not the sum of the duct and AHU dispatch lines."
+      }
+    }
+  },
+  "expected": {
+    "tolerance": {
+      "currency": 0.01,
+      "ratio": 0.0001,
+      "hours": 0.01
+    },
+    "stages": {
+      "stage_0": {
+        "cash_operating_cost": 40,
+        "economic_operating_cost": 70,
+        "required_monthly_revenue": 70,
+        "revenue_per_available_unit_day": 7,
+        "revenue_per_realized_day": 14,
+        "revenue_per_productive_unit_hour": 3.5,
+        "productive_unit_hours": 20,
+        "liquidity_planning_target": 40,
+        "field_headcount": 0,
+        "owner_field_replacement": 30,
+        "weighted_dso": 18
+      },
+      "stage_1": {
+        "cash_operating_cost": 1013.3333333333334,
+        "economic_operating_cost": 1043.3333333333335,
+        "required_monthly_revenue": 1490.4761904761908,
+        "revenue_per_available_unit_day": 149.0476190476191,
+        "revenue_per_realized_day": 186.30952380952385,
+        "revenue_per_productive_unit_hour": 37.26190476190477,
+        "productive_unit_hours": 40,
+        "liquidity_planning_target": 2026.6666666666667,
+        "field_headcount": 1,
+        "owner_field_replacement": 30,
+        "weighted_dso": 18
+      },
+      "stage_2": {
+        "cash_operating_cost": 2158.333333333333,
+        "economic_operating_cost": 2173.333333333333,
+        "required_monthly_revenue": 3104.7619047619046,
+        "revenue_per_available_unit_day": 155.23809523809524,
+        "revenue_per_realized_day": 310.4761904761905,
+        "revenue_per_productive_unit_hour": 77.61904761904762,
+        "productive_unit_hours": 40,
+        "liquidity_planning_target": 6474.999999999999,
+        "field_headcount": 3,
+        "owner_field_replacement": 15,
+        "weighted_dso": 18
+      },
+      "stage_3": {
+        "cash_operating_cost": 3018.3333333333335,
+        "economic_operating_cost": 3018.3333333333335,
+        "required_monthly_revenue": 4311.904761904762,
+        "revenue_per_available_unit_day": 215.59523809523813,
+        "revenue_per_realized_day": 215.59523809523813,
+        "revenue_per_productive_unit_hour": 43.11904761904762,
+        "productive_unit_hours": 100,
+        "liquidity_planning_target": 12073.333333333334,
+        "field_headcount": 5,
+        "owner_field_replacement": 0,
+        "weighted_dso": 18
+      },
+      "stage_3_core": {
+        "cash_operating_cost": 2758.3333333333335,
+        "economic_operating_cost": 2758.3333333333335,
+        "required_monthly_revenue": 3940.476190476191,
+        "revenue_per_available_unit_day": null,
+        "revenue_per_productive_unit_hour": null,
+        "productive_unit_hours": null,
+        "readiness": "Incomplete / Needs review"
+      }
+    },
+    "services": {
+      "residential_dryer_vent": {
+        "direct_labor": 18,
+        "direct_job_cost": 28,
+        "stage2_indirect_allocation": 24.416666666666668,
+        "fully_supported": 52.41666666666667,
+        "stage1_capacity_price": 74.52380952380955,
+        "stage2_capacity_price": 155.23809523809524,
+        "price_vs_stage2": -55.23809523809524,
+        "travel_hours": null,
+        "site_clock_hours": 2,
+        "production_unit_hours": 2
+      },
+      "duct_12_drop_floor": {
+        "direct_labor": 75,
+        "direct_job_cost": 92,
+        "stage2_indirect_allocation": 24.416666666666668,
+        "fully_supported": 116.41666666666667,
+        "stage1_capacity_price": 74.52380952380955,
+        "stage2_capacity_price": 155.23809523809524,
+        "price_vs_stage2": 44.76190476190476,
+        "travel_hours": null,
+        "site_clock_hours": 2,
+        "production_unit_hours": 2
+      },
+      "duct_12_drop_book": {
+        "direct_labor": 75,
+        "direct_job_cost": 92,
+        "stage2_indirect_allocation": 24.416666666666668,
+        "fully_supported": 116.41666666666667,
+        "stage1_capacity_price": 74.52380952380955,
+        "stage2_capacity_price": 155.23809523809524,
+        "price_vs_stage2": 84.76190476190476,
+        "travel_hours": null,
+        "site_clock_hours": 2,
+        "production_unit_hours": 2
+      },
+      "duct_12_drop_stress": {
+        "direct_labor": 112.5,
+        "direct_job_cost": 129.5,
+        "stage2_indirect_allocation": 36.625,
+        "fully_supported": 166.125,
+        "stage1_capacity_price": 111.78571428571432,
+        "stage2_capacity_price": 232.85714285714286,
+        "price_vs_stage2": 7.142857142857139,
+        "travel_hours": null,
+        "site_clock_hours": 3,
+        "production_unit_hours": 3
+      },
+      "ahu_future": {
+        "direct_labor": 12,
+        "direct_job_cost": 22,
+        "stage2_indirect_allocation": 24.416666666666668,
+        "fully_supported": 46.41666666666667,
+        "stage1_capacity_price": 74.52380952380955,
+        "stage2_capacity_price": 155.23809523809524,
+        "price_vs_stage2": -75.23809523809524,
+        "travel_hours": null,
+        "site_clock_hours": 2,
+        "production_unit_hours": 2
+      },
+      "duct_plus_ahu_package": {
+        "direct_labor": 87,
+        "direct_job_cost": 110,
+        "stage2_indirect_allocation": 48.833333333333336,
+        "fully_supported": 158.83333333333334,
+        "stage1_capacity_price": 149.0476190476191,
+        "stage2_capacity_price": 310.4761904761905,
+        "price_vs_stage2": 9.523809523809518,
+        "travel_hours": null,
+        "site_clock_hours": 2,
+        "production_unit_hours": 4
+      }
+    },
+    "controls": {
+      "stage2_indirect_per_productive_unit_hour": 12.208333333333334,
+      "stage2_required_duct_per_drop_target": 15.523809523809524,
+      "stage2_required_duct_per_drop_stress": 23.285714285714285,
+      "suggested_stress_book_price_per_drop": 30,
+      "stage1_required_avg_dryer_ticket": 37.26190476190477,
+      "stage2_required_avg_dryer_ticket": 38.80952380952381
+    },
+    "routes": [
+      {
+        "stops": 4,
+        "dailyRevenue": 400,
+        "stage1Gap": 250.9523809523809,
+        "stage2Gap": 244.76190476190476,
+        "requiredAverageTicketStage1": 37.26190476190477,
+        "requiredAverageTicketStage2": 38.80952380952381
+      },
+      {
+        "stops": 3,
+        "dailyRevenue": 300,
+        "stage1Gap": 150.9523809523809,
+        "stage2Gap": 144.76190476190476,
+        "requiredAverageTicketStage1": 49.6825396825397,
+        "requiredAverageTicketStage2": 51.74603174603175
+      },
+      {
+        "stops": 2,
+        "dailyRevenue": 200,
+        "stage1Gap": 50.952380952380906,
+        "stage2Gap": 44.76190476190476,
+        "requiredAverageTicketStage1": 74.52380952380955,
+        "requiredAverageTicketStage2": 77.61904761904762
+      }
+    ]
+  }
+};
+
+export function getSyntheticPlanningFixture(claims) {
+  if (!claims || claims.routeTenant !== 'tvg' || claims.sessionTenant !== 'tvg') {
+    const error = new Error('FINANCE_FIXTURE_DENIED');
+    error.code = 'FINANCE_FIXTURE_DENIED';
+    throw error;
+  }
+  if (SYNTHETIC_PLANNING_FIXTURE?.meta?.label !== SYNTHETIC_LABEL || SYNTHETIC_PLANNING_FIXTURE?.meta?.data_class !== 'synthetic') {
+    const error = new Error('FINANCE_FIXTURE_DENIED');
+    error.code = 'FINANCE_FIXTURE_DENIED';
+    throw error;
+  }
+  return structuredClone(SYNTHETIC_PLANNING_FIXTURE);
+}

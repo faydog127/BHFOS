@@ -19,13 +19,19 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { CRM_PRIMARY_NAV } from '@/config/crmPrimaryNav';
 import { CRM_PRODUCT_NAME } from '@/config/productBrand';
+import { evaluateFinanceAccess } from '@/lib/finance/authz';
 
 const BHFSidebar = ({ onNavigate = null }) => {
-  const { tenantId = 'tvg' } = useParams();
+  const { tenantId: routeTenantId } = useParams();
+  const tenantId = routeTenantId || 'tvg';
   const navigate = useNavigate();
   const [isSuperUser, setIsSuperUser] = useState(false);
   const [buildLabel, setBuildLabel] = useState('Build: …');
-  const { signOut, user } = useSupabaseAuth();
+  const { signOut, user, session } = useSupabaseAuth();
+  const financeAllowed = evaluateFinanceAccess({
+    accessToken: session?.access_token,
+    routeTenantId,
+  }).allowed;
 
   useEffect(() => {
     let cancelled = false;
@@ -99,6 +105,7 @@ const BHFSidebar = ({ onNavigate = null }) => {
       title: 'Finance',
       items: [
         { name: 'Invoices', path: '/crm/invoices', icon: CreditCard },
+        ...(financeAllowed ? [{ name: 'Financial planning', path: '/finance', icon: BarChart, finance: true }] : []),
       ],
     },
     {

@@ -6,6 +6,7 @@ import BHFCrmLayout from '@/components/BHFCrmLayout';
 import SelectTenant from '@/pages/SelectTenant';
 import { Loader2 } from 'lucide-react';
 import TenantGuard from '@/components/TenantGuard';
+import FinanceGuard from '@/components/finance/FinanceGuard';
 import MediaSessionGuard from '@/components/media/MediaSessionGuard';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import {
@@ -495,6 +496,17 @@ function App() {
         <Route path="/bhf/crm/*" element={<CrmAliasRedirect fromPrefix="/bhf/crm" />} />
         <Route path="/app/:tenantId/*" element={<AppAliasRedirect />} />
         <Route path="/:tenantId/login" element={<Login />} />
+        {/* Dedicated finance shell. Same TenantGuard as CRM, then FinanceGuard. Not inside BHFCrmLayout. */}
+        <Route
+          path="/:tenantId/finance/*"
+          element={
+            <TenantGuard>
+              <RouteErrorBoundary>
+                <FinanceGuard />
+              </RouteErrorBoundary>
+            </TenantGuard>
+          }
+        />
         <Route
           path="/:tenantId/crm/*"
           element={
