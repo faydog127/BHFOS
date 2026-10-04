@@ -114,6 +114,17 @@ export function collectAliasField(record, aliases, { maxLength = 8192 } = {}) {
     return { state: 'UNKNOWN', reason: missing[0]?.reason ?? 'ABSENT_KEY', missing };
   }
 
+  // A present invalid alias must never be silently masked by a valid alias.
+  // Fail closed so a malformed/poisoned duplicate source cannot become usable data.
+  if (invalid.length) {
+    return {
+      state: 'INVALID',
+      reason: 'ALIAS_SET_CONTAINS_INVALID',
+      candidates: [...known, ...invalid],
+      missing,
+    };
+  }
+
   const distinct = new Map();
   for (const item of known) distinct.set(stableStringify(canonicalComparable(item.value)), item);
   if (distinct.size > 1) {

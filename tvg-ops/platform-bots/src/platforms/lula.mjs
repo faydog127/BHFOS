@@ -14,6 +14,6 @@ export const lulaContract = {
     scope: ['scope', 'description', 'work_description'], nte: ['nte', 'not_to_exceed', 'max_amount'],
     scheduled_start: ['scheduled_start', 'appointment_start'], scheduled_end: ['scheduled_end', 'appointment_end'],
     due_at: ['due_at', 'deadline', 'due_date'], status: ['status', 'work_order_status'],
-    go_back: ['go_back', 'warranty_return'], warranty: ['is_warranty', 'warranty'], go_back_reason: ['go_back_reason', 'return_reason'],
+    go_back: ['go_back', 'warranty_return', 'is_warranty'], warranty: ['is_warranty', 'warranty'], go_back_reason: ['go_back_reason', 'return_reason'],
   },
 };

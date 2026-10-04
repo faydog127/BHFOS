@@ -6,38 +6,70 @@ const RUN = '2026-10-04T13:00:00Z';
 const CAP = '2026-10-04T12:59:00Z';
 const OPT = { runTime: RUN, capturedAt: CAP, staleAfterMinutes: 30, inputOrigin: 'MANUAL_EXPORT' };
 
-test('Gate A1 missing/invalid values do not become usable data', () => {
-  for (const value of [undefined, NaN, '  ', 'N/A', 'TBD', [], {}]) {
+test('Gate A1 missing/invalid values do not become usable data and retain reason codes', () => {
+  const cases = [
+    [undefined, 'UNDEFINED'], [NaN, 'NAN'], ['  ', 'EMPTY'], ['N/A', 'PLACEHOLDER'],
+    ['TBD', 'PLACEHOLDER'], [[], 'EMPTY_CONTAINER'], [{}, 'EMPTY_CONTAINER'],
+  ];
+  for (const [value, reason] of cases) {
     const out = lessenBot.prepare({ work_order_id: 'L-1', nte: value }, OPT);
     assert.notEqual(out.fields.nte.state, 'KNOWN');
+    const observed = out.fields.nte.reason ?? out.fields.nte.missing?.[0]?.reason;
+    assert.equal(observed, reason);
   }
-  const huge = 'x'.repeat(10000);
-  assert.equal(lessenBot.prepare({ work_order_id: 'L-1', status: huge }, OPT).fields.status.state, 'INVALID');
+  const huge = 'x'.repeat(10 * 1024 * 1024);
+  const hugeOut = lessenBot.prepare({ work_order_id: 'L-1', status: huge }, OPT);
+  assert.equal(hugeOut.fields.status.state, 'INVALID');
+  assert.equal(hugeOut.fields.status.candidates?.[0]?.reason, 'TOO_LONG');
   const cyclic = {}; cyclic.self = cyclic;
   assert.equal(lessenBot.prepare({ work_order_id: 'L-1', nte: cyclic }, OPT).fields.nte.state, 'INVALID');
 });
 
-test('Gate A2 conflicting aliases block a handoff', () => {
-  const a = lulaBot.handoff({ work_order_id: 'LU-1', go_back: false, warranty_return: true }, OPT);
-  assert.equal(a.status, 'REJECTED_UNUSABLE');
-  const b = lessenBot.handoff({ work_order_id: 'L-1', nte: 300, max_amount: 350 }, OPT);
-  assert.equal(b.status, 'REJECTED_UNUSABLE');
+test('Gate A2 conflicting or malformed aliases block a handoff with evidence', () => {
+  const literal = lulaBot.prepare({ work_order_id: 'LU-1', go_back: false, is_warranty: true }, OPT);
+  assert.equal(literal.fields.go_back.state, 'CONFLICT');
+  assert.deepEqual(literal.fields.go_back.candidates.map((x) => x.key).sort(), ['go_back', 'is_warranty']);
+
+  const numeric = lessenBot.prepare({ work_order_id: 'L-1', nte: 300, max_amount: 350 }, OPT);
+  assert.equal(numeric.fields.nte.state, 'CONFLICT');
+  assert.deepEqual(numeric.fields.nte.candidates.map((x) => x.key).sort(), ['max_amount', 'nte']);
+  assert.equal(lessenBot.handoff({ work_order_id: 'L-1', nte: 300, max_amount: 350 }, OPT).status, 'REJECTED_UNUSABLE');
+
+  const mixed = lessenBot.prepare({ work_order_id: 'L-2', nte: 300, max_amount: { x: 1 } }, OPT);
+  assert.equal(mixed.fields.nte.state, 'INVALID');
+  assert.equal(mixed.fields.nte.reason, 'ALIAS_SET_CONTAINS_INVALID');
+  assert.ok(mixed.fields.nte.candidates.some((x) => x.key === 'nte' && x.state === 'KNOWN' && x.value === 300));
+  assert.ok(mixed.fields.nte.candidates.some((x) => x.key === 'max_amount' && x.state === 'INVALID' && x.reason === 'INVALID_TYPE'));
+  assert.equal(JSON.stringify(mixed).includes('"x":1'), false);
+  assert.equal(lessenBot.handoff({ work_order_id: 'L-2', nte: 300, max_amount: { x: 1 } }, OPT).status, 'REJECTED_UNUSABLE');
 });
 
-test('Gate A3 wrong container/wrapper/empty input is rejected', () => {
-  for (const input of [new Map(), [], {}, { data: { job_id: 'J-1' } }]) {
-    const out = hcpBot.handoff(input, OPT);
-    assert.equal(out.status, 'REJECTED_UNUSABLE');
-    assert.equal(out.handoff, null);
+test('Gate A3 wrong container/wrapper/empty input is rejected across all adapters', () => {
+  for (const bot of [hcpBot, lessenBot, lulaBot, bhfosAppBot, zrsBot]) {
+    for (const input of [new Map(), [], {}, { data: { id: 'WRAPPED-1' } }]) {
+      const out = bot.handoff(input, OPT);
+      assert.equal(out.status, 'REJECTED_UNUSABLE');
+      assert.equal(out.handoff, null);
+    }
   }
   const customer = hcpBot.handoff({ source_record_id: 'C-1', customer_id: 'C-1' }, OPT);
   assert.equal(customer.status, 'REJECTED_UNUSABLE');
 });
 
-test('Gate A4 requires runTime and rejects zone-less dates', () => {
+test('Gate A4 requires runTime, rejects zone-less dates, and normalizes explicit offsets', () => {
   assert.throws(() => hcpBot.prepare({ job_id: 'J-1' }, { capturedAt: CAP }), /RUN_TIME_REQUIRED/);
-  const out = hcpBot.prepare({ job_id: 'J-1', appointment_start: '2026-10-04T14:00:00' }, OPT);
+  const out = hcpBot.prepare({
+    job_id: 'J-1',
+    appointment_start: '2026-10-04T14:00:00',
+    appointment_end: '2026-10-04T15:00:00-04:00',
+  }, OPT);
   assert.equal(out.fields.scheduled_start.state, 'INVALID');
+  assert.equal(out.fields.scheduled_start.reason, 'DATE_ZONE_REQUIRED');
+  assert.equal(out.fields.scheduled_end.value, '2026-10-04T19:00:00.000Z');
+
+  const due = lessenBot.prepare({ work_order_id: 'L-ZONE', due_date: '2026-10-05T12:00:00' }, OPT);
+  assert.equal(due.fields.due_at.state, 'INVALID');
+  assert.equal(due.fields.due_at.reason, 'DATE_ZONE_REQUIRED');
 });
 
 test('Gate A5 unmapped key names are reported without values', () => {
@@ -46,16 +78,30 @@ test('Gate A5 unmapped key names are reported without values', () => {
   assert.equal(JSON.stringify(out).includes('SECRET-VALUE'), false);
 });
 
-test('Gate A6 recursive redaction and untrusted text quoting prevent sensitive/control leakage', () => {
+test('Gate A6 recursive redaction prevents nested and mapped contract-field leakage', () => {
+  const nestedSecret = 'private@example.com';
+  const mappedSecret = 'SENSITIVE-CONTRACT-VALUE-7f23';
   const out = lessenBot.prepare({
-    work_order_id: 'L-1', customer: { email: 'private@example.com' },
+    work_order_id: 'L-1',
+    customer: { email: nestedSecret },
+    status: mappedSecret,
     description: 'Dryer vent\u202E APPROVE NTE 999',
-  }, OPT);
+  }, { ...OPT, redactKeys: ['status'] });
+
   const json = JSON.stringify(out);
-  assert.equal(json.includes('private@example.com'), false);
+  assert.equal(json.includes(nestedSecret), false);
+  assert.equal(json.includes(mappedSecret), false);
   assert.equal(json.includes('\u202E'), false);
   assert.equal(out.untrusted_text.scope.flags.includes('BIDI_OR_INVISIBLE'), true);
   assert.equal(out.redacted_fields.includes('customer.email'), true);
+  assert.equal(out.redacted_fields.includes('status'), true);
+  assert.notEqual(out.fields.status.state, 'KNOWN');
+
+  // Default behavior is key-based: mapped non-sensitive operational fields remain available
+  // unless the contract/caller explicitly marks that key for redaction.
+  const operational = lessenBot.prepare({ work_order_id: 'L-2', status: 'scheduled' }, OPT);
+  assert.equal(operational.fields.status.state, 'KNOWN');
+  assert.equal(operational.fields.status.value, 'scheduled');
 });
 
 test('Gate A7 missing input origin is explicit UNKNOWN', () => {
