@@ -27,8 +27,8 @@ export function sha256(value) {
 
 export function stableStringify(value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return \`[\${value.map(stableStringify).join(',')}]\`;
-  return \`{\${Object.keys(value).sort().map((k) => \`\${JSON.stringify(k)}:\${stableStringify(value[k])}\`).join(',')}}\`;
+  if (Array.isArray(value)) return '[' + value.map(stableStringify).join(',') + ']';
+  return '{' + Object.keys(value).sort().map((k) => JSON.stringify(k) + ':' + stableStringify(value[k])).join(',') + '}';
 }
 
 export function assertAllowedOptions(options) {
@@ -36,7 +36,7 @@ export function assertAllowedOptions(options) {
     throw new TypeError('options must be an object');
   }
   for (const key of Object.keys(options)) {
-    if (!ALLOWED_OPTIONS.has(key)) throw new Error(\`OPTION_NOT_ALLOWED:\${key}\`);
+    if (!ALLOWED_OPTIONS.has(key)) throw new Error('OPTION_NOT_ALLOWED:' + key);
   }
   if (options.staleAfterMinutes !== undefined && (!Number.isFinite(options.staleAfterMinutes) || options.staleAfterMinutes < 0)) {
     throw new Error('INVALID_STALE_THRESHOLD');
@@ -163,8 +163,8 @@ export function quoteUntrustedText(field, maxLength = 4096) {
   if (CONTROL_CHARS.test(raw)) flags.push('CONTROL_CHAR');
   CONTROL_CHARS.lastIndex = 0;
   const quoted = raw
-    .replace(BIDI_OR_INVISIBLE, (c) => \`\\\\u\${c.charCodeAt(0).toString(16).padStart(4, '0')}\`)
-    .replace(CONTROL_CHARS, (c) => \`\\\\u\${c.charCodeAt(0).toString(16).padStart(4, '0')}\`);
+    .replace(BIDI_OR_INVISIBLE, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'))
+    .replace(CONTROL_CHARS, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
   return { state: 'KNOWN', quoted_value: quoted, source_key: field.source_key, raw_hash: sha256(raw), flags };
 }
 
@@ -223,10 +223,10 @@ export function recursivelyRedact(record, redactKeys = []) {
     if (value && typeof value === 'object') {
       if (seen.has(value)) return '[CYCLIC_REDACTED]';
       seen.add(value);
-      if (Array.isArray(value)) return value.map((v, i) => walk(v, \`\${path}[\${i}]\`));
+      if (Array.isArray(value)) return value.map((v, i) => walk(v, path + '[' + i + ']'));
       const out = {};
       for (const [key, child] of Object.entries(value)) {
-        const next = path ? \`\${path}.\${key}\` : key;
+        const next = path ? path + '.' + key : key;
         if (keys.has(key.toLowerCase())) {
           redactedFields.push(next);
           out[key] = null;
