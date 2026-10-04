@@ -154,7 +154,8 @@ describe('stage D recheck: pricing columns, timestamp, print css', () => {
     assert.match(tableRule, /width:\s*100%/);
     assert.equal(/width:\s*\d+px/.test(tableRule), false, 'no fixed pixel table width in print');
     assert.equal(/min-width/.test(css), false, 'no min-width that could force a clip');
-    assert.match(css, /\.report-value\s*\{[^}]*white-space:\s*nowrap/, 'numeric values stay on one line');
+    assert.match(css, /table:has\(th:nth-child\(10\)\) \.report-value\s*\{[^}]*white-space:\s*nowrap/, 'pricing matrix values stay on one line');
+    assert.equal(/(^|\n)\s*\.report-value\s*\{[^}]*nowrap/.test(css), false, 'nowrap does not apply outside the 10-column table');
     assert.equal(/th,\s*td\s*\{[^}]*nowrap/.test(css), false, 'label cells must wrap in print');
     assert.match(css, /white-space:\s*normal/);
     assert.match(css, /overflow-wrap:\s*anywhere|word-break:\s*break-word|overflow-wrap:\s*break-word/);

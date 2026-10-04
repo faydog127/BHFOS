@@ -24,10 +24,19 @@ function printFailures(css) {
   if ((css.match(/@media print/g) || []).length !== 2) failures.push('two print blocks');
   if (/@page[^{]*\{[^}]*size\s*:/.test(css)) failures.push('page size');
   if (/orientation\s*:\s*portrait/.test(css)) failures.push('portrait media');
-  if (!/\.report-value\s*\{[^}]*white-space:\s*nowrap\s*!important/.test(css)) failures.push('value nowrap');
+  if (!/table:has\(th:nth-child\(10\)\) \.report-value\s*\{[^}]*white-space:\s*nowrap\s*!important/.test(css)) failures.push('value nowrap');
+  if (/(^|\n)\s*\.report-value\s*\{[^}]*nowrap/.test(css)) failures.push('global nowrap');
   if (/th,\s*td\s*\{[^}]*nowrap/.test(css) || /\n {2}th \{[^}]*nowrap/.test(css)) failures.push('label nowrap');
   if (!/width:\s*8%/.test(css)) failures.push('value width');
   if (!/\.report-value\s*\{[^}]*overflow-wrap:\s*normal\s*!important/.test(css)) failures.push('report-value');
+  if (!/table:has\(th:nth-child\(10\)\) th:first-child, table:has\(th:nth-child\(10\)\) td:first-child\s*\{[^}]*overflow-wrap:\s*anywhere\s*!important/.test(css)) failures.push('label wrap');
+  if (!/th,\s*td\s*\{[^}]*overflow-wrap:\s*anywhere;/.test(css)) failures.push('anywhere');
+  if (!/\n {2}th \{[^}]*overflow-wrap:\s*anywhere\s*!important/.test(css)) failures.push('header wrap');
+  const faceAt = css.indexOf('@font-face');
+  const mediaAt = css.indexOf('@media');
+  if (faceAt < 0 || mediaAt < 0 || faceAt > mediaAt) failures.push('font face');
+  if (!/font-display:\s*swap/.test(css)) failures.push('font display');
+  if (/font-display:\s*block/.test(css)) failures.push('font block');
   if (!/thead\s*\{[^}]*display:\s*table-header-group/.test(css)) failures.push('thead');
   if (!/font-size:\s*8px\s*!important/.test(css)) failures.push('8px');
   if (!/font-size:\s*10px\s*!important/.test(css)) failures.push('10px');
@@ -36,7 +45,6 @@ function printFailures(css) {
   if (/https?:\/\//.test(css)) failures.push('remote font');
   if (!existsSync(path.join(root, 'public/assets/finance/report-sans.woff2'))) failures.push('woff2 missing');
   if (!/table-layout:\s*fixed/.test(css)) failures.push('fixed');
-  if (!/overflow-wrap:\s*anywhere/.test(css)) failures.push('anywhere');
   if (/@media\s+(?!print\b)/.test(css)) failures.push('non-print media');
   return failures;
 }
@@ -127,7 +135,9 @@ describe('phase H print style mutants', () => {
       printCss.replace('@media print {\n  table:has(th:nth-child(10))', '@media print and (orientation: portrait) {\n  table:has(th:nth-child(10))'),
       printCss.replace('white-space: nowrap !important;', 'white-space: normal !important;'),
       printCss.replace('width: 8%', 'width: 11%'),
-      printCss.replace('th { overflow-wrap: normal !important;', 'th { white-space: nowrap !important; overflow-wrap: normal !important;'),
+      printCss.replace('th { overflow-wrap: anywhere !important;', 'th { white-space: nowrap !important; overflow-wrap: anywhere !important;'),
+      printCss.replace('table:has(th:nth-child(10)) th:first-child, table:has(th:nth-child(10)) td:first-child { width: 8%; overflow-wrap: anywhere !important; }', 'table:has(th:nth-child(10)) th:first-child, table:has(th:nth-child(10)) td:first-child { width: 8%; }'),
+      printCss.replace('font-display: swap', 'font-display: block'),
       printCss.replace('font-size: 8px !important;', 'font-size: 10px !important;'),
       printCss.replace('thead { display: table-header-group; }', 'thead { display: table-row-group; }'),
       printCss.replace('table-layout: fixed;', 'table-layout: auto;'),

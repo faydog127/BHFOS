@@ -90,29 +90,39 @@ describe('stage D closeout: numeric value cells and print scoping', () => {
     assert.equal(/<td\b(?![^>]*className)/.test(JSX), false, 'td without className');
   });
 
-  it('print css is entirely inside @media print or @page (nothing leaks to screen)', () => {
+  it('print css is inside @media print, @page, or the report @font-face', () => {
     assert.equal(printBlocks.length, 2);
     assert.ok(printBase, '@media print block');
     assert.equal(wideTable.prelude, '@media print');
-    for (const b of BLOCKS) assert.match(b.prelude, /^(@media print\b|@page\b)/, `top-level block outside print: ${b.prelude}`);
+    for (const b of BLOCKS) assert.match(b.prelude, /^(@media print\b|@page\b|@font-face\b)/, `top-level block outside print: ${b.prelude}`);
+    assert.equal(BLOCKS.filter((b) => b.prelude.startsWith('@font-face')).length, 1);
+    const face = BLOCKS.find((b) => b.prelude.startsWith('@font-face'));
+    assert.match(face.body, /font-display:\s*swap/);
+    assert.equal(/font-display:\s*block/.test(CSS), false);
+    assert.equal(printBlocks.some((b) => /@font-face/.test(b.body)), false, '@font-face stays outside @media print');
     assert.equal(/@media\s+(?!print)/.test(CSS), false, 'no non-print media block');
     assert.equal(/@media[^{]*screen/.test(CSS), false);
-    assert.equal(CSS.replace(/@media[^{]*\{[\s\S]*?\n\}\n/g, '').replace(/@page[^{]*\{[^}]*\}/g, '').trim(), '', 'no bare rules outside at-rules');
+    assert.match(JSX, /document\.fonts\.load\('400 8px "Finance Report Sans"'\)/);
+    assert.match(JSX, /data-print-ready=/);
   });
 
-  it('.report-value stays one line and labels stay wrappable', () => {
+  it('.report-value wraps prose and the pricing matrix stays one line', () => {
     const rule = rulesIn(printBase.body).find((r) => r.sel === '.report-value');
     assert.ok(rule, '.report-value rule in @media print');
     assert.match(rule.decl, /overflow-wrap:\s*normal\s*!important/);
     assert.match(rule.decl, /word-break:\s*normal\s*!important/);
     assert.match(rule.decl, /hyphens:\s*manual\s*!important/);
-    assert.match(rule.decl, /white-space:\s*nowrap\s*!important/);
+    assert.equal(/nowrap/.test(rule.decl), false, 'long text cells must wrap');
     assert.equal(/anywhere|break-all|break-word|hyphens:\s*auto/.test(rule.decl), false);
+    const scoped = rulesIn(wideTable.body).find((r) => r.sel === 'table:has(th:nth-child(10)) .report-value');
+    assert.ok(scoped, 'nowrap is limited to the 10-column table');
+    assert.match(scoped.decl, /white-space:\s*nowrap\s*!important/);
     const cell = rulesIn(printBase.body).find((r) => r.sel === 'th, td');
     assert.match(cell.decl, /white-space:\s*normal\s*!important/);
     assert.equal(/nowrap/.test(cell.decl), false, 'labels must remain wrappable');
     const head = rulesIn(printBase.body).find((r) => r.sel === 'th');
     assert.equal(/nowrap/.test(head.decl), false);
+    assert.match(head.decl, /overflow-wrap:\s*anywhere\s*!important/);
     assert.match(cell.decl, /overflow-wrap:\s*anywhere/);
     assert.match(CSS, /table\s*\{[^}]*table-layout:\s*fixed/);
   });
@@ -127,8 +137,9 @@ describe('stage D closeout: numeric value cells and print scoping', () => {
     assert.match(sized[0].sel, /table:has\(th:nth-child\(10\)\) th, table:has\(th:nth-child\(10\)\) td/);
     assert.match(sized[0].decl, /font-size:\s*8px\s*!important/);
     assert.match(sized[0].decl, /padding:\s*2px 1px\s*!important/);
-    const first = rs.find((r) => /:first-child/.test(r.sel));
+    const first = rs.find((r) => /:first-child/.test(r.sel) && !/\.report-value/.test(r.sel));
     assert.match(first.decl, /width:\s*8%/);
+    assert.match(first.decl, /overflow-wrap:\s*anywhere\s*!important/);
     assert.equal(/nowrap/.test(first.decl), false);
     const head = rs.find((r) => /th:not\(:first-child\)/.test(r.sel));
     assert.match(head.decl, /overflow-wrap:\s*normal\s*!important/);
@@ -190,6 +201,10 @@ describe('stage D closeout: the browser smoke spec still asserts the closeout gu
     assert.match(spec, /name: 'Signed variance'/);
     assert.match(spec, /name: 'Stage 2 capacity'/);
     assert.match(spec, /expect\(shippedPrintCss\)\.toContain\('\.report-value'\)/);
+    assert.match(spec, /not a readiness input/);
+    assert.match(spec, /data-print-ready/);
+    assert.match(spec, /residential_dryer_vent/);
+    assert.match(spec, /duct_plus_ahu_package/);
     assert.match(spec, /format: 'A4'/);
     assert.match(spec, /landscape: true/);
     assert.equal(/test\.(fixme|only|skip)\b/.test(spec), false);

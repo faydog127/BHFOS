@@ -9,6 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 const out = process.env.FINANCE_REPORT_SHOTS || '/opt/cursor/artifacts/finance-stage-d';
 const presets = [
@@ -48,6 +49,111 @@ function assertPaper(file, expectedBox, landscape) {
     expect(Math.abs(box[1] - expectedBox[1]), file).toBeLessThan(3);
     if (landscape) expect(box[0], file).toBeGreaterThan(box[1]);
   }
+}
+
+const paperViews = [
+  { width: 725, height: 960, name: 'letter' },
+  { width: 703, height: 1000, name: 'a4' },
+  { width: 965, height: 700, name: 'letter-landscape' },
+  { width: 1000, height: 680, name: 'a4-landscape' },
+];
+const priceLabels = ['residential_dryer_vent', 'duct_plus_ahu_package'];
+
+async function pdfItems(file) {
+  const data = new Uint8Array(readFileSync(file));
+  const doc = await getDocument({ data, disableWorker: true, isEvalSupported: false }).promise;
+  const items = [];
+  for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
+    const pdfPage = await doc.getPage(pageNumber);
+    const viewport = pdfPage.getViewport({ scale: 1 });
+    const content = await pdfPage.getTextContent();
+    for (const item of content.items) {
+      if (!item.str) continue;
+      const height = item.height || Math.hypot(item.transform[2], item.transform[3]);
+      items.push({
+        str: item.str,
+        x: item.transform[4],
+        y: item.transform[5],
+        w: item.width,
+        h: height,
+        page: pageNumber,
+        pageWidth: viewport.width,
+        pageHeight: viewport.height,
+      });
+    }
+  }
+  return items;
+}
+
+function pdfText(items) {
+  const sorted = [...items].sort((a, b) => a.page - b.page || b.y - a.y || a.x - b.x);
+  let text = '';
+  let prev = null;
+  for (const item of sorted) {
+    if (prev) {
+      const sameLine = prev.page === item.page && Math.abs(item.y - prev.y) < 2;
+      const gap = item.x - (prev.x + prev.w);
+      if (!sameLine || gap > 0.5) text += ' ';
+    }
+    text += item.str;
+    prev = item;
+  }
+  return text;
+}
+
+function labelFragments(items, label) {
+  return items.filter((item) => {
+    if (item.str.length < 2 || !label.includes(item.str)) return false;
+    const owners = priceLabels.filter((name) => name.includes(item.str));
+    return owners.length === 1 && owners[0] === label;
+  }).sort((a, b) => a.page - b.page || b.y - a.y || a.x - b.x);
+}
+
+function boxesOverlap(left, right) {
+  const xOverlap = Math.min(left.x + left.w, right.x + right.w) - Math.max(left.x, right.x);
+  const yOverlap = Math.min(left.y + left.h, right.y + right.h) - Math.max(left.y, right.y);
+  return xOverlap > 0.5 && yOverlap > 0.5;
+}
+
+async function assertPriceLabelsClear(file) {
+  const items = await pdfItems(file);
+  const planned = items.filter((item) => /^planned(?:\s+price)?$/i.test(item.str.trim()));
+  expect(planned.length, file).toBeGreaterThan(0);
+  const boundary = Math.min(...planned.map((item) => item.x));
+  const labels = items.filter((item) => priceLabels.some((label) => label.includes(item.str) && item.str.length >= 4) && item.x < boundary);
+  expect(labels.length, file).toBeGreaterThan(0);
+  const nextColumn = items.filter((item) => item.x >= boundary - 0.4);
+  const hits = [];
+  for (const label of labels) {
+    for (const other of nextColumn) {
+      if (label.page === other.page && boxesOverlap(label, other)) hits.push(`${label.str} x ${other.str}`);
+    }
+  }
+  expect(hits, file).toEqual([]);
+  for (const label of priceLabels) {
+    expect(labelFragments(items, label).map((item) => item.str).join(''), file).toContain(label);
+  }
+}
+
+async function assertStage3Note(file) {
+  const items = await pdfItems(file);
+  const joined = pdfText(items).replace(/\s+/g, ' ');
+  expect(joined, file).toContain('not a readiness input');
+}
+
+async function assertInsidePageMargin(file) {
+  const items = await pdfItems(file);
+  const margin = (12 * 72) / 25.4;
+  const past = items.filter((item) => item.x + item.w > item.pageWidth - margin + 1 || item.x < margin - 1);
+  expect(past.map((item) => item.str), file).toEqual([]);
+}
+
+async function assertWrappedValuesFit(page, label) {
+  const overflow = await page.evaluate(() => [...document.querySelectorAll('.report-value')].filter((el) => {
+    if (el.closest('table')?.querySelector('th:nth-child(10)')) return false;
+    return el.scrollWidth > el.clientWidth + 1;
+  }).map((el) => (el.textContent || '').trim().slice(0, 80)));
+  expect(overflow, label).toEqual([]);
 }
 
 async function assertNoDocumentOverflow(page) {
@@ -228,6 +334,7 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     await page.setViewportSize({ width: 740, height: 1056 });
     await page.emulateMedia({ media: 'print' });
     await page.evaluate(() => document.fonts.ready);
+    await expect(page.locator('.report-sheet')).toHaveAttribute('data-print-ready', 'yes');
     await expect(page.locator('[data-print-hide]')).toBeHidden();
     await expect(surface.locator('a:visible')).toHaveCount(0);
     await expect(surface.locator('input, textarea, select, button')).toHaveCount(0);
@@ -293,6 +400,13 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     const printed = await page.getByTestId('finance-reports').innerText();
     expect(printed).not.toContain('NotReady');
     expect(printed).not.toContain('below_near');
+    for (const viewport of paperViews) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.emulateMedia({ media: 'print' });
+      await assertWrappedValuesFit(page, `${id} ${viewport.name}`);
+    }
+    await page.setViewportSize({ width: 740, height: 1056 });
+    await page.emulateMedia({ media: 'print' });
     await page.screenshot({ path: `${out}/${id}-print.png`, fullPage: true });
     await page.pdf({ path: `${out}/${id}.pdf`, format: 'Letter', printBackground: true });
     assertPaper(`${out}/${id}.pdf`, [612, 792], false);
@@ -302,6 +416,19 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     assertPaper(`${out}/${id}-landscape.pdf`, [792, 612], true);
     await page.pdf({ path: `${out}/${id}-a4-landscape.pdf`, format: 'A4', landscape: true, printBackground: true });
     assertPaper(`${out}/${id}-a4-landscape.pdf`, [842, 595], true);
+    if (id === 'growth-readiness') {
+      for (const suffix of ['', '-a4', '-landscape', '-a4-landscape']) {
+        await assertStage3Note(`${out}/${id}${suffix}.pdf`);
+      }
+    }
+    if (id === 'pricing-economics') {
+      for (const suffix of ['', '-a4', '-landscape', '-a4-landscape']) {
+        await assertPriceLabelsClear(`${out}/${id}${suffix}.pdf`);
+      }
+    }
+    if (id === 'cost-structure') {
+      await assertInsidePageMargin(`${out}/${id}-a4.pdf`);
+    }
     await page.emulateMedia({ media: 'screen' });
     await page.setViewportSize({ width: 1280, height: 900 });
   }
@@ -335,6 +462,7 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     await page.setViewportSize(viewport);
     await page.emulateMedia({ media: 'print' });
     await page.evaluate(() => document.fonts.ready);
+    await expect(page.locator('.report-sheet')).toHaveAttribute('data-print-ready', 'yes');
     const fit = await page.evaluate(({ seven, eight }) => {
       const sheet = document.querySelector('.report-sheet');
       const table = document.querySelector('[data-testid="report-services"] table');
@@ -375,6 +503,29 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
     await page.screenshot({ path: `${out}/${name}.png`, fullPage: true });
     await page.pdf({ path: `${out}/${name}.pdf`, printBackground: true, ...pdf });
     assertPaper(`${out}/${name}.pdf`, expectedBox, landscape);
+  }
+
+  let delayed = false;
+  await page.route('**/report-sans.woff2', async (route) => {
+    delayed = true;
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+    await route.continue();
+  });
+  const client = await page.context().newCDPSession(page);
+  await client.send('Network.enable');
+  await client.send('Network.setCacheDisabled', { cacheDisabled: true });
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('finance-report-pricing-economics')).toBeVisible();
+  await page.setViewportSize({ width: 703, height: 1000 });
+  await page.emulateMedia({ media: 'print' });
+  const fontStarted = Date.now();
+  await page.pdf({ path: `${out}/pricing-delayed-font.pdf`, format: 'A4', printBackground: true });
+  expect(Date.now() - fontStarted, 'print must paint before the delayed face arrives').toBeLessThan(3500);
+  expect(delayed, 'the report face request must be delayed').toBe(true);
+  const delayedItems = await pdfItems(`${out}/pricing-delayed-font.pdf`);
+  for (const label of priceLabels) {
+    expect(labelFragments(delayedItems, label).map((item) => item.str).join(''), 'pricing-delayed-font.pdf').toContain(label);
   }
 
   expect(writes.every((line) => line.includes('/rpc/check_is_superuser'))).toBe(true);

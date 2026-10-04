@@ -1,17 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import EntityBrandIdentity from '@/components/finance/EntityBrandIdentity';
 import { FINANCE_REPORT_PRESETS, buildFinanceReport, screenNote } from '@/lib/finance/reports';
 
 const PRINT_CSS = `
+@font-face {
+  font-family: "Finance Report Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/assets/finance/report-sans.woff2") format("woff2");
+}
 @media print {
-  @font-face {
-    font-family: "Finance Report Sans";
-    font-style: normal;
-    font-weight: 400;
-    font-display: block;
-    src: url("/assets/finance/report-sans.woff2") format("woff2");
-  }
   [data-print-hide] { display: none !important; }
   html, body { background: #fff !important; }
   .report-sheet { max-width: none !important; background: #fff !important; color: #0f172a !important; padding-left: 0 !important; padding-right: 0 !important; }
@@ -21,13 +21,14 @@ const PRINT_CSS = `
   thead { display: table-header-group; }
   tr, th, td { break-inside: avoid; page-break-inside: avoid; }
   th, td { border-bottom: 1px solid #cbd5e1; padding: 4px 6px !important; text-align: left; vertical-align: top; font-size: 10px !important; white-space: normal !important; overflow-wrap: anywhere; }
-  th { overflow-wrap: normal !important; word-break: normal !important; hyphens: manual !important; }
-  .report-value { overflow-wrap: normal !important; word-break: normal !important; hyphens: manual !important; white-space: nowrap !important; }
+  th { overflow-wrap: anywhere !important; word-break: normal !important; hyphens: manual !important; }
+  .report-value { overflow-wrap: normal !important; word-break: normal !important; hyphens: manual !important; }
 }
 @media print {
   table:has(th:nth-child(10)) th, table:has(th:nth-child(10)) td { font-family: "Finance Report Sans", "Liberation Sans", "Nimbus Sans", "Noto Sans", sans-serif !important; font-weight: 400 !important; font-size: 8px !important; padding: 2px 1px !important; }
-  table:has(th:nth-child(10)) th:first-child, table:has(th:nth-child(10)) td:first-child { width: 8%; }
+  table:has(th:nth-child(10)) th:first-child, table:has(th:nth-child(10)) td:first-child { width: 8%; overflow-wrap: anywhere !important; }
   table:has(th:nth-child(10)) th:not(:first-child) { overflow-wrap: normal !important; word-break: normal !important; hyphens: manual !important; }
+  table:has(th:nth-child(10)) .report-value { white-space: nowrap !important; }
 }
 @page { margin: 12mm; }
 `;
@@ -169,6 +170,15 @@ export default function FinanceReportScreen({
   conflict,
 }) {
   const [generatedAt] = useState(() => new Date().toISOString());
+  const [printReady, setPrintReady] = useState(false);
+  useEffect(() => {
+    let live = true;
+    const load = document.fonts.load('400 8px "Finance Report Sans"');
+    Promise.resolve(load).catch(() => undefined).then(() => {
+      if (live) setPrintReady(true);
+    });
+    return () => { live = false; };
+  }, []);
   const liveNotice = screenNote(dirty, conflict);
   const report = reportId === 'index' ? null : buildFinanceReport({
     id: reportId,
@@ -203,7 +213,7 @@ export default function FinanceReportScreen({
           ))}
         </nav>
       </div>
-      <article className="report-sheet mx-auto min-w-0 max-w-5xl px-4 py-6" data-testid={report ? `finance-report-${report.id}` : 'finance-report-index'}>
+      <article className="report-sheet mx-auto min-w-0 max-w-5xl px-4 py-6" data-print-ready={printReady ? 'yes' : 'no'} data-testid={report ? `finance-report-${report.id}` : 'finance-report-index'}>
         {report ? (
           <>
             <header className="report-block border-b border-slate-300 pb-4">
