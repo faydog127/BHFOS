@@ -175,10 +175,11 @@ test('eight finance reports read the screen and do not write', async ({ page }) 
   await expect(page.getByTestId('finance-report-title')).toHaveText('Owner Operating Report');
   await expect(page.getByTestId('finance-report-generated-at')).not.toHaveText('--');
   await expect(page.locator('p', { has: page.getByTestId('finance-report-generated-at') })).toContainText('UTC');
-  await expect(page.getByTestId('entity-brand-name')).toHaveText('The Vent Guys');
-  await expect(page.getByTestId('entity-brand-identity')).toHaveAttribute('data-brand-complete', 'true');
-  await expect(page.getByTestId('entity-brand-identity')).toHaveAttribute('data-entity-id', 'tvg');
-  await expect(page.getByTestId('entity-brand-logo')).toHaveAttribute('src', '/assets/finance/tvg-logo-primary.png');
+  const identity = page.getByTestId('entity-brand-identity');
+  await expect(identity.getByTestId('entity-brand-name')).toHaveText('The Vent Guys');
+  await expect(identity).toHaveAttribute('data-brand-complete', 'true');
+  await expect(identity).toHaveAttribute('data-entity-id', 'tvg');
+  await expect(identity.getByTestId('entity-brand-logo')).toHaveAttribute('src', '/assets/finance/tvg-logo-primary.png');
   await expect(page.getByTestId('entity-brand-pending')).toHaveCount(0);
 
   await page.getByTestId('finance-report-link-monthly-summary').click();
