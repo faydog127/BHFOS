@@ -58,6 +58,8 @@
 | `RESEND_API_KEY` | Resend | Transactional email | backend | Supabase secret store (backend only) | Founder | Documented cadence | Revoke/rotate in Resend | unknown | Referenced by marketing feature docs; backend-only. |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Stripe | Payments + webhook verification | backend | Supabase secret store (backend only) | Founder | Documented cadence + immediate revoke | Revoke/rotate in Stripe dashboard | unknown | Financial. Backend-only. Routine testing uses synthetic simulation, never live charges. |
 | `GOOGLE_MAPS_API_KEY` | Google | Server-side places/geocoding | backend | Supabase secret store (backend only) | Founder | Per Google key policy | Revoke/rotate in Google Cloud console | unknown | Distinct from the client `VITE_GOOGLE_MAPS_API_KEY`. |
+| `N8N_COMMAND_INGRESS_URL` | n8n | Server-side unpublished Command Center ingress URL | backend | Supabase Edge Function secret store (backend only) | Founder | Immediate rotate on suspicion | Rotate webhook URL in n8n; update backend secret only | unverified | **Backend-only.** Never `VITE_`-prefix. Courier reads it only after auth + approved atomic claim. Not issued/confirmed from this HEAD. |
+| `N8N_COMMAND_INGRESS_TOKEN` | n8n | Server-side ingress token sent as `X-BHFOS-Ingress-Token` | backend | Supabase Edge Function secret store (backend only) | Founder | Immediate rotate on suspicion | Rotate token in n8n; update backend secret only | unverified | **Backend-only.** Never `VITE_`-prefix. Never log or return the value. Not issued/confirmed from this HEAD. |
 
 ## Planned / authorized I2 Production Diagnostics identities (names only)
 

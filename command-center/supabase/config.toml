@@ -145,3 +145,8 @@ port = 25434
 # neither control may be relaxed without an authorized decision.
 [functions.media-intel-upload-reconcile]
   verify_jwt = true
+
+# Courier verifies the caller JWT itself (getVerifiedClaims + Command Center admin/owner).
+# Gateway JWT is off so unauthorized requests reach the handler and stop before outbound.
+[functions.command-packet-courier]
+  verify_jwt = false

@@ -44,6 +44,16 @@ const BANNED_PATTERNS = [
     description: 'Backend OpenAI env var name must not ship in frontend bundles',
     regex: /OPENAI_API_KEY/g,
   },
+  {
+    id: 'n8n_command_ingress_url_name',
+    description: 'n8n Command Center ingress URL must stay server-side',
+    regex: /N8N_COMMAND_INGRESS_URL/g,
+  },
+  {
+    id: 'n8n_command_ingress_token_name',
+    description: 'n8n Command Center ingress token must stay server-side',
+    regex: /N8N_COMMAND_INGRESS_TOKEN/g,
+  },
 ];
 
 function redact(value) {
