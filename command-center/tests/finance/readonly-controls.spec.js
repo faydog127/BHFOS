@@ -3,7 +3,29 @@
  * stay disabled, and a forced click does not write.
  * The loopback mock does not prove server authorization.
  */
+import { execFileSync } from 'node:child_process';
 import { test, expect } from '@playwright/test';
+
+function resetMock() {
+  const raw = process.env.VITE_SUPABASE_URL || '';
+  if (!raw) return;
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('VITE_SUPABASE_URL is not a URL. Do not point it at a remote project.');
+  }
+  if (!['127.0.0.1', 'localhost', '::1'].includes(url.hostname)) {
+    throw new Error('VITE_SUPABASE_URL must be a loopback URL. Do not point it at a remote project.');
+  }
+  const port = process.env.FINANCE_MOCK_PORT || (url.port === '54921' ? url.port : '');
+  if (!port) return;
+  execFileSync('curl', ['-sf', '-X', 'POST', `http://127.0.0.1:${port}/mock/reset`], { stdio: 'pipe' });
+}
+
+test.beforeAll(() => {
+  resetMock();
+});
 
 test('read-only build disables New month and plan writes', async ({ page }) => {
   test.setTimeout(120000);
