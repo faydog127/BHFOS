@@ -55,6 +55,10 @@ declare
   v_portal numeric;
   v_total numeric;
   v_bad jsonb;
+  v_pools jsonb;
+  v_hist uuid;
+  v_hist_version integer;
+  v_hist_schema integer;
 begin
   perform pg_temp.finance_become(v_admin, 'tvg', '"admin"'::jsonb);
 
@@ -116,34 +120,10 @@ begin
   if v_status <> 'draft' or v_version <> 2 then
     raise exception 'FAIL: hurdle of 1 changed status % version %', v_status, v_version;
   end if;
-
-  -- 0.7+0.2+0.1+0 is exactly 1 in numeric arithmetic. JS float sums it to just under 1.
-  v_bad := pg_temp.finance_v2_document('{}'::jsonb);
-  v_bad := jsonb_set(v_bad, '{stages,stage_0,true_operating_profit_pct}', '0.7'::jsonb);
-  v_bad := jsonb_set(v_bad, '{stages,stage_0,growth_reserve_pct}', '0.2'::jsonb);
-  v_bad := jsonb_set(v_bad, '{stages,stage_0,bad_debt_warranty_pct}', '0.1'::jsonb);
-  v_bad := jsonb_set(v_bad, '{stages,stage_0,unidentified_cost_contingency_pct}', '0'::jsonb);
-  if public.finance_plan_approvable(v_bad) then
-    raise exception 'FAIL: 0.7+0.2+0.1+0 looks approvable';
-  end if;
-  update public.finance_plans set inputs = v_bad where id = v_plan returning version into v_version;
-  begin
-    perform public.finance_approve_plan(v_plan, v_version);
-    raise exception 'FAIL: boundary hurdle approve accepted';
-  exception
-    when check_violation then
-      if sqlerrm not like '%finance_plan_not_approvable%' then
-        raise exception 'FAIL: boundary hurdle message %', sqlerrm;
-      end if;
-  end;
-  select status, version into v_status, v_version from public.finance_plans where id = v_plan;
-  if v_status <> 'draft' or v_version <> 3 then
-    raise exception 'FAIL: boundary hurdle changed status % version %', v_status, v_version;
-  end if;
   perform set_config('finance.plan_transition', 'approve', true);
   begin
     update public.finance_plans set status = 'approved' where id = v_plan;
-    raise exception 'FAIL: GUC approve of boundary hurdles accepted';
+    raise exception 'FAIL: GUC approve of hurdle 1 accepted';
   exception
     when check_violation then
       if sqlerrm not like '%finance_plan_not_approvable%' then
@@ -152,8 +132,32 @@ begin
   end;
   perform set_config('finance.plan_transition', '', true);
   select status, version into v_status, v_version from public.finance_plans where id = v_plan;
-  if v_status <> 'draft' or v_version <> 3 then
+  if v_status <> 'draft' or v_version <> 2 then
     raise exception 'FAIL: GUC approve changed status % version %', v_status, v_version;
+  end if;
+
+  -- 0.7+0.2+0.1+0.0001 normalizes to 1.0001 and is over 1.
+  v_bad := pg_temp.finance_v2_document('{}'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,true_operating_profit_pct}', '0.7'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,growth_reserve_pct}', '0.2'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,bad_debt_warranty_pct}', '0.1'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,unidentified_cost_contingency_pct}', '0.0001'::jsonb);
+  if public.finance_plan_approvable(v_bad) then
+    raise exception 'FAIL: hurdle total 1.0001 looks approvable';
+  end if;
+  update public.finance_plans set inputs = v_bad where id = v_plan returning version into v_version;
+  begin
+    perform public.finance_approve_plan(v_plan, v_version);
+    raise exception 'FAIL: hurdle total 1.0001 approve accepted';
+  exception
+    when check_violation then
+      if sqlerrm not like '%finance_plan_not_approvable%' then
+        raise exception 'FAIL: hurdle total 1.0001 message %', sqlerrm;
+      end if;
+  end;
+  select status, version into v_status, v_version from public.finance_plans where id = v_plan;
+  if v_status <> 'draft' or v_version <> 3 then
+    raise exception 'FAIL: hurdle total 1.0001 changed status % version %', v_status, v_version;
   end if;
 
   v_bad := jsonb_set(pg_temp.finance_v2_document('{}'::jsonb), '{stages,stage_1,owner_management_comp}', '-1'::jsonb);
@@ -170,19 +174,82 @@ begin
         raise exception 'FAIL: negative owner comp message %', sqlerrm;
       end if;
   end;
-  select status into v_status from public.finance_plans where id = v_plan;
-  if v_status <> 'draft' then
-    raise exception 'FAIL: negative owner comp changed status %', v_status;
+  select status, version into v_status, v_version from public.finance_plans where id = v_plan;
+  if v_status <> 'draft' or v_version <> 4 then
+    raise exception 'FAIL: negative owner comp changed % %', v_status, v_version;
   end if;
 
-  update public.finance_plans
-  set inputs = pg_temp.finance_v2_document('{}'::jsonb)
-  where id = v_plan
-  returning version into v_version;
+  v_bad := pg_temp.finance_v2_document('{}'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,owner_management_comp}', '0'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,owner_shadow_hours}', '0'::jsonb);
+  v_bad := jsonb_set(v_bad, '{owner_field_replacement,wage}', '0'::jsonb);
+  v_bad := jsonb_set(v_bad, '{owner_field_replacement,burden}', '0'::jsonb);
+  -- jsonb_set does not create missing parent keys, so the pools are built whole.
+  select jsonb_object_agg(grp, grp_obj) into v_pools
+  from (
+    select grp, jsonb_object_agg(line, jsonb_build_object(
+      'stage_0', case when grp = 'direct_production' and line = 'fuel' then -10 else 0 end
+    )) as grp_obj
+    from (values
+      ('direct_production', 'fuel'),
+      ('direct_production', 'consumables'),
+      ('direct_production', 'job_rentals'),
+      ('indirect_field', 'vehicle_payments'),
+      ('indirect_field', 'maintenance'),
+      ('indirect_field', 'equipment_financing'),
+      ('indirect_field', 'tooling_ppe'),
+      ('indirect_field', 'replacement_sinking_fund'),
+      ('ga', 'office_shop'),
+      ('ga', 'utilities'),
+      ('ga', 'software'),
+      ('ga', 'accounting_legal'),
+      ('ga', 'office_misc'),
+      ('sales', 'marketing'),
+      ('sales', 'memberships'),
+      ('sales', 'collateral'),
+      ('insurance', 'gl_package'),
+      ('insurance', 'commercial_auto'),
+      ('insurance', 'umbrella'),
+      ('insurance', 'workers_comp_fixed'),
+      ('insurance', 'licensing')
+    ) as pool_lines(grp, line)
+    group by grp
+  ) as pool_groups;
+  v_bad := jsonb_set(v_bad, '{cost_pools}', v_pools);
+  if public.finance_plan_approvable(v_bad) then
+    raise exception 'FAIL: negative economic cost looks approvable';
+  end if;
+  update public.finance_plans set inputs = v_bad where id = v_plan returning version into v_version;
+  begin
+    perform public.finance_approve_plan(v_plan, v_version);
+    raise exception 'FAIL: negative economic cost approve accepted';
+  exception
+    when check_violation then
+      if sqlerrm not like '%finance_plan_not_approvable%' then
+        raise exception 'FAIL: negative economic cost message %', sqlerrm;
+      end if;
+  end;
+  select status, version into v_status, v_version from public.finance_plans where id = v_plan;
+  if v_status <> 'draft' or v_version <> 5 then
+    raise exception 'FAIL: negative economic cost changed % %', v_status, v_version;
+  end if;
+
+  if not public.finance_plan_approvable(pg_temp.finance_v2_document('{}'::jsonb)) then
+    raise exception 'FAIL: zero hurdles are not approvable';
+  end if;
+  v_bad := pg_temp.finance_v2_document('{}'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,true_operating_profit_pct}', '0.7'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,growth_reserve_pct}', '0.2'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,bad_debt_warranty_pct}', '0.1'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,unidentified_cost_contingency_pct}', '0'::jsonb);
+  if not public.finance_plan_approvable(v_bad) then
+    raise exception 'FAIL: 0.7+0.2+0.1+0 is not approvable';
+  end if;
+  update public.finance_plans set inputs = v_bad where id = v_plan returning version into v_version;
   perform public.finance_approve_plan(v_plan, v_version);
   select status into v_status from public.finance_plans where id = v_plan;
   if v_status <> 'approved' then
-    raise exception 'FAIL: zero hurdles did not approve';
+    raise exception 'FAIL: 0.7+0.2+0.1+0 did not approve';
   end if;
 
   -- D5: once comparison_plan_id is set, a later write cannot rebind it.
@@ -237,6 +304,30 @@ begin
     or v_total is distinct from 1000.00
   then
     raise exception 'FAIL: D6 amounts changed % % % %', v_direct, v_commercial, v_portal, v_total;
+  end if;
+
+  insert into public.finance_plans (tenant_id, schema_version, inputs, notes)
+  values ('tvg', 1, pg_temp.finance_v1_document(), 'historical-v1')
+  returning id, version into v_hist, v_hist_version;
+  if v_hist_version <> 1 then
+    raise exception 'FAIL: historical v1 insert version %', v_hist_version;
+  end if;
+  perform public.finance_upgrade_draft_schema(v_hist, v_hist_version);
+  select schema_version, version, status into v_hist_schema, v_hist_version, v_status
+  from public.finance_plans where id = v_hist;
+  if v_hist_schema <> 2 or v_status <> 'draft' or v_hist_version <> 2 then
+    raise exception 'FAIL: v1 upgrade % % %', v_hist_schema, v_status, v_hist_version;
+  end if;
+  if jsonb_typeof((select inputs -> 'monthly_basis' from public.finance_plans where id = v_hist)) is distinct from 'object' then
+    raise exception 'FAIL: v1 upgrade did not add monthly_basis';
+  end if;
+  perform public.finance_approve_plan(v_hist, v_hist_version);
+  select status, schema_version into v_status, v_hist_schema from public.finance_plans where id = v_hist;
+  if v_status <> 'approved' or v_hist_schema <> 2 then
+    raise exception 'FAIL: upgraded v1 did not approve % %', v_status, v_hist_schema;
+  end if;
+  if (select status from public.finance_plans where id = v_plan) <> 'superseded' then
+    raise exception 'FAIL: boundary plan was not superseded by the upgraded v1';
   end if;
 
   perform pg_temp.finance_clear();

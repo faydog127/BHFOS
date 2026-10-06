@@ -7,7 +7,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { calculatePlan, fractionSumReachesOne, retentionHurdle } from '../../src/lib/finance/calculate.js';
+import { approvabilityCopy, hurdleSumExceedsOne, planApprovabilityErrors } from '../../src/lib/finance/approvability.js';
+import { calculatePlan, retentionHurdle } from '../../src/lib/finance/calculate.js';
 import { evaluateFinanceAccess } from '../../src/lib/finance/authz.js';
 import {
   clearFinanceDrafts,
@@ -166,19 +167,30 @@ describe('approve parity for the hurdle boundary', () => {
     unidentified_cost_contingency_pct: 0,
   };
 
-  it('treats 0.7+0.2+0.1+0 as reaching 1, matching numeric addition', () => {
+  it('treats 0.7+0.2+0.1+0 as a valid total of 1 after scale-4 normalization', () => {
     assert.equal(0.7 + 0.2 + 0.1 + 0 < 1, true);
-    assert.equal(fractionSumReachesOne([0.7, 0.2, 0.1, 0]), true);
-    assert.equal(retentionHurdle(hurdles).valid, false);
-    const inputs = {
+    assert.equal(hurdleSumExceedsOne([0.7, 0.2, 0.1, 0]), false);
+    assert.equal(hurdleSumExceedsOne([0.7, 0.2, 0.1, 0.0001]), true);
+    const verdict = retentionHurdle(hurdles);
+    assert.equal(verdict.valid, true);
+    assert.equal(verdict.value, 1);
+    const zeros = {
+      true_operating_profit_pct: 0,
+      growth_reserve_pct: 0,
+      bad_debt_warranty_pct: 0,
+      unidentified_cost_contingency_pct: 0,
+    };
+    const inputs = { stages: { stage_0: hurdles, stage_1: zeros, stage_2: zeros, stage_3: zeros } };
+    assert.deepEqual(calculatePlan(inputs).errors, []);
+    assert.deepEqual(planApprovabilityErrors(inputs), []);
+    const over = {
+      ...inputs,
       stages: {
-        stage_0: hurdles,
-        stage_1: { true_operating_profit_pct: 0, growth_reserve_pct: 0, bad_debt_warranty_pct: 0, unidentified_cost_contingency_pct: 0 },
-        stage_2: { true_operating_profit_pct: 0, growth_reserve_pct: 0, bad_debt_warranty_pct: 0, unidentified_cost_contingency_pct: 0 },
-        stage_3: { true_operating_profit_pct: 0, growth_reserve_pct: 0, bad_debt_warranty_pct: 0, unidentified_cost_contingency_pct: 0 },
+        ...inputs.stages,
+        stage_0: { ...hurdles, unidentified_cost_contingency_pct: 0.0001 },
       },
     };
-    assert.equal(calculatePlan(inputs).errors.some((error) => error.includes('retention_hurdle')), true);
+    assert.equal(planApprovabilityErrors(over).some((error) => error.includes('retention_hurdle')), true);
   });
 
   it('maps a server approve refusal to finance_plan_not_approvable', async () => {
@@ -192,14 +204,22 @@ describe('approve parity for the hurdle boundary', () => {
     const locked = await approvePlan({
       rpc: async () => ({ data: null, error: { code: '23514', message: 'finance_plan_locked' } }),
     }, { id: '00000000-0000-4000-8000-000000000001', expectedVersion: 1 }, { MODE: 'test' });
-    assert.equal(locked.code, '23514');
+    assert.equal(locked.code, 'finance_plan_locked');
+    const bare = await approvePlan({
+      rpc: async () => ({ data: null, error: { code: '23514', message: '23514' } }),
+    }, { id: '00000000-0000-4000-8000-000000000001', expectedVersion: 1 }, { MODE: 'test' });
+    assert.equal(bare.code, 'finance_check_failed');
   });
 
   it('shows plain language for an approve refusal and keeps other codes', () => {
     const shell = read('src/pages/finance/FinanceShell.jsx');
-    assert.match(shell, /function saveErrorCopy\(code\)/);
-    assert.match(shell, /saveErrorCopy\(saveCode\)/);
-    assert.match(shell, /Approve is blocked until the validation message is clear\./);
+    const contract = read('src/lib/finance/approvability.js');
+    assert.match(shell, /function saveErrorCopy\(code, errors\)/);
+    assert.match(shell, /saveErrorCopy\(saveCode, result\?\.errors\)/);
+    assert.match(contract, /Approve is blocked until the validation message is clear\./);
+    assert.match(contract, /Management compensation cannot be negative\./);
+    assert.equal(approvabilityCopy(['stage_0:owner_management_comp:invalid']).includes('23514'), false);
     assert.equal(shell.includes('{saveCode}'), false);
+    assert.equal(shell.includes('23514'), false);
   });
 });

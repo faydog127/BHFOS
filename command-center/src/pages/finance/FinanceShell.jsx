@@ -26,6 +26,7 @@ import { EXPLANATIONS, FINANCE_SECTIONS, buildFinanceView, showCents, showMoney 
 import { buildDecisionSupport, normalizeFinanceMode } from '@/lib/finance/modes';
 import { presentLabel } from '@/lib/finance/presentLabel';
 import { FINANCE_PLAN_SCHEMA_WITHOUT_MONTHLY_BASIS, planHasMonthlyBasis } from '@/lib/finance/schemaContract';
+import { approvabilityCopy } from '@/lib/finance/approvability';
 import { clearFinanceDrafts, clearPlanDraft, rememberPlanDraft, resolveStoredPlan } from '@/lib/finance/dirtyDraft';
 import { isFinanceLocation } from '@/lib/finance/leaveGuard';
 import EntityBrandIdentity from '@/components/finance/EntityBrandIdentity';
@@ -100,12 +101,18 @@ function MonthlyBasisEditor({ inputs, onPatch }) {
 
 function loadErrorCopy(code) {
   if (code === 'finance_schema_unsupported') return STORED_PLAN_INVALID_COPY;
-  if (code === 'finance_plan_not_approvable') return 'Approve is blocked until the validation message is clear.';
+  if (code === 'finance_plan_not_approvable' || code === 'finance_check_failed') return approvabilityCopy([]);
+  if (code === 'finance_plan_locked') return 'This plan is no longer a draft, so it cannot be approved from here.';
+  if (code === 'finance_plans_monthly_basis') return 'This plan document does not match the required shape.';
+  if (code === 'finance_actuals_basis_locked') return 'The comparison plan is already set and cannot be changed.';
   return code;
 }
 
-function saveErrorCopy(code) {
-  if (code === 'finance_plan_not_approvable') return 'Approve is blocked until the validation message is clear.';
+function saveErrorCopy(code, errors) {
+  if (code === 'finance_plan_not_approvable' || code === 'finance_check_failed') return approvabilityCopy(errors);
+  if (code === 'finance_plan_locked') return 'This plan is no longer a draft, so it cannot be approved from here.';
+  if (code === 'finance_plans_monthly_basis') return 'This plan document does not match the required shape.';
+  if (code === 'finance_actuals_basis_locked') return 'The comparison plan is already set and cannot be changed.';
   return code;
 }
 
@@ -672,7 +679,7 @@ export default function FinanceShell({ grantedAccess }) {
           {writesEnabled ? null : (
             <p className="mt-3 text-sm font-medium text-slate-800" data-testid="finance-writes-disabled">Finance writes are disabled. This screen is read-only.</p>
           )}
-          {saveCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-save-error">{saveErrorCopy(saveCode)}</p> : null}
+          {saveCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-save-error">{saveErrorCopy(saveCode, result?.errors)}</p> : null}
           {loadCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-load-error">{loadErrorCopy(loadCode)}</p> : null}
           {mode === 'guided' ? (
             <div className="mt-4">
@@ -829,6 +836,9 @@ export default function FinanceShell({ grantedAccess }) {
             {record.status === 'draft' ? (
               <button type="button" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:text-slate-400" data-testid="finance-approve" onClick={onApprove} disabled={!writesEnabled || conflict || planNotApprovable}>Approve plan</button>
             ) : null}
+            {record.status === 'draft' && planNotApprovable ? (
+              <p className="text-sm text-red-700" data-testid="finance-approve-block">{approvabilityCopy(result?.errors)}</p>
+            ) : null}
             {record.status === 'approved' ? (
               <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-new-draft" onClick={onNewDraft} disabled={!writesEnabled || conflict}>New draft</button>
             ) : null}
@@ -856,10 +866,10 @@ export default function FinanceShell({ grantedAccess }) {
               <button type="button" className="ml-3 inline-flex min-h-11 items-center underline" data-testid="finance-reload" onClick={refreshPlans}>Reload</button>
             </div>
           ) : null}
-          {saveCode ? <p className="mb-4 text-sm text-red-700" data-testid="finance-save-error">{saveErrorCopy(saveCode)}</p> : null}
+          {saveCode ? <p className="mb-4 text-sm text-red-700" data-testid="finance-save-error">{saveErrorCopy(saveCode, result?.errors)}</p> : null}
           {view.errors.length > 0 ? (
             <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800" data-testid="finance-validation">
-              Some inputs are incomplete or invalid. Affected results show --. Retention hurdles must satisfy 0 ≤ value &lt; 1.
+              Some inputs are incomplete or invalid. Affected results show --. Each retention hurdle must be at least 0 and less than 1, and the four hurdles on a stage cannot total more than 1.
             </div>
           ) : null}
           <fieldset disabled={draftLocked || !writesEnabled} className="min-w-0 border-0 p-0">
@@ -1112,7 +1122,7 @@ function Growth({ inputs, view, result, onStage, onChannel }) {
   const stageKeys = ['stage_0', 'stage_1', 'stage_2', 'stage_3'];
   return (
     <div className="space-y-4" data-testid="finance-growth">
-      <Explain title="Retention hurdle">{EXPLANATIONS.growthReserve} {EXPLANATIONS.badDebt} {EXPLANATIONS.contingency} The total must satisfy 0 ≤ value &lt; 1.</Explain>
+      <Explain title="Retention hurdle">{EXPLANATIONS.growthReserve} {EXPLANATIONS.badDebt} {EXPLANATIONS.contingency} Each value must be at least 0 and less than 1. The four values on a stage cannot total more than 1. A total of exactly 1 leaves required revenue blank.</Explain>
       <div className="grid gap-3 lg:grid-cols-2">
         {stageKeys.map((key) => (
           <div key={key} className="rounded-lg border border-slate-200 bg-white p-4">

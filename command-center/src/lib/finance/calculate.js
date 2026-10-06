@@ -4,10 +4,11 @@
  * Invalid retention hurdles produce null revenue, never a phantom zero or negative.
  * No intermediate rounding.
  */
+import { hurdleSumExceedsOne, POOL_GROUPS, retentionHurdle, STAGE_KEYS, stageApprovabilityErrors } from './approvability.js';
 import { div, maxNullable, num, roundUpToIncrement, sumNullable } from './nullMath.js';
 import { stageReadiness } from './readiness.js';
 
-export const STAGE_KEYS = Object.freeze(['stage_0', 'stage_1', 'stage_2', 'stage_3']);
+export { hurdleSumExceedsOne, POOL_GROUPS, retentionHurdle, STAGE_KEYS };
 
 export const STAGE_3_CORE_CAVEAT =
   'Derived: v4 Stage 3 minus HVAC technician payroll only. HVAC-related non-labor/indirect costs and the third unit\'s capacity are not separated in the workbook. Informational; not a readiness input.';
@@ -16,82 +17,6 @@ export const OWNER_FIELD_RESERVE_LABEL =
   'Owner field reserve / surge — priced as replacement cost; not permanent production labor.';
 
 export const HVAC_REVENUE_MISSING_COPY = 'HVAC revenue: not provided';
-
-export const POOL_GROUPS = Object.freeze({
-  direct_production: ['fuel', 'consumables', 'job_rentals'],
-  indirect_field: ['vehicle_payments', 'maintenance', 'equipment_financing', 'tooling_ppe', 'replacement_sinking_fund'],
-  ga: ['office_shop', 'utilities', 'software', 'accounting_legal', 'office_misc'],
-  sales: ['marketing', 'memberships', 'collateral'],
-  insurance: ['gl_package', 'commercial_auto', 'umbrella', 'workers_comp_fixed', 'licensing'],
-});
-
-const HURDLE_KEYS = [
-  'true_operating_profit_pct',
-  'growth_reserve_pct',
-  'bad_debt_warranty_pct',
-  'unidentified_cost_contingency_pct',
-];
-
-/* global BigInt */
-function decimalUnits(value) {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
-  if (Object.is(value, -0)) return { units: 0n, scale: 0 };
-  let text = String(value);
-  if (/[eE]/.test(text)) {
-    const scientific = /^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/.exec(text);
-    if (!scientific) return null;
-    const sign = scientific[1] === '-' ? -1n : 1n;
-    const digits = `${scientific[2]}${scientific[3] || ''}`;
-    const scale = (scientific[3] || '').length - Number(scientific[4]);
-    if (scale >= 0) return { units: sign * BigInt(digits), scale };
-    return { units: sign * BigInt(digits) * (10n ** BigInt(-scale)), scale: 0 };
-  }
-  const plain = /^(-?)(\d+)(?:\.(\d+))?$/.exec(text);
-  if (!plain) return null;
-  const fraction = plain[3] || '';
-  const sign = plain[1] === '-' ? -1n : 1n;
-  return { units: sign * BigInt(`${plain[2]}${fraction}`), scale: fraction.length };
-}
-
-/**
- * Exact decimal sum of the values' shortest texts. Matches PostgreSQL
- * numeric addition of the JSON number text. 0.7+0.2+0.1+0 reaches 1.
- */
-export function fractionSumReachesOne(values) {
-  let scale = 0;
-  const parts = [];
-  for (const value of values) {
-    const part = decimalUnits(value);
-    if (!part) return true;
-    parts.push(part);
-    if (part.scale > scale) scale = part.scale;
-  }
-  let total = 0n;
-  for (const part of parts) {
-    total += part.units * (10n ** BigInt(scale - part.scale));
-  }
-  return total >= 10n ** BigInt(scale);
-}
-
-export function retentionHurdle(stage) {
-  const errors = [];
-  const values = [];
-  for (const key of HURDLE_KEYS) {
-    const value = num(stage?.[key]);
-    if (value === null) {
-      errors.push(`${key}:missing`);
-      continue;
-    }
-    if (!(value >= 0 && value < 1)) errors.push(`${key}:invalid`);
-    else values.push(value);
-  }
-  if (errors.length) return { value: null, valid: false, errors };
-  if (fractionSumReachesOne(values)) {
-    return { value: null, valid: false, errors: ['retention_hurdle:invalid'] };
-  }
-  const total = values.reduce((sum, value) => sum + value, 0);
-  return { value: total, valid: true, errors: [] };
-}
 
 export function monthlyPayroll(parts) {
   const headcount = num(parts.headcount);
@@ -238,7 +163,6 @@ function computeStageEconomics(inputs, stageKey, options = {}) {
   const insurance = poolTotal(inputs.cost_pools, 'insurance', stageKey);
   const indirectNonLabor = sumNullable([indirectField, ga, sales, insurance]);
   const ownerManagementComp = num(stage.owner_management_comp);
-  if (ownerManagementComp !== null && ownerManagementComp < 0) errors.push(`${stageKey}:owner_management_comp:invalid`);
 
   const cashOperatingCost = sumNullable([
     hiredFieldPayroll,
@@ -255,19 +179,11 @@ function computeStageEconomics(inputs, stageKey, options = {}) {
   );
   const economicOperatingCost = sumNullable([cashOperatingCost, replacement]);
   const hurdle = retentionHurdle(stage);
-  errors.push(...hurdle.errors.map((error) => `${stageKey}:${error}`));
+  errors.push(...stageApprovabilityErrors(inputs, stageKey));
 
   let requiredMonthlyRevenue = null;
-  if (hurdle.valid && economicOperatingCost !== null) {
-    if (economicOperatingCost < 0) {
-      errors.push(`${stageKey}:negative_economic_cost`);
-    } else {
-      requiredMonthlyRevenue = div(economicOperatingCost, 1 - hurdle.value);
-      if (requiredMonthlyRevenue !== null && requiredMonthlyRevenue < 0) {
-        requiredMonthlyRevenue = null;
-        errors.push(`${stageKey}:negative_revenue`);
-      }
-    }
+  if (hurdle.valid && economicOperatingCost !== null && economicOperatingCost >= 0) {
+    requiredMonthlyRevenue = div(economicOperatingCost, 1 - hurdle.value);
   }
 
   const capacity = options.suppressCapacity

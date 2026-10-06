@@ -76,8 +76,8 @@ fi
 echo "INLINE_SCAN" | tee -a "$LOG"
 scan_row="$("${PSQL[@]}" -d "$BAD_DB" -tA -F '|' -f "$TEST/preapply_v1_shape_scan.sql")"
 echo "scan=$scan_row" | tee -a "$LOG"
-if [[ "$scan_row" != "2|2|2|1|0" ]]; then
-  echo "FAIL: inline scan expected 2|2|2|1|0 and got $scan_row" | tee -a "$LOG"
+if [[ "$scan_row" != "2|2|2|1|0|1" ]]; then
+  echo "FAIL: inline scan expected 2|2|2|1|0|1 and got $scan_row" | tee -a "$LOG"
   exit 1
 fi
 

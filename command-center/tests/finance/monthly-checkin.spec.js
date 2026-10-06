@@ -147,7 +147,7 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await expect(page.getByTestId('finance-basis-total-revenue')).toHaveValue('');
   await expect(page.getByTestId('finance-approve')).toBeDisabled();
   await expect(page.getByTestId('finance-validation')).toContainText('Some inputs are incomplete or invalid');
-  await expect(page.getByTestId('finance-validation')).toContainText('Retention hurdles');
+  await expect(page.getByTestId('finance-validation')).toContainText('Each retention hurdle must be at least 0 and less than 1');
   await fillZeroRetentionHurdles(page);
   const hurdleSave = page.waitForResponse((res) => res.url().includes('/finance_plans') && res.request().method() === 'PATCH' && res.ok());
   await page.getByTestId('finance-save').click();
