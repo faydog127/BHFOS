@@ -1,0 +1,224 @@
+-- Gate S corrective behavioral proofs. Local disposable database only.
+-- D1, D5, D6, and the invalid approve run as an authenticated tenant admin.
+-- Triggers stay enabled. No replica role. Rolls back.
+-- Usage: psql "$LOCAL_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/finance/07_gate_s_corrective.sql
+
+\set ON_ERROR_STOP on
+
+begin;
+
+\ir plan_document_fixture.sql
+
+create function pg_temp.finance_become(p_uid uuid, p_tenant text, p_role jsonb)
+returns void
+language plpgsql
+as $$
+begin
+  perform set_config('request.jwt.claim.sub', p_uid::text, true);
+  perform set_config(
+    'request.jwt.claims',
+    json_build_object(
+      'sub', p_uid::text,
+      'role', 'authenticated',
+      'app_metadata', json_build_object('tenant_id', p_tenant, 'role', p_role),
+      'user_metadata', json_build_object('tenant_id', 'tvg', 'role', 'admin')
+    )::text,
+    true
+  );
+  execute 'set local role authenticated';
+end;
+$$;
+
+create function pg_temp.finance_clear()
+returns void
+language plpgsql
+as $$
+begin
+  execute 'reset role';
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '', true);
+end;
+$$;
+
+do $$
+declare
+  v_admin uuid := 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7';
+  v_plan uuid;
+  v_status text;
+  v_version integer;
+  v_notes text;
+  v_actual uuid;
+  v_basis uuid;
+  v_actual_version integer;
+  v_direct numeric;
+  v_commercial numeric;
+  v_portal numeric;
+  v_total numeric;
+  v_bad jsonb;
+begin
+  perform pg_temp.finance_become(v_admin, 'tvg', '"admin"'::jsonb);
+
+  -- D1: schema 2 without monthly_basis is rejected. No row is stored.
+  begin
+    insert into public.finance_plans (tenant_id, schema_version, inputs)
+    values ('tvg', 2, pg_temp.finance_v2_document('{}'::jsonb) - 'monthly_basis');
+    raise exception 'FAIL: D1 v2 without monthly_basis accepted';
+  exception
+    when check_violation then
+      if sqlerrm not like '%finance_plans_monthly_basis%' then
+        raise exception 'FAIL: D1 message %', sqlerrm;
+      end if;
+  end;
+  if (select count(*) from public.finance_plans) <> 0 then
+    raise exception 'FAIL: D1 stored a row';
+  end if;
+
+  -- Direct approve of a stored plan whose retention hurdle is missing or invalid.
+  v_bad := pg_temp.finance_v2_document('{}'::jsonb) #- '{stages,stage_0,growth_reserve_pct}';
+  insert into public.finance_plans (tenant_id, schema_version, inputs, notes)
+  values ('tvg', 2, v_bad, 'invalid-approve')
+  returning id, status, version into v_plan, v_status, v_version;
+  if v_status <> 'draft' or v_version <> 1 then
+    raise exception 'FAIL: invalid plan insert % %', v_status, v_version;
+  end if;
+  if public.finance_plan_approvable((select inputs from public.finance_plans where id = v_plan)) then
+    raise exception 'FAIL: missing hurdle looks approvable';
+  end if;
+  begin
+    perform public.finance_approve_plan(v_plan, v_version);
+    raise exception 'FAIL: missing hurdle approve accepted';
+  exception
+    when check_violation then
+      if sqlerrm not like '%finance_plan_not_approvable%' then
+        raise exception 'FAIL: missing hurdle approve message %', sqlerrm;
+      end if;
+  end;
+  select status, version, notes into v_status, v_version, v_notes
+  from public.finance_plans where id = v_plan;
+  if v_status <> 'draft' or v_version <> 1 or v_notes <> 'invalid-approve' then
+    raise exception 'FAIL: missing hurdle approve changed % % %', v_status, v_version, v_notes;
+  end if;
+
+  update public.finance_plans
+  set inputs = jsonb_set(pg_temp.finance_v2_document('{}'::jsonb), '{stages,stage_0,growth_reserve_pct}', '1'::jsonb)
+  where id = v_plan
+  returning version into v_version;
+  begin
+    perform public.finance_approve_plan(v_plan, v_version);
+    raise exception 'FAIL: hurdle of 1 approve accepted';
+  exception
+    when check_violation then
+      if sqlerrm not like '%finance_plan_not_approvable%' then
+        raise exception 'FAIL: hurdle of 1 message %', sqlerrm;
+      end if;
+  end;
+  select status, version into v_status, v_version from public.finance_plans where id = v_plan;
+  if v_status <> 'draft' or v_version <> 2 then
+    raise exception 'FAIL: hurdle of 1 changed status % version %', v_status, v_version;
+  end if;
+
+  update public.finance_plans
+  set inputs = pg_temp.finance_v2_document('{}'::jsonb)
+  where id = v_plan
+  returning version into v_version;
+  perform public.finance_approve_plan(v_plan, v_version);
+  select status into v_status from public.finance_plans where id = v_plan;
+  if v_status <> 'approved' then
+    raise exception 'FAIL: zero hurdles did not approve';
+  end if;
+
+  -- D5: once comparison_plan_id is set, a later write cannot rebind it.
+  insert into public.finance_monthly_actuals (
+    tenant_id, month, schema_version,
+    total_revenue, direct_residential_revenue, commercial_direct_revenue, portal_revenue
+  )
+  values ('tvg', date '2026-04-01', 1, 1000.00, 600.00, 300.00, 100.00)
+  returning id into v_actual;
+  update public.finance_monthly_actuals
+  set comparison_plan_id = v_plan
+  where id = v_actual
+  returning comparison_plan_id, version into v_basis, v_actual_version;
+  if v_basis is distinct from v_plan then
+    raise exception 'FAIL: D5 association did not stick';
+  end if;
+  begin
+    update public.finance_monthly_actuals
+    set comparison_plan_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb7'
+    where id = v_actual;
+    raise exception 'FAIL: D5 rebind accepted';
+  exception
+    when check_violation then
+      if sqlerrm not like '%finance_actuals_basis_locked%' then
+        raise exception 'FAIL: D5 message %', sqlerrm;
+      end if;
+  end;
+  select comparison_plan_id, version into v_basis, v_version
+  from public.finance_monthly_actuals where id = v_actual;
+  if v_basis is distinct from v_plan or v_version is distinct from v_actual_version then
+    raise exception 'FAIL: D5 row changed % %', v_basis, v_version;
+  end if;
+
+  -- D6: all three channels must equal total revenue. The prior amounts stay.
+  begin
+    update public.finance_monthly_actuals
+    set portal_revenue = 200.00
+    where id = v_actual;
+    raise exception 'FAIL: D6 channel sum accepted';
+  exception
+    when check_violation then
+      if sqlerrm not like '%finance_actuals_channel_reconcile%' then
+        raise exception 'FAIL: D6 message %', sqlerrm;
+      end if;
+  end;
+  select direct_residential_revenue, commercial_direct_revenue, portal_revenue, total_revenue
+  into v_direct, v_commercial, v_portal, v_total
+  from public.finance_monthly_actuals where id = v_actual;
+  if v_direct is distinct from 600.00
+    or v_commercial is distinct from 300.00
+    or v_portal is distinct from 100.00
+    or v_total is distinct from 1000.00
+  then
+    raise exception 'FAIL: D6 amounts changed % % % %', v_direct, v_commercial, v_portal, v_total;
+  end if;
+
+  perform pg_temp.finance_clear();
+
+  -- postgres has no JWT. Insert, actuals write, and approve RPC stay denied.
+  begin
+    insert into public.finance_plans (tenant_id, schema_version, inputs)
+    values ('tvg', 2, pg_temp.finance_v2_document('{}'::jsonb));
+    raise exception 'FAIL: postgres plan insert accepted';
+  exception
+    when insufficient_privilege then
+      if sqlerrm not like '%finance_access_denied%' then
+        raise exception 'FAIL: postgres plan insert %', sqlerrm;
+      end if;
+  end;
+  begin
+    update public.finance_monthly_actuals
+    set source_note = 'postgres probe'
+    where id = v_actual;
+    raise exception 'FAIL: postgres actual update accepted';
+  exception
+    when insufficient_privilege then
+      if sqlerrm not like '%finance_access_denied%' then
+        raise exception 'FAIL: postgres actual update %', sqlerrm;
+      end if;
+  end;
+  begin
+    perform public.finance_approve_plan(v_plan, 1);
+    raise exception 'FAIL: postgres approve accepted';
+  exception
+    when insufficient_privilege then
+      if sqlerrm not like '%finance_access_denied%' then
+        raise exception 'FAIL: postgres approve %', sqlerrm;
+      end if;
+  end;
+  if (select source_note from public.finance_monthly_actuals where id = v_actual) is not null then
+    raise exception 'FAIL: postgres actual probe wrote a note';
+  end if;
+
+  raise notice 'PASS: gate S corrective D1 D5 D6 invalid approve postgres denial';
+end $$;
+
+rollback;

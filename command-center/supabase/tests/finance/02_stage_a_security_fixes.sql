@@ -5,6 +5,8 @@
 
 begin;
 
+\ir plan_document_fixture.sql
+
 create function pg_temp.finance_become(p_uid uuid, p_tenant text, p_role jsonb)
 returns void
 language plpgsql
@@ -158,7 +160,7 @@ declare
 begin
   perform pg_temp.finance_become(v_admin, 'tvg', '"admin"'::jsonb);
   insert into public.finance_plans (tenant_id, schema_version, inputs)
-  values ('tvg', 1, '{}'::jsonb)
+  values ('tvg', 1, pg_temp.finance_v1_document())
   returning id into v_plan;
   select id into v_plan from public.finance_approve_plan(v_plan, 1);
   insert into public.finance_monthly_actuals (tenant_id, comparison_plan_id, month, schema_version, total_revenue, productive_unit_hours)
@@ -231,7 +233,7 @@ begin
   end if;
 
   insert into public.finance_plans (tenant_id, schema_version, inputs)
-  values ('tvg', 1, '{}'::jsonb)
+  values ('tvg', 1, pg_temp.finance_v1_document())
   returning id into v_next;
   perform public.finance_approve_plan(v_next, 1);
 

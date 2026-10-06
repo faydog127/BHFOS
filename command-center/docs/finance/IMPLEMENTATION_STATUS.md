@@ -1,5 +1,18 @@
 # Financial planning — implementation status
 
+## Gate S corrective packet (2026-10-06)
+
+Command Center decision glkry-8: Gate S is not passed. This packet starts from `41077ba968fc8f363803b34c4ef99ffc2fdc6a48` on branch `cursor/finance-gate-s-corrective-01c7`. It is a staging-lineage corrective branch. Production remains the diverged lineage at `88f5daa`. This branch is not a production replacement.
+
+Evidence tier for the items below: **locally verified** on a disposable Postgres 16 database and `npm run test:finance` / `npm run lint`. SQL tests 01–07 passed and rolled back. The v1 impact notice on that empty database was `total=0 v1=0 v1_would_fail=0 v2_would_fail=0`. `npm run test:finance` passed 184 tests. `npm run lint` exited 0 with 25 pre-existing warnings and 0 errors. Not deployed, not staging-verified, not merged, not production-verified. Hosted projects `glkrykpksbsqmmilmjhs` and `wwyxohjnyqnegzbxtuxs` were not contacted. Hosted corrective migration apply stays held. Playwright finance specs were not executed: Docker and the Supabase CLI are absent, so there is no local auth user.
+
+- E2: in-memory drafts in `src/lib/finance/dirtyDraft.js` keep unsaved plan notes and the Monthly Check-In form across Back/Forward and in-app section changes. Leaving Finance still prompts. The dialog Cancel control is `finance-leave-stay`. `finance-exit` links to `/:tenant/crm/dashboard`.
+- Approve: the button stays disabled while `calculatePlan` reports errors. `finance_approve_plan` raises `finance_plan_not_approvable` (23514) before any status update when retention hurdles are missing or invalid.
+- Read-only build: New month is disabled and `openNew` returns immediately. Other mutation controls stay disabled and their handlers return before a write.
+- `20261006140000_finance_v1_document_shape.sql` requires calculator sections on version 1. It does not rewrite rows. See `V1_SHAPE_IMPACT.md`.
+- Maintenance: `FINANCE_MAINTENANCE_CONTRACT.md`. Authorization was not weakened.
+- Matrix mapping: `GATE_S_CORRECTIVE_MATRIX.md`.
+
 Steps 1–6 of the TVG financial planning model, under the 2026-10-01 Command Center Option B ruling, plus Stage A persistence under the 2026-10-03 Command Center ruling.
 
 - Branch: `cursor/tvg-finance-steps-1-6-a117`

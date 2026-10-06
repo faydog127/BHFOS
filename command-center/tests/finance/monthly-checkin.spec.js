@@ -12,6 +12,18 @@ test.beforeAll(() => {
   mkdirSync(out, { recursive: true });
 });
 
+async function fillZeroRetentionHurdles(page) {
+  await page.getByRole('navigation', { name: 'Planning sections' }).getByRole('link', { name: 'Growth & Protection' }).click();
+  await expect(page).toHaveURL(/\/finance\/growth$/);
+  const stages = ['stage_0', 'stage_1', 'stage_2', 'stage_3'];
+  const fields = ['operating-profit', 'growth-reserve', 'bad-debt', 'contingency'];
+  for (const stage of stages) {
+    for (const field of fields) {
+      await page.getByTestId(`finance-hurdle-${stage}-${field}`).fill('0');
+    }
+  }
+}
+
 async function shot(page, name) {
   await page.screenshot({ path: `${out}/${name}.png`, fullPage: true });
 }
@@ -133,7 +145,18 @@ test('monthly check-in entry, history, and comparison basis', async ({ page }) =
   await cycleModes(page, 'incomplete');
   await expect(page.getByTestId('finance-monthly-basis')).toBeVisible();
   await expect(page.getByTestId('finance-basis-total-revenue')).toHaveValue('');
+  await expect(page.getByTestId('finance-approve')).toBeDisabled();
+  await expect(page.getByTestId('finance-validation')).toContainText('Some inputs are incomplete or invalid');
+  await expect(page.getByTestId('finance-validation')).toContainText('Retention hurdles');
+  await fillZeroRetentionHurdles(page);
+  const hurdleSave = page.waitForResponse((res) => res.url().includes('/finance_plans') && res.request().method() === 'PATCH' && res.ok());
+  await page.getByTestId('finance-save').click();
+  await hurdleSave;
+  await expect(page.getByTestId('finance-validation')).toHaveCount(0);
+  await expect(page.getByTestId('finance-approve')).toBeEnabled();
+  const firstApprove = page.waitForResponse((res) => res.url().includes('finance_approve_plan') && res.ok());
   await page.getByTestId('finance-approve').click();
+  await firstApprove;
   await expect(page.getByTestId('plan-banner')).toContainText('approved');
   await page.goto('/tvg/finance/checkin');
   await page.getByTestId('checkin-history-2026-01').click();

@@ -184,7 +184,7 @@ begin
   end if;
   begin
     insert into public.finance_plans (tenant_id, schema_version, inputs)
-    values ('tvg', 1, '{}'::jsonb);
+    values ('tvg', 1, pg_temp.finance_v1_document());
     raise exception 'FAIL: cross-tenant insert';
   exception
     when insufficient_privilege then
@@ -222,7 +222,7 @@ begin
     end if;
     begin
       insert into public.finance_plans (tenant_id, schema_version, inputs)
-      values ('tvg', 1, '{}'::jsonb);
+      values ('tvg', 1, pg_temp.finance_v1_document());
       raise exception 'FAIL: role % insert', v_role;
     exception
       when insufficient_privilege then

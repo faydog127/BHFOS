@@ -14,10 +14,10 @@ as $$
       'rounding_increment_usd', null
     ),
     'stages', jsonb_build_object(
-      'stage_0', jsonb_build_object('label', 'Stage 0'),
-      'stage_1', jsonb_build_object('label', 'Stage 1'),
-      'stage_2', jsonb_build_object('label', 'Stage 2'),
-      'stage_3', jsonb_build_object('label', 'Stage 3')
+      'stage_0', jsonb_build_object('label', 'Stage 0', 'true_operating_profit_pct', 0, 'growth_reserve_pct', 0, 'bad_debt_warranty_pct', 0, 'unidentified_cost_contingency_pct', 0),
+      'stage_1', jsonb_build_object('label', 'Stage 1', 'true_operating_profit_pct', 0, 'growth_reserve_pct', 0, 'bad_debt_warranty_pct', 0, 'unidentified_cost_contingency_pct', 0),
+      'stage_2', jsonb_build_object('label', 'Stage 2', 'true_operating_profit_pct', 0, 'growth_reserve_pct', 0, 'bad_debt_warranty_pct', 0, 'unidentified_cost_contingency_pct', 0),
+      'stage_3', jsonb_build_object('label', 'Stage 3', 'true_operating_profit_pct', 0, 'growth_reserve_pct', 0, 'bad_debt_warranty_pct', 0, 'unidentified_cost_contingency_pct', 0)
     ),
     'staffing', '[]'::jsonb,
     'owner_field_replacement', jsonb_build_object('wage', null, 'burden', null),

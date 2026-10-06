@@ -3,7 +3,8 @@
  * Plan and variance stay blank unless a declared monthly basis exists.
  * Schema version 1 has none, so they stay blank even when a comparison plan is associated.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { readCheckinDraft, rememberCheckinDraft } from '@/lib/finance/dirtyDraft';
 import {
   CHANNEL_ISSUE_COPY,
   CHECKIN_FIELDS,
@@ -102,10 +103,11 @@ export default function MonthlyCheckIn({
   onReload,
 }) {
   const rows = Array.isArray(actuals) ? actuals : [];
-  const [selectedId, setSelectedId] = useState(null);
-  const [monthInput, setMonthInput] = useState('');
-  const [form, setForm] = useState(blankForm);
-  const [associateOnCreate, setAssociateOnCreate] = useState(false);
+  const restored = readCheckinDraft();
+  const [selectedId, setSelectedId] = useState(restored?.selectedId ?? null);
+  const [monthInput, setMonthInput] = useState(restored?.monthInput ?? '');
+  const [form, setForm] = useState(restored?.form ?? blankForm);
+  const [associateOnCreate, setAssociateOnCreate] = useState(restored?.associateOnCreate ?? false);
   const [message, setMessage] = useState(null);
   const [conflict, setConflict] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -113,7 +115,12 @@ export default function MonthlyCheckIn({
   const approved = approvedPlan && approvedPlan.status === 'approved' ? approvedPlan : null;
   const basisLocked = Boolean(selected?.comparison_plan_id);
 
+  useEffect(() => {
+    rememberCheckinDraft({ selectedId, monthInput, form, associateOnCreate });
+  }, [selectedId, monthInput, form, associateOnCreate]);
+
   function openNew() {
+    if (!writesEnabled) return;
     if (conflict) return;
     setSelectedId(null);
     setMonthInput('');
@@ -225,7 +232,7 @@ export default function MonthlyCheckIn({
         <aside className="min-w-0 rounded-lg border border-slate-200 bg-white p-3" data-testid="checkin-history">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">History</h3>
-            <button type="button" className="rounded border border-slate-300 px-2 py-1 text-xs" data-testid="checkin-new" onClick={openNew}>New month</button>
+            <button type="button" className="rounded border border-slate-300 px-2 py-1 text-xs disabled:cursor-not-allowed disabled:text-slate-400" data-testid="checkin-new" onClick={openNew} disabled={!writesEnabled}>New month</button>
           </div>
           {rows.length === 0 ? (
             <p className="mt-3 text-sm text-slate-500" data-testid="checkin-empty">No months entered yet.</p>

@@ -62,7 +62,7 @@ begin
 
   begin
     insert into public.finance_plans (tenant_id, schema_version, inputs)
-    values ('tvg', 1, '{}'::jsonb);
+    values ('tvg', 1, pg_temp.finance_v1_document());
     raise exception 'FAIL: second draft inserted';
   exception
     when unique_violation then
@@ -108,7 +108,7 @@ begin
 
   begin
     insert into public.finance_plans (tenant_id, schema_version, inputs)
-    values ('tvg', 1, '{}'::jsonb);
+    values ('tvg', 1, pg_temp.finance_v1_document());
     raise exception 'FAIL: second draft after open_draft';
   exception
     when unique_violation then
