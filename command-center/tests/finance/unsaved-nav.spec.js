@@ -5,9 +5,34 @@
  * That timeout is the hold. A traversal that actually leaves Finance fails
  * the dialog and URL assertions below.
  */
+import { execFileSync } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 const note = 'unsaved key note';
+const shots = process.env.FINANCE_NAV_SHOTS || '/opt/cursor/artifacts/finance-gate-s-corrective/playwright';
+
+function seedBlankDraft() {
+  const raw = process.env.VITE_SUPABASE_URL || '';
+  if (!raw) return;
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('VITE_SUPABASE_URL is not a URL. Do not point it at a remote project.');
+  }
+  if (!['127.0.0.1', 'localhost', '::1'].includes(url.hostname)) {
+    throw new Error('VITE_SUPABASE_URL must be a loopback URL. Do not point it at a remote project.');
+  }
+  const port = process.env.FINANCE_MOCK_PORT || (url.port === '54921' ? url.port : '');
+  if (!port) return;
+  execFileSync('curl', ['-sf', '-X', 'POST', `http://127.0.0.1:${port}/mock/reset`], { stdio: 'pipe' });
+  execFileSync('curl', ['-sf', '-X', 'POST', `http://127.0.0.1:${port}/mock/seed-blank-draft`], { stdio: 'pipe' });
+}
+
+test.beforeAll(() => {
+  seedBlankDraft();
+});
 
 async function browserBack(page) {
   const dialog = page.getByTestId('finance-leave-dialog');
@@ -157,4 +182,76 @@ test('plain anchor Enter is held when the Navigation API is absent', async ({ pa
   await expect(page).toHaveURL(/\/tvg\/crm\/dashboard/);
   await expect(page.locator('html')).not.toHaveAttribute('data-finance-leave-guard', 'on');
   expect(writes).toEqual([]);
+});
+
+test('intra-finance Back and Forward keep edits; Cancel stays and Discard leaves', async ({ page }) => {
+  test.setTimeout(120000);
+  if (!process.env.FINANCE_CHECKIN_EMAIL || !process.env.FINANCE_CHECKIN_PASSWORD) {
+    throw new Error('FINANCE_CHECKIN_EMAIL and FINANCE_CHECKIN_PASSWORD are required. The release gate supplies synthetic local credentials. This spec does not skip.');
+  }
+  const writes = [];
+  page.on('request', (request) => {
+    const method = request.method();
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return;
+    if (request.url().includes('/auth/v1/token')) return;
+    if (request.url().includes('/rpc/check_is_superuser')) return;
+    writes.push(`${method} ${request.url()}`);
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/tvg/login?next=%2Ftvg%2Ffinance');
+  await page.locator('#email').fill(process.env.FINANCE_CHECKIN_EMAIL);
+  await page.locator('#password').fill(process.env.FINANCE_CHECKIN_PASSWORD);
+  await page.locator('button[type="submit"]').click();
+  await page.waitForURL('**/finance');
+  const create = page.getByTestId('finance-create-plan');
+  if (await create.count()) await create.click();
+  const notes = page.locator('textarea');
+  await expect(notes).toBeVisible();
+  await notes.click();
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type(note);
+  await expect(notes).toHaveValue(note);
+  mkdirSync(shots, { recursive: true });
+  await page.screenshot({ path: `${shots}/dirty-notes-before-back.png`, fullPage: true });
+
+  await page.getByRole('navigation', { name: 'Planning sections' }).getByRole('link', { name: 'Monthly Check-In' }).click();
+  await expect(page).toHaveURL(/\/finance\/checkin$/);
+  await page.getByTestId('checkin-source-note').fill('check-in draft note');
+  await page.goBack();
+  await expect(page).toHaveURL(/\/tvg\/finance\/?$/);
+  await expect(notes).toHaveValue(note);
+  await page.goForward();
+  await expect(page).toHaveURL(/\/finance\/checkin$/);
+  await expect(page.getByTestId('checkin-source-note')).toHaveValue('check-in draft note');
+  await page.goBack();
+  await expect(notes).toHaveValue(note);
+  await expect(page.getByTestId('finance-leave-dialog')).toHaveCount(0);
+  await page.screenshot({ path: `${shots}/edits-retained-after-back-forward.png`, fullPage: true });
+
+  await page.getByTestId('finance-exit').click();
+  await expect(page.getByTestId('finance-leave-dialog')).toBeVisible();
+  await expect(page.getByTestId('finance-leave-stay')).toHaveText('Cancel');
+  await expect(page).toHaveURL(/\/tvg\/finance\/?$/);
+  await page.screenshot({ path: `${shots}/leave-dialog-after-leave-planning.png`, fullPage: true });
+  await page.getByTestId('finance-leave-stay').click();
+  await expect(page.getByTestId('finance-leave-dialog')).toHaveCount(0);
+  await expect(notes).toHaveValue(note);
+  await expect(page).toHaveURL(/\/tvg\/finance\/?$/);
+  await page.screenshot({ path: `${shots}/cancel-keeps-edit.png`, fullPage: true });
+
+  await page.getByTestId('finance-exit').click();
+  await expect(page.getByTestId('finance-leave-dialog')).toBeVisible();
+  await page.getByTestId('finance-leave-discard').click();
+  await expect(page.getByTestId('finance-leave-dialog')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/tvg\/crm\/dashboard/);
+  await expect(page.locator('html')).not.toHaveAttribute('data-finance-leave-guard', 'on');
+  expect(writes).toEqual([]);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/tvg\/finance\/?$/);
+  await expect(page.locator('textarea')).toHaveValue('');
+  await page.getByRole('navigation', { name: 'Planning sections' }).getByRole('link', { name: 'Monthly Check-In' }).click();
+  await expect(page.getByTestId('checkin-source-note')).toHaveValue('');
+  await page.goBack();
+  await expect(page.locator('textarea')).toHaveValue('');
+  await page.screenshot({ path: `${shots}/confirmed-leave-clears-drafts.png`, fullPage: true });
 });

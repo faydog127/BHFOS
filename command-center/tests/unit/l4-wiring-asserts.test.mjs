@@ -26,7 +26,7 @@ describe('MonthlyCheckIn L4 wiring', () => {
   });
   it('New month does not clear an unresolved conflict', () => {
     const openNew = src.match(/function openNew\(\) \{[\s\S]*?\n  \}\n/)?.[0] ?? '';
-    assert.match(openNew, /function openNew\(\) \{\s*if \(conflict\)/);
+    assert.match(openNew, /function openNew\(\) \{\s*if \(!writesEnabled\) return;\s*if \(conflict\) return;/);
     const guard = openNew.indexOf('if (conflict) return;');
     assert.ok(guard > -1);
     assert.equal(openNew.slice(0, guard).includes('setConflict(false)'), false);

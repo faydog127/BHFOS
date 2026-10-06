@@ -26,6 +26,9 @@ import { EXPLANATIONS, FINANCE_SECTIONS, buildFinanceView, showCents, showMoney 
 import { buildDecisionSupport, normalizeFinanceMode } from '@/lib/finance/modes';
 import { presentLabel } from '@/lib/finance/presentLabel';
 import { FINANCE_PLAN_SCHEMA_WITHOUT_MONTHLY_BASIS, planHasMonthlyBasis } from '@/lib/finance/schemaContract';
+import { approvabilityCopy } from '@/lib/finance/approvability';
+import { clearFinanceDrafts, clearPlanDraft, rememberPlanDraft, resolveStoredPlan } from '@/lib/finance/dirtyDraft';
+import { isFinanceLocation } from '@/lib/finance/leaveGuard';
 import EntityBrandIdentity from '@/components/finance/EntityBrandIdentity';
 import { AdvancedView, ExecutiveView, GuidedBrief, ModeSwitch } from '@/pages/finance/FinanceModes';
 import FinanceReportScreen from '@/pages/finance/FinanceReports';
@@ -98,6 +101,18 @@ function MonthlyBasisEditor({ inputs, onPatch }) {
 
 function loadErrorCopy(code) {
   if (code === 'finance_schema_unsupported') return STORED_PLAN_INVALID_COPY;
+  if (code === 'finance_plan_not_approvable' || code === 'finance_check_failed') return approvabilityCopy([]);
+  if (code === 'finance_plan_locked') return 'This plan is no longer a draft, so it cannot be approved from here.';
+  if (code === 'finance_plans_monthly_basis') return 'This plan document does not match the required shape.';
+  if (code === 'finance_actuals_basis_locked') return 'The comparison plan is already set and cannot be changed.';
+  return code;
+}
+
+function saveErrorCopy(code, errors) {
+  if (code === 'finance_plan_not_approvable' || code === 'finance_check_failed') return approvabilityCopy(errors);
+  if (code === 'finance_plan_locked') return 'This plan is no longer a draft, so it cannot be approved from here.';
+  if (code === 'finance_plans_monthly_basis') return 'This plan document does not match the required shape.';
+  if (code === 'finance_actuals_basis_locked') return 'The comparison plan is already set and cannot be changed.';
   return code;
 }
 
@@ -115,13 +130,14 @@ function reportIdFromPath(pathname) {
   return parts[financeIndex + 2] || 'index';
 }
 
-function NumberField({ label, value, onChange }) {
+function NumberField({ label, value, onChange, testId }) {
   return (
     <label className="block text-xs text-slate-600">
       <span>{label}</span>
       <input
         className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900"
         inputMode="decimal"
+        data-testid={testId}
         value={value === null || value === undefined ? '' : String(value)}
         onChange={(event) => {
           const raw = event.target.value;
@@ -183,6 +199,7 @@ export default function FinanceShell({ grantedAccess }) {
   function applyPlan(plan, basis) {
     const decision = storedPlanDecision(plan);
     if (!decision.ok) {
+      clearPlanDraft();
       setLoadCode(decision.code);
       setRecord(null);
       setInputs(null);
@@ -193,18 +210,21 @@ export default function FinanceShell({ grantedAccess }) {
       setSaveCode(null);
       return;
     }
+    const held = resolveStoredPlan(plan);
+    if (!held.held) clearPlanDraft();
     setLoadCode(null);
     setRecord(plan);
     setApprovedBasis(basis || null);
-    setInputs(plan.inputs);
-    setNotes(plan.notes || '');
-    setDirty(false);
+    setInputs(held.inputs);
+    setNotes(held.notes);
+    setDirty(held.dirty);
     setConflict(false);
     setSaveCode(null);
     setPlans((current) => [plan, ...(Array.isArray(current) ? current.filter((row) => row.id !== plan.id) : [])]);
   }
 
   async function refreshPlans() {
+    clearPlanDraft();
     let listed;
     let actualList;
     try {
@@ -262,10 +282,23 @@ export default function FinanceShell({ grantedAccess }) {
 
   function editInputs(updater) {
     setDirty(true);
-    setInputs(updater);
+    setInputs((current) => {
+      const next = typeof updater === 'function' ? updater(current) : updater;
+      if (record?.id) {
+        rememberPlanDraft({ id: record.id, version: record.version, inputs: next, notes });
+      }
+      return next;
+    });
   }
 
+  useEffect(() => {
+    if (!dirty || !record?.id) return undefined;
+    rememberPlanDraft({ id: record.id, version: record.version, inputs, notes });
+    return undefined;
+  }, [dirty, record, inputs, notes]);
+
   const result = useMemo(() => (inputs ? calculatePlan(inputs) : null), [inputs]);
+  const planNotApprovable = Boolean(result?.errors?.length);
   const view = useMemo(
     () => (inputs && result ? buildFinanceView({ meta: { label: 'Stored plan', data_class: 'stored' }, inputs }, result, selectedStage) : null),
     [inputs, result, selectedStage],
@@ -278,7 +311,7 @@ export default function FinanceShell({ grantedAccess }) {
   useEffect(() => {
     if (!dirty) return undefined;
     const prefix = `/${routeTenantId}/finance`;
-    const isFinancePath = (pathname) => pathname === prefix || pathname.startsWith(`${prefix}/`);
+    const isFinancePath = (pathname) => isFinanceLocation(pathname, routeTenantId) && (pathname === prefix || pathname.startsWith(`${prefix}/`));
     const describe = (url) => {
       const parsed = new URL(url, window.location.origin);
       return `${parsed.pathname}${parsed.search}${parsed.hash}`;
@@ -402,6 +435,7 @@ export default function FinanceShell({ grantedAccess }) {
     allowLeaveRef.current = true;
     setLeavePrompt(null);
     setDirty(false);
+    clearFinanceDrafts();
     if (next) navigate(next);
   }
 
@@ -478,6 +512,7 @@ export default function FinanceShell({ grantedAccess }) {
       setSaveCode(created.code);
       return;
     }
+    clearPlanDraft();
     applyPlan(created.plan, null);
   }
 
@@ -496,6 +531,7 @@ export default function FinanceShell({ grantedAccess }) {
       setSaveCode(saved.code);
       return;
     }
+    clearPlanDraft();
     applyPlan(saved.plan, approvedBasis);
   }
 
@@ -533,12 +569,17 @@ export default function FinanceShell({ grantedAccess }) {
       setSaveCode(upgraded.code);
       return;
     }
+    clearPlanDraft();
     applyPlan(upgraded.plan, approvedBasis);
   }
 
   async function onApprove() {
     if (conflict) return;
     if (!writesEnabled) return;
+    if (planNotApprovable) {
+      setSaveCode('finance_plan_not_approvable');
+      return;
+    }
     if (!record || record.status !== 'draft' || dirty) {
       setSaveCode('finance_save_before_approve');
       return;
@@ -549,6 +590,7 @@ export default function FinanceShell({ grantedAccess }) {
       setSaveCode(approved.code);
       return;
     }
+    clearPlanDraft();
     applyPlan(approved.plan, null);
   }
 
@@ -563,18 +605,21 @@ export default function FinanceShell({ grantedAccess }) {
   }
 
   async function onCreateActual(payload) {
+    if (!writesEnabled) return { ok: false, code: 'finance_writes_disabled' };
     const created = await createMonthlyActual(supabase, payload);
     if (created.ok) await refreshActuals();
     return created;
   }
 
   async function onCorrectActual(payload) {
+    if (!writesEnabled) return { ok: false, code: 'finance_writes_disabled' };
     const saved = await correctMonthlyActual(supabase, payload);
     if (saved.ok) await refreshActuals();
     return saved;
   }
 
   async function onAssociateActual(payload) {
+    if (!writesEnabled) return { ok: false, code: 'finance_writes_disabled' };
     const saved = await associateComparisonPlan(supabase, payload);
     if (saved.ok) await refreshActuals();
     return saved;
@@ -589,6 +634,7 @@ export default function FinanceShell({ grantedAccess }) {
       setSaveCode(opened.code);
       return;
     }
+    clearPlanDraft();
     applyPlan(opened.plan, record);
   }
 
@@ -617,6 +663,7 @@ export default function FinanceShell({ grantedAccess }) {
           dirty={dirty}
           conflict={conflict}
         />
+        <NavLink className="fixed bottom-4 left-4 z-40 inline-flex min-h-11 items-center rounded border border-slate-300 bg-white px-3 text-sm font-medium text-slate-900 print:hidden" data-testid="finance-exit" to={`/${routeTenantId}/crm/dashboard`}>Leave planning</NavLink>
         <LeaveFinanceDialog prompt={leavePrompt} onStay={stayOnFinance} onDiscard={discardAndLeave} />
       </>
     );
@@ -632,7 +679,7 @@ export default function FinanceShell({ grantedAccess }) {
           {writesEnabled ? null : (
             <p className="mt-3 text-sm font-medium text-slate-800" data-testid="finance-writes-disabled">Finance writes are disabled. This screen is read-only.</p>
           )}
-          {saveCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-save-error">{saveCode}</p> : null}
+          {saveCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-save-error">{saveErrorCopy(saveCode, result?.errors)}</p> : null}
           {loadCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-load-error">{loadErrorCopy(loadCode)}</p> : null}
           {mode === 'guided' ? (
             <div className="mt-4">
@@ -641,6 +688,7 @@ export default function FinanceShell({ grantedAccess }) {
                 <button type="button" className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-create-plan" onClick={onCreate} disabled={!writesEnabled}>Create plan</button>
                 <NavLink className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium" data-testid="finance-open-checkin" to={`/${routeTenantId}/finance/checkin`}>Monthly Check-In</NavLink>
                 <NavLink className="inline-flex min-h-11 items-center rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium" data-testid="finance-open-reports" to={`/${routeTenantId}/finance/reports`}>Reports</NavLink>
+                <NavLink className="inline-flex min-h-11 items-center rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium" data-testid="finance-exit" to={`/${routeTenantId}/crm/dashboard`}>Leave planning</NavLink>
               </div>
             </div>
           ) : null}
@@ -716,6 +764,7 @@ export default function FinanceShell({ grantedAccess }) {
             ))}
           </nav>
           <NavLink className="mx-4 mb-4 inline-flex min-h-11 items-center text-sm font-medium text-slate-100 underline" data-testid="finance-open-reports" to={`${base}/reports`}>Reports</NavLink>
+          <NavLink className="mx-4 mb-4 inline-flex min-h-11 items-center text-sm font-medium text-slate-100 underline" data-testid="finance-exit" to={`/${routeTenantId}/crm/dashboard`}>Leave planning</NavLink>
         </aside>
         <main className="min-w-0 px-4 py-6 lg:px-8">
           <header className="mb-6 flex flex-col gap-3">
@@ -785,7 +834,10 @@ export default function FinanceShell({ grantedAccess }) {
               <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-save" onClick={onSave} disabled={!writesEnabled || conflict}>Save draft</button>
             ) : null}
             {record.status === 'draft' ? (
-              <button type="button" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:text-slate-400" data-testid="finance-approve" onClick={onApprove} disabled={!writesEnabled || conflict}>Approve plan</button>
+              <button type="button" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:text-slate-400" data-testid="finance-approve" onClick={onApprove} disabled={!writesEnabled || conflict || planNotApprovable}>Approve plan</button>
+            ) : null}
+            {record.status === 'draft' && planNotApprovable ? (
+              <p className="text-sm text-red-700" data-testid="finance-approve-block">{approvabilityCopy(result?.errors)}</p>
             ) : null}
             {record.status === 'approved' ? (
               <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400" data-testid="finance-new-draft" onClick={onNewDraft} disabled={!writesEnabled || conflict}>New draft</button>
@@ -814,10 +866,10 @@ export default function FinanceShell({ grantedAccess }) {
               <button type="button" className="ml-3 inline-flex min-h-11 items-center underline" data-testid="finance-reload" onClick={refreshPlans}>Reload</button>
             </div>
           ) : null}
-          {saveCode ? <p className="mb-4 text-sm text-red-700" data-testid="finance-save-error">{saveCode}</p> : null}
+          {saveCode ? <p className="mb-4 text-sm text-red-700" data-testid="finance-save-error">{saveErrorCopy(saveCode, result?.errors)}</p> : null}
           {view.errors.length > 0 ? (
             <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800" data-testid="finance-validation">
-              Some inputs are incomplete or invalid. Affected results show --. Retention hurdles must satisfy 0 ≤ value &lt; 1.
+              Some inputs are incomplete or invalid. Affected results show --. Each retention hurdle must be at least 0 and less than 1, and the four hurdles on a stage must total less than 1. A total of exactly 1 is not allowed, even when required revenue is blank.
             </div>
           ) : null}
           <fieldset disabled={draftLocked || !writesEnabled} className="min-w-0 border-0 p-0">
@@ -884,9 +936,9 @@ function LeaveFinanceDialog({ prompt, onStay, onDiscard }) {
     <div role="alertdialog" aria-modal="true" aria-labelledby="finance-leave-title" data-testid="finance-leave-dialog" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
       <div className="max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
         <h2 id="finance-leave-title" className="text-lg font-semibold text-slate-950">Leave without saving?</h2>
-        <p className="mt-2 text-sm text-slate-700">This draft has unsaved edits. Leaving Finance discards them. Staying keeps them on this screen. Nothing is saved automatically.</p>
+        <p className="mt-2 text-sm text-slate-700">This draft has unsaved edits. Cancel keeps them on this screen. Discard leaves and drops them. Nothing is saved automatically.</p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" ref={stayRef} className="inline-flex min-h-11 items-center rounded bg-slate-900 px-3 text-sm font-medium text-white" data-testid="finance-leave-stay" onClick={onStay}>Stay</button>
+          <button type="button" ref={stayRef} className="inline-flex min-h-11 items-center rounded bg-slate-900 px-3 text-sm font-medium text-white" data-testid="finance-leave-stay" onClick={onStay}>Cancel</button>
           <button type="button" ref={discardRef} className="inline-flex min-h-11 items-center rounded border border-red-300 bg-white px-3 text-sm text-red-800" data-testid="finance-leave-discard" onClick={onDiscard}>Discard</button>
         </div>
       </div>
@@ -1070,16 +1122,16 @@ function Growth({ inputs, view, result, onStage, onChannel }) {
   const stageKeys = ['stage_0', 'stage_1', 'stage_2', 'stage_3'];
   return (
     <div className="space-y-4" data-testid="finance-growth">
-      <Explain title="Retention hurdle">{EXPLANATIONS.growthReserve} {EXPLANATIONS.badDebt} {EXPLANATIONS.contingency} The total must satisfy 0 ≤ value &lt; 1.</Explain>
+      <Explain title="Retention hurdle">{EXPLANATIONS.growthReserve} {EXPLANATIONS.badDebt} {EXPLANATIONS.contingency} Each value must be at least 0 and less than 1. The four values on a stage must total less than 1. A total of exactly 1 leaves required revenue blank and is not allowed.</Explain>
       <div className="grid gap-3 lg:grid-cols-2">
         {stageKeys.map((key) => (
           <div key={key} className="rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="font-semibold">{inputs.stages[key].label}</h2>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <NumberField label="Operating profit fraction" value={inputs.stages[key].true_operating_profit_pct} onChange={(value) => onStage(key, 'true_operating_profit_pct', value)} />
-              <NumberField label="Growth reserve fraction" value={inputs.stages[key].growth_reserve_pct} onChange={(value) => onStage(key, 'growth_reserve_pct', value)} />
-              <NumberField label="Bad debt / warranty fraction" value={inputs.stages[key].bad_debt_warranty_pct} onChange={(value) => onStage(key, 'bad_debt_warranty_pct', value)} />
-              <NumberField label="Contingency fraction" value={inputs.stages[key].unidentified_cost_contingency_pct} onChange={(value) => onStage(key, 'unidentified_cost_contingency_pct', value)} />
+              <NumberField testId={`finance-hurdle-${key}-operating-profit`} label="Operating profit fraction" value={inputs.stages[key].true_operating_profit_pct} onChange={(value) => onStage(key, 'true_operating_profit_pct', value)} />
+              <NumberField testId={`finance-hurdle-${key}-growth-reserve`} label="Growth reserve fraction" value={inputs.stages[key].growth_reserve_pct} onChange={(value) => onStage(key, 'growth_reserve_pct', value)} />
+              <NumberField testId={`finance-hurdle-${key}-bad-debt`} label="Bad debt / warranty fraction" value={inputs.stages[key].bad_debt_warranty_pct} onChange={(value) => onStage(key, 'bad_debt_warranty_pct', value)} />
+              <NumberField testId={`finance-hurdle-${key}-contingency`} label="Contingency fraction" value={inputs.stages[key].unidentified_cost_contingency_pct} onChange={(value) => onStage(key, 'unidentified_cost_contingency_pct', value)} />
               <NumberField label="Safety months" value={inputs.stages[key].safety_months} onChange={(value) => onStage(key, 'safety_months', value)} />
             </div>
             <p className="mt-3 text-sm">Hurdle {view.stages.find((stage) => stage.key === key).hurdle}. Required revenue {showMoney(result.stages[key].requiredMonthlyRevenue)}.</p>

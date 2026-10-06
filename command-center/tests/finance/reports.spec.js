@@ -27,11 +27,35 @@ test.beforeAll(() => {
   mkdirSync(out, { recursive: true });
 });
 
+function assertLoopback(raw, label) {
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`${label} is not a URL. Do not point it at a remote project.`);
+  }
+  if (!['127.0.0.1', 'localhost', '::1'].includes(url.hostname)) {
+    throw new Error(`${label} must be a loopback URL. Do not point it at a remote project.`);
+  }
+  return url;
+}
+
 function seedHistoricalV1() {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
+  if (!supabaseUrl) {
+    throw new Error('VITE_SUPABASE_URL is required for the browser v1 historical-plan proof. It must be a loopback URL.');
+  }
+  const api = assertLoopback(supabaseUrl, 'VITE_SUPABASE_URL');
+  const mockPort = process.env.FINANCE_MOCK_PORT || (api.port === '54921' ? api.port : '');
+  if (mockPort) {
+    execFileSync('curl', ['-sf', '-X', 'POST', `http://127.0.0.1:${mockPort}/mock/seed-historical-v1`], { stdio: 'pipe' });
+    return;
+  }
   const db = process.env.FINANCE_LOCAL_DB_URL;
   if (!db) {
-    throw new Error('FINANCE_LOCAL_DB_URL is required for the browser v1 historical-plan proof. It is the local Postgres URL from supabase status. Do not point it at a remote project.');
+    throw new Error('FINANCE_LOCAL_DB_URL is required when the Vite API is not the local finance mock. It is a loopback Postgres URL. Do not point it at a remote project.');
   }
+  assertLoopback(db, 'FINANCE_LOCAL_DB_URL');
   const seed = path.join(path.dirname(fileURLToPath(import.meta.url)), 'seed-v1-historical.sql');
   execFileSync('psql', [db, '-v', 'ON_ERROR_STOP=1', '-f', seed], { stdio: 'pipe' });
 }

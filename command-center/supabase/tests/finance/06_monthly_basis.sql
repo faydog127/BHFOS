@@ -133,8 +133,8 @@ begin
   if public.finance_plan_document_ok(1, pg_temp.finance_v1_document()) is not true then
     raise exception 'FAIL: full historical v1 rejected';
   end if;
-  if public.finance_plan_document_ok(1, '{"kept":true}'::jsonb) is not true then
-    raise exception 'FAIL: historical v1 without sections rejected';
+  if public.finance_plan_document_ok(1, '{"kept":true}'::jsonb) then
+    raise exception 'FAIL: partial version 1 accepted';
   end if;
   if public.finance_plan_document_ok(2, pg_temp.finance_v2_document('{}'::jsonb)) is not true then
     raise exception 'FAIL: full v2 rejected';
@@ -164,37 +164,19 @@ begin
     raise exception 'FAIL: 9-digit hours accepted';
   end if;
 
-  -- A minimal version 1 row stays valid storage. Upgrade and open-draft copy it
-  -- into a version 2 document and then fail closed. This probe rolls back.
+  -- A partial version 1 document is not valid storage. The insert fails closed.
   begin
     insert into public.finance_plans (tenant_id, schema_version, inputs, notes)
-    values ('tvg', 1, '{"kept":true}'::jsonb, 'minimal-v1-probe')
-    returning id, version into v_hist, v_version;
-    begin
-      perform public.finance_upgrade_draft_schema(v_hist, v_version);
-      raise exception 'FAIL: minimal v1 upgrade accepted';
-    exception
-      when check_violation then
-        null;
-    end;
-    select version into v_version from public.finance_plans where id = v_hist;
-    perform public.finance_approve_plan(v_hist, v_version);
-    begin
-      perform public.finance_open_draft(v_hist);
-      raise exception 'FAIL: minimal v1 open draft accepted';
-    exception
-      when check_violation then
-        null;
-    end;
-    raise exception 'rollback minimal v1 probe';
+    values ('tvg', 1, '{"kept":true}'::jsonb, 'partial-v1-probe');
+    raise exception 'FAIL: partial v1 insert accepted';
   exception
-    when raise_exception then
-      if sqlerrm is distinct from 'rollback minimal v1 probe' then
-        raise;
+    when check_violation then
+      if sqlerrm not like '%finance_plans_monthly_basis%' then
+        raise exception 'FAIL: partial v1 message %', sqlerrm;
       end if;
   end;
   if (select count(*) from public.finance_plans) <> 0 then
-    raise exception 'FAIL: minimal v1 probe left rows';
+    raise exception 'FAIL: partial v1 probe left rows';
   end if;
 
   insert into public.finance_plans (tenant_id, schema_version, inputs, notes)

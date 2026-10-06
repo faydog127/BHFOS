@@ -1052,7 +1052,7 @@ describe('monthly plan basis', () => {
     assert.match(shell, /async function onApprove\(\) \{\n    if \(conflict\) return;/);
     assert.match(shell, /async function onNewDraft\(\) \{\n    if \(conflict\) return;/);
     assert.match(shell, /data-testid="finance-save" onClick=\{onSave\} disabled=\{!writesEnabled \|\| conflict\}/);
-    assert.match(shell, /data-testid="finance-approve" onClick=\{onApprove\} disabled=\{!writesEnabled \|\| conflict\}/);
+    assert.match(shell, /data-testid="finance-approve" onClick=\{onApprove\} disabled=\{!writesEnabled \|\| conflict \|\| planNotApprovable\}/);
     assert.match(shell, /data-testid="finance-new-draft" onClick=\{onNewDraft\} disabled=\{!writesEnabled \|\| conflict\}/);
     assert.match(shell, /data-testid="finance-upgrade-schema" onClick=\{onUpgradeSchema\} disabled=\{!writesEnabled \|\| dirty \|\| conflict\}/);
     assert.match(shell, /disabled=\{!writesEnabled\}/);
@@ -1083,8 +1083,9 @@ describe('monthly plan basis', () => {
     const applyEnd = shell.indexOf('async function refreshPlans');
     const apply = shell.slice(applyStart, applyEnd);
     const gate = apply.indexOf('storedPlanDecision(plan)');
-    const write = apply.indexOf('setInputs(plan.inputs)');
+    const write = apply.indexOf('setInputs(held.inputs)');
     assert.ok(gate > -1 && write > gate);
+    assert.ok(apply.indexOf('resolveStoredPlan(plan)') > gate);
     assert.match(apply, /if \(!decision\.ok\) \{[\s\S]*setInputs\(null\)[\s\S]*return;/);
     assert.equal(/console\./.test(apply), false);
     assert.match(shell, /loadErrorCopy\(loadCode\)/);

@@ -1,5 +1,7 @@
 # Malformed plan preflight
 
+**Superseded for version 1 shape.** `20261006140000_finance_v1_document_shape.sql` rejects a partial version 1 document on the next write. `{}` and `{"kept":true}` are no longer valid version 1 storage. A section-complete historical version 1 document stays valid and can still upgrade. The migration does not rewrite existing rows. Use `V1_SHAPE_IMPACT.md` before any hosted apply. The version 2 query below is unchanged.
+
 Documentation only. Do not run this against production, n8n Assurance Preview, or Command Center staging from the hardening change.
 
 Run both queries on the target database before `20261003223000_finance_plan_v2_required_sections.sql` is applied. The Finance screen has no replace-invalid-draft button. Do not weaken `finance_plan_document_ok`.
@@ -49,7 +51,7 @@ where schema_version = 2
 
 ## Version 1 rows — stop upgrade and open-draft
 
-A minimal version 1 row, including `{}` and `{"kept":true}`, is still valid storage. The migration does not rewrite it. `finance_upgrade_draft_schema` and `finance_open_draft` copy that document, add `monthly_basis`, and then raise `23514` because the version 2 check requires the calculator sections.
+The paragraph below described storage before `20261006140000_finance_v1_document_shape.sql`. After that migration, a partial version 1 document is rejected on write. Do not treat `{}` or `{"kept":true}` as valid storage.
 
 If this query returns any row, the migration may still be applied. Do not run upgrade or open-draft on those rows until an ordinary admin `UPDATE` replaces the document with a full section document. There is no replace-invalid-draft button and no new product meaning.
 
