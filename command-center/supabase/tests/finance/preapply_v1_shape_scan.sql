@@ -5,8 +5,9 @@
 --
 -- v1_would_fail / v2_fail are document shape. approved_not_approvable counts
 -- approved rows whose stored inputs fail the proposed approvability rules
--- (scale-4 hurdles, cent-rounded money, negative economic cost, negative
--- required revenue). Drafts are omitted there; they stay editable.
+-- (scale-4 hurdles, a hurdle total of 1 or more, cent-rounded money,
+-- negative economic cost, negative required revenue). A blank required
+-- revenue does not exempt an approved row. Drafts are omitted there.
 --
 -- Any count above zero in v1_would_fail, v1_nondraft_would_fail, v2_fail, or
 -- approved_not_approvable means STOP. Do not apply. Do not use replica mode,
@@ -90,7 +91,7 @@ select
           select sum(round((inputs -> 'stages' -> stage_key -> hurdle_key #>> '{}')::numeric, 4))
           from unnest(array['true_operating_profit_pct','growth_reserve_pct','bad_debt_warranty_pct','unidentified_cost_contingency_pct']::text[]) as hurdle_key
           where jsonb_typeof(inputs -> 'stages' -> stage_key -> hurdle_key) = 'number'
-        ), 0) > 1
+        ), 0) >= 1
         or (
           jsonb_typeof(inputs -> 'stages' -> stage_key -> 'owner_management_comp') = 'number'
           and round((inputs -> 'stages' -> stage_key -> 'owner_management_comp' #>> '{}')::numeric, 2) < 0

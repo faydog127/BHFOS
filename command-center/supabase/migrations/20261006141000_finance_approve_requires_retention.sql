@@ -1,7 +1,8 @@
 -- Approve refuses a plan that fails the approvability contract
 -- (command-center/docs/finance/APPROVABILITY_CONTRACT.md).
 -- Rates normalize to 4 decimal places and money to cents, half away from zero.
--- A hurdle total of exactly 1 is valid, including 0.7+0.2+0.1+0.
+-- A hurdle total must be strictly below 1. 0.7+0.2+0.1+0 is exactly 1 and is rejected.
+-- Blank required revenue does not exempt that stage.
 -- A failed approve raises before any status update, so status and version stay.
 -- If an existing approved row would fail, this migration rolls back.
 -- Draft rows are not failed here; they stay editable.
@@ -78,7 +79,7 @@ begin
       end if;
       total := total + amount;
     end loop;
-    if total > 1 then
+    if total >= 1 then
       return false;
     end if;
 

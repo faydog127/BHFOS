@@ -167,13 +167,21 @@ describe('approve parity for the hurdle boundary', () => {
     unidentified_cost_contingency_pct: 0,
   };
 
-  it('treats 0.7+0.2+0.1+0 as a valid total of 1 after scale-4 normalization', () => {
+  it('rejects 0.7+0.2+0.1+0 as exactly 1 and keeps 0.9999 below the boundary', () => {
     assert.equal(0.7 + 0.2 + 0.1 + 0 < 1, true);
-    assert.equal(hurdleSumExceedsOne([0.7, 0.2, 0.1, 0]), false);
+    assert.equal(hurdleSumExceedsOne([0.7, 0.2, 0.0999, 0]), false);
+    assert.equal(hurdleSumExceedsOne([0.7, 0.2, 0.1, 0]), true);
     assert.equal(hurdleSumExceedsOne([0.7, 0.2, 0.1, 0.0001]), true);
+    const below = retentionHurdle({
+      ...hurdles,
+      bad_debt_warranty_pct: 0.0999,
+    });
+    assert.equal(below.valid, true);
+    assert.equal(below.value, 0.9999);
     const verdict = retentionHurdle(hurdles);
-    assert.equal(verdict.valid, true);
-    assert.equal(verdict.value, 1);
+    assert.equal(verdict.valid, false);
+    assert.equal(verdict.value, null);
+    assert.deepEqual(verdict.errors, ['retention_hurdle:invalid']);
     const zeros = {
       true_operating_profit_pct: 0,
       growth_reserve_pct: 0,
@@ -181,8 +189,21 @@ describe('approve parity for the hurdle boundary', () => {
       unidentified_cost_contingency_pct: 0,
     };
     const inputs = { stages: { stage_0: hurdles, stage_1: zeros, stage_2: zeros, stage_3: zeros } };
-    assert.deepEqual(calculatePlan(inputs).errors, []);
-    assert.deepEqual(planApprovabilityErrors(inputs), []);
+    const calculated = calculatePlan(inputs);
+    assert.equal(calculated.stages.stage_0.requiredMonthlyRevenue, null);
+    assert.equal(calculated.errors.some((error) => error === 'stage_0:retention_hurdle:invalid'), true);
+    assert.equal(planApprovabilityErrors(inputs).some((error) => error === 'stage_0:retention_hurdle:invalid'), true);
+    assert.match(approvabilityCopy(calculated.errors), /exactly 1 is not allowed/);
+    const blankStage = {
+      stages: {
+        stage_0: zeros,
+        stage_1: zeros,
+        stage_2: { true_operating_profit_pct: 0, bad_debt_warranty_pct: 0, unidentified_cost_contingency_pct: 0 },
+        stage_3: zeros,
+      },
+    };
+    assert.equal(planApprovabilityErrors(blankStage).some((error) => error === 'stage_2:growth_reserve_pct:missing'), true);
+    assert.equal(calculatePlan(blankStage).stages.stage_2.requiredMonthlyRevenue, null);
     const over = {
       ...inputs,
       stages: {
@@ -216,6 +237,8 @@ describe('approve parity for the hurdle boundary', () => {
     const contract = read('src/lib/finance/approvability.js');
     assert.match(shell, /function saveErrorCopy\(code, errors\)/);
     assert.match(shell, /saveErrorCopy\(saveCode, result\?\.errors\)/);
+    assert.match(contract, /must total less than 1/);
+    assert.match(shell, /exactly 1 is not allowed/);
     assert.match(contract, /Approve is blocked until the validation message is clear\./);
     assert.match(contract, /Management compensation cannot be negative\./);
     assert.equal(approvabilityCopy(['stage_0:owner_management_comp:invalid']).includes('23514'), false);

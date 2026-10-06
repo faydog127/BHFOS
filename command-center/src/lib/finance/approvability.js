@@ -6,8 +6,9 @@
  *
  * Rates (hurdles, burden) normalize to 4 decimal places.
  * Money normalizes to cents (2 decimal places).
- * Rounding is half away from zero. A hurdle total of exactly 1 is valid.
- * 0.7+0.2+0.1+0 normalizes to 1. There is no extra epsilon.
+ * Rounding is half away from zero. A hurdle total must be strictly below 1.
+ * 0.7+0.2+0.1+0 normalizes to exactly 1 and is rejected. There is no extra epsilon.
+ * Blank inputs and a blank required revenue do not exempt a stage.
  */
 /* global BigInt */
 
@@ -166,15 +167,15 @@ export function retentionHurdle(stage) {
   }
   if (errors.length) return { value: null, valid: false, errors };
   const total = values.reduce((sum, units) => sum + units, 0n);
-  if (total > RATE_ONE) {
+  if (total >= RATE_ONE) {
     return { value: null, valid: false, errors: ['retention_hurdle:invalid'] };
   }
   return { value: scaledNumber(total, RATE_SCALE), valid: true, errors: [] };
 }
 
 /**
- * True only when the normalized hurdle total is greater than 1.
- * A total of exactly 1, including 0.7+0.2+0.1+0, is false.
+ * True when the normalized hurdle total is greater than or equal to 1.
+ * 0.7+0.2+0.1+0 is true. 0.9999 is false. A missing value is true.
  */
 export function hurdleSumExceedsOne(values) {
   let total = 0n;
@@ -185,7 +186,7 @@ export function hurdleSumExceedsOne(values) {
     if (units === null) return true;
     total += units;
   }
-  return total > RATE_ONE;
+  return total >= RATE_ONE;
 }
 
 export function stageApprovabilityErrors(inputs, stageKey) {
@@ -238,7 +239,7 @@ export function approvabilityCopy(errors) {
     if (typeof error !== 'string') continue;
     if (error.endsWith(':missing')) add('Enter every retention hurdle on all four stages before approving.');
     else if (error.includes('retention_hurdle') || (error.endsWith(':invalid') && error.includes('_pct:'))) {
-      add('Each retention hurdle must be at least 0 and less than 1, and the four hurdles on a stage cannot total more than 1.');
+      add('Each retention hurdle must be at least 0 and less than 1, and the four hurdles on a stage must total less than 1. A total of exactly 1 is not allowed, even when required revenue is blank.');
     } else if (error.includes('owner_management_comp')) add('Management compensation cannot be negative.');
     else if (error.includes('negative_economic_cost')) add('Economic operating cost cannot be negative. Check the cost pools and compensation.');
     else if (error.includes('negative_revenue')) add('Required revenue cannot be negative.');

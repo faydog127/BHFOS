@@ -869,7 +869,7 @@ export default function FinanceShell({ grantedAccess }) {
           {saveCode ? <p className="mb-4 text-sm text-red-700" data-testid="finance-save-error">{saveErrorCopy(saveCode, result?.errors)}</p> : null}
           {view.errors.length > 0 ? (
             <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800" data-testid="finance-validation">
-              Some inputs are incomplete or invalid. Affected results show --. Each retention hurdle must be at least 0 and less than 1, and the four hurdles on a stage cannot total more than 1.
+              Some inputs are incomplete or invalid. Affected results show --. Each retention hurdle must be at least 0 and less than 1, and the four hurdles on a stage must total less than 1. A total of exactly 1 is not allowed, even when required revenue is blank.
             </div>
           ) : null}
           <fieldset disabled={draftLocked || !writesEnabled} className="min-w-0 border-0 p-0">
@@ -1122,7 +1122,7 @@ function Growth({ inputs, view, result, onStage, onChannel }) {
   const stageKeys = ['stage_0', 'stage_1', 'stage_2', 'stage_3'];
   return (
     <div className="space-y-4" data-testid="finance-growth">
-      <Explain title="Retention hurdle">{EXPLANATIONS.growthReserve} {EXPLANATIONS.badDebt} {EXPLANATIONS.contingency} Each value must be at least 0 and less than 1. The four values on a stage cannot total more than 1. A total of exactly 1 leaves required revenue blank.</Explain>
+      <Explain title="Retention hurdle">{EXPLANATIONS.growthReserve} {EXPLANATIONS.badDebt} {EXPLANATIONS.contingency} Each value must be at least 0 and less than 1. The four values on a stage must total less than 1. A total of exactly 1 leaves required revenue blank and is not allowed.</Explain>
       <div className="grid gap-3 lg:grid-cols-2">
         {stageKeys.map((key) => (
           <div key={key} className="rounded-lg border border-slate-200 bg-white p-4">

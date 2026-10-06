@@ -18,6 +18,6 @@ Non-draft partial version 1 rows have no authorized repair. Approved and superse
 
 A second empty database applies the migration and prints `finance_v1_shape_impact total=0 v1=0 v1_would_fail=0 v2_would_fail=0`. Its clean scan is `2|1|0|0|0|0` after the authorized historical seed.
 
-`supabase/tests/finance/run_approvability_abort.sh` uses the same scan against proposed approvability. An approved negative management-compensation row is `1|0|0|0|0|1`. After a negative stage-0 fuel pool supersedes it, the scan is `2|0|0|0|0|1`. Applying `20261006141000` then aborts with `finance_approvability_impact_abort approved_not_approvable=1`. The approved pool row stays approved and `finance_plan_approvable` is absent.
+`supabase/tests/finance/run_approvability_abort.sh` uses the same scan against proposed approvability. An approved negative management-compensation row is `1|0|0|0|0|1`. After a negative stage-0 fuel pool supersedes it, the scan is `2|0|0|0|0|1`. After `0.7+0.2+0.1+0` supersedes that pool, the scan is `3|0|0|0|0|1`. Applying `20261006141000` then aborts with `finance_approvability_impact_abort approved_not_approvable=1`. The boundary row stays approved and `finance_plan_approvable` is absent.
 
 Hosted staging and production were not queried.

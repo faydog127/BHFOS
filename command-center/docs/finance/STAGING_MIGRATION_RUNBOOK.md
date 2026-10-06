@@ -3,6 +3,20 @@
 Documentation only. Do not execute this runbook from the hardening change.
 Staging apply is not authorized until Command Center opens that gate. Production apply is not authorized.
 
+## Gate S corrective apply order
+
+These three files are unapplied on this branch. An authorized operator applies them after the earlier Finance chain, in this order, and stops at the first error:
+
+1. `20261006140000_finance_v1_document_shape.sql`
+2. `20261006141000_finance_approve_requires_retention.sql`
+3. `20261006142000_finance_approve_trigger_guard.sql`
+
+Never apply `20261006142000` alone. It replaces `finance_plan_before_update` and calls `finance_plan_approvable`. That function is created in `20261006141000`. If `140000` or `141000` aborts, do not continue. A lone `142000` commits and then every approve fails because the function is missing.
+
+Before `141000`, run `supabase/tests/finance/preapply_v1_shape_scan.sql`. A non-zero `v1_would_fail`, `v1_nondraft_would_fail`, `v2_fail`, or `approved_not_approvable` stops the apply. Return the counts and row ids. Do not use replica mode, disable triggers, or bypass constraints.
+
+`20261006142000` does not contain its own hurdle comparison. The strict total below 1 lives in `finance_plan_approvable`.
+
 Future staging project ref, named only: `exwochkjngdztrdtxnsa`.
 Do not link this checkout to that project. Do not run `supabase link`, `supabase db push`, or `supabase db reset` against it.
 
@@ -26,8 +40,8 @@ This repository does not run that check. Phase H did not contact any of those pr
 ## What a later authorized apply would run
 
 Forward migrations only. Do not edit a migration that has already been applied.
-The newest Finance file is `supabase/migrations/20261003223000_finance_plan_v2_required_sections.sql`.
-Phase H does not add another migration. It does not edit `20261003180000_finance_plan_monthly_basis.sql` or `20261003223000`.
+The Phase H chain ends at `supabase/migrations/20261003223000_finance_plan_v2_required_sections.sql`.
+The Gate S corrective files listed above come after it. Phase H does not edit `20261003180000_finance_plan_monthly_basis.sql` or `20261003223000`.
 The version 2 file replaces `finance_plan_document_ok` and rebuilds `finance_plans_monthly_basis`.
 It does not seed rows, rewrite facts, or delete.
 

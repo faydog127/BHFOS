@@ -237,19 +237,110 @@ begin
   if not public.finance_plan_approvable(pg_temp.finance_v2_document('{}'::jsonb)) then
     raise exception 'FAIL: zero hurdles are not approvable';
   end if;
+
+  -- Below the boundary. 0.7+0.2+0.0999+0 normalizes to 0.9999.
+  v_bad := pg_temp.finance_v2_document('{}'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,true_operating_profit_pct}', '0.7'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,growth_reserve_pct}', '0.2'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,bad_debt_warranty_pct}', '0.0999'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,unidentified_cost_contingency_pct}', '0'::jsonb);
+  if not public.finance_plan_approvable(v_bad) then
+    raise exception 'FAIL: hurdle total 0.9999 is not approvable';
+  end if;
+
+  -- Exactly 1.0. 0.7+0.2+0.1+0. Empty pools leave required revenue blank.
+  -- That blank does not exempt the stage.
   v_bad := pg_temp.finance_v2_document('{}'::jsonb);
   v_bad := jsonb_set(v_bad, '{stages,stage_0,true_operating_profit_pct}', '0.7'::jsonb);
   v_bad := jsonb_set(v_bad, '{stages,stage_0,growth_reserve_pct}', '0.2'::jsonb);
   v_bad := jsonb_set(v_bad, '{stages,stage_0,bad_debt_warranty_pct}', '0.1'::jsonb);
   v_bad := jsonb_set(v_bad, '{stages,stage_0,unidentified_cost_contingency_pct}', '0'::jsonb);
-  if not public.finance_plan_approvable(v_bad) then
-    raise exception 'FAIL: 0.7+0.2+0.1+0 is not approvable';
+  if public.finance_plan_approvable(v_bad) then
+    raise exception 'FAIL: 0.7+0.2+0.1+0 looks approvable';
   end if;
+  update public.finance_plans set inputs = v_bad where id = v_plan returning version into v_version;
+  begin
+    perform public.finance_approve_plan(v_plan, v_version);
+    raise exception 'FAIL: 0.7+0.2+0.1+0 approve accepted';
+  exception
+    when check_violation then
+      if sqlerrm not like '%finance_plan_not_approvable%' then
+        raise exception 'FAIL: 0.7+0.2+0.1+0 message %', sqlerrm;
+      end if;
+  end;
+  select status, version into v_status, v_version from public.finance_plans where id = v_plan;
+  if v_status <> 'draft' or v_version <> 6 then
+    raise exception 'FAIL: 0.7+0.2+0.1+0 changed % %', v_status, v_version;
+  end if;
+
+  v_bad := pg_temp.finance_v2_document('{}'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,true_operating_profit_pct}', '0.25'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,growth_reserve_pct}', '0.25'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,bad_debt_warranty_pct}', '0.25'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,unidentified_cost_contingency_pct}', '0.25'::jsonb);
+  if public.finance_plan_approvable(v_bad) then
+    raise exception 'FAIL: four quarters look approvable';
+  end if;
+
+  -- Known zero cost with a total of 1. Required revenue stays blank and approval is refused.
+  v_bad := pg_temp.finance_v2_document('{}'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,true_operating_profit_pct}', '0.7'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,growth_reserve_pct}', '0.2'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,bad_debt_warranty_pct}', '0.1'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,unidentified_cost_contingency_pct}', '0'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,owner_management_comp}', '0'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,owner_shadow_hours}', '0'::jsonb);
+  v_bad := jsonb_set(v_bad, '{owner_field_replacement,wage}', '0'::jsonb);
+  v_bad := jsonb_set(v_bad, '{owner_field_replacement,burden}', '0'::jsonb);
+  select jsonb_object_agg(grp, grp_obj) into v_pools
+  from (
+    select grp, jsonb_object_agg(line, jsonb_build_object('stage_0', 0)) as grp_obj
+    from (values
+      ('direct_production', 'fuel'),
+      ('direct_production', 'consumables'),
+      ('direct_production', 'job_rentals'),
+      ('indirect_field', 'vehicle_payments'),
+      ('indirect_field', 'maintenance'),
+      ('indirect_field', 'equipment_financing'),
+      ('indirect_field', 'tooling_ppe'),
+      ('indirect_field', 'replacement_sinking_fund'),
+      ('ga', 'office_shop'),
+      ('ga', 'utilities'),
+      ('ga', 'software'),
+      ('ga', 'accounting_legal'),
+      ('ga', 'office_misc'),
+      ('sales', 'marketing'),
+      ('sales', 'memberships'),
+      ('sales', 'collateral'),
+      ('insurance', 'gl_package'),
+      ('insurance', 'commercial_auto'),
+      ('insurance', 'umbrella'),
+      ('insurance', 'workers_comp_fixed'),
+      ('insurance', 'licensing')
+    ) as pool_lines(grp, line)
+    group by grp
+  ) as pool_groups;
+  v_bad := jsonb_set(v_bad, '{cost_pools}', v_pools);
+  if public.finance_plan_approvable(v_bad) then
+    raise exception 'FAIL: blank required revenue at total 1 looks approvable';
+  end if;
+
+  -- A blank hurdle on another stage is not exempt.
+  v_bad := pg_temp.finance_v2_document('{}'::jsonb) #- '{stages,stage_2,growth_reserve_pct}';
+  if public.finance_plan_approvable(v_bad) then
+    raise exception 'FAIL: blank hurdle on stage_2 looks approvable';
+  end if;
+
+  v_bad := pg_temp.finance_v2_document('{}'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,true_operating_profit_pct}', '0.7'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,growth_reserve_pct}', '0.2'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,bad_debt_warranty_pct}', '0.0999'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,unidentified_cost_contingency_pct}', '0'::jsonb);
   update public.finance_plans set inputs = v_bad where id = v_plan returning version into v_version;
   perform public.finance_approve_plan(v_plan, v_version);
   select status into v_status from public.finance_plans where id = v_plan;
   if v_status <> 'approved' then
-    raise exception 'FAIL: 0.7+0.2+0.1+0 did not approve';
+    raise exception 'FAIL: hurdle total 0.9999 did not approve';
   end if;
 
   -- D5: once comparison_plan_id is set, a later write cannot rebind it.
