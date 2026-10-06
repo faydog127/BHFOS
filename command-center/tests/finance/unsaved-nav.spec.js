@@ -5,9 +5,11 @@
  * That timeout is the hold. A traversal that actually leaves Finance fails
  * the dialog and URL assertions below.
  */
+import { mkdirSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 const note = 'unsaved key note';
+const shots = process.env.FINANCE_NAV_SHOTS || '/opt/cursor/artifacts/finance-gate-s-corrective/playwright';
 
 async function browserBack(page) {
   const dialog = page.getByTestId('finance-leave-dialog');
@@ -186,6 +188,8 @@ test('intra-finance Back and Forward keep edits; Cancel stays and Discard leaves
   await page.keyboard.press('Control+A');
   await page.keyboard.type(note);
   await expect(notes).toHaveValue(note);
+  mkdirSync(shots, { recursive: true });
+  await page.screenshot({ path: `${shots}/dirty-notes-before-back.png`, fullPage: true });
 
   await page.getByRole('navigation', { name: 'Planning sections' }).getByRole('link', { name: 'Monthly Check-In' }).click();
   await expect(page).toHaveURL(/\/finance\/checkin$/);
@@ -199,15 +203,18 @@ test('intra-finance Back and Forward keep edits; Cancel stays and Discard leaves
   await page.goBack();
   await expect(notes).toHaveValue(note);
   await expect(page.getByTestId('finance-leave-dialog')).toHaveCount(0);
+  await page.screenshot({ path: `${shots}/edits-retained-after-back-forward.png`, fullPage: true });
 
   await page.getByTestId('finance-exit').click();
   await expect(page.getByTestId('finance-leave-dialog')).toBeVisible();
   await expect(page.getByTestId('finance-leave-stay')).toHaveText('Cancel');
   await expect(page).toHaveURL(/\/tvg\/finance\/?$/);
+  await page.screenshot({ path: `${shots}/leave-dialog-after-leave-planning.png`, fullPage: true });
   await page.getByTestId('finance-leave-stay').click();
   await expect(page.getByTestId('finance-leave-dialog')).toHaveCount(0);
   await expect(notes).toHaveValue(note);
   await expect(page).toHaveURL(/\/tvg\/finance\/?$/);
+  await page.screenshot({ path: `${shots}/cancel-keeps-edit.png`, fullPage: true });
 
   await page.getByTestId('finance-exit').click();
   await expect(page.getByTestId('finance-leave-dialog')).toBeVisible();
@@ -216,4 +223,7 @@ test('intra-finance Back and Forward keep edits; Cancel stays and Discard leaves
   await expect(page).toHaveURL(/\/tvg\/crm\/dashboard/);
   await expect(page.locator('html')).not.toHaveAttribute('data-finance-leave-guard', 'on');
   expect(writes).toEqual([]);
+  await page.goto('/tvg/finance');
+  await expect(page.locator('textarea')).toHaveValue('');
+  await page.screenshot({ path: `${shots}/confirmed-leave-clears-drafts.png`, fullPage: true });
 });

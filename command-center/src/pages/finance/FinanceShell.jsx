@@ -651,7 +651,7 @@ export default function FinanceShell({ grantedAccess }) {
           dirty={dirty}
           conflict={conflict}
         />
-        <NavLink className="fixed bottom-4 left-4 z-40 inline-flex min-h-11 items-center rounded border border-slate-300 bg-white px-3 text-sm font-medium text-slate-900" data-print-hide="true" data-testid="finance-exit" to={`/${routeTenantId}/crm/dashboard`}>Leave planning</NavLink>
+        <NavLink className="fixed bottom-4 left-4 z-40 inline-flex min-h-11 items-center rounded border border-slate-300 bg-white px-3 text-sm font-medium text-slate-900 print:hidden" data-testid="finance-exit" to={`/${routeTenantId}/crm/dashboard`}>Leave planning</NavLink>
         <LeaveFinanceDialog prompt={leavePrompt} onStay={stayOnFinance} onDiscard={discardAndLeave} />
       </>
     );
