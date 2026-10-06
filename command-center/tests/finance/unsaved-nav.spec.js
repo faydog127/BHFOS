@@ -5,11 +5,34 @@
  * That timeout is the hold. A traversal that actually leaves Finance fails
  * the dialog and URL assertions below.
  */
+import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 const note = 'unsaved key note';
 const shots = process.env.FINANCE_NAV_SHOTS || '/opt/cursor/artifacts/finance-gate-s-corrective/playwright';
+
+function seedBlankDraft() {
+  const raw = process.env.VITE_SUPABASE_URL || '';
+  if (!raw) return;
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('VITE_SUPABASE_URL is not a URL. Do not point it at a remote project.');
+  }
+  if (!['127.0.0.1', 'localhost', '::1'].includes(url.hostname)) {
+    throw new Error('VITE_SUPABASE_URL must be a loopback URL. Do not point it at a remote project.');
+  }
+  const port = process.env.FINANCE_MOCK_PORT || (url.port === '54921' ? url.port : '');
+  if (!port) return;
+  execFileSync('curl', ['-sf', '-X', 'POST', `http://127.0.0.1:${port}/mock/reset`], { stdio: 'pipe' });
+  execFileSync('curl', ['-sf', '-X', 'POST', `http://127.0.0.1:${port}/mock/seed-blank-draft`], { stdio: 'pipe' });
+}
+
+test.beforeAll(() => {
+  seedBlankDraft();
+});
 
 async function browserBack(page) {
   const dialog = page.getByTestId('finance-leave-dialog');
@@ -223,7 +246,12 @@ test('intra-finance Back and Forward keep edits; Cancel stays and Discard leaves
   await expect(page).toHaveURL(/\/tvg\/crm\/dashboard/);
   await expect(page.locator('html')).not.toHaveAttribute('data-finance-leave-guard', 'on');
   expect(writes).toEqual([]);
-  await page.goto('/tvg/finance');
+  await page.goBack();
+  await expect(page).toHaveURL(/\/tvg\/finance\/?$/);
+  await expect(page.locator('textarea')).toHaveValue('');
+  await page.getByRole('navigation', { name: 'Planning sections' }).getByRole('link', { name: 'Monthly Check-In' }).click();
+  await expect(page.getByTestId('checkin-source-note')).toHaveValue('');
+  await page.goBack();
   await expect(page.locator('textarea')).toHaveValue('');
   await page.screenshot({ path: `${shots}/confirmed-leave-clears-drafts.png`, fullPage: true });
 });

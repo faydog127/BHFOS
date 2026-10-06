@@ -21,6 +21,7 @@ migrations=(
   20261004120000_finance_version_conflict_pt409.sql
   20261006140000_finance_v1_document_shape.sql
   20261006141000_finance_approve_requires_retention.sql
+  20261006142000_finance_approve_trigger_guard.sql
 )
 
 tests=(

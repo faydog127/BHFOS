@@ -1,7 +1,0 @@
-#!/bin/bash
-# Stand-in for the reports spec seed. It does not open a database connection
-# and it does not set session_replication_role. The historical v1 row is
-# inserted into the local finance mock instead.
-set -euo pipefail
-port="${FINANCE_MOCK_PORT:-54921}"
-curl -sf -X POST "http://127.0.0.1:${port}/mock/seed-historical-v1" >/dev/null

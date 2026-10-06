@@ -27,7 +27,7 @@ These functions raise `finance_access_denied` with SQLSTATE `42501` when the ses
 
 A superuser, including the `postgres` role, bypasses row level security even when it is forced. The triggers and the RPCs still run. A `postgres` insert into `finance_plans`, a `postgres` write to `finance_monthly_actuals`, and a `postgres` call to those RPCs therefore return `42501 finance_access_denied`. That denial is the contract. It is not a defect to remove.
 
-`finance_plan_before_update` does not raise `finance_access_denied`. A superuser update of an existing plan row is not rejected by that trigger, because superuser bypasses RLS. That path is not an authorized maintenance write. Do not use it to repair or clean rows.
+`finance_plan_before_update` does not raise `finance_access_denied`. A superuser update of an existing plan row is not rejected by that trigger, because superuser bypasses RLS. That path is not an authorized maintenance write. Do not use it to repair or clean rows. Whether the hosted staging `postgres` role is a superuser (`rolsuper`, `rolbypassrls`) was not read and is UNKNOWN. Record those attributes before any hosted apply. This packet does not add an `auth.uid()` guard on that trigger.
 
 ## How to do legitimate maintenance
 

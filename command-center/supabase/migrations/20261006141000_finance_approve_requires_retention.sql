@@ -1,5 +1,9 @@
--- Approve refuses a plan whose retention hurdles are missing or invalid.
--- The screen already shows "Some inputs are incomplete or invalid" for that case.
+-- Approve refuses a plan whose retention hurdles are missing or invalid,
+-- whose hurdle sum is >= 1 in exact numeric arithmetic, or whose
+-- owner_management_comp is a negative number.
+-- The screen uses the same hurdle-sum rule on the decimal text of each value.
+-- Derived calculator errors that are not a stored field are listed for a
+-- Command Center ruling; they are not reimplemented here.
 -- This does not edit an applied migration. It does not change grants on the approve RPC.
 -- A rejected approve does not update status or version.
 -- No hosted project is contacted. No finance seed. No DELETE.
@@ -54,8 +58,16 @@ begin
       end if;
       total := total + amount;
     end loop;
+    -- Numeric addition matches the client decimal-text sum. 0.7+0.2+0.1+0 is 1.
     if total >= 1 then
       return false;
+    end if;
+    raw := p_inputs -> 'stages' -> stage_key -> 'owner_management_comp';
+    if pg_catalog.jsonb_typeof(raw) = 'number' and (raw #>> '{}') !~ '^-0+(\.0+)?$' then
+      amount := (raw #>> '{}')::numeric;
+      if amount < 0 then
+        return false;
+      end if;
     end if;
   end loop;
   return true;

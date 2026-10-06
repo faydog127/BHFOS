@@ -1,7 +1,8 @@
 -- Version 1 plan documents must carry the same calculator sections as version 2.
 -- monthly_basis stays forbidden on version 1. This does not edit an applied migration.
--- CREATE OR REPLACE does not rewrite stored rows and does not recheck them until
--- the next insert or update. The notice below reports rows that would fail.
+-- CREATE OR REPLACE does not rewrite stored rows. If any existing row would fail
+-- the new check, this migration raises and the transaction rolls back. A notice
+-- is printed only when every existing row passes.
 -- A missing key makes jsonb_typeof return null. A null CHECK expression passes,
 -- so every predicate below is a real boolean and the result is coalesced to false.
 -- A partial document such as {"kept":true} is rejected.
@@ -224,7 +225,7 @@ revoke all on function public.finance_plan_calculator_sections_ok(jsonb) from pu
 grant execute on function public.finance_plan_calculator_sections_ok(jsonb) to authenticated;
 
 comment on constraint finance_plans_monthly_basis on public.finance_plans is
-  'Version 1 has no monthly_basis and must include structural, stages, staffing, owner_field_replacement, cost_pools, channels, and services. Version 2 also requires monthly_basis. A partial version 1 document is rejected on write. Existing rows are not rewritten by this migration.';
+  'Version 1 has no monthly_basis and must include structural, stages, staffing, owner_field_replacement, cost_pools, channels, and services. Version 2 also requires monthly_basis. A partial version 1 document is rejected on write. This migration aborts if an existing row would fail.';
 
 do $$
 declare
@@ -243,6 +244,11 @@ begin
   from public.finance_plans
   where schema_version = 2
     and not public.finance_plan_document_ok(schema_version, inputs);
+  if v_v1_fail > 0 or v_v2_fail > 0 then
+    raise exception 'finance_v1_shape_impact_abort total=% v1=% v1_would_fail=% v2_would_fail=% existing rows would fail the new plan document check; migration rolled back; non-draft partial rows have no authorized repair',
+      v_total, v_v1, v_v1_fail, v_v2_fail
+      using errcode = '23514';
+  end if;
   raise notice 'finance_v1_shape_impact total=% v1=% v1_would_fail=% v2_would_fail=%',
     v_total, v_v1, v_v1_fail, v_v2_fail;
 end;

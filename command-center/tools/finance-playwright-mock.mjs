@@ -6,6 +6,7 @@
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { blankPlanInputs } from '../src/lib/finance/blankPlan.js';
+import { calculatePlan } from '../src/lib/finance/calculate.js';
 
 const port = Number(process.env.FINANCE_MOCK_PORT || 54921);
 const userId = '11111111-1111-4111-8111-111111111111';
@@ -142,10 +143,10 @@ function historicalV1() {
           rounding_increment_usd: null,
         },
         stages: {
-          stage_0: { label: 'Stage 0' },
-          stage_1: { label: 'Stage 1' },
-          stage_2: { label: 'Stage 2' },
-          stage_3: { label: 'Stage 3' },
+          stage_0: { label: 'Stage 0', true_operating_profit_pct: 0, growth_reserve_pct: 0, bad_debt_warranty_pct: 0, unidentified_cost_contingency_pct: 0 },
+          stage_1: { label: 'Stage 1', true_operating_profit_pct: 0, growth_reserve_pct: 0, bad_debt_warranty_pct: 0, unidentified_cost_contingency_pct: 0 },
+          stage_2: { label: 'Stage 2', true_operating_profit_pct: 0, growth_reserve_pct: 0, bad_debt_warranty_pct: 0, unidentified_cost_contingency_pct: 0 },
+          stage_3: { label: 'Stage 3', true_operating_profit_pct: 0, growth_reserve_pct: 0, bad_debt_warranty_pct: 0, unidentified_cost_contingency_pct: 0 },
         },
         staffing: [],
         owner_field_replacement: { wage: null, burden: null },
@@ -188,7 +189,47 @@ function historicalV1() {
   }
 }
 
+function sectionsOk(inputs) {
+  if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) return false;
+  const structural = inputs.structural;
+  const stages = inputs.stages;
+  const owner = inputs.owner_field_replacement;
+  if (!structural || typeof structural !== 'object' || Array.isArray(structural)) return false;
+  if (!stages || typeof stages !== 'object' || Array.isArray(stages)) return false;
+  if (!Array.isArray(inputs.staffing) || !Array.isArray(inputs.channels)) return false;
+  if (!owner || typeof owner !== 'object' || Array.isArray(owner)) return false;
+  if (!inputs.cost_pools || typeof inputs.cost_pools !== 'object' || Array.isArray(inputs.cost_pools)) return false;
+  if (!inputs.services || typeof inputs.services !== 'object' || Array.isArray(inputs.services)) return false;
+  for (const key of ['stage_0', 'stage_1', 'stage_2', 'stage_3']) {
+    if (!stages[key] || typeof stages[key] !== 'object' || Array.isArray(stages[key])) return false;
+  }
+  for (const key of ['weeks_per_year', 'months_per_year', 'days_per_month_ar', 'rounding_increment_usd']) {
+    if (!Object.prototype.hasOwnProperty.call(structural, key)) return false;
+  }
+  return Object.prototype.hasOwnProperty.call(owner, 'wage') && Object.prototype.hasOwnProperty.call(owner, 'burden');
+}
+
+function documentOk(schema, inputs) {
+  const basis = inputs && Object.prototype.hasOwnProperty.call(inputs, 'monthly_basis');
+  if (schema === 1) return sectionsOk(inputs) && !basis;
+  if (schema === 2) {
+    return sectionsOk(inputs) && basis && inputs.monthly_basis && typeof inputs.monthly_basis === 'object' && !Array.isArray(inputs.monthly_basis);
+  }
+  return false;
+}
+
+function shapeError(schema, inputs) {
+  if (documentOk(schema, inputs)) return null;
+  return { status: 400, body: { code: '23514', message: 'finance_plans_monthly_basis', details: 'finance_plans_monthly_basis' } };
+}
+
+function notApprovableError() {
+  return { status: 400, body: { code: '23514', message: 'finance_plan_not_approvable', details: 'finance_plan_not_approvable', hint: null } };
+}
+
 function insertPlan(body) {
+  const shape = shapeError(body.schema_version, body.inputs);
+  if (shape) return { error: shape };
   if (plans.some((row) => row.status === 'draft')) {
     return { error: { status: 409, body: { code: '23505', message: 'finance_plans_one_draft' } } };
   }
@@ -212,6 +253,12 @@ function patchPlan(url, body) {
   const expected = filters(url);
   const row = plans.find((item) => matches(item, expected));
   if (!row) return null;
+  if (row.status !== 'draft') {
+    return { error: { status: 400, body: { code: '23514', message: 'finance_plan_locked', details: 'finance_plan_locked' } } };
+  }
+  const nextInputs = Object.prototype.hasOwnProperty.call(body, 'inputs') ? body.inputs : row.inputs;
+  const shape = shapeError(row.schema_version, nextInputs);
+  if (shape) return { error: shape };
   if (Object.prototype.hasOwnProperty.call(body, 'inputs')) row.inputs = body.inputs;
   if (Object.prototype.hasOwnProperty.call(body, 'notes')) row.notes = body.notes;
   row.version += 1;
@@ -233,6 +280,9 @@ function approvePlan(body) {
         },
       },
     };
+  }
+  if (row.notes === 'refuse-approve' || calculatePlan(row.inputs).errors.length > 0) {
+    return { error: notApprovableError() };
   }
   for (const plan of plans) {
     if (plan.status === 'approved') {
@@ -309,6 +359,11 @@ function patchActual(url, body) {
   const expected = filters(url);
   const row = actuals.find((item) => matches(item, expected));
   if (!row) return null;
+  if (Object.prototype.hasOwnProperty.call(body, 'comparison_plan_id')
+    && row.comparison_plan_id
+    && String(body.comparison_plan_id) !== String(row.comparison_plan_id)) {
+    return { error: { status: 400, body: { code: '23514', message: 'finance_actuals_basis_locked', details: 'finance_actuals_basis_locked' } } };
+  }
   Object.assign(row, body);
   row.version += 1;
   row.updated_at = now();
@@ -402,6 +457,7 @@ const server = createServer(async (req, res) => {
       if (req.method === 'PATCH') {
         const row = patchPlan(url, await readBody(req));
         if (!row) zeroRows(res);
+        else if (row.error) send(res, row.error.status, row.error.body);
         else send(res, 200, wantsObject(req) ? row : [row]);
         return;
       }
@@ -424,6 +480,7 @@ const server = createServer(async (req, res) => {
       if (req.method === 'PATCH') {
         const row = patchActual(url, await readBody(req));
         if (!row) zeroRows(res);
+        else if (row.error) send(res, row.error.status, row.error.body);
         else send(res, 200, wantsObject(req) ? row : [row]);
         return;
       }

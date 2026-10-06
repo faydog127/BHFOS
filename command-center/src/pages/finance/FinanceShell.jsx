@@ -104,6 +104,11 @@ function loadErrorCopy(code) {
   return code;
 }
 
+function saveErrorCopy(code) {
+  if (code === 'finance_plan_not_approvable') return 'Approve is blocked until the validation message is clear.';
+  return code;
+}
+
 function sectionIdFromPath(pathname) {
   const parts = pathname.split('/').filter(Boolean);
   const financeIndex = parts.indexOf('finance');
@@ -667,7 +672,7 @@ export default function FinanceShell({ grantedAccess }) {
           {writesEnabled ? null : (
             <p className="mt-3 text-sm font-medium text-slate-800" data-testid="finance-writes-disabled">Finance writes are disabled. This screen is read-only.</p>
           )}
-          {saveCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-save-error">{saveCode}</p> : null}
+          {saveCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-save-error">{saveErrorCopy(saveCode)}</p> : null}
           {loadCode ? <p className="mt-3 text-sm text-red-700" data-testid="finance-load-error">{loadErrorCopy(loadCode)}</p> : null}
           {mode === 'guided' ? (
             <div className="mt-4">
@@ -851,7 +856,7 @@ export default function FinanceShell({ grantedAccess }) {
               <button type="button" className="ml-3 inline-flex min-h-11 items-center underline" data-testid="finance-reload" onClick={refreshPlans}>Reload</button>
             </div>
           ) : null}
-          {saveCode ? <p className="mb-4 text-sm text-red-700" data-testid="finance-save-error">{saveCode}</p> : null}
+          {saveCode ? <p className="mb-4 text-sm text-red-700" data-testid="finance-save-error">{saveErrorCopy(saveCode)}</p> : null}
           {view.errors.length > 0 ? (
             <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800" data-testid="finance-validation">
               Some inputs are incomplete or invalid. Affected results show --. Retention hurdles must satisfy 0 ≤ value &lt; 1.

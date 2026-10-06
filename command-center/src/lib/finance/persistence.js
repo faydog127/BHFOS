@@ -146,6 +146,11 @@ export async function approvePlan(client, { id, expectedVersion }, env) {
   });
   if (error) {
     if (isFinanceVersionConflict(error)) return { ok: false, code: 'version_conflict' };
+    const text = ['message', 'details', 'detail', 'hint']
+      .map((key) => error[key])
+      .filter((value) => typeof value === 'string')
+      .join(' ');
+    if (text.includes('finance_plan_not_approvable')) return { ok: false, code: 'finance_plan_not_approvable' };
     return { ok: false, code: error.code || 'finance_approve_failed' };
   }
   if (!data) return { ok: false, code: 'version_conflict' };

@@ -32,6 +32,47 @@ const HURDLE_KEYS = [
   'unidentified_cost_contingency_pct',
 ];
 
+/* global BigInt */
+function decimalUnits(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  if (Object.is(value, -0)) return { units: 0n, scale: 0 };
+  let text = String(value);
+  if (/[eE]/.test(text)) {
+    const scientific = /^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/.exec(text);
+    if (!scientific) return null;
+    const sign = scientific[1] === '-' ? -1n : 1n;
+    const digits = `${scientific[2]}${scientific[3] || ''}`;
+    const scale = (scientific[3] || '').length - Number(scientific[4]);
+    if (scale >= 0) return { units: sign * BigInt(digits), scale };
+    return { units: sign * BigInt(digits) * (10n ** BigInt(-scale)), scale: 0 };
+  }
+  const plain = /^(-?)(\d+)(?:\.(\d+))?$/.exec(text);
+  if (!plain) return null;
+  const fraction = plain[3] || '';
+  const sign = plain[1] === '-' ? -1n : 1n;
+  return { units: sign * BigInt(`${plain[2]}${fraction}`), scale: fraction.length };
+}
+
+/**
+ * Exact decimal sum of the values' shortest texts. Matches PostgreSQL
+ * numeric addition of the JSON number text. 0.7+0.2+0.1+0 reaches 1.
+ */
+export function fractionSumReachesOne(values) {
+  let scale = 0;
+  const parts = [];
+  for (const value of values) {
+    const part = decimalUnits(value);
+    if (!part) return true;
+    parts.push(part);
+    if (part.scale > scale) scale = part.scale;
+  }
+  let total = 0n;
+  for (const part of parts) {
+    total += part.units * (10n ** BigInt(scale - part.scale));
+  }
+  return total >= 10n ** BigInt(scale);
+}
+
 export function retentionHurdle(stage) {
   const errors = [];
   const values = [];
@@ -45,10 +86,10 @@ export function retentionHurdle(stage) {
     else values.push(value);
   }
   if (errors.length) return { value: null, valid: false, errors };
-  const total = values.reduce((sum, value) => sum + value, 0);
-  if (!(total >= 0 && total < 1)) {
+  if (fractionSumReachesOne(values)) {
     return { value: null, valid: false, errors: ['retention_hurdle:invalid'] };
   }
+  const total = values.reduce((sum, value) => sum + value, 0);
   return { value: total, valid: true, errors: [] };
 }
 

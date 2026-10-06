@@ -8,6 +8,7 @@ import {
 } from '@/lib/supabaseEnv';
 import { resolveTenantIdFromSession, logTenantDebugInfo, getSelectedTenantId } from '@/lib/tenantUtils';
 import { jwtDecode } from "jwt-decode";
+import { clearFinanceDrafts } from '@/lib/finance/dirtyDraft';
 
 const SupabaseAuthContext = createContext({});
 
@@ -133,6 +134,7 @@ export const SupabaseAuthProvider = ({ children }) => {
         if (isCorruptedToken) {
           console.warn('⚠️ Detected corrupted JWT or session. Forcing cleanup...');
           try {
+            clearFinanceDrafts();
             await supabase.auth.signOut();
             setSession(null);
             setUser(null);
@@ -295,6 +297,7 @@ export const SupabaseAuthProvider = ({ children }) => {
     },
     signOut: async () => {
       try {
+        clearFinanceDrafts();
         await supabase.auth.signOut();
         setUser(null);
         setSession(null);

@@ -117,6 +117,64 @@ begin
     raise exception 'FAIL: hurdle of 1 changed status % version %', v_status, v_version;
   end if;
 
+  -- 0.7+0.2+0.1+0 is exactly 1 in numeric arithmetic. JS float sums it to just under 1.
+  v_bad := pg_temp.finance_v2_document('{}'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,true_operating_profit_pct}', '0.7'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,growth_reserve_pct}', '0.2'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,bad_debt_warranty_pct}', '0.1'::jsonb);
+  v_bad := jsonb_set(v_bad, '{stages,stage_0,unidentified_cost_contingency_pct}', '0'::jsonb);
+  if public.finance_plan_approvable(v_bad) then
+    raise exception 'FAIL: 0.7+0.2+0.1+0 looks approvable';
+  end if;
+  update public.finance_plans set inputs = v_bad where id = v_plan returning version into v_version;
+  begin
+    perform public.finance_approve_plan(v_plan, v_version);
+    raise exception 'FAIL: boundary hurdle approve accepted';
+  exception
+    when check_violation then
+      if sqlerrm not like '%finance_plan_not_approvable%' then
+        raise exception 'FAIL: boundary hurdle message %', sqlerrm;
+      end if;
+  end;
+  select status, version into v_status, v_version from public.finance_plans where id = v_plan;
+  if v_status <> 'draft' or v_version <> 3 then
+    raise exception 'FAIL: boundary hurdle changed status % version %', v_status, v_version;
+  end if;
+  perform set_config('finance.plan_transition', 'approve', true);
+  begin
+    update public.finance_plans set status = 'approved' where id = v_plan;
+    raise exception 'FAIL: GUC approve of boundary hurdles accepted';
+  exception
+    when check_violation then
+      if sqlerrm not like '%finance_plan_not_approvable%' then
+        raise exception 'FAIL: GUC approve message %', sqlerrm;
+      end if;
+  end;
+  perform set_config('finance.plan_transition', '', true);
+  select status, version into v_status, v_version from public.finance_plans where id = v_plan;
+  if v_status <> 'draft' or v_version <> 3 then
+    raise exception 'FAIL: GUC approve changed status % version %', v_status, v_version;
+  end if;
+
+  v_bad := jsonb_set(pg_temp.finance_v2_document('{}'::jsonb), '{stages,stage_1,owner_management_comp}', '-1'::jsonb);
+  if public.finance_plan_approvable(v_bad) then
+    raise exception 'FAIL: negative owner comp looks approvable';
+  end if;
+  update public.finance_plans set inputs = v_bad where id = v_plan returning version into v_version;
+  begin
+    perform public.finance_approve_plan(v_plan, v_version);
+    raise exception 'FAIL: negative owner comp approve accepted';
+  exception
+    when check_violation then
+      if sqlerrm not like '%finance_plan_not_approvable%' then
+        raise exception 'FAIL: negative owner comp message %', sqlerrm;
+      end if;
+  end;
+  select status into v_status from public.finance_plans where id = v_plan;
+  if v_status <> 'draft' then
+    raise exception 'FAIL: negative owner comp changed status %', v_status;
+  end if;
+
   update public.finance_plans
   set inputs = pg_temp.finance_v2_document('{}'::jsonb)
   where id = v_plan
